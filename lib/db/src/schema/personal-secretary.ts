@@ -27,7 +27,7 @@ export const peopleTable = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    uniqueIndex("people_owner_name_key_unique").on(
+    index("people_owner_name_key_idx").on(
       table.tenantId,
       table.ownerUserId,
       table.nameKey,
@@ -47,7 +47,7 @@ export const projectsTable = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    uniqueIndex("projects_owner_name_key_unique").on(
+    index("projects_owner_name_key_idx").on(
       table.tenantId,
       table.ownerUserId,
       table.nameKey,
@@ -116,6 +116,51 @@ export const tasksTable = pgTable(
   ],
 );
 
+export const projectPeopleTable = pgTable(
+  "project_people",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projectsTable.id),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => peopleTable.id),
+    relationship: text("relationship"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("project_people_owner_pair_unique").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.projectId,
+      table.personId,
+    ),
+  ],
+);
+
+export const commitmentsTable = pgTable(
+  "commitments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    title: text("title").notNull(),
+    personId: uuid("person_id").references(() => peopleTable.id),
+    dueAt: timestamp("due_at", { withTimezone: true }),
+    status: text("status").notNull().default("open"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("commitments_owner_status_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.status,
+    ),
+  ],
+);
+
 export const idempotencyRecordsTable = pgTable(
   "idempotency_records",
   {
@@ -158,6 +203,8 @@ export type Project = typeof projectsTable.$inferSelect;
 export type Expense = typeof expensesTable.$inferSelect;
 export type Reminder = typeof remindersTable.$inferSelect;
 export type Task = typeof tasksTable.$inferSelect;
+export type ProjectPerson = typeof projectPeopleTable.$inferSelect;
+export type Commitment = typeof commitmentsTable.$inferSelect;
 export type InsertPerson = z.infer<typeof insertPersonSchema>;
 export type InsertProject = z.infer<typeof insertProjectSchema>;
 export type InsertExpense = z.infer<typeof insertExpenseSchema>;

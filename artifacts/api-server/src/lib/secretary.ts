@@ -22,6 +22,7 @@ import {
   type Reminder,
   type Task,
 } from "@workspace/db";
+import { phase2AgentRuntime, phase2Enabled } from "./phase2";
 
 export type Identity = {
   tenantId: string;
@@ -497,7 +498,7 @@ function tomorrowAtNine(): Date {
   return date;
 }
 
-export class AgentRuntime {
+export class DeterministicAgentRuntime {
   constructor(private readonly persistence: PersistencePort) {}
 
   async run(
@@ -641,4 +642,7 @@ export class AgentRuntime {
 }
 
 export const persistence: PersistencePort = new DrizzlePersistence();
-export const agentRuntime = new AgentRuntime(persistence);
+export const developmentAgentRuntime = new DeterministicAgentRuntime(persistence);
+export const agentRuntime = phase2Enabled()
+  ? phase2AgentRuntime
+  : developmentAgentRuntime;
