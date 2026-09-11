@@ -11,7 +11,7 @@ A private Arabic-first secretary that turns natural-language requests into autho
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (development only)
 - Required env: `DATABASE_URL` — PostgreSQL connection string
-- Optional server-only LLM env: `AI_PROVIDER=gemini|development`, `GEMINI_MODEL`, and `GEMINI_API_KEY`
+- Optional server-only LLM env: `AI_PROVIDER=gemini|groq|development`, provider-specific model variables, and the matching server-only API key
 
 ## Stack
 
@@ -34,8 +34,8 @@ A private Arabic-first secretary that turns natural-language requests into autho
 ## Architecture decisions
 
 - The browser only calls the API; it never receives database credentials or the Gemini key.
-- `AI_PROVIDER=development` keeps the deterministic provider available for local tests and safe fallback.
-- `AI_PROVIDER=gemini` selects a provider adapter behind the same runtime boundary; the LLM can only invoke registered application tools.
+- `AI_PROVIDER=gemini` or `AI_PROVIDER=groq` selects one provider adapter behind the same runtime boundary; the LLM can only invoke registered application tools.
+- The deterministic provider is explicit test/development mode only; provider failures do not switch to it automatically.
 - Every tool derives tenant and user identity from the authenticated request, not model arguments.
 - Conversation IDs remain a runtime boundary; messages are not automatically written to durable memory.
 

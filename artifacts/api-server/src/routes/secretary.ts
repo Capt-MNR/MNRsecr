@@ -9,6 +9,7 @@ import {
   persistence,
   type Identity,
 } from "../lib/secretary";
+import { configuredProvider } from "../lib/phase2";
 
 const router: IRouter = Router();
 
@@ -49,7 +50,9 @@ router.post("/turns", async (req, res): Promise<void> => {
   } catch (error) {
     req.log.error({ err: error }, "Secretary turn failed");
     res.status(503).json({
-      error: "The secretary could not complete this request. Review saved context before retrying.",
+      error: "The configured LLM provider is unavailable. Check its server-side configuration and try again.",
+      code: "LLM_PROVIDER_UNAVAILABLE",
+      provider: configuredProvider() === "unavailable" ? null : configuredProvider(),
     });
   }
 });

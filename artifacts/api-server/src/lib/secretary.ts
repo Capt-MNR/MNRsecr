@@ -22,7 +22,12 @@ import {
   type Reminder,
   type Task,
 } from "@workspace/db";
-import { phase2AgentRuntime, phase2Enabled } from "./phase2";
+import {
+  configuredProvider,
+  phase2AgentRuntime,
+  phase2Enabled,
+  unavailableAgentRuntime,
+} from "./phase2";
 
 export type Identity = {
   tenantId: string;
@@ -627,6 +632,8 @@ export class DeterministicAgentRuntime {
 
 export const persistence: PersistencePort = new DrizzlePersistence();
 export const developmentAgentRuntime = new DeterministicAgentRuntime(persistence);
-export const agentRuntime = phase2Enabled()
-  ? phase2AgentRuntime
-  : developmentAgentRuntime;
+export const agentRuntime = configuredProvider() === "development"
+  ? developmentAgentRuntime
+  : phase2Enabled()
+    ? phase2AgentRuntime
+    : unavailableAgentRuntime;

@@ -90,7 +90,7 @@ type ToolResult = {
 const MAX_TOOL_CALLS = 8;
 const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.6-flash";
 const GEMINI_FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL ?? "gemini-3-flash-preview";
-const GROQ_MODEL = process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile";
+const GROQ_MODEL = process.env.GROQ_MODEL ?? "openai/gpt-oss-20b";
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 
 function normalize(value: string): string {
@@ -538,62 +538,230 @@ const requestGuidance = `إرشادات تنفيذ إضافية:
 - إذا كانت الرسالة تسأل عن إجمالي ما صُرف على وصف أو فئة مثل "التشطيبات" من دون ذكر مشروع صريح، استخدم query_expenses مع description ثم احسب الناتج من الصفوف. لا تخترع مشروعًا اسمه الفئة.
 - إذا كانت الرسالة تسأل "محمد أخد مني كام؟"، نفّذ find_person ثم get_person_expense_total.`;
 
-class GeminiModelGateway {
-  private readonly apiKey = process.env.GEMINI_API_KEY;
-  private readonly model = MODEL;
-  private activeModel = MODEL;
-
-  get configured(): boolean {
-    return Boolean(this.apiKey);
+function parseJsonObject(value: string | undefined): Record<string, unknown> {
+  if (!value) return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
   }
+}
 
-  async generate(contents: Array<{ role: string; parts: GeminiPart[] }>): Promise<GeminiResponse> {
-    if (!this.apiKey) throw new Error("GEMINI_API_KEY is not configured.");
-    let lastError: Error | null = null;
-    const models = this.model === FALLBACK_MODEL
-      ? [this.model]
-      : [this.model, FALLBACK_MODEL];
-
-    for (const model of models) {
-      for (let attempt = 0; attempt < 1; attempt += 1) {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 25_000);
-        try {
-          const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(this.apiKey)}`,
-            {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({
-            systemInstruction: { parts: [{ text: `${systemInstruction}\n${requestGuidance}` }] },
-                contents,
-                tools: [{ functionDeclarations: phase2Tools }],
-                toolConfig: { functionCallingConfig: { mode: "AUTO" } },
-                generationConfig: { temperature: 0.15, maxOutputTokens: 8192 },
-              }),
-              signal: controller.signal,
-            },
-          );
-          const raw = await response.text();
-          if (response.ok) {
-            this.activeModel = model;
-            return JSON.parse(raw) as GeminiResponse;
-          }
-          lastError = new Error(`Gemini request failed with ${response.status}: ${raw.slice(0, 500)}`);
-          if (![404, 429, 500, 502, 503, 504].includes(response.status)) throw lastError;
-        } catch (error) {
-          lastError = error instanceof Error ? error : new Error(String(error));
-        } finally {
-          clearTimeout(timeout);
-        }
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      }
+function toGeminiContents(messages: ConversationMessage[]): Array<{ role: string; parts: GeminiPart[] }> {
+  return messages.map((message) => {
+    if (message.role === "assistant") {
+      return {
+        role: "model",
+        parts: [
+          ...(message.text ? [{ text: message.text }] : []),
+          ...(message.toolCalls ?? []).map((call) => ({
+            functionCall: { name: call.name, args: call.args },
+          })),
+        ],
+      };
     }
-    throw lastError ?? new Error("Gemini request failed.");
+    if (message.role === "tool") {
+      return {
+        role: "user",
+        parts: [{
+          functionResponse: {
+            name: message.toolName ?? "tool",
+            response: parseJsonObject(message.text),
+          },
+        }],
+      };
+    }
+    return { role: "user", parts: [{ text: message.text ?? "" }] };
+  });
+}
+
+function toOpenAiSchema(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(toOpenAiSchema);
+  if (!value || typeof value !== "object") {
+    return typeof value === "string" && ["OBJECT", "STRING", "INTEGER", "NUMBER", "BOOLEAN", "ARRAY"].includes(value)
+      ? value.toLowerCase()
+      : value;
   }
+  return Object.fromEntries(
+    Object.entries(value).map(([key, child]) => [key, toOpenAiSchema(child)]),
+  );
+}
+
+function toOpenAiTools() {
+  return phase2Tools.map((definition) => ({
+    type: "function",
+    function: {
+      name: definition.name,
+      description: definition.description,
+      parameters: toOpenAiSchema(definition.parameters),
+    },
+  }));
+}
+
+class GeminiModelGateway implements ModelGateway {
+  readonly provider = "gemini" as const;
+  private readonly apiKey = process.env.GEMINI_API_KEY;
+  private readonly model = GEMINI_MODEL;
+  private activeModel = GEMINI_MODEL;
 
   get modelName(): string {
     return this.activeModel;
+  }
+
+  async generate(messages: ConversationMessage[]): Promise<GatewayResponse> {
+    if (!this.apiKey) throw new Error("GEMINI_API_KEY is not configured.");
+    let lastError: Error | null = null;
+    const models = this.model === GEMINI_FALLBACK_MODEL
+      ? [this.model]
+      : [this.model, GEMINI_FALLBACK_MODEL];
+
+    for (const model of models) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 25_000);
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(this.apiKey)}`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              systemInstruction: { parts: [{ text: `${systemInstruction}\n${requestGuidance}` }] },
+              contents: toGeminiContents(messages),
+              tools: [{ functionDeclarations: phase2Tools }],
+              toolConfig: { functionCallingConfig: { mode: "AUTO" } },
+              generationConfig: { temperature: 0.15, maxOutputTokens: 8192 },
+            }),
+            signal: controller.signal,
+          },
+        );
+        const raw = await response.text();
+        if (response.ok) {
+          const parsed = JSON.parse(raw) as GeminiResponse;
+          const parts = parsed.candidates?.[0]?.content?.parts ?? [];
+          this.activeModel = model;
+          return {
+            text: parts.map((part) => part.text ?? "").join("").trim(),
+            toolCalls: parts.flatMap((part, index) => part.functionCall
+              ? [{
+                  id: `gemini-call-${index}`,
+                  name: part.functionCall.name,
+                  args: part.functionCall.args ?? {},
+                }]
+              : []),
+            usage: parsed.usageMetadata,
+          };
+        }
+        lastError = new Error(`Gemini request failed with ${response.status}: ${raw.slice(0, 500)}`);
+        if (![404, 429, 500, 502, 503, 504].includes(response.status)) throw lastError;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+      } finally {
+        clearTimeout(timeout);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    throw lastError ?? new Error("Gemini request failed.");
+  }
+}
+
+class GroqModelGateway implements ModelGateway {
+  readonly provider = "groq" as const;
+  private readonly apiKey = process.env.GROQ_API_KEY;
+  readonly model = GROQ_MODEL;
+
+  get modelName(): string {
+    return this.model;
+  }
+
+  async generate(messages: ConversationMessage[]): Promise<GatewayResponse> {
+    if (!this.apiKey) throw new Error("GROQ_API_KEY is not configured.");
+    const apiMessages = [
+      {
+        role: "system",
+        content: `${systemInstruction}\n${requestGuidance}`,
+      },
+      ...messages.map((message) => {
+        if (message.role === "assistant") {
+          return {
+            role: "assistant",
+            content: message.text || null,
+            tool_calls: (message.toolCalls ?? []).map((call) => ({
+              id: call.id,
+              type: "function",
+              function: { name: call.name, arguments: JSON.stringify(call.args) },
+            })),
+          };
+        }
+        if (message.role === "tool") {
+          return {
+            role: "tool",
+            tool_call_id: message.toolCallId,
+            name: message.toolName,
+            content: message.text ?? "{}",
+          };
+        }
+        return { role: "user", content: message.text ?? "" };
+      }),
+    ];
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 25_000);
+      try {
+        const response = await fetch(GROQ_API_URL, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${this.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: this.model,
+            messages: apiMessages,
+            tools: toOpenAiTools(),
+            tool_choice: "auto",
+            temperature: 0.15,
+            max_tokens: 4096,
+          }),
+          signal: controller.signal,
+        });
+        const raw = await response.text();
+        if (response.ok) {
+          const payload = JSON.parse(raw) as {
+            choices?: Array<{
+              message?: {
+                content?: string | null;
+                tool_calls?: Array<{
+                  id: string;
+                  function: { name: string; arguments: string };
+                }>;
+              };
+            }>;
+            usage?: unknown;
+          };
+          const message = payload.choices?.[0]?.message;
+          return {
+            text: message?.content?.trim() ?? "",
+            toolCalls: (message?.tool_calls ?? []).map((call) => ({
+              id: call.id,
+              name: call.function.name,
+              args: parseJsonObject(call.function.arguments),
+            })),
+            usage: payload.usage,
+          };
+        }
+        lastError = new Error(`Groq request failed with ${response.status}: ${raw.slice(0, 500)}`);
+        if (response.status !== 429 || attempt === 1) throw lastError;
+        const retryAfter = Number(response.headers.get("retry-after") ?? 1);
+        await new Promise((resolve) => setTimeout(resolve, Math.min(Math.max(retryAfter * 1000, 500), 3_000)));
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        if (attempt === 1 || !lastError.message.includes("429")) throw lastError;
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+    throw lastError ?? new Error("Groq request failed.");
   }
 }
 
@@ -615,7 +783,7 @@ async function saveIdempotent(identity: Identity, key: string, response: Phase2T
 }
 
 export class Phase2AgentRuntime {
-  private readonly gateway = new GeminiModelGateway();
+  constructor(private readonly gateway: ModelGateway) {}
 
   async run(identity: Identity, input: Phase2TurnInput): Promise<Phase2TurnResult> {
     const startedAt = Date.now();
@@ -625,69 +793,88 @@ export class Phase2AgentRuntime {
     }
 
     const conversationId = input.conversationId || crypto.randomUUID();
-    const contents: Array<{ role: string; parts: GeminiPart[] }> = [{
-      role: "user",
-      parts: [{ text: input.message.trim() }],
-    }];
+    const messages: ConversationMessage[] = [{ role: "user", text: input.message.trim() }];
     let calls = 0;
     let action: Record<string, unknown> | undefined;
 
     while (calls < MAX_TOOL_CALLS) {
-      const response = await this.gateway.generate(contents);
-      const parts = response.candidates?.[0]?.content?.parts ?? [];
-      const callsInResponse = parts.filter((part) => part.functionCall);
-      const text = parts.map((part) => part.text ?? "").join("").trim();
-      if (callsInResponse.length === 0) {
+      const response = await this.gateway.generate(messages);
+      if (response.toolCalls.length === 0) {
         const result: Phase2TurnResult = {
           conversationId,
-          assistantMessage: text || "لم أستطع إكمال الطلب بشكل آمن. اكتب التفاصيل المطلوبة وسأحاول مرة أخرى.",
+          assistantMessage: response.text || "لم أستطع إكمال الطلب بشكل آمن. اكتب التفاصيل المطلوبة وسأحاول مرة أخرى.",
           action: action ?? { type: "llm_response" },
-          provider: "gemini",
+          provider: this.gateway.provider,
           model: this.gateway.modelName,
         };
         if (input.idempotencyKey) await saveIdempotent(identity, input.idempotencyKey, result);
         logger.info({
-          provider: "gemini",
+          provider: this.gateway.provider,
           model: this.gateway.modelName,
           toolCalls: calls,
           latencyMs: Date.now() - startedAt,
-          usage: response.usageMetadata,
+          usage: response.usage,
         }, "agent turn completed");
         return result;
       }
 
-      contents.push({
-        role: "model",
-        parts,
+      messages.push({
+        role: "assistant",
+        text: response.text || undefined,
+        toolCalls: response.toolCalls,
       });
-      const functionResponses: GeminiPart[] = [];
-      for (const part of callsInResponse) {
-        const call = part.functionCall!;
+      for (const call of response.toolCalls) {
         calls += 1;
         if (calls > MAX_TOOL_CALLS) break;
-        const toolResult = await executeTool(identity, call.name, call.args ?? {});
+        const toolResult = await executeTool(identity, call.name, call.args);
         action = {
           type: "tool_orchestration",
           lastTool: call.name,
           toolCalls: calls,
         };
-        functionResponses.push({
-          functionResponse: {
-            name: call.name,
-            response: toolResult,
-          },
+        messages.push({
+          role: "tool",
+          toolCallId: call.id,
+          toolName: call.name,
+          text: JSON.stringify(toolResult),
         });
       }
-      contents.push({ role: "user", parts: functionResponses });
     }
 
     throw new Error(`Agent stopped after ${MAX_TOOL_CALLS} tool calls.`);
   }
 }
 
-export function phase2Enabled(): boolean {
-  const provider = (process.env.AI_PROVIDER ?? (process.env.GEMINI_API_KEY ? "gemini" : "development")).toLowerCase();
-  return provider === "gemini";
+export type ConfiguredProvider = "gemini" | "groq" | "development" | "unavailable";
+
+export function configuredProvider(): ConfiguredProvider {
+  const configured = process.env.AI_PROVIDER?.trim().toLowerCase();
+  if (configured === "gemini" || configured === "groq" || configured === "development") {
+    return configured;
+  }
+  if (process.env.GEMINI_API_KEY) return "gemini";
+  if (process.env.GROQ_API_KEY) return "groq";
+  return "unavailable";
 }
 
-export const phase2AgentRuntime = new Phase2AgentRuntime();
+export function phase2Enabled(): boolean {
+  const provider = configuredProvider();
+  return provider === "gemini" || provider === "groq";
+}
+
+function createConfiguredGateway(): ModelGateway {
+  return configuredProvider() === "groq"
+    ? new GroqModelGateway()
+    : new GeminiModelGateway();
+}
+
+export class UnavailableAgentRuntime {
+  async run(): Promise<Phase2TurnResult> {
+    throw new Error(
+      "No configured LLM provider is available. Set AI_PROVIDER to gemini or groq and configure its server-side API key.",
+    );
+  }
+}
+
+export const phase2AgentRuntime = new Phase2AgentRuntime(createConfiguredGateway());
+export const unavailableAgentRuntime = new UnavailableAgentRuntime();
