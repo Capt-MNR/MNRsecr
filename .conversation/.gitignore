@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+*.sqlite3
+data/
+.pytest_cache/
+.mypy_cache/
+.coverage
+.pythonlibs/
+*.egg-info/
+.upm/
+.cache/

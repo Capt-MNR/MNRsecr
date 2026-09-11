@@ -1,0 +1,30 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "sCsX403Z6jDT4iCSq5Uu1"
+uri = "file://docs/architecture/postgres-design.md"
+type = "text"
+title = "Postgres design"
+description = "Phase 1.2 Postgres/Supabase persistence design."
+logical_id = "785f705f-a3a4-46bd-9aa2-378988662590"
+content_hash = "sha256:d07712407926f5536165e78ef510bdde81f49d8d8268489416e204dca1cd8ee8"
+size = 38456
+mtime_ms = 1789134783892
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/conversation:5384c018-553e-4efc-89f6-4a17a2521cad/785f705f-a3a4-46bd-9aa2-378988662590/88ba423a-7d2d-422e-847b-e03c12bd82d3"
+storage_version_token = "1789136497801859"
+content_type = "text/markdown"
+
+[[outputs]]
+id = "sWkQV5fxGmtMEnk9dv3ji"
+uri = "file://docs/architecture/rls-design.md"
+type = "text"
+title = "RLS design"
+description = "Phase 1.2 Supabase/Postgres row-level security design."
+logical_id = "f57bd1ed-7168-414e-b8f6-eb71776e8e22"
+content_hash = "sha256:f044afc955f327fda62be1d0a80904b7966e6bbcf08525570a8ea0ae9d599654"
+size = 15341
+mtime_ms = 1789134784136
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/conversation:5384c018-553e-4efc-89f6-4a17a2521cad/f57bd1ed-7168-414e-b8f6-eb71776e8e22/9c204e5c-ec4c-4ef1-a292-de63ebebfbef"
+storage_version_token = "1789136498591521"
+content_type = "text/markdown"

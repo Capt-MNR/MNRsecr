@@ -1,0 +1,117 @@
+Phase 1.2 design review is APPROVED for implementation.
+
+Proceed with the Postgres/Supabase persistence implementation based on the two reviewed design documents:
+
+- docs/architecture/postgres-design.md
+- docs/architecture/rls-design.md
+
+Implementation scope ONLY:
+
+1. Create the production foundation migration(s) under:
+   supabase/migrations/
+
+2. Implement the approved Postgres schema:
+   
+   - tenants
+   - users
+   - tenant_memberships
+   - currency_metadata
+   - people
+   - relationships
+   - projects
+   - project_people
+   - tasks
+   - expenses
+   - commitments
+   - events
+   - reminders
+   - memories
+   - typed memory context joins
+   - permissions
+   - conversations
+   - conversation_turns
+   - tool_calls
+   - typed conversation context joins
+   - idempotency_records
+   - audit_events
+   - domain_events
+
+3. Implement PostgreSQL/Supabase RLS according to rls-design.md.
+
+4. Implement the approved Auth mapping:
+   auth.uid()
+   -> users.auth_subject
+   -> product users.id
+   -> tenant_memberships
+   -> trusted ExecutionContext
+
+5. Preserve owner-only Personal OS behavior by default.
+
+6. Implement tenant-scoped composite foreign keys where specified.
+
+7. Preserve the approved money model:
+   amount_minor bigint + currency_code + currency metadata.
+
+8. Preserve the separation between:
+   canonical domain data
+   structured memories
+   temporary runtime context.
+
+9. Implement the persistence adapter/port boundary needed so Application Use Cases no longer depend directly on SQLite-specific APIs.
+
+10. Keep SQLite adapter working as the development adapter during the transition. Do not delete it yet.
+
+11. Add Postgres-specific tests, especially real RLS tests, including the full cross-tenant matrix from rls-design.md.
+
+12. Add migration/schema validation and rollback/recovery documentation where appropriate.
+
+Permission note:
+If straightforward, add an explicit grant_reason/purpose field to permissions so the model supports Who + What + Why + Scope + Duration. Do not redesign the permission system beyond the approved foundation.
+
+Important security constraints:
+
+- Never trust tenant_id or user_id from request body/model output.
+- Never allow the model to grant or broaden permissions.
+- Never expose Supabase service-role credentials to clients or models.
+- Do not use graph relationships as access permissions.
+- Do not introduce new polymorphic Context Graph links.
+- source_type/source_id may remain only where explicitly designed as provenance/audit/event metadata and must never bypass RLS.
+
+Do NOT:
+
+- build Android
+- build Telegram
+- build A2A
+- activate Hermes
+- add a production LLM provider
+- add billing
+- build the full permission product
+- implement the outbox yet
+- remove SQLite
+- rewrite the AgentRuntime architecture
+
+Before declaring completion:
+
+- run the full existing test suite
+- run the new Postgres/RLS tests against an actual Postgres/Supabase-compatible environment
+- verify migration from a clean database
+- verify tenant isolation
+- verify owner isolation
+- verify composite FK protection
+- verify Auth mapping
+- verify idempotency constraints
+- verify reminder lease/concurrency behavior
+- verify that Hermes remains inactive
+- verify that no provider/API key was introduced
+
+At the end, report:
+
+1. files changed
+2. migrations created
+3. schema summary
+4. RLS policy summary
+5. tests run and exact results
+6. any deviations from the approved design
+7. any remaining blockers
+
+Do not proceed to another product phase after this. Stop for review.

@@ -3,20 +3,21 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Personal Secretary API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: secretary
+    description: Personal secretary operations
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +25,54 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /today:
+    get:
+      operationId: getTodayContext
+      tags: [secretary]
+      summary: Get the persisted today context
+      responses:
+        "200":
+          description: Persisted personal context
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TodayContextResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /turns:
+    post:
+      operationId: createTurn
+      tags: [secretary]
+      summary: Send a natural-language message to the secretary
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TurnInput"
+      responses:
+        "200":
+          description: Assistant result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TurnResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     HealthStatus:
@@ -31,6 +80,130 @@ components:
       properties:
         status:
           type: string
+        service:
+          type: string
+      required: [status]
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+    TurnInput:
+      type: object
+      properties:
+        message:
+          type: string
+          minLength: 1
+        conversationId:
+          type: ["string", "null"]
+        idempotencyKey:
+          type: ["string", "null"]
+      required: [message]
+    ActionResult:
+      type: object
+      additionalProperties: true
+    TurnResponse:
+      type: object
+      properties:
+        conversationId:
+          type: string
+        assistantMessage:
+          type: string
+        action:
+          $ref: "#/components/schemas/ActionResult"
+        provider:
+          type: string
+        model:
+          type: string
+      required: [conversationId, assistantMessage, provider, model]
+    ReminderSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        text:
+          type: string
+        dueAt:
+          type: string
+        timezone:
+          type: string
+        status:
+          type: string
+      required: [id, text, dueAt, timezone, status]
+    ExpenseSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        amountMinor:
+          type: integer
+        currency:
+          type: string
+        description:
+          type: string
+        personName:
+          type: ["string", "null"]
+        projectName:
+          type: ["string", "null"]
+        occurredAt:
+          type: string
+      required: [id, amountMinor, currency, description, occurredAt]
+    NamedItem:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+      required: [id, name]
+    PendingTask:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        dueAt:
+          type: ["string", "null"]
+        status:
+          type: string
+      required: [id, title, status]
+    TodayContext:
+      type: object
+      properties:
+        upcomingReminders:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReminderSummary"
+        recentExpenses:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExpenseSummary"
+        activeProjects:
+          type: array
+          items:
+            $ref: "#/components/schemas/NamedItem"
+        relevantPeople:
+          type: array
+          items:
+            $ref: "#/components/schemas/NamedItem"
+        pendingTasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/PendingTask"
+        asOf:
+          type: string
       required:
-        - status
-
+        - upcomingReminders
+        - recentExpenses
+        - activeProjects
+        - relevantPeople
+        - pendingTasks
+        - asOf
+    TodayContextResponse:
+      type: object
+      properties:
+        context:
+          $ref: "#/components/schemas/TodayContext"
+      required: [context]

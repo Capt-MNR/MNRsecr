@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Personal Secretary"
+description = "A mobile-first personal AI secretary interface for natural-language expenses, reminders, projects, people, and a live today context connected to the existing API."
+version = "1.0.0"
+id = "artifacts/personal-secretary"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23375
+
+[services.development]
+run = "pnpm --filter @workspace/personal-secretary run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/personal-secretary", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/personal-secretary/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23375"
+BASE_PATH = "/"

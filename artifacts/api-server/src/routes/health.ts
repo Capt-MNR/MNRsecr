@@ -4,7 +4,10 @@ import { HealthCheckResponse } from "@workspace/api-zod";
 const router: IRouter = Router();
 
 router.get("/healthz", (_req, res) => {
-  const data = HealthCheckResponse.parse({ status: "ok" });
+  const data = HealthCheckResponse.parse({
+    status: "ok",
+    service: "personal-secretary-api",
+  });
   res.json(data);
 });
 
