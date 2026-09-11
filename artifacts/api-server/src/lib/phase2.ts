@@ -44,6 +44,32 @@ type GeminiPart = {
   };
 };
 
+type ConversationMessage = {
+  role: "user" | "assistant" | "tool";
+  text?: string;
+  toolCalls?: Array<{ id: string; name: string; args: Record<string, unknown> }>;
+  toolCallId?: string;
+  toolName?: string;
+};
+
+type GatewayToolCall = {
+  id: string;
+  name: string;
+  args: Record<string, unknown>;
+};
+
+type GatewayResponse = {
+  text: string;
+  toolCalls: GatewayToolCall[];
+  usage?: unknown;
+};
+
+interface ModelGateway {
+  readonly provider: "gemini" | "groq";
+  readonly modelName: string;
+  generate(messages: ConversationMessage[]): Promise<GatewayResponse>;
+}
+
 type GeminiResponse = {
   candidates?: Array<{
     content?: { role?: string; parts?: GeminiPart[] };
@@ -62,8 +88,10 @@ type ToolResult = {
 };
 
 const MAX_TOOL_CALLS = 8;
-const MODEL = process.env.GEMINI_MODEL ?? "gemini-3.6-flash";
-const FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL ?? "gemini-3-flash-preview";
+const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.6-flash";
+const GEMINI_FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL ?? "gemini-3-flash-preview";
+const GROQ_MODEL = process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile";
+const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 
 function normalize(value: string): string {
   return value
