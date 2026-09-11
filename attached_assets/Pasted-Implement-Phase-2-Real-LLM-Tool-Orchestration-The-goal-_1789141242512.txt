@@ -1,0 +1,624 @@
+Implement Phase 2 — Real LLM + Tool Orchestration.
+
+The goal of this phase is to replace the deterministic development intent matching with a real LLM-driven agent that can understand natural language and safely operate the existing Personal AI OS through application-level tools.
+
+This phase must preserve the architecture already implemented in Phases 1.0–1.3.
+
+---
+
+1. Core objective
+
+The Personal AI Secretary must understand natural language rather than only a fixed list of development commands.
+
+Examples:
+
+"محمد أخد مني كام؟"
+
+"أنا دفعت لمحمد 5000 كمان النهارده."
+
+"احسبلي كل اللي صرفته على التشطيبات."
+
+"بدأت مشروع جديد اسمه المحجر."
+
+"محمد هو المقاول بتاع المحجر."
+
+"دفعتله 11500 جنيه تشطيبات."
+
+"فكرني الخميس أكلم محمد."
+
+The system must determine the appropriate application operation(s) and execute them through approved tools/use cases.
+
+---
+
+2. Real LLM provider
+
+Replace the current DeterministicDevelopmentProvider with a real LLM provider behind the existing ModelGateway/provider abstraction.
+
+Preferred first provider:
+
+- Gemini API
+
+However:
+
+DO NOT couple the application architecture to Gemini.
+
+The architecture must remain:
+
+Application
+→ ModelGateway
+→ Provider adapter
+
+A future provider must be replaceable without rewriting the application/runtime.
+
+Do not add provider-specific logic to:
+
+- frontend
+- domain
+- persistence
+- application use cases
+
+---
+
+3. API key security
+
+The API key MUST:
+
+- exist only on the server
+- come from environment/configuration
+- never be committed to Git
+- never appear in frontend assets
+- never be returned by an API endpoint
+- never be passed to the browser
+- never be stored in the database as ordinary user data
+
+Add/update ".env.example" if appropriate, but never commit a real secret.
+
+If no real provider key is available in the environment, the application must fail clearly and safely or retain the development provider as an explicit development mode.
+
+Do NOT invent credentials.
+
+---
+
+4. Tool architecture
+
+The LLM must NOT directly access:
+
+- PostgreSQL
+- SQLite
+- persistence adapters
+- database credentials
+- service-role credentials
+
+Instead, expose application-level tools/use cases.
+
+Initial tool set should include at minimum:
+
+People
+
+- find_person
+- create_person
+- update_person
+
+Projects
+
+- find_project
+- create_project
+- update_project
+
+Relationships
+
+- link_person_to_project
+- update_person_project_relationship
+
+Expenses
+
+- record_expense
+- query_expenses
+- get_person_expense_total
+- get_project_expense_total
+
+Tasks / commitments
+
+- create_task
+- create_commitment
+
+Reminders
+
+- create_reminder
+- query_reminders
+
+Context
+
+- recall_context
+
+Only expose tools that are actually implemented and authorized.
+
+---
+
+5. New people and projects are FIRST-CLASS behavior
+
+This is a mandatory acceptance criterion.
+
+The assistant must be able to discover that a new person or project exists and create it through the application layer.
+
+Example:
+
+"بدأت مشروع جديد اسمه المحجر."
+
+Expected:
+
+create_project("المحجر")
+
+Example:
+
+"محمد هو المقاول بتاع المحجر."
+
+If محمد does not already exist:
+
+create_person("محمد")
+
+then:
+
+link_person_to_project(
+person=محمد,
+project=المحجر,
+relationship="مقاول"
+)
+
+Example:
+
+"دفعت لمحمد 11500 جنيه تشطيبات."
+
+If محمد already exists, resolve the existing person.
+
+If no matching محمد exists, create a new person rather than failing.
+
+---
+
+6. Entity resolution is mandatory
+
+Do NOT blindly create duplicates.
+
+If the user says:
+
+"محمد"
+
+and exactly one suitable محمد exists in the user's accessible context, resolve it.
+
+If multiple plausible people exist:
+
+DO NOT choose randomly.
+
+Ask the user for clarification.
+
+Example:
+
+"تقصد محمد الكهربائي بتاع التشطيبات ولا محمد المقاول؟"
+
+If no suitable person exists:
+
+Create a new person using only information actually known.
+
+Never invent:
+
+- phone number
+- email
+- surname
+- address
+- relationship
+- project
+- other personal details
+
+unless provided or reliably inferred from context.
+
+---
+
+7. Multi-step actions
+
+The LLM must be able to perform multiple safe operations for one user message.
+
+Example:
+
+"بدأت مشروع جديد اسمه المحجر، ومحمد هو المقاول، ودفعتله 11500 جنيه تشطيبات."
+
+Possible tool sequence:
+
+1. find_project("المحجر")
+2. create_project if absent
+3. find_person("محمد")
+4. create_person if absent
+5. link_person_to_project(محمد, المحجر, "مقاول")
+6. record_expense(
+   amount=11500,
+   currency=EGP,
+   person=محمد,
+   project=المحجر,
+   description="تشطيبات"
+   )
+
+The final response should summarize what was actually committed.
+
+Do not claim an operation succeeded unless the application/tool returned success.
+
+---
+
+8. Ambiguity handling
+
+The assistant must ask instead of guessing when ambiguity could cause incorrect persistent data.
+
+Examples:
+
+Multiple people named محمد:
+→ ask which one.
+
+Multiple projects named المحل:
+→ ask which one.
+
+Missing critical information:
+→ ask only for the information actually required.
+
+Do NOT ask unnecessary questions when context is sufficient.
+
+---
+
+9. Context-aware resolution
+
+The assistant should use existing structured context when resolving entities.
+
+Example:
+
+If the user previously established:
+
+محمد = electrician
+محمد → التشطيبات
+
+then:
+
+"دفعت لمحمد 3000"
+
+should preferentially resolve to that محمد when there is no competing plausible entity.
+
+Context must come from canonical persisted data and approved context/memory interfaces.
+
+Do not treat the raw conversation transcript as the canonical database.
+
+---
+
+10. Money handling
+
+Preserve the existing canonical money model:
+
+amount_minor
+currency_code
+
+Never use floating-point money internally.
+
+If currency is not explicitly provided:
+
+- use the user's configured/default currency only if that configuration already exists and is authoritative
+- otherwise ask
+
+Do not hardcode EGP as a universal default.
+
+---
+
+11. Tool authorization
+
+Every tool invocation must pass through the application authorization boundary.
+
+The LLM cannot:
+
+- grant itself permissions
+- change tenant identity
+- change user identity
+- access another user's records
+- bypass RLS
+- access service credentials
+- directly execute arbitrary SQL
+- call arbitrary HTTP endpoints
+- create unrestricted tools
+
+The server-derived ExecutionContext remains authoritative.
+
+---
+
+12. Read vs write behavior
+
+Reads may execute automatically when authorized.
+
+Writes must be explicit application actions.
+
+For normal low-risk personal operations such as:
+
+"دفعت لمحمد 5000"
+
+the assistant may commit the expense directly through the authorized use case.
+
+For operations outside the currently approved low-risk scope, do not invent autonomous execution behavior.
+
+---
+
+13. Response behavior
+
+After tool execution, the assistant should respond naturally in Arabic when the user is speaking Arabic.
+
+Example:
+
+User:
+"دفعت لمحمد 11500 جنيه تشطيبات."
+
+Assistant:
+"تمام، سجلت 11,500 جنيه لمحمد ضمن التشطيبات."
+
+If a new person/project was created:
+
+"تمام، أنشأت مشروع «المحجر»، وسجلت محمد كمقاول مرتبط به، وسجلت دفعة 11,500 جنيه للتشطيبات."
+
+Do not expose internal tool names unless debugging is explicitly requested.
+
+---
+
+14. Development provider
+
+Keep DeterministicDevelopmentProvider available as an explicit development/fallback mode.
+
+Do not delete it unnecessarily.
+
+The system should make the active provider explicit in configuration.
+
+Example conceptually:
+
+AI_PROVIDER=gemini
+AI_PROVIDER=development
+
+Do not hardcode one provider into the runtime.
+
+---
+
+15. Conversation handling
+
+Do not create a new conversation architecture.
+
+Use the existing runtime conversation boundary.
+
+Do not automatically convert every conversation message into durable memory.
+
+Conversation history and durable memory remain separate.
+
+---
+
+16. Memory
+
+Do not implement the complete Memory Engine in this phase.
+
+However, the architecture must allow the LLM to produce structured memory/context proposals through the existing application boundary.
+
+The application decides whether such memory is valid and persistent.
+
+The LLM cannot directly write arbitrary memory records.
+
+---
+
+17. Frontend
+
+Keep the existing Phase 1.3 UI functional.
+
+Do not redesign the UI in this phase unless a minimal change is required to display:
+
+- loading
+- tool/action progress
+- errors
+- final response
+
+The UI is NOT the focus of Phase 2.
+
+---
+
+18. Observability
+
+For development/debugging, expose enough server-side information to determine:
+
+- model/provider used
+- tool selected
+- tool arguments after validation
+- tool result
+- execution success/failure
+- latency
+- token/usage information when available
+
+Do not expose secrets.
+
+Do not expose sensitive internal traces to ordinary users.
+
+Existing audit/security boundaries must remain intact.
+
+---
+
+19. Tests
+
+Add real tests for the new agent/tool flow.
+
+At minimum test:
+
+Natural language reads
+
+"محمد أخد مني كام؟"
+
+"أنا صرفت كام على التشطيبات؟"
+
+Entity creation
+
+"بدأت مشروع جديد اسمه المحجر."
+
+Expected:
+
+- project created
+
+Person creation
+
+"محمد هو المقاول بتاع المحجر."
+
+Expected:
+
+- person created if absent
+- project resolved
+- relationship created
+
+Combined action
+
+"بدأت مشروع جديد اسمه المحجر، ومحمد هو المقاول، ودفعتله 11500 جنيه تشطيبات."
+
+Expected:
+
+- project
+- person
+- relationship
+- expense
+
+all persisted correctly.
+
+Duplicate prevention
+
+Repeat the same contextual entity creation.
+
+Expected:
+
+- no duplicate person/project when an existing entity is clearly resolvable.
+
+Ambiguity
+
+Create two people named محمد.
+
+Ask:
+"دفعت لمحمد 5000."
+
+Expected:
+
+- clarification instead of arbitrary selection.
+
+Persistence
+
+Restart API/store and verify entities remain.
+
+Security
+
+Verify the LLM cannot:
+
+- change tenant
+- change user
+- bypass authorization
+- access another user's records
+- directly execute SQL
+
+Provider abstraction
+
+Verify switching between development provider and real provider does not require application/domain changes.
+
+---
+
+20. Cost and safety
+
+Do not add unlimited agent loops.
+
+Implement bounded:
+
+- tool-call count
+- execution time
+- model request timeout
+- retry policy
+
+Avoid unnecessary LLM calls for deterministic operations where the application can safely handle them without a model.
+
+Do not implement autonomous background agent behavior yet.
+
+---
+
+21. No scope creep
+
+Do NOT implement:
+
+- Android native app
+- Telegram
+- WhatsApp
+- A2A
+- Hermes
+- Business Mode
+- billing
+- subscriptions
+- ads
+- production deployment
+- autonomous background agent
+- full memory engine
+- advanced workflow engine
+- outbox
+- Gmail
+- external integrations
+
+Those are later phases.
+
+---
+
+22. Acceptance criteria
+
+Phase 2 is successful only if I can open the existing web UI and write natural variations of the same request and receive correct behavior.
+
+For example, all of these should be understood without hardcoded sentence matching:
+
+"دفعت لمحمد 5000"
+
+"أنا اديت محمد 5000 جنيه"
+
+"محمد استلم مني ٥ آلاف"
+
+"سجل 5000 جنيه لمحمد"
+
+The system should understand that these represent an expense operation.
+
+Likewise:
+
+"اعمل مشروع اسمه المحجر"
+
+"بدأت مشروع جديد اسمه المحجر"
+
+"المشروع الجديد بتاعي اسمه المحجر"
+
+should result in the same project creation intent.
+
+And:
+
+"محمد المقاول بتاع المحجر"
+
+"المقاول محمد هو اللي شغال في المحجر"
+
+should establish the appropriate person/project relationship when unambiguous.
+
+This is the key transition from:
+
+command-driven demo
+
+to:
+
+natural-language Personal AI Secretary.
+
+---
+
+23. Final report
+
+When implementation is complete, STOP and report:
+
+1. Files created/changed
+2. Provider implemented
+3. Model used
+4. Tool list
+5. Agent/runtime flow
+6. Entity-resolution behavior
+7. New-person/project behavior
+8. Security boundaries
+9. Exact tests and results
+10. Real-provider test results
+11. Development-provider test results
+12. Any limitations
+13. Any blockers
+14. Any deviations from the approved architecture
+
+Do not start another phase automatically.
