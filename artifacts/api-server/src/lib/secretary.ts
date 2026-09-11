@@ -147,14 +147,6 @@ class DrizzlePersistence implements PersistencePort {
         name: name.trim(),
         nameKey,
       })
-      .onConflictDoUpdate({
-        target: [
-          peopleTable.tenantId,
-          peopleTable.ownerUserId,
-          peopleTable.nameKey,
-        ],
-        set: { updatedAt: new Date() },
-      })
       .returning();
     return created;
   }
@@ -185,14 +177,6 @@ class DrizzlePersistence implements PersistencePort {
         ownerUserId: identity.userId,
         name: name.trim(),
         nameKey,
-      })
-      .onConflictDoUpdate({
-        target: [
-          projectsTable.tenantId,
-          projectsTable.ownerUserId,
-          projectsTable.nameKey,
-        ],
-        set: { updatedAt: new Date() },
       })
       .returning();
     return created;

@@ -62,7 +62,8 @@ type ToolResult = {
 };
 
 const MAX_TOOL_CALLS = 8;
-const MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
+const MODEL = process.env.GEMINI_MODEL ?? "gemini-3.6-flash";
+const FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL ?? "gemini-3-flash-preview";
 
 function normalize(value: string): string {
   return value
@@ -151,6 +152,7 @@ export const phase2Tools: ToolDefinition[] = [
   tool("query_expenses", "Query saved expenses for a person or project.", {
     personId: { type: "STRING" },
     projectId: { type: "STRING" },
+    description: { type: "STRING", description: "Optional description/category text to search" },
     limit: { type: "INTEGER" },
   }),
   tool("get_person_expense_total", "Get the total saved expense amount for one resolved person.", {
@@ -384,6 +386,7 @@ async function executeTool(
     }
     case "query_expenses": {
       const limit = Math.min(Math.max(Number(args.limit ?? 20), 1), 50);
+      const description = stringArg("description");
       const rows = await db.select({
         expense: expensesTable,
         personName: peopleTable.name,
@@ -395,6 +398,7 @@ async function executeTool(
           identityWhere(identity, expensesTable),
           personId ? eq(expensesTable.personId, personId) : undefined,
           projectId ? eq(expensesTable.projectId, projectId) : undefined,
+          description ? ilike(expensesTable.description, `%${description}%`) : undefined,
         ))
         .orderBy(desc(expensesTable.occurredAt))
         .limit(limit);
@@ -501,9 +505,15 @@ const systemInstruction = `أنت سكرتير شخصي عربي يعمل داخ
 7. لا تنشئ ذاكرة دائمة من المحادثة. استخدم recall_context للبيانات القانونية المحفوظة.
 8. عند إنشاء شخص أو مشروع، لا تضف هاتفًا أو بريدًا أو صفة أو علاقة لم يذكرها المستخدم.`;
 
+const requestGuidance = `إرشادات تنفيذ إضافية:
+- إذا كانت الرسالة جملة دفع/إعطاء/استلام وبها شخص ومبلغ وعملة، نفّذ find_person ثم record_expense مباشرة. لا تستدع recall_context أولًا. إذا لم يذكر المستخدم وصفًا، استخدم وصفًا صادقًا مثل "دفعة إلى <الاسم>".
+- إذا كانت الرسالة تسأل عن إجمالي ما صُرف على وصف أو فئة مثل "التشطيبات" من دون ذكر مشروع صريح، استخدم query_expenses مع description ثم احسب الناتج من الصفوف. لا تخترع مشروعًا اسمه الفئة.
+- إذا كانت الرسالة تسأل "محمد أخد مني كام؟"، نفّذ find_person ثم get_person_expense_total.`;
+
 class GeminiModelGateway {
   private readonly apiKey = process.env.GEMINI_API_KEY;
   private readonly model = MODEL;
+  private activeModel = MODEL;
 
   get configured(): boolean {
     return Boolean(this.apiKey);
@@ -511,36 +521,51 @@ class GeminiModelGateway {
 
   async generate(contents: Array<{ role: string; parts: GeminiPart[] }>): Promise<GeminiResponse> {
     if (!this.apiKey) throw new Error("GEMINI_API_KEY is not configured.");
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 45_000);
-    try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${encodeURIComponent(this.apiKey)}`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: systemInstruction }] },
-            contents,
-            tools: [{ functionDeclarations: phase2Tools }],
-            toolConfig: { functionCallingConfig: { mode: "AUTO" } },
-            generationConfig: { temperature: 0.15, maxOutputTokens: 8192 },
-          }),
-          signal: controller.signal,
-        },
-      );
-      const raw = await response.text();
-      if (!response.ok) {
-        throw new Error(`Gemini request failed with ${response.status}: ${raw.slice(0, 500)}`);
+    let lastError: Error | null = null;
+    const models = this.model === FALLBACK_MODEL
+      ? [this.model]
+      : [this.model, FALLBACK_MODEL];
+
+    for (const model of models) {
+      for (let attempt = 0; attempt < 1; attempt += 1) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 25_000);
+        try {
+          const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(this.apiKey)}`,
+            {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+            systemInstruction: { parts: [{ text: `${systemInstruction}\n${requestGuidance}` }] },
+                contents,
+                tools: [{ functionDeclarations: phase2Tools }],
+                toolConfig: { functionCallingConfig: { mode: "AUTO" } },
+                generationConfig: { temperature: 0.15, maxOutputTokens: 8192 },
+              }),
+              signal: controller.signal,
+            },
+          );
+          const raw = await response.text();
+          if (response.ok) {
+            this.activeModel = model;
+            return JSON.parse(raw) as GeminiResponse;
+          }
+          lastError = new Error(`Gemini request failed with ${response.status}: ${raw.slice(0, 500)}`);
+          if (![404, 429, 500, 502, 503, 504].includes(response.status)) throw lastError;
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error(String(error));
+        } finally {
+          clearTimeout(timeout);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
-      return JSON.parse(raw) as GeminiResponse;
-    } finally {
-      clearTimeout(timeout);
     }
+    throw lastError ?? new Error("Gemini request failed.");
   }
 
   get modelName(): string {
-    return this.model;
+    return this.activeModel;
   }
 }
 

@@ -1,15 +1,17 @@
-# [Project name]
+# Personal AI Secretary
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A private Arabic-first secretary that turns natural-language requests into authorized, persisted personal actions.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm --filter @workspace/api-server run dev` — run the API server
+- `pnpm --filter @workspace/personal-secretary run dev` — run the web app
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- `pnpm --filter @workspace/db run push` — push DB schema changes (development only)
+- Required env: `DATABASE_URL` — PostgreSQL connection string
+- Optional server-only LLM env: `AI_PROVIDER=gemini|development`, `GEMINI_MODEL`, and `GEMINI_API_KEY`
 
 ## Stack
 
@@ -17,29 +19,42 @@ _Replace the heading above with the project's name, and this line with one sente
 - API: Express 5
 - DB: PostgreSQL + Drizzle ORM
 - Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- API codegen: Orval from the OpenAPI contract
+- Build: Vite for the web app and esbuild for the API
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `lib/api-spec/openapi.yaml` — source-of-truth HTTP contract
+- `lib/db/src/schema/personal-secretary.ts` — PostgreSQL schema
+- `artifacts/api-server/src/lib/secretary.ts` — persistence boundary and deterministic provider
+- `artifacts/api-server/src/lib/phase2.ts` — Gemini gateway, approved tools, and bounded orchestration
+- `artifacts/api-server/src/routes/secretary.ts` — authenticated secretary routes
+- `artifacts/personal-secretary/src/pages/home.tsx` — Arabic responsive product UI
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- The browser only calls the API; it never receives database credentials or the Gemini key.
+- `AI_PROVIDER=development` keeps the deterministic provider available for local tests and safe fallback.
+- `AI_PROVIDER=gemini` selects a provider adapter behind the same runtime boundary; the LLM can only invoke registered application tools.
+- Every tool derives tenant and user identity from the authenticated request, not model arguments.
+- Conversation IDs remain a runtime boundary; messages are not automatically written to durable memory.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Arabic natural-language conversation for expenses, people, projects, relationships, reminders, tasks, commitments, and Today context.
+- Entity resolution asks for clarification when multiple accessible records match instead of choosing randomly.
+- Safe multi-step tool execution is bounded to eight calls and 45 seconds per model request.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Keep Hermes, Telegram, Android native, billing, A2A, and autonomous background behavior out of Phase 2.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Run `pnpm -w run typecheck:libs` after changing a shared `lib/*` package so generated declarations are current before checking artifacts.
+- The development API token is intentionally a Phase 1/2 boundary and is not production authentication.
+- Real-provider failures must not silently claim a write succeeded; use the development provider explicitly when no Gemini key is configured.
 
 ## Pointers
 
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.

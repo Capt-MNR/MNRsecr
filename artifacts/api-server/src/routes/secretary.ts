@@ -43,8 +43,15 @@ router.post("/turns", async (req, res): Promise<void> => {
     return;
   }
 
-  const result = await agentRuntime.run(identity, parsed.data);
-  res.json(CreateTurnResponse.parse(result));
+  try {
+    const result = await agentRuntime.run(identity, parsed.data);
+    res.json(CreateTurnResponse.parse(result));
+  } catch (error) {
+    req.log.error({ err: error }, "Secretary turn failed");
+    res.status(503).json({
+      error: "The secretary could not complete this request. Review saved context before retrying.",
+    });
+  }
 });
 
 export default router;

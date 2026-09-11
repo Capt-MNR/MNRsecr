@@ -1,0 +1,1 @@
+- [Phase 2 provider and entity resolution](phase2-provider-and-entity-resolution.md) — Gemini availability is variable; duplicate names require application-level resolution, not unique-name upserts.
