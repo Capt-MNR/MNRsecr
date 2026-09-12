@@ -112,6 +112,35 @@ export function providerExceptionError(provider: string, cause: unknown): Secret
   });
 }
 
+export function isTransientProviderFailure(error: unknown): error is SecretaryError {
+  if (!(error instanceof SecretaryError)) return false;
+  if (error.category === "provider_rate_limit" || error.category === "timeout" || error.category === "provider_unavailable") {
+    return true;
+  }
+  return error.category === "provider_error"
+    && (error.code === "PROVIDER_REQUEST_FAILED" || (error.upstreamStatus ?? 0) >= 500);
+}
+
+export function providerFailoverError(
+  primaryProvider: string,
+  primaryError: SecretaryError,
+  fallbackProvider: string,
+  fallbackError: SecretaryError,
+): SecretaryError {
+  const primaryDetail = `${primaryProvider}:${primaryError.code}${primaryError.upstreamStatus ? `/${primaryError.upstreamStatus}` : ""}`;
+  const fallbackDetail = `${fallbackProvider}:${fallbackError.code}${fallbackError.upstreamStatus ? `/${fallbackError.upstreamStatus}` : ""}`;
+  return new SecretaryError("All configured LLM providers failed.", {
+    status: fallbackError.status,
+    category: fallbackError.category,
+    code: "PROVIDER_FAILOVER_FAILED",
+    retryable: fallbackError.retryable,
+    provider: fallbackProvider,
+    upstreamStatus: fallbackError.upstreamStatus,
+    providerError: sanitizeProviderError(`${primaryDetail}; ${fallbackDetail}`),
+    cause: fallbackError,
+  });
+}
+
 export function agentToolError(toolName: string, cause: unknown): SecretaryError {
   return new SecretaryError("Agent tool execution failed.", {
     status: 500,

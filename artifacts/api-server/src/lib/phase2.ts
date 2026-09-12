@@ -25,6 +25,8 @@ import {
 } from "./conversation-memory";
 import {
   agentToolError,
+  isTransientProviderFailure,
+  providerFailoverError,
   providerExceptionError,
   providerResponseError,
   SecretaryError,
@@ -111,9 +113,12 @@ export type FinalResponse = {
   groundedFacts?: GroundedFact[];
 };
 
-type GatewayCallContext = {
+export type ProviderName = "gemini" | "groq";
+
+export type GatewayCallContext = {
   requestId: string;
   callNumber: number;
+  toolCallsExecuted: number;
 };
 
 function logLlmFailure(
@@ -137,10 +142,23 @@ function logLlmFailure(
 }
 
 export interface ModelGateway {
-  readonly provider: "gemini" | "groq";
+  readonly provider: ProviderName;
   readonly modelName: string;
   generate(messages: ConversationMessage[], context: GatewayCallContext): Promise<GatewayResponse>;
+  getProviderForRequest?(requestId: string): { provider: ProviderName; model: string };
+  getTrace?(requestId: string): ProviderTrace;
+  finishRequest?(requestId: string): void;
 }
+
+export type ProviderTrace = {
+  primaryProvider: ProviderName;
+  fallbackProvider?: ProviderName;
+  selectedProvider?: ProviderName;
+  providersAttempted: ProviderName[];
+  fallbackOccurred: boolean;
+  fallbackReason?: string;
+  toolCallsExecutedBeforeFailure?: number;
+};
 
 type GeminiResponse = {
   candidates?: Array<{
@@ -1012,7 +1030,7 @@ function toOpenAiTools() {
   }));
 }
 
-class GeminiModelGateway implements ModelGateway {
+export class GeminiModelGateway implements ModelGateway {
   readonly provider = "gemini" as const;
   private readonly apiKey = process.env.GEMINI_API_KEY;
   private readonly model = GEMINI_MODEL;
@@ -1085,7 +1103,9 @@ class GeminiModelGateway implements ModelGateway {
         lastError = providerResponseError("gemini", response.status, raw);
         if (![404, 429, 500, 502, 503, 504].includes(response.status)) throw lastError;
       } catch (error) {
-        lastError = providerExceptionError("gemini", error);
+        lastError = error instanceof SecretaryError
+          ? error
+          : providerExceptionError("gemini", error);
         logLlmFailure("gemini", model, context, 1, lastError);
       } finally {
         clearTimeout(timeout);
@@ -1096,7 +1116,7 @@ class GeminiModelGateway implements ModelGateway {
   }
 }
 
-class GroqModelGateway implements ModelGateway {
+export class GroqModelGateway implements ModelGateway {
   readonly provider = "groq" as const;
   private readonly apiKey = process.env.GROQ_API_KEY;
   readonly model = GROQ_MODEL;
@@ -1215,7 +1235,9 @@ class GroqModelGateway implements ModelGateway {
         }, "agent llm rate limit retry");
         await new Promise((resolve) => setTimeout(resolve, Math.min(Math.max(retryAfter * 1000, 500), 3_000)));
       } catch (error) {
-        lastError = providerExceptionError("groq", error);
+        lastError = error instanceof SecretaryError
+          ? error
+          : providerExceptionError("groq", error);
         logLlmFailure("groq", this.model, context, attempt + 1, lastError);
         if (attempt === 1 || !(lastError instanceof SecretaryError && lastError.upstreamStatus === 429)) {
           throw lastError;
@@ -1225,6 +1247,194 @@ class GroqModelGateway implements ModelGateway {
       }
     }
     throw lastError ?? new Error("Groq request failed.");
+  }
+}
+
+type CircuitState = {
+  consecutiveFailures: number;
+  openUntil: number;
+};
+
+type RequestProviderState = {
+  fallbackProvider?: ProviderName;
+  selectedProvider?: ProviderName;
+  primaryError?: SecretaryError;
+  expiresAt: number;
+};
+
+const CIRCUIT_FAILURE_THRESHOLD = 2;
+const CIRCUIT_OPEN_MS = 15_000;
+const REQUEST_PROVIDER_STATE_TTL_MS = 5 * 60_000;
+
+export class FailoverModelGateway implements ModelGateway {
+  private readonly circuits = new Map<ProviderName, CircuitState>();
+  private readonly requests = new Map<string, RequestProviderState>();
+  private readonly traces = new Map<string, ProviderTrace>();
+
+  constructor(
+    private readonly gateways: Partial<Record<ProviderName, ModelGateway>>,
+    private readonly order: ProviderName[],
+  ) {
+    if (order.length === 0) throw new Error("At least one LLM provider is required.");
+  }
+
+  get provider(): ProviderName {
+    return this.order[0];
+  }
+
+  get modelName(): string {
+    return this.gateways[this.order[0]]?.modelName ?? "unconfigured";
+  }
+
+  private circuit(provider: ProviderName): CircuitState {
+    const current = this.circuits.get(provider);
+    if (current) return current;
+    const created = { consecutiveFailures: 0, openUntil: 0 };
+    this.circuits.set(provider, created);
+    return created;
+  }
+
+  private isCircuitOpen(provider: ProviderName): boolean {
+    return this.circuit(provider).openUntil > Date.now();
+  }
+
+  private markSuccess(provider: ProviderName): void {
+    this.circuits.set(provider, { consecutiveFailures: 0, openUntil: 0 });
+  }
+
+  private markTransientFailure(provider: ProviderName): void {
+    const current = this.circuit(provider);
+    const consecutiveFailures = current.consecutiveFailures + 1;
+    this.circuits.set(provider, {
+      consecutiveFailures,
+      openUntil: consecutiveFailures >= CIRCUIT_FAILURE_THRESHOLD
+        ? Date.now() + CIRCUIT_OPEN_MS
+        : current.openUntil,
+    });
+  }
+
+  private trace(requestId: string): ProviderTrace {
+    const current = this.traces.get(requestId);
+    if (current) return current;
+    const created: ProviderTrace = {
+      primaryProvider: this.order[0],
+      ...(this.order[1] ? { fallbackProvider: this.order[1] } : {}),
+      providersAttempted: [],
+      fallbackOccurred: false,
+    };
+    this.traces.set(requestId, created);
+    return created;
+  }
+
+  private requestState(requestId: string): RequestProviderState | undefined {
+    const current = this.requests.get(requestId);
+    if (!current || current.expiresAt <= Date.now()) {
+      if (current) this.requests.delete(requestId);
+      return undefined;
+    }
+    return current;
+  }
+
+  getProviderForRequest(requestId: string): { provider: ProviderName; model: string } {
+    const selected = this.requestState(requestId)?.selectedProvider ?? this.order[0];
+    const gateway = this.gateways[selected];
+    return {
+      provider: selected,
+      model: gateway?.modelName ?? "unconfigured",
+    };
+  }
+
+  getTrace(requestId: string): ProviderTrace {
+    return this.trace(requestId);
+  }
+
+  finishRequest(requestId: string): void {
+    this.requests.delete(requestId);
+    this.traces.delete(requestId);
+  }
+
+  async generate(messages: ConversationMessage[], context: GatewayCallContext): Promise<GatewayResponse> {
+    const request = this.requestState(context.requestId);
+    const lockedProvider = request?.fallbackProvider;
+    const preferredProviders = lockedProvider
+      ? [lockedProvider]
+      : this.order;
+    const trace = this.trace(context.requestId);
+    const candidates = preferredProviders.filter((provider) => this.gateways[provider]);
+    const available = candidates.filter((provider) => !this.isCircuitOpen(provider));
+    const providersToTry = available.length > 0 ? available : candidates.slice(0, 1);
+    let primaryError = request?.primaryError;
+
+    for (const [index, provider] of providersToTry.entries()) {
+      const gateway = this.gateways[provider];
+      if (!gateway) continue;
+      if (provider !== this.order[0] && !trace.fallbackOccurred) {
+        trace.fallbackOccurred = true;
+        trace.fallbackReason = "circuit_open";
+        trace.toolCallsExecutedBeforeFailure = context.toolCallsExecuted;
+        logger.warn({
+          requestId: context.requestId,
+          primaryProvider: this.order[0],
+          fallbackProvider: provider,
+          fallback: true,
+          fallbackReason: trace.fallbackReason,
+          toolCallsExecutedBeforeFailure: context.toolCallsExecuted,
+        }, "agent provider fallback");
+      }
+      trace.providersAttempted.push(provider);
+      try {
+        const response = await gateway.generate(messages, context);
+        this.markSuccess(provider);
+        trace.selectedProvider = provider;
+        this.requests.set(context.requestId, {
+          ...(trace.fallbackOccurred ? { fallbackProvider: provider } : {}),
+          selectedProvider: provider,
+          expiresAt: Date.now() + REQUEST_PROVIDER_STATE_TTL_MS,
+        });
+        return response;
+      } catch (error) {
+        const classified = error instanceof SecretaryError
+          ? error
+          : providerExceptionError(provider, error);
+        if (!isTransientProviderFailure(classified)) throw classified;
+        this.markTransientFailure(provider);
+        trace.fallbackReason = classified.code;
+        trace.toolCallsExecutedBeforeFailure = context.toolCallsExecuted;
+        primaryError ??= classified;
+
+        const nextProvider = providersToTry[index + 1];
+        if (nextProvider) {
+          trace.fallbackOccurred = true;
+          this.requests.set(context.requestId, {
+            fallbackProvider: nextProvider,
+            ...(provider === this.order[0] ? { primaryError: classified } : {}),
+            expiresAt: Date.now() + REQUEST_PROVIDER_STATE_TTL_MS,
+          });
+          logger.warn({
+            requestId: context.requestId,
+            primaryProvider: this.order[0],
+            fallbackProvider: nextProvider,
+            fallback: true,
+            fallbackReason: classified.code,
+            primaryError: classified.code,
+            toolCallsExecutedBeforeFailure: context.toolCallsExecuted,
+          }, "agent provider fallback");
+          continue;
+        }
+
+        if (primaryError && provider !== this.order[0]) {
+          throw providerFailoverError(this.order[0], primaryError, provider, classified);
+        }
+        throw classified;
+      }
+    }
+
+    throw new SecretaryError("No configured LLM provider is available.", {
+      status: 503,
+      category: "provider_unavailable",
+      code: "PROVIDER_NOT_CONFIGURED",
+      retryable: false,
+    });
   }
 }
 
@@ -1371,17 +1581,27 @@ export class Phase2AgentRuntime {
     let conversationState: ConversationState = conversationMemory.state;
 
     const persistResult = async (finalResponse: FinalResponse): Promise<Phase2TurnResult> => {
-      const finalAction = compactActionForMemory(action) ?? {
-        type: "llm_response",
-        conversationState,
+      const providerSelection = this.gateway.getProviderForRequest?.(requestId) ?? {
+        provider: this.gateway.provider,
+        model: this.gateway.modelName,
+      };
+      const providerTrace = this.gateway.getTrace?.(requestId);
+      const finalAction = {
+        ...(compactActionForMemory(action) ?? {
+          type: "llm_response",
+          conversationState,
+        }),
+        llmCalls,
+        toolCalls,
+        ...(providerTrace ? { providerTrace } : {}),
       };
       const result: Phase2TurnResult = {
         conversationId,
         assistantMessage: finalResponse.message,
         response: finalResponse,
         action: finalAction,
-        provider: this.gateway.provider,
-        model: this.gateway.modelName,
+        provider: providerSelection.provider,
+        model: providerSelection.model,
       };
       if (!options.dryRun) {
         await saveConversationTurn(identity, conversationMemory, {
@@ -1393,104 +1613,132 @@ export class Phase2AgentRuntime {
       }
       logger.info({
         requestId,
-        provider: this.gateway.provider,
-        model: this.gateway.modelName,
+        provider: providerSelection.provider,
+        model: providerSelection.model,
         toolCalls,
         llmCalls,
+        fallback: providerTrace?.fallbackOccurred ?? false,
+        fallbackReason: providerTrace?.fallbackReason,
+        providersAttempted: providerTrace?.providersAttempted,
+        toolCallsExecutedBeforeFailure: providerTrace?.toolCallsExecutedBeforeFailure,
         latencyMs: Date.now() - startedAt,
         dryRun: options.dryRun ?? false,
       }, "agent final response");
       return result;
     };
 
-    while (toolCalls < MAX_TOOL_CALLS) {
-      llmCalls += 1;
-      const response = await this.gateway.generate(messages, {
-        requestId,
-        callNumber: llmCalls,
-      });
-      if (response.toolCalls.length === 0) {
-        return persistResult(finalResponseFromText(response.text, toolHistory));
-      }
-
-      messages.push({
-        role: "assistant",
-        text: response.text || undefined,
-        toolCalls: response.toolCalls,
-      });
-
-      const finalCall = response.toolCalls.find((call) => call.name === "final_response");
-      if (finalCall && response.toolCalls.length === 1) {
-        return persistResult(finalResponseFromArgs(finalCall.args, toolHistory));
-      }
-
-      for (const call of response.toolCalls) {
-        if (call.name === "final_response") {
-          continue;
-        }
-        toolCalls += 1;
-        if (toolCalls > MAX_TOOL_CALLS) break;
-        let toolResult: ToolResult;
-        try {
-          toolResult = await executeTool(identity, call.name, call.args, {
-            requestId,
-            callId: call.id,
-            dryRun: options.dryRun,
-          });
-        } catch (error) {
-          throw agentToolError(call.name, error);
-        }
-        toolHistory.push({ name: call.name, result: toolResult });
-        conversationState = updateConversationState(conversationState, call.name, toolResult);
-        action = {
-          type: "tool_orchestration",
-          lastTool: call.name,
-          toolCalls,
-          llmCalls,
-          conversationState,
-          toolResult: compactActionForMemory({
-            toolResult: jsonSafe(toolResult),
-          })?.toolResult,
-        };
-        messages.push({
-          role: "tool",
-          toolCallId: call.id,
-          toolName: call.name,
-          text: JSON.stringify(toolResult),
+    try {
+      while (toolCalls < MAX_TOOL_CALLS) {
+        llmCalls += 1;
+        const response = await this.gateway.generate(messages, {
+          requestId,
+          callNumber: llmCalls,
+          toolCallsExecuted: toolCalls,
         });
-      }
-    }
+        if (response.toolCalls.length === 0) {
+          return persistResult(finalResponseFromText(response.text, toolHistory));
+        }
 
-    throw new SecretaryError(`Agent stopped after ${MAX_TOOL_CALLS} tool calls.`, {
-      status: 500,
-      category: "agent_error",
-      code: "AGENT_TOOL_CALL_LIMIT",
-      retryable: false,
-    });
+        messages.push({
+          role: "assistant",
+          text: response.text || undefined,
+          toolCalls: response.toolCalls,
+        });
+
+        const finalCall = response.toolCalls.find((call) => call.name === "final_response");
+        if (finalCall && response.toolCalls.length === 1) {
+          return persistResult(finalResponseFromArgs(finalCall.args, toolHistory));
+        }
+
+        for (const call of response.toolCalls) {
+          if (call.name === "final_response") {
+            continue;
+          }
+          toolCalls += 1;
+          if (toolCalls > MAX_TOOL_CALLS) break;
+          let toolResult: ToolResult;
+          try {
+            toolResult = await executeTool(identity, call.name, call.args, {
+              requestId,
+              callId: call.id,
+              dryRun: options.dryRun,
+            });
+          } catch (error) {
+            throw agentToolError(call.name, error);
+          }
+          toolHistory.push({ name: call.name, result: toolResult });
+          conversationState = updateConversationState(conversationState, call.name, toolResult);
+          action = {
+            type: "tool_orchestration",
+            lastTool: call.name,
+            toolCalls,
+            llmCalls,
+            conversationState,
+            toolResult: compactActionForMemory({
+              toolResult: jsonSafe(toolResult),
+            })?.toolResult,
+          };
+          messages.push({
+            role: "tool",
+            toolCallId: call.id,
+            toolName: call.name,
+            text: JSON.stringify(toolResult),
+          });
+        }
+      }
+
+      throw new SecretaryError(`Agent stopped after ${MAX_TOOL_CALLS} tool calls.`, {
+        status: 500,
+        category: "agent_error",
+        code: "AGENT_TOOL_CALL_LIMIT",
+        retryable: false,
+      });
+    } finally {
+      this.gateway.finishRequest?.(requestId);
+    }
   }
 }
 
-export type ConfiguredProvider = "gemini" | "groq" | "development" | "unavailable";
+export type ConfiguredProvider = ProviderName | "development" | "unavailable";
+
+function asProvider(value: string | undefined): ProviderName | undefined {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === "gemini" || normalized === "groq" ? normalized : undefined;
+}
+
+export function configuredProviderOrder(): ProviderName[] {
+  const primary = asProvider(process.env.AI_PRIMARY_PROVIDER)
+    ?? asProvider(process.env.AI_PROVIDER)
+    ?? (process.env.GEMINI_API_KEY ? "gemini" : process.env.GROQ_API_KEY ? "groq" : undefined);
+  const fallback = asProvider(process.env.AI_FALLBACK_PROVIDER)
+    ?? (primary === "gemini" && process.env.GROQ_API_KEY ? "groq" : undefined)
+    ?? (primary === "groq" && process.env.GEMINI_API_KEY ? "gemini" : undefined);
+  return [primary, fallback].filter(
+    (provider, index, providers): provider is ProviderName => Boolean(provider) && providers.indexOf(provider) === index,
+  );
+}
 
 export function configuredProvider(): ConfiguredProvider {
   const configured = process.env.AI_PROVIDER?.trim().toLowerCase();
-  if (configured === "gemini" || configured === "groq" || configured === "development") {
-    return configured;
-  }
-  if (process.env.GEMINI_API_KEY) return "gemini";
-  if (process.env.GROQ_API_KEY) return "groq";
-  return "unavailable";
+  if (configured === "development") return "development";
+  return configuredProviderOrder()[0] ?? "unavailable";
 }
 
 export function phase2Enabled(): boolean {
-  const provider = configuredProvider();
-  return provider === "gemini" || provider === "groq";
+  return configuredProviderOrder().length > 0;
+}
+
+function createGateway(provider: ProviderName): ModelGateway {
+  return provider === "groq" ? new GroqModelGateway() : new GeminiModelGateway();
 }
 
 function createConfiguredGateway(): ModelGateway {
-  return configuredProvider() === "groq"
-    ? new GroqModelGateway()
-    : new GeminiModelGateway();
+  const order = configuredProviderOrder();
+  const selectedOrder = order.length > 0 ? order : ["gemini" as const];
+  return new FailoverModelGateway(
+    Object.fromEntries(selectedOrder.map((provider) => [provider, createGateway(provider)])),
+    [...selectedOrder],
+  );
 }
 
 export class UnavailableAgentRuntime {

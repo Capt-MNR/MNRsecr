@@ -35,7 +35,7 @@ A private Arabic-first secretary that turns natural-language requests into autho
 ## Architecture decisions
 
 - The browser only calls the API; it never receives database credentials or the Gemini key.
-- `AI_PROVIDER=gemini` or `AI_PROVIDER=groq` selects one provider adapter behind the same runtime boundary; the LLM can only invoke registered application tools.
+- `AI_PRIMARY_PROVIDER=gemini|groq` and `AI_FALLBACK_PROVIDER=gemini|groq` configure provider order behind the same runtime boundary. `AI_PROVIDER` remains a backwards-compatible primary-provider alias; the LLM can only invoke registered application tools.
 - The deterministic provider is explicit test/development mode only; provider failures do not switch to it automatically.
 - Every tool derives tenant and user identity from the authenticated request, not model arguments.
 - Conversation memory has three levels: bounded recent Conversation State for follow-ups, canonical Structured Memory in the existing domain tables, and a separate compact summary for long conversations.

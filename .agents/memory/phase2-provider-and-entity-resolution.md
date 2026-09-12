@@ -22,3 +22,11 @@ People and projects intentionally allow duplicate names so ambiguity can be repr
 **Why:** A unique name constraint would make clarification impossible, while an upsert targeting a removed unique constraint fails at runtime.
 
 **How to apply:** Use owner/tenant-scoped lookup results to return clarification for multiple matches and only create when no matching record exists.
+
+## Provider failover
+
+The runtime uses a failover gateway above the independent Gemini and Groq adapters. A request that switches providers stays on the fallback for the rest of that request, and the fallback receives the complete message history including already executed tool results.
+
+**Why:** Retrying a write tool after a provider timeout can duplicate a financial record; provider switching must happen only on the next LLM call and never replay application tools.
+
+**How to apply:** Fail over only classified transient provider failures (429, timeout, unavailable, or transient 5xx/request failures). Preserve non-transient validation, tool, permission, and logical model errors; preserve the original `SecretaryError` classification so HTTP status and retryability remain accurate.
