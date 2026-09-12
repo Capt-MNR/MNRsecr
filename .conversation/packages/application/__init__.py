@@ -1,1 +1,0 @@
-"""Authorized product use cases."""
