@@ -179,6 +179,32 @@ export const idempotencyRecordsTable = pgTable(
   ],
 );
 
+export const conversationMemoryTable = pgTable(
+  "conversation_memory",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    conversationId: text("conversation_id").notNull(),
+    recentStateJson: text("recent_state_json").notNull().default("[]"),
+    summary: text("summary"),
+    turnCount: bigint("turn_count", { mode: "number" }).notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("conversation_memory_owner_conversation_unique").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.conversationId,
+    ),
+    index("conversation_memory_owner_updated_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.updatedAt,
+    ),
+  ],
+);
+
 export const insertPersonSchema = createInsertSchema(peopleTable).omit({
   id: true,
   createdAt: true,
@@ -205,6 +231,7 @@ export type Reminder = typeof remindersTable.$inferSelect;
 export type Task = typeof tasksTable.$inferSelect;
 export type ProjectPerson = typeof projectPeopleTable.$inferSelect;
 export type Commitment = typeof commitmentsTable.$inferSelect;
+export type ConversationMemory = typeof conversationMemoryTable.$inferSelect;
 export type InsertPerson = z.infer<typeof insertPersonSchema>;
 export type InsertProject = z.infer<typeof insertProjectSchema>;
 export type InsertExpense = z.infer<typeof insertExpenseSchema>;

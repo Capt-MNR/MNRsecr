@@ -13,6 +13,7 @@ import {
   expensesTable,
   idempotencyRecordsTable,
   peopleTable,
+  projectPeopleTable,
   projectsTable,
   remindersTable,
   tasksTable,
@@ -28,6 +29,11 @@ import {
   phase2Enabled,
   unavailableAgentRuntime,
 } from "./phase2";
+import {
+  loadConversationMemory,
+  saveConversationTurn,
+  type ConversationMemorySnapshot,
+} from "./conversation-memory";
 
 export type Identity = {
   tenantId: string;
@@ -87,6 +93,16 @@ export interface PersistencePort {
       projectName?: string;
     },
   ): Promise<PersistedExpense>;
+  createProject(identity: Identity, name: string): Promise<Project>;
+  createPerson(identity: Identity, name: string): Promise<Person>;
+  linkPersonToProject(
+    identity: Identity,
+    input: { personId: string; projectId: string; relationship: string },
+  ): Promise<void>;
+  updateExpense(
+    identity: Identity,
+    input: { expenseId: string; amountMinor: number },
+  ): Promise<PersistedExpense | null>;
   createReminder(
     identity: Identity,
     input: { text: string; dueAt: Date; timezone: string },
@@ -221,6 +237,62 @@ class DrizzlePersistence implements PersistencePort {
       ...expense,
       personName: person?.name ?? null,
       projectName: project?.name ?? null,
+    };
+  }
+
+  async createProject(identity: Identity, name: string): Promise<Project> {
+    return this.findOrCreateProject(identity, name);
+  }
+
+  async createPerson(identity: Identity, name: string): Promise<Person> {
+    return this.findOrCreatePerson(identity, name);
+  }
+
+  async linkPersonToProject(
+    identity: Identity,
+    input: { personId: string; projectId: string; relationship: string },
+  ): Promise<void> {
+    await db.insert(projectPeopleTable).values({
+      tenantId: identity.tenantId,
+      ownerUserId: identity.userId,
+      personId: input.personId,
+      projectId: input.projectId,
+      relationship: input.relationship,
+    }).onConflictDoUpdate({
+      target: [
+        projectPeopleTable.tenantId,
+        projectPeopleTable.ownerUserId,
+        projectPeopleTable.projectId,
+        projectPeopleTable.personId,
+      ],
+      set: { relationship: input.relationship, updatedAt: new Date() },
+    });
+  }
+
+  async updateExpense(
+    identity: Identity,
+    input: { expenseId: string; amountMinor: number },
+  ): Promise<PersistedExpense | null> {
+    const [updated] = await db.update(expensesTable).set({
+      amountMinor: input.amountMinor,
+    }).where(and(
+      eq(expensesTable.id, input.expenseId),
+      eq(expensesTable.tenantId, identity.tenantId),
+      eq(expensesTable.ownerUserId, identity.userId),
+    )).returning();
+    if (!updated) return null;
+    const [names] = await db.select({
+      personName: peopleTable.name,
+      projectName: projectsTable.name,
+    }).from(expensesTable)
+      .leftJoin(peopleTable, eq(expensesTable.personId, peopleTable.id))
+      .leftJoin(projectsTable, eq(expensesTable.projectId, projectsTable.id))
+      .where(eq(expensesTable.id, updated.id))
+      .limit(1);
+    return {
+      ...updated,
+      personName: names?.personName ?? null,
+      projectName: names?.projectName ?? null,
     };
   }
 
@@ -480,6 +552,59 @@ function parseExpense(message: string) {
   };
 }
 
+function amountMinorFromArabic(value: string): number {
+  const westernDigits = value.replace(/[٠-٩]/g, (digit) =>
+    String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)),
+  );
+  return Math.round(Number(westernDigits.replace(",", ".")) * 100);
+}
+
+function recentActionValue(
+  memory: ConversationMemorySnapshot,
+  key: string,
+): unknown {
+  for (const turn of [...memory.recentTurns].reverse()) {
+    if (turn.action && key in turn.action) return turn.action[key];
+  }
+  return undefined;
+}
+
+function parseConversationExpense(
+  message: string,
+  memory: ConversationMemorySnapshot,
+) {
+  const match = message.match(
+    /^(?:و)?دفعت\s*ل(?:ه|ها)\s+([\d٠-٩]+(?:[.,][\d٠-٩]+)?)\s*$/i,
+  );
+  if (!match) return null;
+  const amountMinor = amountMinorFromArabic(match[1]);
+  if (!Number.isSafeInteger(amountMinor) || amountMinor <= 0) return null;
+  const personName = recentActionValue(memory, "personName");
+  const projectName = recentActionValue(memory, "projectName");
+  return {
+    amountMinor,
+    currency: "EGP",
+    description: `دفعة إلى ${typeof personName === "string" ? personName : "الشخص السابق"}`,
+    personName: typeof personName === "string" ? personName : undefined,
+    projectName: typeof projectName === "string" ? projectName : undefined,
+  };
+}
+
+function parseConversationCorrection(
+  message: string,
+  memory: ConversationMemorySnapshot,
+) {
+  const match = message.match(
+    /^(?:لا[،,]?\s*)?(?:المبلغ\s+كان|المبلغ|خليه)\s+([\d٠-٩]+(?:[.,][\d٠-٩]+)?)/i,
+  );
+  const expenseId = recentActionValue(memory, "expenseId");
+  if (!match || typeof expenseId !== "string") return null;
+  const amountMinor = amountMinorFromArabic(match[1]);
+  return Number.isSafeInteger(amountMinor) && amountMinor > 0
+    ? { expenseId, amountMinor }
+    : null;
+}
+
 function tomorrowAtNine(): Date {
   const date = new Date();
   date.setDate(date.getDate() + 1);
@@ -507,11 +632,108 @@ export class DeterministicAgentRuntime {
     }
 
     const conversationId = input.conversationId || randomUUID();
+    const conversationMemory = await loadConversationMemory(identity, conversationId);
     const message = input.message.trim();
     let result: TurnResult;
     const expense = parseExpense(message);
+    const contextualExpense = parseConversationExpense(message, conversationMemory);
+    const correction = parseConversationCorrection(message, conversationMemory);
+    const projectMatch = message.match(
+      /^بدأت\s+(?:مشروع(?:\s+جديد)?)\s+(?:اسمه\s+)?(.+)$/i,
+    );
+    const personRelationshipMatch = message.match(/^(.+?)\s+هو\s+(.+)$/i);
 
-    if (expense) {
+    if (projectMatch) {
+      const project = await this.persistence.createProject(identity, projectMatch[1].trim());
+      result = {
+        conversationId,
+        assistantMessage: `تمام، سجلت مشروع ${project.name}.`,
+        action: {
+          type: "project_created",
+          projectId: project.id,
+          projectName: project.name,
+        },
+        provider: "development",
+        model: "deterministic-ar-v1",
+      };
+    } else if (personRelationshipMatch) {
+      const person = await this.persistence.createPerson(identity, personRelationshipMatch[1].trim());
+      const projectId = recentActionValue(conversationMemory, "projectId");
+      const projectName = recentActionValue(conversationMemory, "projectName");
+      if (typeof projectId !== "string") {
+        result = {
+          conversationId,
+          assistantMessage: "حدّد المشروع المرتبط بمحمد أولًا.",
+          action: { type: "clarification_needed", personId: person.id, personName: person.name },
+          provider: "development",
+          model: "deterministic-ar-v1",
+        };
+      } else {
+        await this.persistence.linkPersonToProject(identity, {
+          personId: person.id,
+          projectId,
+          relationship: personRelationshipMatch[2].trim(),
+        });
+        result = {
+          conversationId,
+          assistantMessage: `تمام، ربطت ${person.name} بمشروع ${typeof projectName === "string" ? projectName : "المشروع السابق"} كـ${personRelationshipMatch[2].trim()}.`,
+          action: {
+            type: "person_linked",
+            personId: person.id,
+            personName: person.name,
+            projectId,
+            projectName,
+            relationship: personRelationshipMatch[2].trim(),
+          },
+          provider: "development",
+          model: "deterministic-ar-v1",
+        };
+      }
+    } else if (correction) {
+      const saved = await this.persistence.updateExpense(identity, correction);
+      result = saved
+        ? {
+            conversationId,
+            assistantMessage: `تمام، صححت المبلغ إلى ${moneyLabel(saved.amountMinor, saved.currency)} بدلًا من تسجيل دفعة جديدة.`,
+            action: {
+              type: "expense_corrected",
+              expenseId: saved.id,
+              amountMinor: saved.amountMinor,
+              currency: saved.currency,
+              personId: saved.personId,
+              projectId: saved.projectId,
+              personName: saved.personName,
+              projectName: saved.projectName,
+            },
+            provider: "development",
+            model: "deterministic-ar-v1",
+          }
+        : {
+            conversationId,
+            assistantMessage: "لم أجد الدفعة السابقة لتصحيحها.",
+            action: { type: "clarification_needed", reason: "expense_not_found" },
+            provider: "development",
+            model: "deterministic-ar-v1",
+          };
+    } else if (contextualExpense) {
+      const saved = await this.persistence.createExpense(identity, contextualExpense);
+      result = {
+        conversationId,
+        assistantMessage: `تمام، سجلت ${moneyLabel(saved.amountMinor, saved.currency)} لـ${saved.personName ?? "الشخص السابق"}${saved.projectName ? ` على مشروع ${saved.projectName}` : ""}.`,
+        action: {
+          type: "expense_recorded",
+          expenseId: saved.id,
+          amountMinor: saved.amountMinor,
+          currency: saved.currency,
+          personId: saved.personId,
+          projectId: saved.projectId,
+          personName: saved.personName,
+          projectName: saved.projectName,
+        },
+        provider: "development",
+        model: "deterministic-ar-v1",
+      };
+    } else if (expense) {
       const saved = await this.persistence.createExpense(identity, expense);
       result = {
         conversationId,
@@ -521,6 +743,10 @@ export class DeterministicAgentRuntime {
           expenseId: saved.id,
           amountMinor: saved.amountMinor,
           currency: saved.currency,
+          personId: saved.personId,
+          projectId: saved.projectId,
+          personName: saved.personName,
+          projectName: saved.projectName,
         },
         provider: "development",
         model: "deterministic-ar-v1",
@@ -626,6 +852,11 @@ export class DeterministicAgentRuntime {
         result,
       );
     }
+    await saveConversationTurn(identity, conversationMemory, {
+      userMessage: message,
+      assistantMessage: result.assistantMessage,
+      action: result.action,
+    });
     return result;
   }
 }

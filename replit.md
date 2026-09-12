@@ -28,6 +28,7 @@ A private Arabic-first secretary that turns natural-language requests into autho
 - `lib/db/src/schema/personal-secretary.ts` — PostgreSQL schema
 - `artifacts/api-server/src/lib/secretary.ts` — persistence boundary and deterministic provider
 - `artifacts/api-server/src/lib/phase2.ts` — Gemini gateway, approved tools, and bounded orchestration
+- `artifacts/api-server/src/lib/conversation-memory.ts` — bounded Conversation State and separate conversation summaries
 - `artifacts/api-server/src/routes/secretary.ts` — authenticated secretary routes
 - `artifacts/personal-secretary/src/pages/home.tsx` — Arabic responsive product UI
 
@@ -37,7 +38,8 @@ A private Arabic-first secretary that turns natural-language requests into autho
 - `AI_PROVIDER=gemini` or `AI_PROVIDER=groq` selects one provider adapter behind the same runtime boundary; the LLM can only invoke registered application tools.
 - The deterministic provider is explicit test/development mode only; provider failures do not switch to it automatically.
 - Every tool derives tenant and user identity from the authenticated request, not model arguments.
-- Conversation IDs remain a runtime boundary; messages are not automatically written to durable memory.
+- Conversation memory has three levels: bounded recent Conversation State for follow-ups, canonical Structured Memory in the existing domain tables, and a separate compact summary for long conversations.
+- Conversation State and summaries are persisted in PostgreSQL per tenant/user/conversation; ordinary messages are never promoted to Structured Memory automatically.
 
 ## Product
 

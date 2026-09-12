@@ -14,6 +14,12 @@ import {
   type Project,
 } from "@workspace/db";
 import type { Identity } from "./secretary";
+import {
+  conversationContextMessages,
+  loadConversationMemory,
+  saveConversationTurn,
+  type ConversationMemorySnapshot,
+} from "./conversation-memory";
 
 export type Phase2TurnInput = {
   message: string;
@@ -177,6 +183,14 @@ export const phase2Tools: ToolDefinition[] = [
     projectId: { type: "STRING" },
     occurredAt: { type: "STRING", description: "ISO timestamp if explicitly known" },
   }, ["amountMinor", "currency", "description"]),
+  tool("update_expense", "Correct an existing saved expense; never create a second expense for a correction.", {
+    expenseId: { type: "STRING" },
+    amountMinor: { type: "INTEGER" },
+    currency: { type: "STRING" },
+    description: { type: "STRING" },
+    personId: { type: "STRING" },
+    projectId: { type: "STRING" },
+  }, ["expenseId", "amountMinor"]),
   tool("query_expenses", "Query saved expenses for a person or project.", {
     personId: { type: "STRING" },
     projectId: { type: "STRING" },
@@ -412,6 +426,31 @@ async function executeTool(
       result = { ok: true, expense };
       break;
     }
+    case "update_expense": {
+      const expenseId = stringArg("expenseId");
+      const amountMinor = Number(args.amountMinor);
+      if (!expenseId || !Number.isSafeInteger(amountMinor) || amountMinor <= 0) {
+        return { ok: false, error: "expenseId and a positive integer amountMinor are required." };
+      }
+      const [existing] = await db.select().from(expensesTable).where(and(
+        identityWhere(identity, expensesTable),
+        eq(expensesTable.id, expenseId),
+      )).limit(1);
+      if (!existing) return { ok: false, error: "Expense not found." };
+      const updates: Record<string, unknown> = { amountMinor };
+      const currency = stringArg("currency");
+      const description = stringArg("description");
+      if (currency) updates.currency = currency.toUpperCase();
+      if (description) updates.description = description;
+      if (personId) updates.personId = personId;
+      if (projectId) updates.projectId = projectId;
+      const [updated] = await db.update(expensesTable).set(updates).where(and(
+        identityWhere(identity, expensesTable),
+        eq(expensesTable.id, expenseId),
+      )).returning();
+      result = updated ? { ok: true, corrected: true, expense: updated } : { ok: false, error: "Expense not found." };
+      break;
+    }
     case "query_expenses": {
       const limit = Math.min(Math.max(Number(args.limit ?? 20), 1), 50);
       const description = stringArg("description");
@@ -531,7 +570,10 @@ const systemInstruction = `أنت سكرتير شخصي عربي يعمل داخ
 5. نفّذ الخطوات الآمنة المطلوبة في رسالة واحدة، ولا تقل إن شيئًا تم إلا إذا أعادت الأداة نجاحًا.
 6. لا تعرض أسماء الأدوات أو تفاصيل النظام للمستخدم. رد بالعربية الطبيعية عندما تكون الرسالة بالعربية.
 7. لا تنشئ ذاكرة دائمة من المحادثة. استخدم recall_context للبيانات القانونية المحفوظة.
-8. عند إنشاء شخص أو مشروع، لا تضف هاتفًا أو بريدًا أو صفة أو علاقة لم يذكرها المستخدم.`;
+ 8. عند إنشاء شخص أو مشروع، لا تضف هاتفًا أو بريدًا أو صفة أو علاقة لم يذكرها المستخدم.
+ 9. سياق المحادثة السابق مؤقت للمساعدة على فهم الإشارات والتصحيحات، وليس مصدرًا قانونيًا. استخدم الأدوات للتحقق من Structured Memory.
+ 10. إذا صحح المستخدم مبلغًا أو وصفًا لعملية سابقة، استخدم update_expense على expenseId السابق ولا تنشئ مصروفًا جديدًا.
+ 11. عبارات مثل "قصدي ده" و"غيره" و"خليه" و"لا، المبلغ كان" تشير إلى السياق القريب. حلّ المرجع من Conversation State، ثم تحقق من السجل بالأداة المناسبة.`;
 
 const requestGuidance = `إرشادات تنفيذ إضافية:
 - إذا كانت الرسالة جملة دفع/إعطاء/استلام وبها شخص ومبلغ وعملة، نفّذ find_person ثم record_expense مباشرة. لا تستدع recall_context أولًا. إذا لم يذكر المستخدم وصفًا، استخدم وصفًا صادقًا مثل "دفعة إلى <الاسم>".
@@ -793,7 +835,11 @@ export class Phase2AgentRuntime {
     }
 
     const conversationId = input.conversationId || crypto.randomUUID();
-    const messages: ConversationMessage[] = [{ role: "user", text: input.message.trim() }];
+    const conversationMemory = await loadConversationMemory(identity, conversationId);
+    const messages: ConversationMessage[] = [
+      ...conversationContextMessages(conversationMemory),
+      { role: "user", text: input.message.trim() },
+    ];
     let calls = 0;
     let action: Record<string, unknown> | undefined;
 
@@ -807,6 +853,11 @@ export class Phase2AgentRuntime {
           provider: this.gateway.provider,
           model: this.gateway.modelName,
         };
+        await saveConversationTurn(identity, conversationMemory, {
+          userMessage: input.message.trim(),
+          assistantMessage: result.assistantMessage,
+          action: result.action,
+        });
         if (input.idempotencyKey) await saveIdempotent(identity, input.idempotencyKey, result);
         logger.info({
           provider: this.gateway.provider,
@@ -831,6 +882,7 @@ export class Phase2AgentRuntime {
           type: "tool_orchestration",
           lastTool: call.name,
           toolCalls: calls,
+          toolResult: jsonSafe(toolResult) as Record<string, unknown>,
         };
         messages.push({
           role: "tool",
