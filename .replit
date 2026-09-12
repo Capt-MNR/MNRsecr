@@ -22,4 +22,6 @@ timeoutMs = 20000
 [userenv]
 
 [userenv.production]
+
+[userenv.shared]
 AI_PROVIDER = "groq"
