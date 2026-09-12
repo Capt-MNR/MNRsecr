@@ -48,10 +48,42 @@ export interface TurnInput {
 
 export interface ActionResult { [key: string]: unknown }
 
+export type FinalResponseKind = typeof FinalResponseKind[keyof typeof FinalResponseKind];
+
+
+export const FinalResponseKind = {
+  answer: 'answer',
+  clarification: 'clarification',
+  not_found: 'not_found',
+  error: 'error',
+} as const;
+
+export type FinalResponseGroundedFactsItemType = typeof FinalResponseGroundedFactsItemType[keyof typeof FinalResponseGroundedFactsItemType];
+
+
+export const FinalResponseGroundedFactsItemType = {
+  money: 'money',
+  count: 'count',
+} as const;
+
+export type FinalResponseGroundedFactsItem = {
+  type: FinalResponseGroundedFactsItemType;
+  value: number;
+  currency?: string;
+  label?: string;
+};
+
+export interface FinalResponse {
+  kind: FinalResponseKind;
+  message: string;
+  groundedFacts?: FinalResponseGroundedFactsItem[];
+}
+
 export interface TurnResponse {
   conversationId: string;
   assistantMessage: string;
   action?: ActionResult;
+  response?: FinalResponse;
   provider: string;
   model: string;
 }

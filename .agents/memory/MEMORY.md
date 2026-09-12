@@ -2,3 +2,4 @@
 - [Phase 2 integration testing](phase2-testing.md) — isolate fixtures by tenant; keep provider smoke tests short and deterministic multi-turn coverage local.
 - [Secretary error contract](secretary-error-contract.md) — distinguish browser transport failures from classified API/provider failures and carry correlation IDs through both.
 - [Deterministic expense reports](deterministic-expense-reports.md) — broad reports must use a bounded canonical read instead of letting the model choose an inconsistent query limit.
+- [Groq GPT-OSS limits](groq-gpt-oss-limits.md) — low hidden reasoning keeps tool calls usable under the provider's token-per-minute budget.

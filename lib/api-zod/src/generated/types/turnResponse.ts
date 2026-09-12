@@ -6,11 +6,13 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ActionResult } from './actionResult';
+import type { FinalResponse } from './finalResponse';
 
 export interface TurnResponse {
   conversationId: string;
   assistantMessage: string;
   action?: ActionResult;
+  response?: FinalResponse;
   provider: string;
   model: string;
 }

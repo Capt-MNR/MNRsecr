@@ -809,6 +809,7 @@ export class DeterministicAgentRuntime {
       message: string;
       conversationId?: string | null;
       idempotencyKey?: string | null;
+      requestId?: string;
     },
   ): Promise<TurnResult> {
     if (input.idempotencyKey) {

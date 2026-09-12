@@ -162,6 +162,30 @@ components:
     ActionResult:
       type: object
       additionalProperties: true
+    FinalResponse:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [answer, clarification, not_found, error]
+        message:
+          type: string
+        groundedFacts:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+                enum: [money, count]
+              value:
+                type: integer
+              currency:
+                type: string
+              label:
+                type: string
+            required: [type, value]
+      required: [kind, message]
     TurnResponse:
       type: object
       properties:
@@ -171,6 +195,8 @@ components:
           type: string
         action:
           $ref: "#/components/schemas/ActionResult"
+        response:
+          $ref: "#/components/schemas/FinalResponse"
         provider:
           type: string
         model:

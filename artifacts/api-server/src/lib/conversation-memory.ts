@@ -14,12 +14,131 @@ export type ConversationMemorySnapshot = {
   recentTurns: ConversationTurn[];
   summary: string | null;
   turnCount: number;
+  state: ConversationState;
 };
 
 export const RECENT_CONVERSATION_TURNS = 6;
 export const SUMMARY_TRIGGER_TURNS = 7;
 const SUMMARY_MAX_CHARS = 5000;
 const MEMORY_VALUE_MAX_CHARS = 320;
+const STATE_MARKER = "\n[حالة المحادثة المنظمة]\n";
+
+export type ConversationEntity = {
+  id: string;
+  name: string;
+  type: "person" | "project";
+  status?: string;
+  ordinal?: number;
+};
+
+export type ConversationState = {
+  people: ConversationEntity[];
+  projects: ConversationEntity[];
+  candidatePeople: ConversationEntity[];
+  candidateProjects: ConversationEntity[];
+  lastPerson?: ConversationEntity;
+  lastProject?: ConversationEntity;
+  lastExpense?: {
+    id: string;
+    amountMinor: number;
+    currency: string;
+    description?: string;
+    personId?: string;
+    projectId?: string;
+  };
+};
+
+export const emptyConversationState = (): ConversationState => ({
+  people: [],
+  projects: [],
+  candidatePeople: [],
+  candidateProjects: [],
+});
+
+function validEntity(value: unknown, type: ConversationEntity["type"]): ConversationEntity | null {
+  if (!value || typeof value !== "object") return null;
+  const item = value as Record<string, unknown>;
+  if (typeof item.id !== "string" || typeof item.name !== "string") return null;
+  return {
+    id: item.id,
+    name: item.name,
+    type,
+    ...(typeof item.status === "string" ? { status: item.status } : {}),
+    ...(typeof item.ordinal === "number" ? { ordinal: item.ordinal } : {}),
+  };
+}
+
+function normalizeState(value: unknown): ConversationState {
+  const fallback = emptyConversationState();
+  if (!value || typeof value !== "object") return fallback;
+  const input = value as Record<string, unknown>;
+  const people = Array.isArray(input.people)
+    ? input.people.map((item) => validEntity(item, "person")).filter((item): item is ConversationEntity => Boolean(item))
+    : [];
+  const projects = Array.isArray(input.projects)
+    ? input.projects.map((item) => validEntity(item, "project")).filter((item): item is ConversationEntity => Boolean(item))
+    : [];
+  const candidatePeople = Array.isArray(input.candidatePeople)
+    ? input.candidatePeople.map((item) => validEntity(item, "person")).filter((item): item is ConversationEntity => Boolean(item))
+    : [];
+  const candidateProjects = Array.isArray(input.candidateProjects)
+    ? input.candidateProjects.map((item) => validEntity(item, "project")).filter((item): item is ConversationEntity => Boolean(item))
+    : [];
+  const lastPerson = validEntity(input.lastPerson, "person") ?? undefined;
+  const lastProject = validEntity(input.lastProject, "project") ?? undefined;
+  const lastExpenseValue = input.lastExpense;
+  const lastExpense = lastExpenseValue && typeof lastExpenseValue === "object"
+    ? (() => {
+        const expense = lastExpenseValue as Record<string, unknown>;
+        return typeof expense.id === "string"
+          && typeof expense.amountMinor === "number"
+          && typeof expense.currency === "string"
+          ? {
+              id: expense.id,
+              amountMinor: expense.amountMinor,
+              currency: expense.currency,
+              ...(typeof expense.description === "string" ? { description: expense.description } : {}),
+              ...(typeof expense.personId === "string" ? { personId: expense.personId } : {}),
+              ...(typeof expense.projectId === "string" ? { projectId: expense.projectId } : {}),
+            }
+          : undefined;
+      })()
+    : undefined;
+
+  return {
+    people: people.slice(-10),
+    projects: projects.slice(-10),
+    candidatePeople: candidatePeople.slice(-10),
+    candidateProjects: candidateProjects.slice(-10),
+    ...(lastPerson ? { lastPerson } : {}),
+    ...(lastProject ? { lastProject } : {}),
+    ...(lastExpense ? { lastExpense } : {}),
+  };
+}
+
+function stripStateMarker(summary: string | null): string | null {
+  if (!summary) return summary;
+  return summary.split(STATE_MARKER, 1)[0] || null;
+}
+
+function stateFromSummary(summary: string | null): ConversationState {
+  if (!summary || !summary.includes(STATE_MARKER)) return emptyConversationState();
+  const encoded = summary.slice(summary.lastIndexOf(STATE_MARKER) + STATE_MARKER.length);
+  try {
+    return normalizeState(JSON.parse(encoded));
+  } catch {
+    return emptyConversationState();
+  }
+}
+
+function stateFromTurns(turns: ConversationTurn[]): ConversationState {
+  let state = emptyConversationState();
+  for (const turn of turns) {
+    const candidate = turn.action?.conversationState;
+    if (candidate) state = normalizeState(candidate);
+  }
+  return state;
+}
 
 function compactExpenseRows(value: unknown) {
   if (!Array.isArray(value)) return { count: 0, totalByCurrency: {} };
@@ -66,6 +185,7 @@ function compactToolResult(value: unknown): unknown {
         id: item.id,
         name: item.name,
         status: item.status,
+        ordinal: item.ordinal,
       };
     });
   }
@@ -111,6 +231,90 @@ function compactToolResult(value: unknown): unknown {
   }
 
   return Object.keys(compact).length > 0 ? compact : result;
+}
+
+export function updateConversationState(
+  previous: ConversationState,
+  toolName: string,
+  rawResult: unknown,
+): ConversationState {
+  const state = normalizeState(previous);
+  if (!rawResult || typeof rawResult !== "object") return state;
+  const result = rawResult as Record<string, unknown>;
+  const matches = Array.isArray(result.matches) ? result.matches : [];
+
+  if (toolName === "find_person") {
+    const candidates = matches
+      .map((item, index) => {
+        const entity = validEntity(
+          item && typeof item === "object"
+            ? { ...(item as Record<string, unknown>), ordinal: index + 1 }
+            : item,
+          "person",
+        );
+        return entity;
+      })
+      .filter((item): item is ConversationEntity => Boolean(item));
+    state.candidatePeople = candidates;
+    state.people = [...state.people, ...candidates].slice(-10);
+    if (candidates.length === 1) state.lastPerson = candidates[0];
+  }
+
+  if (toolName === "find_project") {
+    const candidates = matches
+      .map((item, index) => {
+        const entity = validEntity(
+          item && typeof item === "object"
+            ? { ...(item as Record<string, unknown>), ordinal: index + 1 }
+            : item,
+          "project",
+        );
+        return entity;
+      })
+      .filter((item): item is ConversationEntity => Boolean(item));
+    state.candidateProjects = candidates;
+    state.projects = [...state.projects, ...candidates].slice(-10);
+    if (candidates.length === 1) state.lastProject = candidates[0];
+  }
+
+  for (const [key, type] of [["person", "person"], ["project", "project"]] as const) {
+    const entity = validEntity(result[key], type);
+    if (!entity) continue;
+    if (type === "person") {
+      state.people = [...state.people, entity].slice(-10);
+      state.lastPerson = entity;
+      state.candidatePeople = [];
+    } else {
+      state.projects = [...state.projects, entity].slice(-10);
+      state.lastProject = entity;
+      state.candidateProjects = [];
+    }
+  }
+
+  const expenseValue = result.expense;
+  if (expenseValue && typeof expenseValue === "object") {
+    const expense = expenseValue as Record<string, unknown>;
+    if (
+      typeof expense.id === "string"
+      && typeof expense.amountMinor === "number"
+      && typeof expense.currency === "string"
+    ) {
+      state.lastExpense = {
+        id: expense.id,
+        amountMinor: expense.amountMinor,
+        currency: expense.currency,
+        ...(typeof expense.description === "string" ? { description: expense.description } : {}),
+        ...(typeof expense.personId === "string" ? { personId: expense.personId } : {}),
+        ...(typeof expense.projectId === "string" ? { projectId: expense.projectId } : {}),
+      };
+      const person = state.people.find((item) => item.id === expense.personId);
+      const project = state.projects.find((item) => item.id === expense.projectId);
+      if (person) state.lastPerson = person;
+      if (project) state.lastProject = project;
+    }
+  }
+
+  return normalizeState(state);
 }
 
 export function compactActionForMemory(action: Record<string, unknown> | undefined) {
@@ -187,13 +391,24 @@ export async function loadConversationMemory(
     ownershipWhere(identity, conversationId),
   ).limit(1);
   if (!record) {
-    return { conversationId, recentTurns: [], summary: null, turnCount: 0 };
+    return {
+      conversationId,
+      recentTurns: [],
+      summary: null,
+      turnCount: 0,
+      state: emptyConversationState(),
+    };
   }
+  const recentTurns = parseTurns(record.recentStateJson);
+  const summaryState = stateFromSummary(record.summary);
   return {
     conversationId,
-    recentTurns: parseTurns(record.recentStateJson),
-    summary: record.summary,
+    recentTurns,
+    summary: stripStateMarker(record.summary),
     turnCount: Number(record.turnCount),
+    state: record.summary?.includes(STATE_MARKER)
+      ? summaryState
+      : stateFromTurns(recentTurns),
   };
 }
 
@@ -207,6 +422,11 @@ export async function saveConversationTurn(
     ...snapshot.recentTurns,
     { ...turn, action: compactActionForMemory(turn.action), createdAt },
   ];
+  const nextState = normalizeState(
+    turn.action?.conversationState
+      ?? snapshot.state
+      ?? stateFromTurns(expandedTurns),
+  );
   const turnCount = snapshot.turnCount + 1;
   const shouldSummarize = expandedTurns.length > RECENT_CONVERSATION_TURNS
     || turnCount >= SUMMARY_TRIGGER_TURNS;
@@ -216,8 +436,14 @@ export async function saveConversationTurn(
   const next: ConversationMemorySnapshot = {
     conversationId: snapshot.conversationId,
     recentTurns: expandedTurns.slice(-RECENT_CONVERSATION_TURNS),
-    summary: appendSummary(snapshot.summary, turnsToCompress),
+    summary: (() => {
+      const summary = appendSummary(stripStateMarker(snapshot.summary), turnsToCompress);
+      return summary
+        ? `${summary}${STATE_MARKER}${JSON.stringify(nextState)}`
+        : STATE_MARKER + JSON.stringify(nextState);
+    })(),
     turnCount,
+    state: nextState,
   };
 
   await db.insert(conversationMemoryTable).values({
@@ -246,12 +472,26 @@ export async function saveConversationTurn(
 
 export function conversationContextMessages(
   snapshot: ConversationMemorySnapshot,
-): Array<{ role: "user" | "assistant"; text: string }> {
-  const context: Array<{ role: "user" | "assistant"; text: string }> = [];
+): Array<{ role: "system" | "user" | "assistant"; text: string }> {
+  const context: Array<{ role: "system" | "user" | "assistant"; text: string }> = [];
   if (snapshot.summary) {
     context.push({
-      role: "user",
-      text: `[ملخص محادثة سابق، ليس مصدرًا قانونيًا للبيانات:\n${snapshot.summary}]`,
+      role: "system",
+      text: `[ملخص محادثة سابق، ليس مصدرًا قانونيًا للبيانات]\n${stripStateMarker(snapshot.summary)}`,
+    });
+  }
+  if (
+    snapshot.state.people.length > 0
+    || snapshot.state.projects.length > 0
+    || snapshot.state.candidatePeople.length > 0
+    || snapshot.state.candidateProjects.length > 0
+    || snapshot.state.lastPerson
+    || snapshot.state.lastProject
+    || snapshot.state.lastExpense
+  ) {
+    context.push({
+      role: "system",
+      text: `[حالة المحادثة المنظمة، استخدمها لفهم الإشارات فقط ثم تحقق من Structured Memory بالأدوات]\n${JSON.stringify(snapshot.state)}`,
     });
   }
   for (const turn of snapshot.recentTurns) {

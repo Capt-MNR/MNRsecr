@@ -73,6 +73,16 @@ export const CreateTurnResponse = zod.object({
   "conversationId": zod.string(),
   "assistantMessage": zod.string(),
   "action": zod.record(zod.string(), zod.unknown()).optional(),
+  "response": zod.object({
+  "kind": zod.enum(['answer', 'clarification', 'not_found', 'error']),
+  "message": zod.string(),
+  "groundedFacts": zod.array(zod.object({
+  "type": zod.enum(['money', 'count']),
+  "value": zod.number().int(),
+  "currency": zod.string().optional(),
+  "label": zod.string().optional()
+})).optional()
+}).optional(),
   "provider": zod.string(),
   "model": zod.string()
 })

@@ -105,7 +105,22 @@ router.post("/turns", async (req, res): Promise<void> => {
   }
 
   try {
-    const result = await agentRuntime.run(identity, parsed.data);
+    const currentRequestId = requestId(req);
+    req.log.info({
+      requestId: currentRequestId,
+      provider: configuredProvider(),
+      conversationId: parsed.data.conversationId ?? undefined,
+    }, "Secretary request started");
+    const result = await agentRuntime.run(identity, {
+      ...parsed.data,
+      requestId: currentRequestId,
+    });
+    req.log.info({
+      requestId: currentRequestId,
+      provider: result.provider,
+      model: result.model,
+      conversationId: result.conversationId,
+    }, "Secretary request completed");
     res.json(CreateTurnResponse.parse(result));
   } catch (error) {
     const classified = classifySecretaryError(error);

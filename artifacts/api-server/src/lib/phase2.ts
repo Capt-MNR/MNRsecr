@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ilike, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { logger } from "./logger";
 import {
   commitmentsTable,
@@ -19,6 +19,8 @@ import {
   conversationContextMessages,
   loadConversationMemory,
   saveConversationTurn,
+  updateConversationState,
+  type ConversationState,
   type ConversationMemorySnapshot,
 } from "./conversation-memory";
 import {
@@ -27,18 +29,23 @@ import {
   providerResponseError,
   SecretaryError,
 } from "./error-contract";
-import { isBroadExpenseReportRequest } from "./expense-report";
 
 export type Phase2TurnInput = {
   message: string;
   conversationId?: string | null;
   idempotencyKey?: string | null;
+  requestId?: string;
+};
+
+export type Phase2RunOptions = {
+  dryRun?: boolean;
 };
 
 export type Phase2TurnResult = {
   conversationId: string;
   assistantMessage: string;
   action?: Record<string, unknown>;
+  response?: FinalResponse;
   provider: string;
   model: string;
 };
@@ -63,8 +70,8 @@ type GeminiPart = {
   };
 };
 
-type ConversationMessage = {
-  role: "user" | "assistant" | "tool";
+export type ConversationMessage = {
+  role: "system" | "user" | "assistant" | "tool";
   text?: string;
   toolCalls?: Array<{
     id: string;
@@ -83,16 +90,56 @@ type GatewayToolCall = {
   thoughtSignature?: string;
 };
 
-type GatewayResponse = {
+export type GatewayResponse = {
   text: string;
   toolCalls: GatewayToolCall[];
   usage?: unknown;
 };
 
-interface ModelGateway {
+export type FinalResponseKind = "answer" | "clarification" | "not_found" | "error";
+
+export type GroundedFact = {
+  type: "money" | "count";
+  value: number;
+  currency?: string;
+  label?: string;
+};
+
+export type FinalResponse = {
+  kind: FinalResponseKind;
+  message: string;
+  groundedFacts?: GroundedFact[];
+};
+
+type GatewayCallContext = {
+  requestId: string;
+  callNumber: number;
+};
+
+function logLlmFailure(
+  provider: string,
+  model: string,
+  context: GatewayCallContext,
+  attempt: number,
+  error: unknown,
+): void {
+  const classified = error instanceof SecretaryError ? error : providerExceptionError(provider, error);
+  logger.warn({
+    requestId: context.requestId,
+    provider,
+    model,
+    llmCall: context.callNumber,
+    attempt,
+    errorCode: classified.code,
+    upstreamStatus: classified.upstreamStatus,
+    providerError: classified.providerError,
+  }, "agent llm call failed");
+}
+
+export interface ModelGateway {
   readonly provider: "gemini" | "groq";
   readonly modelName: string;
-  generate(messages: ConversationMessage[]): Promise<GatewayResponse>;
+  generate(messages: ConversationMessage[], context: GatewayCallContext): Promise<GatewayResponse>;
 }
 
 type GeminiResponse = {
@@ -117,6 +164,20 @@ const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.6-flash";
 const GEMINI_FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL ?? "gemini-3-flash-preview";
 const GROQ_MODEL = process.env.GROQ_MODEL ?? "openai/gpt-oss-20b";
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
+const DEFAULT_TIMEZONE = "Africa/Cairo";
+const WRITE_TOOLS = new Set([
+  "create_person",
+  "update_person",
+  "create_project",
+  "update_project",
+  "link_person_to_project",
+  "update_person_project_relationship",
+  "record_expense",
+  "update_expense",
+  "create_task",
+  "create_commitment",
+  "create_reminder",
+]);
 
 function normalize(value: string): string {
   return value
@@ -142,11 +203,6 @@ function jsonSafe(value: unknown): unknown {
       typeof current === "bigint" ? Number(current) : current,
     ),
   );
-}
-
-function moneyLabel(amountMinor: number, currency: string): string {
-  const major = amountMinor / 100;
-  return `${new Intl.NumberFormat("ar-EG").format(major)} ${currency === "EGP" ? "جنيه" : currency}`;
 }
 
 function expenseRowsSummary(rows: unknown[]): {
@@ -177,63 +233,6 @@ function expenseRowsSummary(rows: unknown[]): {
 
 type ToolHistoryEntry = { name: string; result: ToolResult };
 
-function compactToolResponse(
-  userMessage: string,
-  modelText: string,
-  history: ToolHistoryEntry[],
-): string {
-  const last = history.at(-1);
-  if (!last || !last.result.ok) return modelText;
-
-  if (last.name === "get_person_expense_total") {
-    const total = last.result.total;
-    if (total && typeof total === "object") {
-      const totalRecord = total as Record<string, unknown>;
-      const personResult = [...history].reverse().find((entry) => entry.name === "find_person");
-      const matches = personResult?.result.matches;
-      const personName = Array.isArray(matches) && matches[0] && typeof matches[0] === "object"
-        ? (matches[0] as Record<string, unknown>).name
-        : undefined;
-      return `${typeof personName === "string" ? personName : "الشخص"} أخد منك ${moneyLabel(
-        Number(totalRecord.amountMinor ?? 0),
-        String(totalRecord.currency ?? "EGP"),
-      )} في ${new Intl.NumberFormat("ar-EG").format(Number(totalRecord.count ?? 0))} مصروفات.`;
-    }
-  }
-
-  if (last.name === "query_expenses" && Array.isArray(last.result.expenses)) {
-    const summary = expenseRowsSummary(last.result.expenses);
-    return summary.count > 0
-      ? `لديك ${new Intl.NumberFormat("ar-EG").format(summary.count)} مصروفات بإجمالي ${moneyLabel(
-        summary.totalMinor,
-        summary.currency,
-      )}${summary.projectCount > 1 ? ` موزعة على ${summary.projectCount} مشاريع` : ""}.`
-      : "لا توجد مصروفات مطابقة.";
-  }
-
-  if (last.name === "recall_context" && last.result.context && typeof last.result.context === "object") {
-    const context = last.result.context as Record<string, unknown>;
-    const expenses = Array.isArray(context.expenses) ? context.expenses : [];
-    const summary = expenseRowsSummary(expenses);
-    const reminders = Array.isArray(context.reminders) ? context.reminders.length : 0;
-    const tasks = Array.isArray(context.tasks) ? context.tasks.length : 0;
-    const parts = [
-      reminders > 0 ? `لديك ${reminders} تذكيرات قادمة` : "لا توجد تذكيرات قادمة",
-      tasks > 0 ? `${tasks} مهام مفتوحة` : "لا توجد مهام مفتوحة",
-      summary.count > 0
-        ? `${summary.count} مصروفات حديثة بإجمالي ${moneyLabel(summary.totalMinor, summary.currency)}`
-        : "لا توجد مصروفات حديثة",
-    ];
-    return `${parts.join("، ")}.`;
-  }
-
-  // Tool-backed answers should not become an unbounded copy of a tool payload.
-  if (modelText.length > 1800 || (modelText.match(/7[٬,]?500/g)?.length ?? 0) > 4) {
-    return `نفذت طلبك بناءً على البيانات المحفوظة. إذا أردت التفاصيل، اذكر المصروفات أو المشروع المطلوب تحديدًا.`;
-  }
-  return modelText;
-}
-
 function tool(
   name: string,
   description: string,
@@ -252,6 +251,28 @@ function tool(
 }
 
 export const phase2Tools: ToolDefinition[] = [
+  tool(
+    "final_response",
+    "Finish the turn with a natural Arabic response. Use this after all required tools. Never invent financial values; include groundedFacts only for values returned by tools.",
+    {
+      kind: { type: "STRING", enum: ["answer", "clarification", "not_found", "error"] },
+      message: { type: "STRING" },
+      groundedFacts: {
+        type: "ARRAY",
+        items: {
+          type: "OBJECT",
+          properties: {
+            type: { type: "STRING", enum: ["money", "count"] },
+            value: { type: "INTEGER" },
+            currency: { type: "STRING" },
+            label: { type: "STRING" },
+          },
+          required: ["type", "value"],
+        },
+      },
+    },
+    ["kind", "message"],
+  ),
   tool("find_person", "Find accessible people by name. Always call before using a person.", {
     name: { type: "STRING", description: "The known person name" },
   }, ["name"]),
@@ -291,7 +312,7 @@ export const phase2Tools: ToolDefinition[] = [
     personId: { type: "STRING" },
     projectId: { type: "STRING" },
     occurredAt: { type: "STRING", description: "ISO timestamp if explicitly known" },
-  }, ["amountMinor", "currency", "description"]),
+  }, ["amountMinor", "description"]),
   tool("update_expense", "Correct an existing saved expense; never create a second expense for a correction.", {
     expenseId: { type: "STRING" },
     amountMinor: { type: "INTEGER" },
@@ -303,8 +324,26 @@ export const phase2Tools: ToolDefinition[] = [
   tool("query_expenses", "Query saved expenses for a person or project.", {
     personId: { type: "STRING" },
     projectId: { type: "STRING" },
+    excludeProjectId: { type: "STRING", description: "Exclude this resolved project from the result" },
     description: { type: "STRING", description: "Optional description/category text to search" },
+    period: {
+      type: "STRING",
+      enum: ["last_month", "this_month", "last_week", "this_week"],
+      description: "Use for a relative time phrase; the server resolves the exact Cairo date range",
+    },
+    fromDate: { type: "STRING", description: "Optional inclusive ISO date/time lower bound" },
+    toDate: { type: "STRING", description: "Optional exclusive ISO date/time upper bound" },
     limit: { type: "INTEGER" },
+  }),
+  tool("rank_expense_projects", "Rank saved project spending using database totals. Use for questions asking which project spent the most.", {
+    period: {
+      type: "STRING",
+      enum: ["last_month", "this_month", "last_week", "this_week"],
+      description: "Use for a relative time phrase; the server resolves the exact Cairo date range",
+    },
+    fromDate: { type: "STRING", description: "Optional inclusive ISO date/time lower bound" },
+    toDate: { type: "STRING", description: "Optional exclusive ISO date/time upper bound" },
+    excludeProjectId: { type: "STRING", description: "Exclude this resolved project from the ranking" },
   }),
   tool("get_person_expense_total", "Get the total saved expense amount for one resolved person.", {
     personId: { type: "STRING" },
@@ -363,13 +402,136 @@ async function findProjects(identity: Identity, name: string): Promise<Project[]
     .limit(10);
 }
 
+type CairoDateParts = { year: number; month: number; day: number };
+
+function cairoDateParts(date: Date): CairoDateParts {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: DEFAULT_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return {
+    year: Number(values.year),
+    month: Number(values.month),
+    day: Number(values.day),
+  };
+}
+
+function cairoOffsetAt(utcGuess: number): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: DEFAULT_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(utcGuess));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return Date.UTC(
+    Number(values.year),
+    Number(values.month) - 1,
+    Number(values.day),
+    Number(values.hour),
+    Number(values.minute),
+    Number(values.second),
+  ) - utcGuess;
+}
+
+function cairoMidnight(parts: CairoDateParts): Date {
+  const utcGuess = Date.UTC(parts.year, parts.month - 1, parts.day);
+  return new Date(utcGuess - cairoOffsetAt(utcGuess));
+}
+
+function shiftLocalDate(parts: CairoDateParts, days: number): CairoDateParts {
+  const shifted = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + days));
+  return {
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth() + 1,
+    day: shifted.getUTCDate(),
+  };
+}
+
+function parseIsoBound(value: unknown): Date | undefined {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+}
+
+function expenseDateRange(args: Record<string, unknown>): { from?: Date; to?: Date } {
+  const explicitFrom = parseIsoBound(args.fromDate);
+  const explicitTo = parseIsoBound(args.toDate);
+  if (explicitFrom || explicitTo) return { from: explicitFrom, to: explicitTo };
+
+  const period = typeof args.period === "string" ? args.period : undefined;
+  if (!period) return {};
+
+  const now = cairoDateParts(new Date());
+  const today = new Date(Date.UTC(now.year, now.month - 1, now.day));
+  const currentMonthStart = { year: now.year, month: now.month, day: 1 };
+  const nextMonthStart = new Date(Date.UTC(now.year, now.month, 1));
+  const currentWeekStart = shiftLocalDate(now, -((today.getUTCDay() + 6) % 7));
+
+  switch (period) {
+    case "last_month": {
+      const fromParts = {
+        year: now.month === 1 ? now.year - 1 : now.year,
+        month: now.month === 1 ? 12 : now.month - 1,
+        day: 1,
+      };
+      return { from: cairoMidnight(fromParts), to: cairoMidnight(currentMonthStart) };
+    }
+    case "this_month":
+      return { from: cairoMidnight(currentMonthStart), to: cairoMidnight({
+        year: new Date(nextMonthStart).getUTCFullYear(),
+        month: new Date(nextMonthStart).getUTCMonth() + 1,
+        day: 1,
+      }) };
+    case "last_week": {
+      const fromParts = shiftLocalDate(currentWeekStart, -7);
+      return { from: cairoMidnight(fromParts), to: cairoMidnight(currentWeekStart) };
+    }
+    case "this_week":
+      return { from: cairoMidnight(currentWeekStart), to: cairoMidnight(shiftLocalDate(currentWeekStart, 7)) };
+    default:
+      return {};
+  }
+}
+
 async function executeTool(
   identity: Identity,
   name: string,
   rawArgs: Record<string, unknown>,
+  options: { requestId: string; callId?: string; dryRun?: boolean },
 ): Promise<ToolResult> {
   const args = rawArgs ?? {};
-  logger.info({ tool: name, arguments: jsonSafe(args) }, "agent tool selected");
+  logger.info({
+    requestId: options.requestId,
+    tool: name,
+    toolCallId: options.callId,
+    arguments: jsonSafe(args),
+    dryRun: options.dryRun ?? false,
+  }, "agent tool selected");
+
+  if (options.dryRun && WRITE_TOOLS.has(name)) {
+    const preview = {
+      ok: true,
+      dryRun: true,
+      wouldExecute: name,
+      arguments: jsonSafe(args),
+    };
+    logger.info({
+      requestId: options.requestId,
+      tool: name,
+      toolCallId: options.callId,
+      ok: true,
+      dryRun: true,
+    }, "agent tool result");
+    return preview;
+  }
 
   const stringArg = (key: string): string | undefined =>
     typeof args[key] === "string" && args[key].trim() ? String(args[key]).trim() : undefined;
@@ -382,7 +544,12 @@ async function executeTool(
       const matches = await findPeople(identity, stringArg("name") ?? "");
       result = {
         ok: true,
-        matches: matches.map((person) => ({ id: person.id, name: person.name, notes: person.notes })),
+        matches: matches.map((person, index) => ({
+          id: person.id,
+          name: person.name,
+          notes: person.notes,
+          ordinal: index + 1,
+        })),
         needsClarification: matches.length > 1,
       };
       break;
@@ -424,7 +591,12 @@ async function executeTool(
       const matches = await findProjects(identity, stringArg("name") ?? "");
       result = {
         ok: true,
-        matches: matches.map((project) => ({ id: project.id, name: project.name, status: project.status })),
+        matches: matches.map((project, index) => ({
+          id: project.id,
+          name: project.name,
+          status: project.status,
+          ordinal: index + 1,
+        })),
         needsClarification: matches.length > 1,
       };
       break;
@@ -502,9 +674,9 @@ async function executeTool(
     }
     case "record_expense": {
       const amountMinor = Number(args.amountMinor);
-      const currency = stringArg("currency");
+      const currency = stringArg("currency") ?? "EGP";
       const description = stringArg("description");
-      if (!Number.isSafeInteger(amountMinor) || amountMinor <= 0 || !currency || !description) {
+      if (!Number.isSafeInteger(amountMinor) || amountMinor <= 0 || !description) {
         return { ok: false, error: "Amount, currency, and description are required; amount must be integer minor units." };
       }
       if (personId) {
@@ -566,6 +738,12 @@ async function executeTool(
         ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 50)
         : 20;
       const description = stringArg("description");
+      const excludeProjectId = stringArg("excludeProjectId");
+      const dateRange = expenseDateRange(args);
+      const dateFilters = [
+        dateRange.from ? gte(expensesTable.occurredAt, dateRange.from) : undefined,
+        dateRange.to ? lt(expensesTable.occurredAt, dateRange.to) : undefined,
+      ];
       const rows = await db.select({
         expense: expensesTable,
         personName: peopleTable.name,
@@ -577,7 +755,11 @@ async function executeTool(
           identityWhere(identity, expensesTable),
           personId ? eq(expensesTable.personId, personId) : undefined,
           projectId ? eq(expensesTable.projectId, projectId) : undefined,
+          excludeProjectId
+            ? or(isNull(expensesTable.projectId), ne(expensesTable.projectId, excludeProjectId))
+            : undefined,
           description ? ilike(expensesTable.description, `%${description}%`) : undefined,
+          ...dateFilters,
         ))
         .orderBy(desc(expensesTable.occurredAt))
         .limit(limit);
@@ -588,6 +770,42 @@ async function executeTool(
           ...row.expense,
           projectName: row.projectName,
         }))),
+      };
+      break;
+    }
+    case "rank_expense_projects": {
+      const dateRange = expenseDateRange(args);
+      const excludeProjectId = stringArg("excludeProjectId");
+      const projectTotals = await db.select({
+        projectId: expensesTable.projectId,
+        projectName: projectsTable.name,
+        currency: expensesTable.currency,
+        amountMinor: sql<number>`sum(${expensesTable.amountMinor})::bigint`,
+        count: sql<number>`count(*)::int`,
+      }).from(expensesTable)
+        .leftJoin(projectsTable, eq(expensesTable.projectId, projectsTable.id))
+        .where(and(
+          identityWhere(identity, expensesTable),
+          excludeProjectId
+            ? or(isNull(expensesTable.projectId), ne(expensesTable.projectId, excludeProjectId))
+            : undefined,
+          dateRange.from ? gte(expensesTable.occurredAt, dateRange.from) : undefined,
+          dateRange.to ? lt(expensesTable.occurredAt, dateRange.to) : undefined,
+        ))
+        .groupBy(expensesTable.projectId, projectsTable.name, expensesTable.currency)
+        .orderBy(desc(sql`sum(${expensesTable.amountMinor})`));
+      result = {
+        ok: true,
+        projectTotals: projectTotals.map((row) => ({
+          projectId: row.projectId,
+          projectName: row.projectName ?? "بدون مشروع",
+          currency: row.currency,
+          amountMinor: Number(row.amountMinor ?? 0),
+          count: Number(row.count ?? 0),
+        })),
+        period: typeof args.period === "string" ? args.period : undefined,
+        fromDate: dateRange.from?.toISOString(),
+        toDate: dateRange.to?.toISOString(),
       };
       break;
     }
@@ -686,7 +904,13 @@ async function executeTool(
       result = { ok: false, error: `Tool ${name} is not available.` };
   }
 
-  logger.info({ tool: name, ok: result.ok }, "agent tool completed");
+  logger.info({
+    requestId: options.requestId,
+    tool: name,
+    toolCallId: options.callId,
+    ok: result.ok,
+    resultKeys: Object.keys(result),
+  }, "agent tool result");
   return jsonSafe(result) as ToolResult;
 }
 
@@ -696,7 +920,7 @@ const systemInstruction = `أنت سكرتير شخصي عربي يعمل داخ
 1. لا تصل مباشرة إلى قاعدة البيانات ولا تخترع هوية المستخدم أو المستأجر.
 2. قبل استخدام شخص أو مشروع، استدع find_person أو find_project. إذا وجدت أكثر من نتيجة لا تختار عشوائيًا؛ اطلب توضيحًا. إذا لم تجد نتيجة وأنشأ المستخدم كيانًا جديدًا بوضوح، استدع أداة الإنشاء.
 3. لا تسجل مصروفًا قبل حل الشخص والمشروع عندما يذكرهما المستخدم. استخدم amountMinor كعدد صحيح بوحدات العملة الصغرى، ولا تستخدم أرقامًا عائمة.
-4. إذا لم يذكر المستخدم العملة ولم توجد عملة افتراضية موثوقة، اسأل عن العملة.
+4. إذا لم يذكر المستخدم العملة في سياق عربي مصري، استخدم EGP كافتراضي محلي؛ لا تغيّر العملة التي أعادتها قاعدة البيانات.
 5. نفّذ الخطوات الآمنة المطلوبة في رسالة واحدة، ولا تقل إن شيئًا تم إلا إذا أعادت الأداة نجاحًا.
 6. لا تعرض أسماء الأدوات أو تفاصيل النظام للمستخدم. رد بالعربية الطبيعية عندما تكون الرسالة بالعربية.
 7. لا تنشئ ذاكرة دائمة من المحادثة. استخدم recall_context للبيانات القانونية المحفوظة.
@@ -707,14 +931,21 @@ const systemInstruction = `أنت سكرتير شخصي عربي يعمل داخ
 12. إذا كانت النية واضحة والمعلومة ناقصة، اسأل عن المعلومة الناقصة فقط؛ لا تطلب إعادة صياغة الطلب كاملًا. مثال: "عايز أسجل مصروف لمحمد" يتبعه سؤال عن المبلغ، والرد "7500" يكمل الطلب.
 13. افهم المرادفات الطبيعية مثل دفع، ادى، أعطى، خد مني، سجل مصروف، ولا تجعل علامات الترقيم شرطًا للفهم.
 14. عند وجود عدة نتائج من أداة، لا تنسخ JSON أو تسرد الصفوف واحدًا تلو الآخر. استخدم العدد والإجمالي المحسوبين من الأداة، واذكر التوزيع على المشاريع عند الحاجة. اعرض التفاصيل الفردية فقط إذا طلبها المستخدم صراحة.
-15. لا تحسب إجماليًا ماليًا بنفسك إذا أعادت الأداة total أو summary؛ استخدم القيم المحسوبة من قاعدة البيانات كما هي.`;
+15. لا تحسب إجماليًا ماليًا بنفسك إذا أعادت الأداة total أو summary؛ استخدم القيم المحسوبة من قاعدة البيانات كما هي.
+16. اعتبر حالة المحادثة المنظمة سياقًا لفهم "ده" و"التاني" و"له" و"الفلوس دي" فقط؛ تحقق دائمًا من IDs عبر الأدوات.
+17. لا تذكر رقمًا ماليًا أو عددًا ماليًا من الذاكرة أو التخمين. بعد الأدوات استخدم final_response، وضع كل رقم مالي مؤكد في groundedFacts كما أعادته الأداة. الرسالة نفسها يجب أن تكون طبيعية وليست قالبًا.
+18. لا تستخدم final_response قبل إكمال الأدوات اللازمة. إذا كانت البيانات ناقصة أو الأسماء متكررة، اجعل kind = clarification بدل التخمين.`;
 
 const requestGuidance = `إرشادات تنفيذ إضافية:
 - إذا كانت الرسالة جملة دفع/إعطاء/استلام وبها شخص ومبلغ وعملة، نفّذ find_person ثم record_expense مباشرة. لا تستدع recall_context أولًا. إذا لم يذكر المستخدم وصفًا، استخدم وصفًا صادقًا مثل "دفعة إلى <الاسم>".
 - إذا كانت الرسالة تسأل عن إجمالي ما صُرف على وصف أو فئة مثل "التشطيبات" من دون ذكر مشروع صريح، استخدم query_expenses مع description ثم احسب الناتج من الصفوف. لا تخترع مشروعًا اسمه الفئة.
 - إذا كانت الرسالة تسأل "محمد أخد مني كام؟"، نفّذ find_person ثم get_person_expense_total.
 - إذا كان اسم المشروع أو الشخص يطابق أكثر من كيان، لا تختار أي نتيجة عشوائيًا؛ اسأل المستخدم، إلا إذا كان السياق السابق يحتوي على اختيار واضح.
-- لا تذكر أسماء الأدوات ولا تنسخ نتائجها الخام في الرد النهائي.`;
+- استخدم period = last_month أو this_month أو last_week أو this_week للعبارات الزمنية النسبية، ودع الخادم يحسب الحدود الزمنية.
+- استخدم rank_expense_projects لسؤال "أنهي مشروع صرفت فيه أكتر؟"، ولا تجمع أرقام الصفوف بنفسك.
+- إذا قال المستخدم "من غير" أو "بدون" مشروع معروف في السياق، استخدم excludeProjectId بعد التحقق من المشروع.
+- لا تذكر أسماء الأدوات ولا تنسخ نتائجها الخام في الرد النهائي.
+- في نهاية الجولة استدع final_response برسالة عربية طبيعية.`;
 
 function parseJsonObject(value: string | undefined): Record<string, unknown> {
   if (!value) return {};
@@ -728,6 +959,9 @@ function parseJsonObject(value: string | undefined): Record<string, unknown> {
 
 function toGeminiContents(messages: ConversationMessage[]): Array<{ role: string; parts: GeminiPart[] }> {
   return messages.map((message) => {
+    if (message.role === "system") {
+      return { role: "user", parts: [{ text: `[سياق موثوق من التطبيق]\n${message.text ?? ""}` }] };
+    }
     if (message.role === "assistant") {
       return {
         role: "model",
@@ -788,7 +1022,7 @@ class GeminiModelGateway implements ModelGateway {
     return this.activeModel;
   }
 
-  async generate(messages: ConversationMessage[]): Promise<GatewayResponse> {
+  async generate(messages: ConversationMessage[], context: GatewayCallContext): Promise<GatewayResponse> {
     if (!this.apiKey) throw new Error("GEMINI_API_KEY is not configured.");
     let lastError: Error | null = null;
     const models = this.model === GEMINI_FALLBACK_MODEL
@@ -798,6 +1032,13 @@ class GeminiModelGateway implements ModelGateway {
     for (const model of models) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 25_000);
+      const startedAt = Date.now();
+      logger.info({
+        requestId: context.requestId,
+        provider: this.provider,
+        model,
+        llmCall: context.callNumber,
+      }, "agent llm call started");
       try {
         const response = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(this.apiKey)}`,
@@ -819,7 +1060,7 @@ class GeminiModelGateway implements ModelGateway {
           const parsed = JSON.parse(raw) as GeminiResponse;
           const parts = parsed.candidates?.[0]?.content?.parts ?? [];
           this.activeModel = model;
-          return {
+          const responseResult = {
             text: parts.map((part) => part.text ?? "").join("").trim(),
             toolCalls: parts.flatMap((part, index) => part.functionCall
               ? [{
@@ -831,11 +1072,21 @@ class GeminiModelGateway implements ModelGateway {
               : []),
             usage: parsed.usageMetadata,
           };
+          logger.info({
+            requestId: context.requestId,
+            provider: this.provider,
+            model,
+            llmCall: context.callNumber,
+            toolCalls: responseResult.toolCalls.length,
+            latencyMs: Date.now() - startedAt,
+          }, "agent llm call completed");
+          return responseResult;
         }
         lastError = providerResponseError("gemini", response.status, raw);
         if (![404, 429, 500, 502, 503, 504].includes(response.status)) throw lastError;
       } catch (error) {
         lastError = providerExceptionError("gemini", error);
+        logLlmFailure("gemini", model, context, 1, lastError);
       } finally {
         clearTimeout(timeout);
       }
@@ -854,7 +1105,7 @@ class GroqModelGateway implements ModelGateway {
     return this.model;
   }
 
-  async generate(messages: ConversationMessage[]): Promise<GatewayResponse> {
+  async generate(messages: ConversationMessage[], context: GatewayCallContext): Promise<GatewayResponse> {
     if (!this.apiKey) throw new Error("GROQ_API_KEY is not configured.");
     const apiMessages = [
       {
@@ -888,6 +1139,14 @@ class GroqModelGateway implements ModelGateway {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 25_000);
+      const startedAt = Date.now();
+      logger.info({
+        requestId: context.requestId,
+        provider: this.provider,
+        model: this.model,
+        llmCall: context.callNumber,
+        attempt: attempt + 1,
+      }, "agent llm call started");
       try {
         const response = await fetch(GROQ_API_URL, {
           method: "POST",
@@ -900,6 +1159,8 @@ class GroqModelGateway implements ModelGateway {
             messages: apiMessages,
             tools: toOpenAiTools(),
             tool_choice: "auto",
+            reasoning_effort: "low",
+            include_reasoning: false,
             temperature: 0.15,
             max_tokens: 4096,
           }),
@@ -920,7 +1181,7 @@ class GroqModelGateway implements ModelGateway {
             usage?: unknown;
           };
           const message = payload.choices?.[0]?.message;
-          return {
+          const responseResult = {
             text: message?.content?.trim() ?? "",
             toolCalls: (message?.tool_calls ?? []).map((call) => ({
               id: call.id,
@@ -929,13 +1190,33 @@ class GroqModelGateway implements ModelGateway {
             })),
             usage: payload.usage,
           };
+          logger.info({
+            requestId: context.requestId,
+            provider: this.provider,
+            model: this.model,
+            llmCall: context.callNumber,
+            attempt: attempt + 1,
+            toolCalls: responseResult.toolCalls.length,
+            latencyMs: Date.now() - startedAt,
+          }, "agent llm call completed");
+          return responseResult;
         }
         lastError = providerResponseError("groq", response.status, raw);
         if (response.status !== 429 || attempt === 1) throw lastError;
         const retryAfter = Number(response.headers.get("retry-after") ?? 1);
+        logger.warn({
+          requestId: context.requestId,
+          provider: this.provider,
+          model: this.model,
+          llmCall: context.callNumber,
+          attempt: attempt + 1,
+          retryAfterSeconds: retryAfter,
+          safeToRetry: true,
+        }, "agent llm rate limit retry");
         await new Promise((resolve) => setTimeout(resolve, Math.min(Math.max(retryAfter * 1000, 500), 3_000)));
       } catch (error) {
         lastError = providerExceptionError("groq", error);
+        logLlmFailure("groq", this.model, context, attempt + 1, lastError);
         if (attempt === 1 || !(lastError instanceof SecretaryError && lastError.upstreamStatus === 429)) {
           throw lastError;
         }
@@ -945,6 +1226,104 @@ class GroqModelGateway implements ModelGateway {
     }
     throw lastError ?? new Error("Groq request failed.");
   }
+}
+
+function numericValues(value: unknown, output = new Set<number>()): Set<number> {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    output.add(value);
+    if (Number.isInteger(value) && value % 100 === 0) output.add(value / 100);
+    return output;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) numericValues(item, output);
+    return output;
+  }
+  if (value && typeof value === "object") {
+    for (const child of Object.values(value)) numericValues(child, output);
+  }
+  return output;
+}
+
+function numericTextValues(value: string): number[] {
+  return [...value.matchAll(/(?<![\p{L}\p{N}])[0-9٠-٩][0-9٠-٩,٬.]*/gu)]
+    .map((match) => Number(
+      match[0]
+        .replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)))
+        .replace(/[,.٬]/g, ""),
+    ))
+    .filter((number) => Number.isFinite(number));
+}
+
+function groundedValues(history: ToolHistoryEntry[]): Set<number> {
+  const values = new Set<number>();
+  for (const entry of history) numericValues(entry.result, values);
+  return values;
+}
+
+function isFinancialMessage(message: string): boolean {
+  return /جنيه|دولار|ريال|مصروف|مصروفات|مصاريف|اجمالي|إجمالي|مبلغ|دفع|دفعت|صرف|فلوس|فلوس/i.test(message);
+}
+
+function safeFinalResponse(
+  kind: FinalResponseKind,
+  message: string,
+  history: ToolHistoryEntry[],
+  groundedFacts?: GroundedFact[],
+): FinalResponse {
+  const facts = groundedFacts?.filter((fact) => {
+    if (!fact || !["money", "count"].includes(fact.type) || !Number.isSafeInteger(fact.value)) return false;
+    const values = groundedValues(history);
+    return values.has(fact.value);
+  });
+  const hasInvalidFact = (groundedFacts?.length ?? 0) !== (facts?.length ?? 0);
+  const unverifiedNumbers = isFinancialMessage(message)
+    ? numericTextValues(message).some((value) => !groundedValues(history).has(value))
+    : false;
+
+  if (hasInvalidFact || unverifiedNumbers) {
+    return {
+      kind: "error",
+      message: "راجعت البيانات المحفوظة، لكن لم أستطع تأكيد الرقم المالي من نتيجة قاعدة البيانات. لن أخمّن.",
+    };
+  }
+
+  return {
+    kind,
+    message: message.trim(),
+    ...(facts && facts.length > 0 ? { groundedFacts: facts } : {}),
+  };
+}
+
+function finalResponseFromArgs(args: Record<string, unknown>, history: ToolHistoryEntry[]): FinalResponse {
+  const kind = args.kind === "clarification" || args.kind === "not_found" || args.kind === "error"
+    ? args.kind
+    : "answer";
+  const message = typeof args.message === "string" ? args.message.trim() : "";
+  if (!message) {
+    return {
+      kind: "error",
+      message: "لم يصل رد نهائي مفهوم من النموذج.",
+    };
+  }
+  const groundedFacts = Array.isArray(args.groundedFacts)
+    ? args.groundedFacts.flatMap((fact) => {
+        if (!fact || typeof fact !== "object") return [];
+        const item = fact as Record<string, unknown>;
+        if ((item.type !== "money" && item.type !== "count") || typeof item.value !== "number") return [];
+        return [{
+          type: item.type,
+          value: item.value,
+          ...(typeof item.currency === "string" ? { currency: item.currency } : {}),
+          ...(typeof item.label === "string" ? { label: item.label } : {}),
+        } satisfies GroundedFact];
+      })
+    : undefined;
+  return safeFinalResponse(kind, message, history, groundedFacts);
+}
+
+function finalResponseFromText(text: string, history: ToolHistoryEntry[]): FinalResponse {
+  const message = text.trim() || "لم أستطع إكمال الطلب بشكل آمن. اكتب التفاصيل المطلوبة وسأحاول مرة أخرى.";
+  return safeFinalResponse("answer", message, history);
 }
 
 async function loadIdempotent(identity: Identity, key: string): Promise<Phase2TurnResult | null> {
@@ -964,53 +1343,16 @@ async function saveIdempotent(identity: Identity, key: string, response: Phase2T
   }).onConflictDoNothing();
 }
 
-async function runBroadExpenseReport(
-  identity: Identity,
-  gateway: ModelGateway,
-  input: Phase2TurnInput,
-  conversationId: string,
-  conversationMemory: ConversationMemorySnapshot,
-  startedAt: number,
-): Promise<Phase2TurnResult> {
-  const toolResult = await executeTool(identity, "query_expenses", { limit: 50 });
-  if (!toolResult.ok) {
-    throw agentToolError("query_expenses", new Error(String(toolResult.error ?? "Expense query failed.")));
-  }
-
-  const toolHistory: ToolHistoryEntry[] = [{ name: "query_expenses", result: toolResult }];
-  const result: Phase2TurnResult = {
-    conversationId,
-    assistantMessage: compactToolResponse(input.message.trim(), "", toolHistory),
-    action: compactActionForMemory({
-      type: "expense_report",
-      lastTool: "query_expenses",
-      toolResult: jsonSafe(toolResult),
-    }),
-    provider: gateway.provider,
-    model: gateway.modelName,
-  };
-
-  await saveConversationTurn(identity, conversationMemory, {
-    userMessage: input.message.trim(),
-    assistantMessage: result.assistantMessage,
-    action: result.action,
-  });
-  if (input.idempotencyKey) await saveIdempotent(identity, input.idempotencyKey, result);
-  logger.info({
-    provider: gateway.provider,
-    model: gateway.modelName,
-    toolCalls: 1,
-    latencyMs: Date.now() - startedAt,
-    deterministic: true,
-  }, "expense report completed");
-  return result;
-}
-
 export class Phase2AgentRuntime {
   constructor(private readonly gateway: ModelGateway) {}
 
-  async run(identity: Identity, input: Phase2TurnInput): Promise<Phase2TurnResult> {
+  async run(
+    identity: Identity,
+    input: Phase2TurnInput,
+    options: Phase2RunOptions = {},
+  ): Promise<Phase2TurnResult> {
     const startedAt = Date.now();
+    const requestId = input.requestId ?? crypto.randomUUID();
     if (input.idempotencyKey) {
       const stored = await loadIdempotent(identity, input.idempotencyKey);
       if (stored) return stored;
@@ -1018,52 +1360,57 @@ export class Phase2AgentRuntime {
 
     const conversationId = input.conversationId || crypto.randomUUID();
     const conversationMemory = await loadConversationMemory(identity, conversationId);
-    if (isBroadExpenseReportRequest(input.message)) {
-      return runBroadExpenseReport(
-        identity,
-        this.gateway,
-        input,
-        conversationId,
-        conversationMemory,
-        startedAt,
-      );
-    }
     const messages: ConversationMessage[] = [
       ...conversationContextMessages(conversationMemory),
       { role: "user", text: input.message.trim() },
     ];
-    let calls = 0;
+    let toolCalls = 0;
+    let llmCalls = 0;
     let action: Record<string, unknown> | undefined;
     const toolHistory: ToolHistoryEntry[] = [];
+    let conversationState: ConversationState = conversationMemory.state;
 
-    while (calls < MAX_TOOL_CALLS) {
-      const response = await this.gateway.generate(messages);
-      if (response.toolCalls.length === 0) {
-        const result: Phase2TurnResult = {
-          conversationId,
-          assistantMessage: compactToolResponse(
-            input.message.trim(),
-            response.text || "لم أستطع إكمال الطلب بشكل آمن. اكتب التفاصيل المطلوبة وسأحاول مرة أخرى.",
-            toolHistory,
-          ),
-          action: compactActionForMemory(action) ?? { type: "llm_response" },
-          provider: this.gateway.provider,
-          model: this.gateway.modelName,
-        };
+    const persistResult = async (finalResponse: FinalResponse): Promise<Phase2TurnResult> => {
+      const finalAction = compactActionForMemory(action) ?? {
+        type: "llm_response",
+        conversationState,
+      };
+      const result: Phase2TurnResult = {
+        conversationId,
+        assistantMessage: finalResponse.message,
+        response: finalResponse,
+        action: finalAction,
+        provider: this.gateway.provider,
+        model: this.gateway.modelName,
+      };
+      if (!options.dryRun) {
         await saveConversationTurn(identity, conversationMemory, {
           userMessage: input.message.trim(),
           assistantMessage: result.assistantMessage,
           action: result.action,
         });
         if (input.idempotencyKey) await saveIdempotent(identity, input.idempotencyKey, result);
-        logger.info({
-          provider: this.gateway.provider,
-          model: this.gateway.modelName,
-          toolCalls: calls,
-          latencyMs: Date.now() - startedAt,
-          usage: response.usage,
-        }, "agent turn completed");
-        return result;
+      }
+      logger.info({
+        requestId,
+        provider: this.gateway.provider,
+        model: this.gateway.modelName,
+        toolCalls,
+        llmCalls,
+        latencyMs: Date.now() - startedAt,
+        dryRun: options.dryRun ?? false,
+      }, "agent final response");
+      return result;
+    };
+
+    while (toolCalls < MAX_TOOL_CALLS) {
+      llmCalls += 1;
+      const response = await this.gateway.generate(messages, {
+        requestId,
+        callNumber: llmCalls,
+      });
+      if (response.toolCalls.length === 0) {
+        return persistResult(finalResponseFromText(response.text, toolHistory));
       }
 
       messages.push({
@@ -1071,20 +1418,36 @@ export class Phase2AgentRuntime {
         text: response.text || undefined,
         toolCalls: response.toolCalls,
       });
+
+      const finalCall = response.toolCalls.find((call) => call.name === "final_response");
+      if (finalCall && response.toolCalls.length === 1) {
+        return persistResult(finalResponseFromArgs(finalCall.args, toolHistory));
+      }
+
       for (const call of response.toolCalls) {
-        calls += 1;
-        if (calls > MAX_TOOL_CALLS) break;
+        if (call.name === "final_response") {
+          continue;
+        }
+        toolCalls += 1;
+        if (toolCalls > MAX_TOOL_CALLS) break;
         let toolResult: ToolResult;
         try {
-          toolResult = await executeTool(identity, call.name, call.args);
+          toolResult = await executeTool(identity, call.name, call.args, {
+            requestId,
+            callId: call.id,
+            dryRun: options.dryRun,
+          });
         } catch (error) {
           throw agentToolError(call.name, error);
         }
         toolHistory.push({ name: call.name, result: toolResult });
+        conversationState = updateConversationState(conversationState, call.name, toolResult);
         action = {
           type: "tool_orchestration",
           lastTool: call.name,
-          toolCalls: calls,
+          toolCalls,
+          llmCalls,
+          conversationState,
           toolResult: compactActionForMemory({
             toolResult: jsonSafe(toolResult),
           })?.toolResult,
