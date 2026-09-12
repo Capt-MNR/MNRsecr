@@ -27,6 +27,7 @@ import {
   providerResponseError,
   SecretaryError,
 } from "./error-contract";
+import { isBroadExpenseReportRequest } from "./expense-report";
 
 export type Phase2TurnInput = {
   message: string;
@@ -560,7 +561,10 @@ async function executeTool(
       break;
     }
     case "query_expenses": {
-      const limit = Math.min(Math.max(Number(args.limit ?? 20), 1), 50);
+      const requestedLimit = Number(args.limit ?? 20);
+      const limit = Number.isFinite(requestedLimit)
+        ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 50)
+        : 20;
       const description = stringArg("description");
       const rows = await db.select({
         expense: expensesTable,
@@ -960,6 +964,48 @@ async function saveIdempotent(identity: Identity, key: string, response: Phase2T
   }).onConflictDoNothing();
 }
 
+async function runBroadExpenseReport(
+  identity: Identity,
+  gateway: ModelGateway,
+  input: Phase2TurnInput,
+  conversationId: string,
+  conversationMemory: ConversationMemorySnapshot,
+  startedAt: number,
+): Promise<Phase2TurnResult> {
+  const toolResult = await executeTool(identity, "query_expenses", { limit: 50 });
+  if (!toolResult.ok) {
+    throw agentToolError("query_expenses", new Error(String(toolResult.error ?? "Expense query failed.")));
+  }
+
+  const toolHistory: ToolHistoryEntry[] = [{ name: "query_expenses", result: toolResult }];
+  const result: Phase2TurnResult = {
+    conversationId,
+    assistantMessage: compactToolResponse(input.message.trim(), "", toolHistory),
+    action: compactActionForMemory({
+      type: "expense_report",
+      lastTool: "query_expenses",
+      toolResult: jsonSafe(toolResult),
+    }),
+    provider: gateway.provider,
+    model: gateway.modelName,
+  };
+
+  await saveConversationTurn(identity, conversationMemory, {
+    userMessage: input.message.trim(),
+    assistantMessage: result.assistantMessage,
+    action: result.action,
+  });
+  if (input.idempotencyKey) await saveIdempotent(identity, input.idempotencyKey, result);
+  logger.info({
+    provider: gateway.provider,
+    model: gateway.modelName,
+    toolCalls: 1,
+    latencyMs: Date.now() - startedAt,
+    deterministic: true,
+  }, "expense report completed");
+  return result;
+}
+
 export class Phase2AgentRuntime {
   constructor(private readonly gateway: ModelGateway) {}
 
@@ -972,6 +1018,16 @@ export class Phase2AgentRuntime {
 
     const conversationId = input.conversationId || crypto.randomUUID();
     const conversationMemory = await loadConversationMemory(identity, conversationId);
+    if (isBroadExpenseReportRequest(input.message)) {
+      return runBroadExpenseReport(
+        identity,
+        this.gateway,
+        input,
+        conversationId,
+        conversationMemory,
+        startedAt,
+      );
+    }
     const messages: ConversationMessage[] = [
       ...conversationContextMessages(conversationMemory),
       { role: "user", text: input.message.trim() },

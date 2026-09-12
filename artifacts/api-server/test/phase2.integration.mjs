@@ -360,4 +360,17 @@ test("runs a real Groq turn and keeps tool output compact", {
   assert.ok(stored.length < 3500);
   assert.equal(stored.includes('"expenses":['), false);
 
+  const reportConversation = `groq-report-${Date.now()}`;
+  const firstReport = await sendTurn(
+    "عايز تقرير بالمصروفات",
+    reportConversation,
+    `${reportConversation}-first`,
+  );
+  const repeatedReport = await sendTurn(
+    "تقرير شامل بالمصروفات",
+    reportConversation,
+    `${reportConversation}-second`,
+  );
+  assert.equal(repeatedReport.assistantMessage, firstReport.assistantMessage);
+  assert.match(firstReport.assistantMessage, /مصروفات بإجمالي/);
 });
