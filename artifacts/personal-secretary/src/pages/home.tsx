@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -25,7 +25,9 @@ import {
   useGetTodayContext,
   useHealthCheck,
 } from '@workspace/api-client-react';
+import type { ConversationDetail } from '@workspace/api-client-react';
 import { classifySecretaryError } from '../lib/secretary-errors';
+import ConversationHistory from '../components/conversation-history';
 
 type LocalMessage = {
   id: string;
@@ -88,6 +90,8 @@ function Home() {
   const [draft, setDraft] = useState('');
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [isContextOpen, setIsContextOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [selectedConversationId, setSelectedConversationId] = useState<string | undefined>();
   const [messages, setMessages] = useState<LocalMessage[]>([starterMessage]);
 
   const todayQuery = useGetTodayContext({
@@ -122,6 +126,34 @@ function Home() {
         ? 'جاهز'
         : 'متاح';
 
+  const handleConversationLoaded = useCallback((detail: ConversationDetail) => {
+    setConversationId(detail.conversationId);
+    const loadedMessages: LocalMessage[] = [];
+    detail.recentTurns.forEach((turn, index) => {
+      loadedMessages.push({
+        id: `${detail.conversationId}-user-${index}`,
+        role: 'user',
+        text: turn.userMessage,
+        time: formatTime(turn.createdAt),
+      });
+      loadedMessages.push({
+        id: `${detail.conversationId}-assistant-${index}`,
+        role: 'assistant',
+        text: turn.assistantMessage,
+        time: formatTime(turn.createdAt),
+        meta: 'من سجل المحادثة',
+      });
+    });
+    setMessages(loadedMessages.length > 0 ? loadedMessages : [starterMessage]);
+  }, []);
+
+  function startNewConversation() {
+    setConversationId(undefined);
+    setSelectedConversationId(undefined);
+    setMessages([starterMessage]);
+    setIsHistoryOpen(false);
+  }
+
   function sendMessage(value = draft) {
     const message = value.trim();
     if (!message || createTurn.isPending) return;
@@ -143,6 +175,7 @@ function Home() {
       {
         onSuccess: (response) => {
           setConversationId(response.conversationId);
+          setSelectedConversationId(response.conversationId);
           setMessages((current) => [
             ...current,
             {
@@ -154,6 +187,7 @@ function Home() {
             },
           ]);
           queryClient.invalidateQueries({ queryKey: getGetTodayContextQueryKey() });
+          queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
         },
       },
     );
@@ -185,14 +219,28 @@ function Home() {
             <p className="text-[11px] tracking-wide text-muted-foreground">مساحة العمل</p>
             <button
               type="button"
-              onClick={() => { setConversationId(undefined); setMessages([starterMessage]); }}
+              onClick={startNewConversation}
               className="mt-3 flex w-full items-center gap-3 rounded-xl bg-primary/10 px-3 py-3 text-left text-sm font-medium text-primary transition-colors hover:bg-primary/15"
               data-testid="button-new-conversation"
             >
               <Plus className="size-4" />
                محادثة جديدة
             </button>
+            <a href={`${import.meta.env.BASE_URL}records`} className="mt-2 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+              <span className="flex size-4 items-center justify-center rounded border border-current text-[9px]">▦</span>
+              السجلات المحفوظة
+            </a>
           </div>
+
+          <ConversationHistory
+            variant="desktop"
+            selectedId={selectedConversationId}
+            isOpen={isHistoryOpen}
+            onOpenChange={setIsHistoryOpen}
+            onNew={startNewConversation}
+            onSelect={setSelectedConversationId}
+            onLoaded={handleConversationLoaded}
+          />
 
           <div className="mt-auto rounded-2xl border border-border/80 bg-card/55 p-4">
             <div className="flex items-center gap-2 text-xs font-semibold">
@@ -202,11 +250,20 @@ function Home() {
             <p className="mt-2 text-xs leading-relaxed text-muted-foreground">بياناتك محفوظة في مساحتك الخاصة ومتاحة وقت ما تحتاجها.</p>
           </div>
         </aside>
+        <ConversationHistory
+          variant="mobile"
+          selectedId={selectedConversationId}
+          isOpen={isHistoryOpen}
+          onOpenChange={setIsHistoryOpen}
+          onNew={startNewConversation}
+          onSelect={setSelectedConversationId}
+          onLoaded={handleConversationLoaded}
+        />
 
         <main className="flex min-w-0 flex-1 flex-col">
           <header className="flex h-[76px] shrink-0 items-center justify-between border-b border-border/70 px-4 sm:px-8 lg:px-12">
             <div className="flex items-center gap-3">
-              <button type="button" onClick={() => setIsContextOpen(true)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted lg:hidden" data-testid="button-open-menu">
+              <button type="button" onClick={() => setIsHistoryOpen(true)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted lg:hidden" data-testid="button-open-menu">
                 <Menu className="size-5" />
               </button>
               <div>
@@ -244,7 +301,7 @@ function Home() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => { setConversationId(undefined); setMessages([starterMessage]); }}
+                    onClick={startNewConversation}
                     className="hidden items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted sm:flex"
                     data-testid="button-clear-conversation"
                   >

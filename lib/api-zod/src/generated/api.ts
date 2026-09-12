@@ -88,3 +88,169 @@ export const CreateTurnResponse = zod.object({
 })
 
 
+/**
+ * @summary List recent conversations
+ */
+export const ListConversationsQueryParams = zod.object({
+  "search": zod.coerce.string().optional()
+})
+
+export const ListConversationsResponse = zod.object({
+  "conversations": zod.array(zod.object({
+  "conversationId": zod.string(),
+  "title": zod.string(),
+  "preview": zod.string(),
+  "lastActivityAt": zod.string(),
+  "turnCount": zod.number().int()
+}))
+})
+
+
+/**
+ * @summary Load a conversation and its recent turns
+ */
+export const GetConversationParams = zod.object({
+  "conversationId": zod.coerce.string()
+})
+
+export const GetConversationResponse = zod.object({
+  "conversationId": zod.string(),
+  "title": zod.string(),
+  "lastActivityAt": zod.string(),
+  "turnCount": zod.number().int(),
+  "recentTurns": zod.array(zod.object({
+  "userMessage": zod.string(),
+  "assistantMessage": zod.string(),
+  "createdAt": zod.string(),
+  "action": zod.record(zod.string(), zod.unknown()).optional()
+})),
+  "summary": zod.string().nullable(),
+  "state": zod.record(zod.string(), zod.unknown())
+})
+
+
+/**
+ * @summary List structured memory records
+ */
+export const ListRecordsResponse = zod.object({
+  "expenses": zod.array(zod.object({
+  "id": zod.string(),
+  "amountMinor": zod.number().int(),
+  "currency": zod.string(),
+  "description": zod.string(),
+  "personId": zod.string().nullish(),
+  "personName": zod.string().nullish(),
+  "projectId": zod.string().nullish(),
+  "projectName": zod.string().nullish(),
+  "occurredAt": zod.string(),
+  "createdAt": zod.string()
+})),
+  "people": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})),
+  "projects": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "status": zod.string(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})),
+  "tasks": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "dueAt": zod.string().nullish(),
+  "status": zod.string(),
+  "createdAt": zod.string()
+})),
+  "reminders": zod.array(zod.object({
+  "id": zod.string(),
+  "text": zod.string(),
+  "dueAt": zod.string(),
+  "timezone": zod.string(),
+  "status": zod.string(),
+  "createdAt": zod.string()
+})),
+  "commitments": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "personId": zod.string().nullish(),
+  "personName": zod.string().nullish(),
+  "dueAt": zod.string().nullish(),
+  "status": zod.string(),
+  "createdAt": zod.string()
+}))
+})
+
+
+/**
+ * @summary Update one structured memory record
+ */
+export const UpdateRecordParams = zod.object({
+  "recordType": zod.enum(['expense', 'person', 'project', 'task', 'reminder', 'commitment']),
+  "recordId": zod.coerce.string()
+})
+
+export const UpdateRecordBody = zod.object({
+  "amountMinor": zod.number().int().optional(),
+  "currency": zod.string().optional(),
+  "description": zod.string().optional(),
+  "personId": zod.string().nullish(),
+  "projectId": zod.string().nullish(),
+  "occurredAt": zod.string().optional(),
+  "name": zod.string().optional(),
+  "notes": zod.string().nullish(),
+  "title": zod.string().optional(),
+  "text": zod.string().optional(),
+  "dueAt": zod.string().nullish(),
+  "timezone": zod.string().optional(),
+  "status": zod.string().optional()
+})
+
+export const UpdateRecordResponse = zod.object({
+  "ok": zod.boolean(),
+  "recordType": zod.enum(['expense', 'person', 'project', 'task', 'reminder', 'commitment']),
+  "recordId": zod.string(),
+  "record": zod.record(zod.string(), zod.unknown()).optional(),
+  "deleted": zod.boolean().optional()
+})
+
+
+/**
+ * @summary Delete one structured memory record
+ */
+export const DeleteRecordParams = zod.object({
+  "recordType": zod.enum(['expense', 'person', 'project', 'task', 'reminder', 'commitment']),
+  "recordId": zod.coerce.string()
+})
+
+export const DeleteRecordResponse = zod.object({
+  "ok": zod.boolean(),
+  "recordType": zod.enum(['expense', 'person', 'project', 'task', 'reminder', 'commitment']),
+  "recordId": zod.string(),
+  "record": zod.record(zod.string(), zod.unknown()).optional(),
+  "deleted": zod.boolean().optional()
+})
+
+
+/**
+ * @summary Safely undo a just-created record
+ */
+export const UndoCreatedRecordBody = zod.object({
+  "recordType": zod.enum(['expense', 'person', 'project', 'task', 'reminder', 'commitment']),
+  "recordId": zod.string(),
+  "createdAt": zod.string()
+})
+
+export const UndoCreatedRecordResponse = zod.object({
+  "ok": zod.boolean(),
+  "recordType": zod.enum(['expense', 'person', 'project', 'task', 'reminder', 'commitment']),
+  "recordId": zod.string(),
+  "record": zod.record(zod.string(), zod.unknown()).optional(),
+  "deleted": zod.boolean().optional()
+})
+
+

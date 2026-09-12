@@ -12,6 +12,10 @@ tags:
     description: Health operations
   - name: secretary
     description: Personal secretary operations
+  - name: conversations
+    description: Conversation history operations
+  - name: records
+    description: Structured memory records operations
 paths:
   /healthz:
     get:
@@ -105,6 +109,201 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /conversations:
+    get:
+      operationId: listConversations
+      tags: [conversations]
+      summary: List recent conversations
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Conversation summaries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationListResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /conversations/{conversationId}:
+    get:
+      operationId: getConversation
+      tags: [conversations]
+      summary: Load a conversation and its recent turns
+      parameters:
+        - name: conversationId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Conversation detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationDetail"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Conversation not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /records:
+    get:
+      operationId: listRecords
+      tags: [records]
+      summary: List structured memory records
+      responses:
+        "200":
+          description: Structured records grouped by type
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordsResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /records/{recordType}/{recordId}:
+    patch:
+      operationId: updateRecord
+      tags: [records]
+      summary: Update one structured memory record
+      parameters:
+        - name: recordType
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/RecordType"
+        - name: recordId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordUpdateInput"
+      responses:
+        "200":
+          description: Updated record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordMutationResponse"
+        "400":
+          description: Invalid record update
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Record not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteRecord
+      tags: [records]
+      summary: Delete one structured memory record
+      parameters:
+        - name: recordType
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/RecordType"
+        - name: recordId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordMutationResponse"
+        "400":
+          description: Invalid delete request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Record not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /records/undo:
+    post:
+      operationId: undoCreatedRecord
+      tags: [records]
+      summary: Safely undo a just-created record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UndoRecordInput"
+      responses:
+        "200":
+          description: Undo result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordMutationResponse"
+        "400":
+          description: Invalid undo request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Record not found or changed
           content:
             application/json:
               schema:
@@ -292,3 +491,208 @@ components:
         context:
           $ref: "#/components/schemas/TodayContext"
       required: [context]
+    ConversationTurn:
+      type: object
+      additionalProperties: true
+      properties:
+        userMessage:
+          type: string
+        assistantMessage:
+          type: string
+        createdAt:
+          type: string
+        action:
+          type: object
+          additionalProperties: true
+      required: [userMessage, assistantMessage, createdAt]
+    ConversationSummary:
+      type: object
+      properties:
+        conversationId:
+          type: string
+        title:
+          type: string
+        preview:
+          type: string
+        lastActivityAt:
+          type: string
+        turnCount:
+          type: integer
+      required: [conversationId, title, preview, lastActivityAt, turnCount]
+    ConversationListResponse:
+      type: object
+      properties:
+        conversations:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConversationSummary"
+      required: [conversations]
+    ConversationDetail:
+      type: object
+      properties:
+        conversationId:
+          type: string
+        title:
+          type: string
+        lastActivityAt:
+          type: string
+        turnCount:
+          type: integer
+        recentTurns:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConversationTurn"
+        summary:
+          type: ["string", "null"]
+        state:
+          type: object
+          additionalProperties: true
+      required: [conversationId, title, lastActivityAt, turnCount, recentTurns, summary, state]
+    RecordType:
+      type: string
+      enum: [expense, person, project, task, reminder, commitment]
+    RecordUpdateInput:
+      type: object
+      additionalProperties: false
+      properties:
+        amountMinor:
+          type: integer
+        currency:
+          type: string
+        description:
+          type: string
+        personId:
+          type: ["string", "null"]
+        projectId:
+          type: ["string", "null"]
+        occurredAt:
+          type: string
+        name:
+          type: string
+        notes:
+          type: ["string", "null"]
+        title:
+          type: string
+        text:
+          type: string
+        dueAt:
+          type: ["string", "null"]
+        timezone:
+          type: string
+        status:
+          type: string
+    RecordMutationResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        recordType:
+          $ref: "#/components/schemas/RecordType"
+        recordId:
+          type: string
+        record:
+          type: object
+          additionalProperties: true
+        deleted:
+          type: boolean
+      required: [ok, recordType, recordId]
+    UndoRecordInput:
+      type: object
+      properties:
+        recordType:
+          $ref: "#/components/schemas/RecordType"
+        recordId:
+          type: string
+        createdAt:
+          type: string
+      required: [recordType, recordId, createdAt]
+    ExpenseRecord:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        amountMinor: { type: integer }
+        currency: { type: string }
+        description: { type: string }
+        personId: { type: ["string", "null"] }
+        personName: { type: ["string", "null"] }
+        projectId: { type: ["string", "null"] }
+        projectName: { type: ["string", "null"] }
+        occurredAt: { type: string }
+        createdAt: { type: string }
+      required: [id, amountMinor, currency, description, occurredAt, createdAt]
+    PersonRecord:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        name: { type: string }
+        notes: { type: ["string", "null"] }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+      required: [id, name, createdAt, updatedAt]
+    ProjectRecord:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        name: { type: string }
+        status: { type: string }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+      required: [id, name, status, createdAt, updatedAt]
+    TaskRecord:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        title: { type: string }
+        dueAt: { type: ["string", "null"] }
+        status: { type: string }
+        createdAt: { type: string }
+      required: [id, title, status, createdAt]
+    ReminderRecord:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        text: { type: string }
+        dueAt: { type: string }
+        timezone: { type: string }
+        status: { type: string }
+        createdAt: { type: string }
+      required: [id, text, dueAt, timezone, status, createdAt]
+    CommitmentRecord:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        title: { type: string }
+        personId: { type: ["string", "null"] }
+        personName: { type: ["string", "null"] }
+        dueAt: { type: ["string", "null"] }
+        status: { type: string }
+        createdAt: { type: string }
+      required: [id, title, status, createdAt]
+    RecordsResponse:
+      type: object
+      properties:
+        expenses:
+          type: array
+          items: { $ref: "#/components/schemas/ExpenseRecord" }
+        people:
+          type: array
+          items: { $ref: "#/components/schemas/PersonRecord" }
+        projects:
+          type: array
+          items: { $ref: "#/components/schemas/ProjectRecord" }
+        tasks:
+          type: array
+          items: { $ref: "#/components/schemas/TaskRecord" }
+        reminders:
+          type: array
+          items: { $ref: "#/components/schemas/ReminderRecord" }
+        commitments:
+          type: array
+          items: { $ref: "#/components/schemas/CommitmentRecord" }
+      required: [expenses, people, projects, tasks, reminders, commitments]

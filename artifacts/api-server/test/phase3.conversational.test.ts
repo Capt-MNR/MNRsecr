@@ -8,6 +8,7 @@ import {
   type GatewayResponse,
   type ModelGateway,
 } from "../src/lib/phase2.ts";
+import { updateConversationState, type ConversationState } from "../src/lib/conversation-memory.ts";
 import type { Identity } from "../src/lib/secretary.ts";
 
 type ScriptedTurn = {
@@ -168,4 +169,53 @@ test("Phase 3 keeps one natural conversation in LLM tool state and dry-runs writ
     eq(conversationMemoryTable.conversationId, conversationId),
   ));
   assert.equal(storedMemory.length, 0);
+});
+
+test("conversation state removes deleted structured entities instead of keeping stale references", () => {
+  let state = {
+    people: [],
+    projects: [],
+    candidatePeople: [],
+    candidateProjects: [],
+  } as ConversationState;
+  state = updateConversationState(state, "find_person", {
+    ok: true,
+    matches: [{ id: "person-1", name: "محمد" }],
+  });
+  state = updateConversationState(state, "find_project", {
+    ok: true,
+    matches: [{ id: "project-1", name: "المحجر" }],
+  });
+  state = updateConversationState(state, "record_expense", {
+    ok: true,
+    expense: {
+      id: "expense-1",
+      amountMinor: 750000,
+      currency: "EGP",
+      personId: "person-1",
+      projectId: "project-1",
+    },
+  });
+
+  state = updateConversationState(state, "delete_expense", {
+    ok: true,
+    deleted: true,
+    deletedExpense: { id: "expense-1" },
+  });
+  state = updateConversationState(state, "delete_person", {
+    ok: true,
+    deleted: true,
+    deletedPerson: { id: "person-1" },
+  });
+  state = updateConversationState(state, "delete_project", {
+    ok: true,
+    deleted: true,
+    deletedProject: { id: "project-1" },
+  });
+
+  assert.equal(state.lastExpense, undefined);
+  assert.equal(state.lastPerson, undefined);
+  assert.equal(state.lastProject, undefined);
+  assert.deepEqual(state.people, []);
+  assert.deepEqual(state.projects, []);
 });

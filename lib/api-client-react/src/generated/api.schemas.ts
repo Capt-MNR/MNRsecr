@@ -134,3 +134,170 @@ export interface TodayContextResponse {
   context: TodayContext;
 }
 
+export type ConversationTurnAction = { [key: string]: unknown };
+
+export interface ConversationTurn {
+  userMessage: string;
+  assistantMessage: string;
+  createdAt: string;
+  action?: ConversationTurnAction;
+  [key: string]: unknown;
+ }
+
+export interface ConversationSummary {
+  conversationId: string;
+  title: string;
+  preview: string;
+  lastActivityAt: string;
+  turnCount: number;
+}
+
+export interface ConversationListResponse {
+  conversations: ConversationSummary[];
+}
+
+export type ConversationDetailState = { [key: string]: unknown };
+
+export interface ConversationDetail {
+  conversationId: string;
+  title: string;
+  lastActivityAt: string;
+  turnCount: number;
+  recentTurns: ConversationTurn[];
+  /** @nullable */
+  summary: string | null;
+  state: ConversationDetailState;
+}
+
+export type RecordType = typeof RecordType[keyof typeof RecordType];
+
+
+export const RecordType = {
+  expense: 'expense',
+  person: 'person',
+  project: 'project',
+  task: 'task',
+  reminder: 'reminder',
+  commitment: 'commitment',
+} as const;
+
+export interface RecordUpdateInput {
+  amountMinor?: number;
+  currency?: string;
+  description?: string;
+  /** @nullable */
+  personId?: string | null;
+  /** @nullable */
+  projectId?: string | null;
+  occurredAt?: string;
+  name?: string;
+  /** @nullable */
+  notes?: string | null;
+  title?: string;
+  text?: string;
+  /** @nullable */
+  dueAt?: string | null;
+  timezone?: string;
+  status?: string;
+}
+
+export type RecordMutationResponseRecord = { [key: string]: unknown };
+
+export interface RecordMutationResponse {
+  ok: boolean;
+  recordType: RecordType;
+  recordId: string;
+  record?: RecordMutationResponseRecord;
+  deleted?: boolean;
+}
+
+export interface UndoRecordInput {
+  recordType: RecordType;
+  recordId: string;
+  createdAt: string;
+}
+
+export interface ExpenseRecord {
+  id: string;
+  amountMinor: number;
+  currency: string;
+  description: string;
+  /** @nullable */
+  personId?: string | null;
+  /** @nullable */
+  personName?: string | null;
+  /** @nullable */
+  projectId?: string | null;
+  /** @nullable */
+  projectName?: string | null;
+  occurredAt: string;
+  createdAt: string;
+  [key: string]: unknown;
+ }
+
+export interface PersonRecord {
+  id: string;
+  name: string;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  [key: string]: unknown;
+ }
+
+export interface ProjectRecord {
+  id: string;
+  name: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  [key: string]: unknown;
+ }
+
+export interface TaskRecord {
+  id: string;
+  title: string;
+  /** @nullable */
+  dueAt?: string | null;
+  status: string;
+  createdAt: string;
+  [key: string]: unknown;
+ }
+
+export interface ReminderRecord {
+  id: string;
+  text: string;
+  dueAt: string;
+  timezone: string;
+  status: string;
+  createdAt: string;
+  [key: string]: unknown;
+ }
+
+export interface CommitmentRecord {
+  id: string;
+  title: string;
+  /** @nullable */
+  personId?: string | null;
+  /** @nullable */
+  personName?: string | null;
+  /** @nullable */
+  dueAt?: string | null;
+  status: string;
+  createdAt: string;
+  [key: string]: unknown;
+ }
+
+export interface RecordsResponse {
+  expenses: ExpenseRecord[];
+  people: PersonRecord[];
+  projects: ProjectRecord[];
+  tasks: TaskRecord[];
+  reminders: ReminderRecord[];
+  commitments: CommitmentRecord[];
+}
+
+export type ListConversationsParams = {
+search?: string;
+};
+

@@ -195,6 +195,15 @@ const WRITE_TOOLS = new Set([
   "create_task",
   "create_commitment",
   "create_reminder",
+  "update_task",
+  "update_commitment",
+  "update_reminder",
+  "delete_person",
+  "delete_project",
+  "delete_expense",
+  "delete_task",
+  "delete_commitment",
+  "delete_reminder",
 ]);
 
 function normalize(value: string): string {
@@ -338,6 +347,7 @@ export const phase2Tools: ToolDefinition[] = [
     description: { type: "STRING" },
     personId: { type: "STRING" },
     projectId: { type: "STRING" },
+    occurredAt: { type: "STRING", description: "Optional ISO timestamp" },
   }, ["expenseId", "amountMinor"]),
   tool("query_expenses", "Query saved expenses for a person or project.", {
     personId: { type: "STRING" },
@@ -383,6 +393,50 @@ export const phase2Tools: ToolDefinition[] = [
     dueAt: { type: "STRING" },
     timezone: { type: "STRING" },
   }, ["text", "dueAt"]),
+  tool("update_task", "Update an accessible task by exact ID.", {
+    taskId: { type: "STRING" },
+    title: { type: "STRING" },
+    dueAt: { type: ["STRING", "NULL"] },
+    status: { type: "STRING", enum: ["pending", "in_progress", "completed", "cancelled"] },
+  }, ["taskId"]),
+  tool("update_commitment", "Update an accessible commitment by exact ID.", {
+    commitmentId: { type: "STRING" },
+    title: { type: "STRING" },
+    personId: { type: ["STRING", "NULL"] },
+    dueAt: { type: ["STRING", "NULL"] },
+    status: { type: "STRING", enum: ["open", "completed", "cancelled"] },
+  }, ["commitmentId"]),
+  tool("update_reminder", "Update an accessible reminder by exact ID.", {
+    reminderId: { type: "STRING" },
+    text: { type: "STRING" },
+    dueAt: { type: "STRING" },
+    timezone: { type: "STRING" },
+    status: { type: "STRING", enum: ["scheduled", "completed", "cancelled"] },
+  }, ["reminderId"]),
+  tool("delete_expense", "Delete one expense only by an exact resolved expenseId. Never guess or choose between similar expenses.", {
+    expenseId: { type: "STRING" },
+    expectedCreatedAt: { type: "STRING", description: "Only supplied by a safe undo of a just-created record." },
+  }, ["expenseId"]),
+  tool("delete_person", "Delete one person only by exact personId when no saved records depend on it. Never guess.", {
+    personId: { type: "STRING" },
+    expectedCreatedAt: { type: "STRING", description: "Only supplied by a safe undo of a just-created record." },
+  }, ["personId"]),
+  tool("delete_project", "Delete one project only by exact projectId when no saved records depend on it. Never guess.", {
+    projectId: { type: "STRING" },
+    expectedCreatedAt: { type: "STRING", description: "Only supplied by a safe undo of a just-created record." },
+  }, ["projectId"]),
+  tool("delete_task", "Delete one task only by exact taskId. Never guess.", {
+    taskId: { type: "STRING" },
+    expectedCreatedAt: { type: "STRING", description: "Only supplied by a safe undo of a just-created record." },
+  }, ["taskId"]),
+  tool("delete_commitment", "Delete one commitment only by exact commitmentId. Never guess.", {
+    commitmentId: { type: "STRING" },
+    expectedCreatedAt: { type: "STRING", description: "Only supplied by a safe undo of a just-created record." },
+  }, ["commitmentId"]),
+  tool("delete_reminder", "Delete one reminder only by exact reminderId. Never guess.", {
+    reminderId: { type: "STRING" },
+    expectedCreatedAt: { type: "STRING", description: "Only supplied by a safe undo of a just-created record." },
+  }, ["reminderId"]),
   tool("query_reminders", "Query saved reminders.", {
     status: { type: "STRING", enum: ["scheduled", "completed", "cancelled"] },
   }),
@@ -553,6 +607,9 @@ async function executeTool(
 
   const stringArg = (key: string): string | undefined =>
     typeof args[key] === "string" && args[key].trim() ? String(args[key]).trim() : undefined;
+  const expectedCreatedAt = stringArg("expectedCreatedAt");
+  const matchesExpectedVersion = (record: { createdAt: Date }) =>
+    !expectedCreatedAt || record.createdAt.toISOString() === expectedCreatedAt;
   const personId = stringArg("personId");
   const projectId = stringArg("projectId");
 
@@ -592,10 +649,11 @@ async function executeTool(
     }
     case "update_person": {
       if (!personId) return { ok: false, error: "personId is required." };
-      const updates: Record<string, string> = {};
-      if (stringArg("name")) {
-        updates.name = stringArg("name")!;
-        updates.nameKey = normalize(updates.name);
+      const updates: Record<string, unknown> = { updatedAt: new Date() };
+      const name = stringArg("name");
+      if (name) {
+        updates.name = name;
+        updates.nameKey = normalize(name);
       }
       if (stringArg("notes")) updates.notes = stringArg("notes")!;
       const [updated] = await db.update(peopleTable).set(updates).where(and(
@@ -639,10 +697,11 @@ async function executeTool(
     }
     case "update_project": {
       if (!projectId) return { ok: false, error: "projectId is required." };
-      const updates: Record<string, string> = {};
-      if (stringArg("name")) {
-        updates.name = stringArg("name")!;
-        updates.nameKey = normalize(updates.name);
+      const updates: Record<string, unknown> = { updatedAt: new Date() };
+      const name = stringArg("name");
+      if (name) {
+        updates.name = name;
+        updates.nameKey = normalize(name);
       }
       if (stringArg("status")) updates.status = stringArg("status")!;
       const [updated] = await db.update(projectsTable).set(updates).where(and(
@@ -741,13 +800,262 @@ async function executeTool(
       const description = stringArg("description");
       if (currency) updates.currency = currency.toUpperCase();
       if (description) updates.description = description;
-      if (personId) updates.personId = personId;
-      if (projectId) updates.projectId = projectId;
+      if (personId) {
+        const [person] = await db.select({ id: peopleTable.id }).from(peopleTable).where(and(
+          identityWhere(identity, peopleTable),
+          eq(peopleTable.id, personId),
+        ));
+        if (!person) return { ok: false, error: "Person is not accessible." };
+        updates.personId = personId;
+      }
+      if (projectId) {
+        const [project] = await db.select({ id: projectsTable.id }).from(projectsTable).where(and(
+          identityWhere(identity, projectsTable),
+          eq(projectsTable.id, projectId),
+        ));
+        if (!project) return { ok: false, error: "Project is not accessible." };
+        updates.projectId = projectId;
+      }
+      const occurredAtValue = stringArg("occurredAt");
+      if (occurredAtValue) {
+        const occurredAt = new Date(occurredAtValue);
+        if (Number.isNaN(occurredAt.getTime())) return { ok: false, error: "occurredAt must be a valid ISO timestamp." };
+        updates.occurredAt = occurredAt;
+      }
       const [updated] = await db.update(expensesTable).set(updates).where(and(
         identityWhere(identity, expensesTable),
         eq(expensesTable.id, expenseId),
       )).returning();
       result = updated ? { ok: true, corrected: true, expense: updated } : { ok: false, error: "Expense not found." };
+      break;
+    }
+    case "update_task": {
+      const taskId = stringArg("taskId");
+      if (!taskId) return { ok: false, error: "taskId is required." };
+      const updates: Record<string, unknown> = {};
+      if (stringArg("title")) updates.title = stringArg("title");
+      if (typeof args.dueAt === "string" && args.dueAt.trim()) {
+        const dueAt = new Date(args.dueAt);
+        if (Number.isNaN(dueAt.getTime())) return { ok: false, error: "dueAt must be a valid ISO timestamp." };
+        updates.dueAt = dueAt;
+      } else if (args.dueAt === null) {
+        updates.dueAt = null;
+      }
+      if (stringArg("status")) updates.status = stringArg("status");
+      const [updated] = await db.update(tasksTable).set(updates).where(and(
+        identityWhere(identity, tasksTable),
+        eq(tasksTable.id, taskId),
+      )).returning();
+      result = updated ? { ok: true, task: updated } : { ok: false, error: "Task not found." };
+      break;
+    }
+    case "update_commitment": {
+      const commitmentId = stringArg("commitmentId");
+      if (!commitmentId) return { ok: false, error: "commitmentId is required." };
+      const updates: Record<string, unknown> = {};
+      if (stringArg("title")) updates.title = stringArg("title");
+      if (typeof args.personId === "string" && args.personId.trim()) {
+        const targetPersonId = args.personId.trim();
+        const [person] = await db.select({ id: peopleTable.id }).from(peopleTable).where(and(
+          identityWhere(identity, peopleTable),
+          eq(peopleTable.id, targetPersonId),
+        ));
+        if (!person) return { ok: false, error: "Person is not accessible." };
+        updates.personId = targetPersonId;
+      }
+      else if (args.personId === null) updates.personId = null;
+      if (typeof args.dueAt === "string" && args.dueAt.trim()) {
+        const dueAt = new Date(args.dueAt);
+        if (Number.isNaN(dueAt.getTime())) return { ok: false, error: "dueAt must be a valid ISO timestamp." };
+        updates.dueAt = dueAt;
+      } else if (args.dueAt === null) {
+        updates.dueAt = null;
+      }
+      if (stringArg("status")) updates.status = stringArg("status");
+      const [updated] = await db.update(commitmentsTable).set(updates).where(and(
+        identityWhere(identity, commitmentsTable),
+        eq(commitmentsTable.id, commitmentId),
+      )).returning();
+      result = updated ? { ok: true, commitment: updated } : { ok: false, error: "Commitment not found." };
+      break;
+    }
+    case "update_reminder": {
+      const reminderId = stringArg("reminderId");
+      if (!reminderId) return { ok: false, error: "reminderId is required." };
+      const updates: Record<string, unknown> = {};
+      if (stringArg("text")) updates.text = stringArg("text");
+      if (stringArg("timezone")) updates.timezone = stringArg("timezone");
+      if (stringArg("status")) updates.status = stringArg("status");
+      if (typeof args.dueAt === "string" && args.dueAt.trim()) {
+        const dueAt = new Date(args.dueAt);
+        if (Number.isNaN(dueAt.getTime())) return { ok: false, error: "dueAt must be a valid ISO timestamp." };
+        updates.dueAt = dueAt;
+      }
+      const [updated] = await db.update(remindersTable).set(updates).where(and(
+        identityWhere(identity, remindersTable),
+        eq(remindersTable.id, reminderId),
+      )).returning();
+      result = updated ? { ok: true, reminder: updated } : { ok: false, error: "Reminder not found." };
+      break;
+    }
+    case "delete_expense": {
+      const expenseId = stringArg("expenseId");
+      if (!expenseId) return { ok: false, error: "expenseId is required." };
+      const [existing] = await db.select().from(expensesTable).where(and(
+        identityWhere(identity, expensesTable),
+        eq(expensesTable.id, expenseId),
+      )).limit(1);
+      if (!existing) {
+        result = { ok: false, error: "Expense not found." };
+        break;
+      }
+      if (!matchesExpectedVersion(existing)) {
+        result = { ok: false, error: "This record changed after it was created; undo was not applied." };
+        break;
+      }
+      await db.delete(expensesTable).where(and(
+        identityWhere(identity, expensesTable),
+        eq(expensesTable.id, expenseId),
+      ));
+      result = { ok: true, deleted: true, deletedExpense: existing };
+      break;
+    }
+    case "delete_person": {
+      const targetId = stringArg("personId");
+      if (!targetId) return { ok: false, error: "personId is required." };
+      const [existing] = await db.select().from(peopleTable).where(and(
+        identityWhere(identity, peopleTable),
+        eq(peopleTable.id, targetId),
+      )).limit(1);
+      if (!existing) {
+        result = { ok: false, error: "Person not found." };
+        break;
+      }
+      if (!matchesExpectedVersion(existing)) {
+        result = { ok: false, error: "This record changed after it was created; undo was not applied." };
+        break;
+      }
+      const [dependency] = await db.select({ id: expensesTable.id }).from(expensesTable).where(and(
+        identityWhere(identity, expensesTable),
+        eq(expensesTable.personId, targetId),
+      )).limit(1);
+      const [commitmentDependency] = await db.select({ id: commitmentsTable.id }).from(commitmentsTable).where(and(
+        identityWhere(identity, commitmentsTable),
+        eq(commitmentsTable.personId, targetId),
+      )).limit(1);
+      if (dependency || commitmentDependency) {
+        result = { ok: false, error: "Person has saved records and cannot be deleted until those links are resolved." };
+        break;
+      }
+      await db.delete(projectPeopleTable).where(and(
+        identityWhere(identity, projectPeopleTable),
+        eq(projectPeopleTable.personId, targetId),
+      ));
+      await db.delete(peopleTable).where(and(
+        identityWhere(identity, peopleTable),
+        eq(peopleTable.id, targetId),
+      ));
+      result = { ok: true, deleted: true, deletedPerson: existing };
+      break;
+    }
+    case "delete_project": {
+      const targetId = stringArg("projectId");
+      if (!targetId) return { ok: false, error: "projectId is required." };
+      const [existing] = await db.select().from(projectsTable).where(and(
+        identityWhere(identity, projectsTable),
+        eq(projectsTable.id, targetId),
+      )).limit(1);
+      if (!existing) {
+        result = { ok: false, error: "Project not found." };
+        break;
+      }
+      if (!matchesExpectedVersion(existing)) {
+        result = { ok: false, error: "This record changed after it was created; undo was not applied." };
+        break;
+      }
+      const [dependency] = await db.select({ id: expensesTable.id }).from(expensesTable).where(and(
+        identityWhere(identity, expensesTable),
+        eq(expensesTable.projectId, targetId),
+      )).limit(1);
+      const [relationshipDependency] = await db.select({ id: projectPeopleTable.id }).from(projectPeopleTable).where(and(
+        identityWhere(identity, projectPeopleTable),
+        eq(projectPeopleTable.projectId, targetId),
+      )).limit(1);
+      if (dependency || relationshipDependency) {
+        result = { ok: false, error: "Project has saved records and cannot be deleted until those links are resolved." };
+        break;
+      }
+      await db.delete(projectsTable).where(and(
+        identityWhere(identity, projectsTable),
+        eq(projectsTable.id, targetId),
+      ));
+      result = { ok: true, deleted: true, deletedProject: existing };
+      break;
+    }
+    case "delete_task": {
+      const targetId = stringArg("taskId");
+      if (!targetId) return { ok: false, error: "taskId is required." };
+      const [existing] = await db.select().from(tasksTable).where(and(
+        identityWhere(identity, tasksTable),
+        eq(tasksTable.id, targetId),
+      )).limit(1);
+      if (!existing) {
+        result = { ok: false, error: "Task not found." };
+        break;
+      }
+      if (!matchesExpectedVersion(existing)) {
+        result = { ok: false, error: "This record changed after it was created; undo was not applied." };
+        break;
+      }
+      const [deleted] = await db.delete(tasksTable).where(and(
+        identityWhere(identity, tasksTable),
+        eq(tasksTable.id, targetId),
+      )).returning();
+      result = deleted ? { ok: true, deleted: true, deletedTask: deleted } : { ok: false, error: "Task not found." };
+      break;
+    }
+    case "delete_commitment": {
+      const targetId = stringArg("commitmentId");
+      if (!targetId) return { ok: false, error: "commitmentId is required." };
+      const [existing] = await db.select().from(commitmentsTable).where(and(
+        identityWhere(identity, commitmentsTable),
+        eq(commitmentsTable.id, targetId),
+      )).limit(1);
+      if (!existing) {
+        result = { ok: false, error: "Commitment not found." };
+        break;
+      }
+      if (!matchesExpectedVersion(existing)) {
+        result = { ok: false, error: "This record changed after it was created; undo was not applied." };
+        break;
+      }
+      const [deleted] = await db.delete(commitmentsTable).where(and(
+        identityWhere(identity, commitmentsTable),
+        eq(commitmentsTable.id, targetId),
+      )).returning();
+      result = deleted ? { ok: true, deleted: true, deletedCommitment: deleted } : { ok: false, error: "Commitment not found." };
+      break;
+    }
+    case "delete_reminder": {
+      const targetId = stringArg("reminderId");
+      if (!targetId) return { ok: false, error: "reminderId is required." };
+      const [existing] = await db.select().from(remindersTable).where(and(
+        identityWhere(identity, remindersTable),
+        eq(remindersTable.id, targetId),
+      )).limit(1);
+      if (!existing) {
+        result = { ok: false, error: "Reminder not found." };
+        break;
+      }
+      if (!matchesExpectedVersion(existing)) {
+        result = { ok: false, error: "This record changed after it was created; undo was not applied." };
+        break;
+      }
+      const [deleted] = await db.delete(remindersTable).where(and(
+        identityWhere(identity, remindersTable),
+        eq(remindersTable.id, targetId),
+      )).returning();
+      result = deleted ? { ok: true, deleted: true, deletedReminder: deleted } : { ok: false, error: "Reminder not found." };
       break;
     }
     case "query_expenses": {
@@ -930,6 +1238,15 @@ async function executeTool(
     resultKeys: Object.keys(result),
   }, "agent tool result");
   return jsonSafe(result) as ToolResult;
+}
+
+export async function executeStructuredTool(
+  identity: Identity,
+  name: string,
+  args: Record<string, unknown>,
+  options: { requestId: string; dryRun?: boolean } = { requestId: crypto.randomUUID() },
+): Promise<ToolResult> {
+  return executeTool(identity, name, args, options);
 }
 
 const systemInstruction = `أنت سكرتير شخصي عربي يعمل داخل نظام بيانات منظم.

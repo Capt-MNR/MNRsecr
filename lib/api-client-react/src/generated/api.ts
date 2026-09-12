@@ -20,11 +20,19 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  ConversationDetail,
+  ConversationListResponse,
   ErrorResponse,
   HealthStatus,
+  ListConversationsParams,
+  RecordMutationResponse,
+  RecordType,
+  RecordUpdateInput,
+  RecordsResponse,
   TodayContextResponse,
   TurnInput,
-  TurnResponse
+  TurnResponse,
+  UndoRecordInput
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -294,5 +302,498 @@ export const useCreateTurn = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getCreateTurnMutationOptions(options));
+    }
+
+export const getListConversationsUrl = (params?: ListConversationsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/conversations?${stringifiedParams}` : `/api/conversations`
+}
+
+/**
+ * @summary List recent conversations
+ */
+export const listConversations = async (params?: ListConversationsParams, options?: Parameters<typeof customFetch>[1]): Promise<ConversationListResponse> => {
+
+  return customFetch<ConversationListResponse>(getListConversationsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListConversationsQueryKey = (params?: ListConversationsParams,) => {
+    return [
+    `/api/conversations`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListConversationsQueryOptions = <TData = Awaited<ReturnType<typeof listConversations>>, TError = ErrorType<ErrorResponse>>(params?: ListConversationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listConversations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListConversationsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listConversations>>> = ({ signal }) => listConversations(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listConversations>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListConversationsQueryResult = NonNullable<Awaited<ReturnType<typeof listConversations>>>
+export type ListConversationsQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary List recent conversations
+ */
+
+export function useListConversations<TData = Awaited<ReturnType<typeof listConversations>>, TError = ErrorType<ErrorResponse>>(
+ params?: ListConversationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listConversations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListConversationsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetConversationUrl = (conversationId: string,) => {
+
+
+
+
+  return `/api/conversations/${conversationId}`
+}
+
+/**
+ * @summary Load a conversation and its recent turns
+ */
+export const getConversation = async (conversationId: string, options?: Parameters<typeof customFetch>[1]): Promise<ConversationDetail> => {
+
+  return customFetch<ConversationDetail>(getGetConversationUrl(conversationId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetConversationQueryKey = (conversationId: string,) => {
+    return [
+    `/api/conversations/${conversationId}`
+    ] as const;
+    }
+
+
+export const getGetConversationQueryOptions = <TData = Awaited<ReturnType<typeof getConversation>>, TError = ErrorType<ErrorResponse>>(conversationId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getConversation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetConversationQueryKey(conversationId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getConversation>>> = ({ signal }) => getConversation(conversationId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: conversationId !== null && conversationId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getConversation>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetConversationQueryResult = NonNullable<Awaited<ReturnType<typeof getConversation>>>
+export type GetConversationQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Load a conversation and its recent turns
+ */
+
+export function useGetConversation<TData = Awaited<ReturnType<typeof getConversation>>, TError = ErrorType<ErrorResponse>>(
+ conversationId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getConversation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetConversationQueryOptions(conversationId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListRecordsUrl = () => {
+
+
+
+
+  return `/api/records`
+}
+
+/**
+ * @summary List structured memory records
+ */
+export const listRecords = async ( options?: Parameters<typeof customFetch>[1]): Promise<RecordsResponse> => {
+
+  return customFetch<RecordsResponse>(getListRecordsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListRecordsQueryKey = () => {
+    return [
+    `/api/records`
+    ] as const;
+    }
+
+
+export const getListRecordsQueryOptions = <TData = Awaited<ReturnType<typeof listRecords>>, TError = ErrorType<ErrorResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listRecords>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListRecordsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listRecords>>> = ({ signal }) => listRecords({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listRecords>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListRecordsQueryResult = NonNullable<Awaited<ReturnType<typeof listRecords>>>
+export type ListRecordsQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary List structured memory records
+ */
+
+export function useListRecords<TData = Awaited<ReturnType<typeof listRecords>>, TError = ErrorType<ErrorResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listRecords>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListRecordsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateRecordUrl = (recordType: RecordType,
+    recordId: string,) => {
+
+
+
+
+  return `/api/records/${recordType}/${recordId}`
+}
+
+/**
+ * @summary Update one structured memory record
+ */
+export const updateRecord = async (recordType: RecordType,
+    recordId: string,
+    recordUpdateInput: RecordUpdateInput, options?: Parameters<typeof customFetch>[1]): Promise<RecordMutationResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<RecordMutationResponse>(getUpdateRecordUrl(recordType,recordId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(recordUpdateInput)
+  }
+);}
+
+
+
+
+
+export const getUpdateRecordMutationKey = () => ['updateRecord'] as const;
+
+export const getUpdateRecordMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateRecord>>, TError,UpdateRecordMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateRecord>>, TError,UpdateRecordMutationVariables, TContext> => {
+
+const mutationKey = getUpdateRecordMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateRecord>>, UpdateRecordMutationVariables> = (props) => {
+          const {recordType,recordId,data} = props ?? {};
+
+          return  updateRecord(recordType,recordId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateRecordMutationResult = NonNullable<Awaited<ReturnType<typeof updateRecord>>>
+    export type UpdateRecordMutationBody = BodyType<RecordUpdateInput>
+    export type UpdateRecordMutationError = ErrorType<ErrorResponse>
+    export type UpdateRecordMutationVariables = {recordType: RecordType;recordId: string;data: BodyType<RecordUpdateInput>}
+
+    /**
+ * @summary Update one structured memory record
+ */
+export const useUpdateRecord = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateRecord>>, TError,UpdateRecordMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateRecord>>,
+        TError,
+        UpdateRecordMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdateRecordMutationOptions(options));
+    }
+
+export const getDeleteRecordUrl = (recordType: RecordType,
+    recordId: string,) => {
+
+
+
+
+  return `/api/records/${recordType}/${recordId}`
+}
+
+/**
+ * @summary Delete one structured memory record
+ */
+export const deleteRecord = async (recordType: RecordType,
+    recordId: string, options?: Parameters<typeof customFetch>[1]): Promise<RecordMutationResponse> => {
+
+  return customFetch<RecordMutationResponse>(getDeleteRecordUrl(recordType,recordId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteRecordMutationKey = () => ['deleteRecord'] as const;
+
+export const getDeleteRecordMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteRecord>>, TError,DeleteRecordMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteRecord>>, TError,DeleteRecordMutationVariables, TContext> => {
+
+const mutationKey = getDeleteRecordMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteRecord>>, DeleteRecordMutationVariables> = (props) => {
+          const {recordType,recordId} = props ?? {};
+
+          return  deleteRecord(recordType,recordId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteRecordMutationResult = NonNullable<Awaited<ReturnType<typeof deleteRecord>>>
+
+    export type DeleteRecordMutationError = ErrorType<ErrorResponse>
+    export type DeleteRecordMutationVariables = {recordType: RecordType;recordId: string}
+
+    /**
+ * @summary Delete one structured memory record
+ */
+export const useDeleteRecord = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteRecord>>, TError,DeleteRecordMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteRecord>>,
+        TError,
+        DeleteRecordMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteRecordMutationOptions(options));
+    }
+
+export const getUndoCreatedRecordUrl = () => {
+
+
+
+
+  return `/api/records/undo`
+}
+
+/**
+ * @summary Safely undo a just-created record
+ */
+export const undoCreatedRecord = async (undoRecordInput: UndoRecordInput, options?: Parameters<typeof customFetch>[1]): Promise<RecordMutationResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<RecordMutationResponse>(getUndoCreatedRecordUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(undoRecordInput)
+  }
+);}
+
+
+
+
+
+export const getUndoCreatedRecordMutationKey = () => ['undoCreatedRecord'] as const;
+
+export const getUndoCreatedRecordMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof undoCreatedRecord>>, TError,UndoCreatedRecordMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof undoCreatedRecord>>, TError,UndoCreatedRecordMutationVariables, TContext> => {
+
+const mutationKey = getUndoCreatedRecordMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof undoCreatedRecord>>, UndoCreatedRecordMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  undoCreatedRecord(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UndoCreatedRecordMutationResult = NonNullable<Awaited<ReturnType<typeof undoCreatedRecord>>>
+    export type UndoCreatedRecordMutationBody = BodyType<UndoRecordInput>
+    export type UndoCreatedRecordMutationError = ErrorType<ErrorResponse>
+    export type UndoCreatedRecordMutationVariables = {data: BodyType<UndoRecordInput>}
+
+    /**
+ * @summary Safely undo a just-created record
+ */
+export const useUndoCreatedRecord = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof undoCreatedRecord>>, TError,UndoCreatedRecordMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof undoCreatedRecord>>,
+        TError,
+        UndoCreatedRecordMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUndoCreatedRecordMutationOptions(options));
     }
 

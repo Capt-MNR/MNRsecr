@@ -3,3 +3,4 @@
 - [Secretary error contract](secretary-error-contract.md) — distinguish browser transport failures from classified API/provider failures and carry correlation IDs through both.
 - [Deterministic expense reports](deterministic-expense-reports.md) — broad reports must use a bounded canonical read instead of letting the model choose an inconsistent query limit.
 - [Groq GPT-OSS limits](groq-gpt-oss-limits.md) — low hidden reasoning keeps tool calls usable under the provider's token-per-minute budget.
+- [Workspace test runner](workspace-test-runner.md) — direct Node 24 TypeScript tests can fail on workspace directory imports even when builds and workflows are healthy.

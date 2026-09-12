@@ -217,6 +217,9 @@ function compactToolResult(value: unknown): unknown {
       id: expense.id,
       amountMinor: expense.amountMinor,
       currency: expense.currency,
+      description: expense.description,
+      occurredAt: expense.occurredAt,
+      createdAt: expense.createdAt,
       personId: expense.personId,
       projectId: expense.projectId,
     };
@@ -228,6 +231,21 @@ function compactToolResult(value: unknown): unknown {
   if ("project" in result && result.project && typeof result.project === "object") {
     const project = result.project as Record<string, unknown>;
     compact.project = { id: project.id, name: project.name, status: project.status };
+  }
+  for (const key of ["task", "commitment", "reminder", "deletedExpense", "deletedPerson", "deletedProject", "deletedTask", "deletedCommitment", "deletedReminder"]) {
+    if (key in result && result[key] && typeof result[key] === "object") {
+      const item = result[key] as Record<string, unknown>;
+      compact[key] = {
+        id: item.id,
+        name: item.name,
+        title: item.title,
+        text: item.text,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+        amountMinor: item.amountMinor,
+        currency: item.currency,
+      };
+    }
   }
 
   return Object.keys(compact).length > 0 ? compact : result;
@@ -311,6 +329,29 @@ export function updateConversationState(
       const project = state.projects.find((item) => item.id === expense.projectId);
       if (person) state.lastPerson = person;
       if (project) state.lastProject = project;
+    }
+  }
+
+  if (toolName.startsWith("delete_") && result.deleted === true) {
+    const deletedKey = Object.keys(result).find((key) => key.startsWith("deleted") && key !== "deleted");
+    const deleted = deletedKey && result[deletedKey] && typeof result[deletedKey] === "object"
+      ? result[deletedKey] as Record<string, unknown>
+      : undefined;
+    const deletedId = typeof deleted?.id === "string" ? deleted.id : undefined;
+    if (deletedId) {
+      if (toolName === "delete_expense") {
+        if (state.lastExpense?.id === deletedId) state.lastExpense = undefined;
+      }
+      if (toolName === "delete_person") {
+        state.people = state.people.filter((item) => item.id !== deletedId);
+        state.candidatePeople = state.candidatePeople.filter((item) => item.id !== deletedId);
+        if (state.lastPerson?.id === deletedId) state.lastPerson = undefined;
+      }
+      if (toolName === "delete_project") {
+        state.projects = state.projects.filter((item) => item.id !== deletedId);
+        state.candidateProjects = state.candidateProjects.filter((item) => item.id !== deletedId);
+        if (state.lastProject?.id === deletedId) state.lastProject = undefined;
+      }
     }
   }
 
