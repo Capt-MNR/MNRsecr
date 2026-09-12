@@ -43,7 +43,12 @@ type ToolDefinition = {
 
 type GeminiPart = {
   text?: string;
-  functionCall?: { name: string; args?: Record<string, unknown> };
+  thoughtSignature?: string;
+  functionCall?: {
+    name: string;
+    args?: Record<string, unknown>;
+    thoughtSignature?: string;
+  };
   functionResponse?: {
     name: string;
     response: Record<string, unknown>;
@@ -53,7 +58,12 @@ type GeminiPart = {
 type ConversationMessage = {
   role: "user" | "assistant" | "tool";
   text?: string;
-  toolCalls?: Array<{ id: string; name: string; args: Record<string, unknown> }>;
+  toolCalls?: Array<{
+    id: string;
+    name: string;
+    args: Record<string, unknown>;
+    thoughtSignature?: string;
+  }>;
   toolCallId?: string;
   toolName?: string;
 };
@@ -62,6 +72,7 @@ type GatewayToolCall = {
   id: string;
   name: string;
   args: Record<string, unknown>;
+  thoughtSignature?: string;
 };
 
 type GatewayResponse = {
@@ -599,6 +610,7 @@ function toGeminiContents(messages: ConversationMessage[]): Array<{ role: string
           ...(message.text ? [{ text: message.text }] : []),
           ...(message.toolCalls ?? []).map((call) => ({
             functionCall: { name: call.name, args: call.args },
+            ...(call.thoughtSignature ? { thoughtSignature: call.thoughtSignature } : {}),
           })),
         ],
       };
@@ -689,6 +701,7 @@ class GeminiModelGateway implements ModelGateway {
                   id: `gemini-call-${index}`,
                   name: part.functionCall.name,
                   args: part.functionCall.args ?? {},
+                  thoughtSignature: part.functionCall.thoughtSignature ?? part.thoughtSignature,
                 }]
               : []),
             usage: parsed.usageMetadata,
