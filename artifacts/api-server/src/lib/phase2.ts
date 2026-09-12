@@ -15,6 +15,7 @@ import {
 } from "@workspace/db";
 import type { Identity } from "./secretary";
 import {
+  compactActionForMemory,
   conversationContextMessages,
   loadConversationMemory,
   saveConversationTurn,
@@ -134,6 +135,96 @@ function jsonSafe(value: unknown): unknown {
       typeof current === "bigint" ? Number(current) : current,
     ),
   );
+}
+
+function moneyLabel(amountMinor: number, currency: string): string {
+  const major = amountMinor / 100;
+  return `${new Intl.NumberFormat("ar-EG").format(major)} ${currency === "EGP" ? "جنيه" : currency}`;
+}
+
+function expenseRowsSummary(rows: unknown[]): {
+  count: number;
+  totalMinor: number;
+  currency: string;
+  projectCount: number;
+} {
+  const totals = new Map<string, number>();
+  const projects = new Set<string>();
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    const outer = row as Record<string, unknown>;
+    const expense = outer.expense && typeof outer.expense === "object"
+      ? outer.expense as Record<string, unknown>
+      : outer;
+    const currency = typeof expense.currency === "string" ? expense.currency : "EGP";
+    const amountMinor = typeof expense.amountMinor === "number" ? expense.amountMinor : 0;
+    totals.set(currency, (totals.get(currency) ?? 0) + amountMinor);
+    const projectName = typeof outer.projectName === "string"
+      ? outer.projectName
+      : typeof expense.projectId === "string" ? expense.projectId : null;
+    if (projectName) projects.add(projectName);
+  }
+  const [currency, totalMinor] = [...totals.entries()][0] ?? ["EGP", 0];
+  return { count: rows.length, totalMinor, currency, projectCount: projects.size };
+}
+
+type ToolHistoryEntry = { name: string; result: ToolResult };
+
+function compactToolResponse(
+  userMessage: string,
+  modelText: string,
+  history: ToolHistoryEntry[],
+): string {
+  const last = history.at(-1);
+  if (!last || !last.result.ok) return modelText;
+
+  if (last.name === "get_person_expense_total") {
+    const total = last.result.total;
+    if (total && typeof total === "object") {
+      const totalRecord = total as Record<string, unknown>;
+      const personResult = [...history].reverse().find((entry) => entry.name === "find_person");
+      const matches = personResult?.result.matches;
+      const personName = Array.isArray(matches) && matches[0] && typeof matches[0] === "object"
+        ? (matches[0] as Record<string, unknown>).name
+        : undefined;
+      return `${typeof personName === "string" ? personName : "الشخص"} أخد منك ${moneyLabel(
+        Number(totalRecord.amountMinor ?? 0),
+        String(totalRecord.currency ?? "EGP"),
+      )} في ${new Intl.NumberFormat("ar-EG").format(Number(totalRecord.count ?? 0))} مصروفات.`;
+    }
+  }
+
+  if (last.name === "query_expenses" && Array.isArray(last.result.expenses)) {
+    const summary = expenseRowsSummary(last.result.expenses);
+    return summary.count > 0
+      ? `لديك ${new Intl.NumberFormat("ar-EG").format(summary.count)} مصروفات بإجمالي ${moneyLabel(
+        summary.totalMinor,
+        summary.currency,
+      )}${summary.projectCount > 1 ? ` موزعة على ${summary.projectCount} مشاريع` : ""}.`
+      : "لا توجد مصروفات مطابقة.";
+  }
+
+  if (last.name === "recall_context" && last.result.context && typeof last.result.context === "object") {
+    const context = last.result.context as Record<string, unknown>;
+    const expenses = Array.isArray(context.expenses) ? context.expenses : [];
+    const summary = expenseRowsSummary(expenses);
+    const reminders = Array.isArray(context.reminders) ? context.reminders.length : 0;
+    const tasks = Array.isArray(context.tasks) ? context.tasks.length : 0;
+    const parts = [
+      reminders > 0 ? `لديك ${reminders} تذكيرات قادمة` : "لا توجد تذكيرات قادمة",
+      tasks > 0 ? `${tasks} مهام مفتوحة` : "لا توجد مهام مفتوحة",
+      summary.count > 0
+        ? `${summary.count} مصروفات حديثة بإجمالي ${moneyLabel(summary.totalMinor, summary.currency)}`
+        : "لا توجد مصروفات حديثة",
+    ];
+    return `${parts.join("، ")}.`;
+  }
+
+  // Tool-backed answers should not become an unbounded copy of a tool payload.
+  if (modelText.length > 1800 || (modelText.match(/7[٬,]?500/g)?.length ?? 0) > 4) {
+    return `نفذت طلبك بناءً على البيانات المحفوظة. إذا أردت التفاصيل، اذكر المصروفات أو المشروع المطلوب تحديدًا.`;
+  }
+  return modelText;
 }
 
 function tool(
@@ -480,7 +571,14 @@ async function executeTool(
         ))
         .orderBy(desc(expensesTable.occurredAt))
         .limit(limit);
-      result = { ok: true, expenses: rows };
+      result = {
+        ok: true,
+        expenses: rows,
+        summary: expenseRowsSummary(rows.map((row) => ({
+          ...row.expense,
+          projectName: row.projectName,
+        }))),
+      };
       break;
     }
     case "get_person_expense_total": {
@@ -560,7 +658,18 @@ async function executeTool(
         db.select().from(peopleTable).where(identityWhere(identity, peopleTable)).limit(8),
         db.select().from(tasksTable).where(and(identityWhere(identity, tasksTable), inArray(tasksTable.status, ["pending", "in_progress"]))).limit(8),
       ]);
-      result = { ok: true, context: { reminders, expenses, projects, people, tasks, asOf: new Date().toISOString() } };
+      result = {
+        ok: true,
+        context: {
+          reminders,
+          expenses,
+          expenseSummary: expenseRowsSummary(expenses),
+          projects,
+          people,
+          tasks,
+          asOf: new Date().toISOString(),
+        },
+      };
       break;
     }
     default:
@@ -584,12 +693,18 @@ const systemInstruction = `أنت سكرتير شخصي عربي يعمل داخ
  8. عند إنشاء شخص أو مشروع، لا تضف هاتفًا أو بريدًا أو صفة أو علاقة لم يذكرها المستخدم.
  9. سياق المحادثة السابق مؤقت للمساعدة على فهم الإشارات والتصحيحات، وليس مصدرًا قانونيًا. استخدم الأدوات للتحقق من Structured Memory.
  10. إذا صحح المستخدم مبلغًا أو وصفًا لعملية سابقة، استخدم update_expense على expenseId السابق ولا تنشئ مصروفًا جديدًا.
- 11. عبارات مثل "قصدي ده" و"غيره" و"خليه" و"لا، المبلغ كان" تشير إلى السياق القريب. حلّ المرجع من Conversation State، ثم تحقق من السجل بالأداة المناسبة.`;
+11. عبارات مثل "قصدي ده" و"غيره" و"خليه" و"لا، المبلغ كان" تشير إلى السياق القريب. حلّ المرجع من Conversation State، ثم تحقق من السجل بالأداة المناسبة.
+12. إذا كانت النية واضحة والمعلومة ناقصة، اسأل عن المعلومة الناقصة فقط؛ لا تطلب إعادة صياغة الطلب كاملًا. مثال: "عايز أسجل مصروف لمحمد" يتبعه سؤال عن المبلغ، والرد "7500" يكمل الطلب.
+13. افهم المرادفات الطبيعية مثل دفع، ادى، أعطى، خد مني، سجل مصروف، ولا تجعل علامات الترقيم شرطًا للفهم.
+14. عند وجود عدة نتائج من أداة، لا تنسخ JSON أو تسرد الصفوف واحدًا تلو الآخر. استخدم العدد والإجمالي المحسوبين من الأداة، واذكر التوزيع على المشاريع عند الحاجة. اعرض التفاصيل الفردية فقط إذا طلبها المستخدم صراحة.
+15. لا تحسب إجماليًا ماليًا بنفسك إذا أعادت الأداة total أو summary؛ استخدم القيم المحسوبة من قاعدة البيانات كما هي.`;
 
 const requestGuidance = `إرشادات تنفيذ إضافية:
 - إذا كانت الرسالة جملة دفع/إعطاء/استلام وبها شخص ومبلغ وعملة، نفّذ find_person ثم record_expense مباشرة. لا تستدع recall_context أولًا. إذا لم يذكر المستخدم وصفًا، استخدم وصفًا صادقًا مثل "دفعة إلى <الاسم>".
 - إذا كانت الرسالة تسأل عن إجمالي ما صُرف على وصف أو فئة مثل "التشطيبات" من دون ذكر مشروع صريح، استخدم query_expenses مع description ثم احسب الناتج من الصفوف. لا تخترع مشروعًا اسمه الفئة.
-- إذا كانت الرسالة تسأل "محمد أخد مني كام؟"، نفّذ find_person ثم get_person_expense_total.`;
+- إذا كانت الرسالة تسأل "محمد أخد مني كام؟"، نفّذ find_person ثم get_person_expense_total.
+- إذا كان اسم المشروع أو الشخص يطابق أكثر من كيان، لا تختار أي نتيجة عشوائيًا؛ اسأل المستخدم، إلا إذا كان السياق السابق يحتوي على اختيار واضح.
+- لا تذكر أسماء الأدوات ولا تنسخ نتائجها الخام في الرد النهائي.`;
 
 function parseJsonObject(value: string | undefined): Record<string, unknown> {
   if (!value) return {};
@@ -855,14 +970,19 @@ export class Phase2AgentRuntime {
     ];
     let calls = 0;
     let action: Record<string, unknown> | undefined;
+    const toolHistory: ToolHistoryEntry[] = [];
 
     while (calls < MAX_TOOL_CALLS) {
       const response = await this.gateway.generate(messages);
       if (response.toolCalls.length === 0) {
         const result: Phase2TurnResult = {
           conversationId,
-          assistantMessage: response.text || "لم أستطع إكمال الطلب بشكل آمن. اكتب التفاصيل المطلوبة وسأحاول مرة أخرى.",
-          action: action ?? { type: "llm_response" },
+          assistantMessage: compactToolResponse(
+            input.message.trim(),
+            response.text || "لم أستطع إكمال الطلب بشكل آمن. اكتب التفاصيل المطلوبة وسأحاول مرة أخرى.",
+            toolHistory,
+          ),
+          action: compactActionForMemory(action) ?? { type: "llm_response" },
           provider: this.gateway.provider,
           model: this.gateway.modelName,
         };
@@ -891,11 +1011,14 @@ export class Phase2AgentRuntime {
         calls += 1;
         if (calls > MAX_TOOL_CALLS) break;
         const toolResult = await executeTool(identity, call.name, call.args);
+        toolHistory.push({ name: call.name, result: toolResult });
         action = {
           type: "tool_orchestration",
           lastTool: call.name,
           toolCalls: calls,
-          toolResult: jsonSafe(toolResult) as Record<string, unknown>,
+          toolResult: compactActionForMemory({
+            toolResult: jsonSafe(toolResult),
+          })?.toolResult,
         };
         messages.push({
           role: "tool",

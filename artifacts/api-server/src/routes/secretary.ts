@@ -16,7 +16,10 @@ const router: IRouter = Router();
 function getIdentity(req: Request): Identity | null {
   const authorization = req.get("authorization");
   if (authorization !== "Bearer dev-user") return null;
-  return { tenantId: "development", userId: "dev-user" };
+  return {
+    tenantId: process.env.SECRETARY_TENANT_ID ?? "development",
+    userId: process.env.SECRETARY_USER_ID ?? "dev-user",
+  };
 }
 
 router.get("/today", async (req, res): Promise<void> => {

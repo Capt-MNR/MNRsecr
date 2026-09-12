@@ -6,7 +6,10 @@ import test from "node:test";
 
 const port = 8091;
 const baseUrl = `http://127.0.0.1:${port}/api`;
+const testTenantId = `phase2-test-${process.pid}-${Date.now()}`;
+const testUserId = "phase2-test-user";
 let server;
+let provider = "development";
 
 const headers = {
   Authorization: "Bearer dev-user",
@@ -29,7 +32,13 @@ async function waitForHealth() {
 async function startServer() {
   server = spawn("node", ["--enable-source-maps", "dist/index.mjs"], {
     cwd: new URL("..", import.meta.url),
-    env: { ...process.env, PORT: String(port), AI_PROVIDER: "development" },
+    env: {
+      ...process.env,
+      PORT: String(port),
+      AI_PROVIDER: provider,
+      SECRETARY_TENANT_ID: testTenantId,
+      SECRETARY_USER_ID: testUserId,
+    },
     stdio: ["ignore", "pipe", "pipe"],
   });
   server.stderr.on("data", (chunk) => process.stderr.write(chunk));
@@ -50,7 +59,9 @@ async function sendTurn(message, conversationId, idempotencyKey = `${conversatio
     headers,
     body: JSON.stringify({ message, conversationId, idempotencyKey }),
   });
-  assert.equal(response.status, 200);
+  if (response.status !== 200) {
+    throw new Error(`turn failed with ${response.status}: ${await response.text()}`);
+  }
   return response.json();
 }
 
@@ -60,6 +71,8 @@ function queryDb(sql) {
     encoding: "utf8",
   }).trim();
 }
+
+const scopedWhere = `tenant_id = '${testTenantId}' AND owner_user_id = '${testUserId}'`;
 
 test.before(async () => {
   await startServer();
@@ -110,6 +123,81 @@ test("persists a natural-language expense and deduplicates an idempotent retry",
   );
 });
 
+test("understands equivalent natural expense phrases without punctuation", async () => {
+  const messages = [
+    "دفعت لمحمد 7500",
+    "محمد خد مني 7500",
+    "أنا اديت محمد سبعة آلاف ونص",
+    "سجل 7500 لمحمد",
+    "سجل مصروف لمحمد بمبلغ 7500",
+  ];
+
+  for (const [index, message] of messages.entries()) {
+    const response = await sendTurn(message, `natural-variants-${index}`, `natural-variants-${index}`);
+    assert.equal(response.action.type, "expense_recorded");
+    assert.equal(response.action.amountMinor, 750000);
+    assert.equal(response.action.personName, "محمد");
+  }
+});
+
+test("asks for a missing amount and completes the expense on the next turn", async () => {
+  const conversationId = `missing-amount-${Date.now()}`;
+  const clarification = await sendTurn("عايز أسجل مصروف لمحمد", conversationId, `${conversationId}-ask`);
+  assert.equal(clarification.action.type, "clarification_needed");
+  assert.equal(clarification.action.awaitingAmount, true);
+
+  const completed = await sendTurn("7500", conversationId, `${conversationId}-amount`);
+  assert.equal(completed.action.type, "expense_recorded");
+  assert.equal(completed.action.amountMinor, 750000);
+  assert.equal(completed.action.personName, "محمد");
+});
+
+test("corrects a previous amount without creating another expense", async () => {
+  const conversationId = `natural-correction-${Date.now()}`;
+  const first = await sendTurn("سجلت لمحمد 5000", conversationId, `${conversationId}-first`);
+  assert.equal(first.action.type, "expense_recorded");
+  const corrected = await sendTurn("لا، قصدي 7500", conversationId, `${conversationId}-correct`);
+  assert.equal(corrected.action.type, "expense_corrected");
+  assert.equal(corrected.action.expenseId, first.action.expenseId);
+  assert.equal(corrected.action.amountMinor, 750000);
+
+  const rows = queryDb(
+    `SELECT count(*) FROM expenses WHERE ${scopedWhere} AND id = '${first.action.expenseId}'`,
+  );
+  assert.equal(Number(rows), 1);
+});
+
+test("asks about duplicate projects and uses the selected project in later turns", async () => {
+  const projectName = "المحجر";
+  queryDb(
+    `INSERT INTO projects (tenant_id, owner_user_id, name, name_key, status)
+     VALUES ('${testTenantId}', '${testUserId}', '${projectName}', '${projectName}', 'active'),
+            ('${testTenantId}', '${testUserId}', '${projectName}', '${projectName}', 'active')`,
+  );
+  const conversationId = `duplicate-project-${Date.now()}`;
+  const clarification = await sendTurn(
+    "دفعت لمحمد 7500 على المحجر",
+    conversationId,
+    `${conversationId}-ask`,
+  );
+  assert.equal(clarification.action.type, "clarification_needed");
+  assert.equal(clarification.action.reason, "ambiguous_project");
+  assert.equal(clarification.action.projectCandidates.length, 2);
+
+  const selected = await sendTurn("الأول", conversationId, `${conversationId}-select`);
+  assert.equal(selected.action.type, "expense_recorded");
+  assert.equal(selected.action.projectId, clarification.action.projectCandidates[0].id);
+  assert.equal(selected.action.projectCandidates.length, 2);
+
+  const corrected = await sendTurn(
+    "مش ده، المشروع التاني",
+    conversationId,
+    `${conversationId}-project-correction`,
+  );
+  assert.equal(corrected.action.type, "expense_project_corrected");
+  assert.equal(corrected.action.projectId, clarification.action.projectCandidates[1].id);
+});
+
 test("keeps conversation state across a restart and applies a multi-turn correction", async () => {
   const conversationId = `memory-correction-${Date.now()}`;
   const projectName = `المحجر-${Date.now()}`;
@@ -151,7 +239,7 @@ test("creates a bounded summary without turning conversation into structured mem
     await sendTurn(`رسالة سياق ${index} قصدي ده`, conversationId, `${conversationId}-${index}`);
   }
 
-  const where = `tenant_id = 'development' AND owner_user_id = 'dev-user' AND conversation_id = '${conversationId}'`;
+  const where = `${scopedWhere} AND conversation_id = '${conversationId}'`;
   const summary = queryDb(`SELECT summary FROM conversation_memory WHERE ${where}`);
   const recentState = queryDb(`SELECT recent_state_json FROM conversation_memory WHERE ${where}`);
   const turnCount = queryDb(`SELECT turn_count FROM conversation_memory WHERE ${where}`);
@@ -161,7 +249,7 @@ test("creates a bounded summary without turning conversation into structured mem
   assert.equal(Number(turnCount), 8);
 
   const structuredRows = queryDb(
-    `SELECT count(*) FROM expenses WHERE tenant_id = 'development' AND owner_user_id = 'dev-user' AND description ILIKE '%رسالة سياق%'`,
+    `SELECT count(*) FROM expenses WHERE ${scopedWhere} AND description ILIKE '%رسالة سياق%'`,
   );
   assert.equal(Number(structuredRows), 0);
 });
@@ -181,4 +269,26 @@ test("does not read another owner's conversation state", async () => {
   const response = await sendTurn("محمد هو المقاول", conversationId, `${conversationId}-isolation`);
   assert.equal(response.action.type, "clarification_needed");
   assert.notEqual(response.action.projectName, "foreign");
+});
+
+test("runs a real Groq turn and keeps tool output compact", {
+  skip: process.env.RUN_REAL_LLM_TESTS !== "1",
+}, async () => {
+  await stopServer();
+  provider = "groq";
+  await startServer();
+
+  const todayConversation = `groq-summary-${Date.now()}`;
+  const today = await sendTurn("إيه عندي النهارده؟", todayConversation, `${todayConversation}-today`);
+  assert.equal(today.provider, "groq");
+  assert.ok(today.assistantMessage.length < 1800);
+  assert.ok((today.assistantMessage.match(/7[٬,]?500/g) ?? []).length <= 4);
+
+  const stored = queryDb(
+    `SELECT recent_state_json FROM conversation_memory WHERE ${scopedWhere} AND conversation_id = '${todayConversation}'`,
+  );
+  assert.ok(stored.length > 0);
+  assert.ok(stored.length < 3500);
+  assert.equal(stored.includes('"expenses":['), false);
+
 });
