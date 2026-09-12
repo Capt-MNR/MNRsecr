@@ -8,6 +8,7 @@
 
 export * from './actionResult';
 export * from './errorResponse';
+export * from './errorResponseCategory';
 export * from './expenseSummary';
 export * from './healthStatus';
 export * from './namedItem';

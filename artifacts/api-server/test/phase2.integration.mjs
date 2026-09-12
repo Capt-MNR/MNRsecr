@@ -30,15 +30,20 @@ async function waitForHealth() {
 }
 
 async function startServer() {
+  const env = {
+    ...process.env,
+    PORT: String(port),
+    AI_PROVIDER: provider,
+    SECRETARY_TENANT_ID: testTenantId,
+    SECRETARY_USER_ID: testUserId,
+  };
+  if (provider === "unavailable") {
+    delete env.GEMINI_API_KEY;
+    delete env.GROQ_API_KEY;
+  }
   server = spawn("node", ["--enable-source-maps", "dist/index.mjs"], {
     cwd: new URL("..", import.meta.url),
-    env: {
-      ...process.env,
-      PORT: String(port),
-      AI_PROVIDER: provider,
-      SECRETARY_TENANT_ID: testTenantId,
-      SECRETARY_USER_ID: testUserId,
-    },
+    env,
     stdio: ["ignore", "pipe", "pipe"],
   });
   server.stderr.on("data", (chunk) => process.stderr.write(chunk));
@@ -85,6 +90,70 @@ test.after(async () => {
 test("rejects unauthenticated Today requests", async () => {
   const response = await fetch(`${baseUrl}/today`);
   assert.equal(response.status, 401);
+});
+
+test("returns classified validation and authentication errors", async () => {
+  const unauthenticated = await fetch(`${baseUrl}/turns`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: "اختبار" }),
+  });
+  assert.equal(unauthenticated.status, 401);
+  const unauthenticatedPayload = await unauthenticated.json();
+  assert.equal(unauthenticatedPayload.category, "authentication_error");
+  assert.equal(unauthenticatedPayload.requestId, unauthenticated.headers.get("x-request-id"));
+
+  const invalid = await fetch(`${baseUrl}/turns`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ message: "" }),
+  });
+  assert.equal(invalid.status, 400);
+  const invalidPayload = await invalid.json();
+  assert.equal(invalidPayload.category, "validation_error");
+  assert.equal(invalidPayload.code, "INVALID_TURN_BODY");
+  assert.equal(invalidPayload.requestId, invalid.headers.get("x-request-id"));
+});
+
+test("classifies malformed JSON and missing routes without using a connection error", async () => {
+  const malformed = await fetch(`${baseUrl}/turns`, {
+    method: "POST",
+    headers,
+    body: "{not-json",
+  });
+  assert.equal(malformed.status, 400);
+  const malformedPayload = await malformed.json();
+  assert.equal(malformedPayload.category, "validation_error");
+  assert.equal(malformedPayload.code, "INVALID_JSON_BODY");
+
+  const missingRoute = await fetch(`${baseUrl}/missing-route`, {
+    headers: { Authorization: "Bearer dev-user" },
+  });
+  assert.equal(missingRoute.status, 404);
+  const missingPayload = await missingRoute.json();
+  assert.equal(missingPayload.category, "not_found");
+  assert.equal(missingPayload.requestId, missingRoute.headers.get("x-request-id"));
+});
+
+test("returns a provider-unavailable error instead of a connection error", async () => {
+  await stopServer();
+  provider = "unavailable";
+  await startServer();
+
+  const response = await fetch(`${baseUrl}/turns`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ message: "اختبار مزود غير متاح" }),
+  });
+  assert.equal(response.status, 503);
+  const payload = await response.json();
+  assert.equal(payload.category, "provider_unavailable");
+  assert.equal(payload.code, "PROVIDER_NOT_CONFIGURED");
+  assert.equal(payload.requestId, response.headers.get("x-request-id"));
+
+  await stopServer();
+  provider = "development";
+  await startServer();
 });
 
 test("persists a natural-language expense and deduplicates an idempotent retry", async () => {

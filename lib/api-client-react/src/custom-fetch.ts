@@ -1,5 +1,6 @@
 export type CustomFetchOptions = RequestInit & {
   responseType?: "json" | "text" | "blob" | "auto";
+  timeoutMs?: number;
 };
 
 export type ErrorType<T = unknown> = ApiError<T>;
@@ -233,6 +234,17 @@ export class ResponseParseError extends Error {
   }
 }
 
+export class FetchTimeoutError extends Error {
+  readonly name = "FetchTimeoutError";
+  readonly timeoutMs: number;
+
+  constructor(timeoutMs: number) {
+    super(`Request timed out after ${timeoutMs}ms`);
+    Object.setPrototypeOf(this, new.target.prototype);
+    this.timeoutMs = timeoutMs;
+  }
+}
+
 async function parseJsonBody(
   response: Response,
   requestInfo: { method: string; url: string },
@@ -327,7 +339,12 @@ export async function customFetch<T = unknown>(
   options: CustomFetchOptions = {},
 ): Promise<T> {
   input = applyBaseUrl(input);
-  const { responseType = "auto", headers: headersInit, ...init } = options;
+  const {
+    responseType = "auto",
+    timeoutMs,
+    headers: headersInit,
+    ...init
+  } = options;
 
   const method = resolveMethod(input, init.method);
 
@@ -360,7 +377,42 @@ export async function customFetch<T = unknown>(
 
   const requestInfo = { method, url: resolveUrl(input) };
 
-  const response = await fetch(input, { ...init, method, headers });
+  const shouldTimeout = typeof timeoutMs === "number" && timeoutMs > 0;
+  const timeoutController = shouldTimeout ? new AbortController() : null;
+  const originalSignal = init.signal;
+  let timeoutTriggered = false;
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  let removeAbortListener: (() => void) | undefined;
+
+  if (timeoutController) {
+    const abortFromCaller = () => timeoutController.abort();
+    if (originalSignal?.aborted) {
+      timeoutController.abort();
+    } else if (originalSignal) {
+      originalSignal.addEventListener("abort", abortFromCaller, { once: true });
+      removeAbortListener = () => originalSignal.removeEventListener("abort", abortFromCaller);
+    }
+    timeoutHandle = setTimeout(() => {
+      timeoutTriggered = true;
+      timeoutController.abort();
+    }, timeoutMs);
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(input, {
+      ...init,
+      method,
+      headers,
+      ...(timeoutController ? { signal: timeoutController.signal } : {}),
+    });
+  } catch (error) {
+    if (timeoutTriggered) throw new FetchTimeoutError(timeoutMs!);
+    throw error;
+  } finally {
+    if (timeoutHandle) clearTimeout(timeoutHandle);
+    removeAbortListener?.();
+  }
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);

@@ -25,6 +25,7 @@ import {
   useGetTodayContext,
   useHealthCheck,
 } from '@workspace/api-client-react';
+import { classifySecretaryError } from '../lib/secretary-errors';
 
 type LocalMessage = {
   id: string;
@@ -102,8 +103,11 @@ function Home() {
       retry: 1,
     },
   });
-  const createTurn = useCreateTurn();
+  const createTurn = useCreateTurn({
+    request: { timeoutMs: 30_000 },
+  });
   const context = todayQuery.data?.context;
+  const sendError = createTurn.isError ? classifySecretaryError(createTurn.error) : null;
 
   const dateLabel = useMemo(
     () => formatDate(context?.asOf ?? new Date().toISOString()),
@@ -289,10 +293,15 @@ function Home() {
                       </div>
                     </article>
                   )}
-                  {createTurn.isError && (
-                    <div className="ml-11 flex items-center gap-2 rounded-xl border border-destructive/25 bg-destructive/5 px-3 py-2 text-xs text-destructive" data-testid="error-send">
+                  {sendError && (
+                    <div
+                      className="ml-11 flex items-center gap-2 rounded-xl border border-destructive/25 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+                      data-testid="error-send"
+                      data-error-category={sendError.category}
+                      role="alert"
+                    >
                       <CircleAlert className="size-3.5 shrink-0" />
-                      تعذر الوصول للسكرتير. راجع الاتصال وحاول مرة أخرى.
+                      {sendError.message}
                     </div>
                   )}
                 </div>

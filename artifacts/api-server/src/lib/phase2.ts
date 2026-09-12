@@ -21,6 +21,12 @@ import {
   saveConversationTurn,
   type ConversationMemorySnapshot,
 } from "./conversation-memory";
+import {
+  agentToolError,
+  providerExceptionError,
+  providerResponseError,
+  SecretaryError,
+} from "./error-contract";
 
 export type Phase2TurnInput = {
   message: string;
@@ -822,10 +828,10 @@ class GeminiModelGateway implements ModelGateway {
             usage: parsed.usageMetadata,
           };
         }
-        lastError = new Error(`Gemini request failed with ${response.status}: ${raw.slice(0, 500)}`);
+        lastError = providerResponseError("gemini", response.status, raw);
         if (![404, 429, 500, 502, 503, 504].includes(response.status)) throw lastError;
       } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error));
+        lastError = providerExceptionError("gemini", error);
       } finally {
         clearTimeout(timeout);
       }
@@ -920,13 +926,15 @@ class GroqModelGateway implements ModelGateway {
             usage: payload.usage,
           };
         }
-        lastError = new Error(`Groq request failed with ${response.status}: ${raw.slice(0, 500)}`);
+        lastError = providerResponseError("groq", response.status, raw);
         if (response.status !== 429 || attempt === 1) throw lastError;
         const retryAfter = Number(response.headers.get("retry-after") ?? 1);
         await new Promise((resolve) => setTimeout(resolve, Math.min(Math.max(retryAfter * 1000, 500), 3_000)));
       } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error));
-        if (attempt === 1 || !lastError.message.includes("429")) throw lastError;
+        lastError = providerExceptionError("groq", error);
+        if (attempt === 1 || !(lastError instanceof SecretaryError && lastError.upstreamStatus === 429)) {
+          throw lastError;
+        }
       } finally {
         clearTimeout(timeout);
       }
@@ -1010,7 +1018,12 @@ export class Phase2AgentRuntime {
       for (const call of response.toolCalls) {
         calls += 1;
         if (calls > MAX_TOOL_CALLS) break;
-        const toolResult = await executeTool(identity, call.name, call.args);
+        let toolResult: ToolResult;
+        try {
+          toolResult = await executeTool(identity, call.name, call.args);
+        } catch (error) {
+          throw agentToolError(call.name, error);
+        }
         toolHistory.push({ name: call.name, result: toolResult });
         action = {
           type: "tool_orchestration",
@@ -1029,7 +1042,12 @@ export class Phase2AgentRuntime {
       }
     }
 
-    throw new Error(`Agent stopped after ${MAX_TOOL_CALLS} tool calls.`);
+    throw new SecretaryError(`Agent stopped after ${MAX_TOOL_CALLS} tool calls.`, {
+      status: 500,
+      category: "agent_error",
+      code: "AGENT_TOOL_CALL_LIMIT",
+      retryable: false,
+    });
   }
 }
 
@@ -1058,9 +1076,12 @@ function createConfiguredGateway(): ModelGateway {
 
 export class UnavailableAgentRuntime {
   async run(): Promise<Phase2TurnResult> {
-    throw new Error(
-      "No configured LLM provider is available. Set AI_PROVIDER to gemini or groq and configure its server-side API key.",
-    );
+    throw new SecretaryError("No configured LLM provider is available.", {
+      status: 503,
+      category: "provider_unavailable",
+      code: "PROVIDER_NOT_CONFIGURED",
+      retryable: false,
+    });
   }
 }
 

@@ -1,2 +1,3 @@
 - [Phase 2 provider and entity resolution](phase2-provider-and-entity-resolution.md) — Gemini availability is variable; duplicate names require application-level resolution, not unique-name upserts.
 - [Phase 2 integration testing](phase2-testing.md) — isolate fixtures by tenant; keep provider smoke tests short and deterministic multi-turn coverage local.
+- [Secretary error contract](secretary-error-contract.md) — distinguish browser transport failures from classified API/provider failures and carry correlation IDs through both.

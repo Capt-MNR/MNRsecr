@@ -10,8 +10,31 @@ export interface HealthStatus {
   service?: string;
 }
 
+export type ErrorResponseCategory = typeof ErrorResponseCategory[keyof typeof ErrorResponseCategory];
+
+
+export const ErrorResponseCategory = {
+  validation_error: 'validation_error',
+  authentication_error: 'authentication_error',
+  permission_error: 'permission_error',
+  not_found: 'not_found',
+  rate_limit: 'rate_limit',
+  timeout: 'timeout',
+  provider_error: 'provider_error',
+  provider_rate_limit: 'provider_rate_limit',
+  provider_unavailable: 'provider_unavailable',
+  agent_error: 'agent_error',
+  response_parse_error: 'response_parse_error',
+  internal_error: 'internal_error',
+} as const;
+
 export interface ErrorResponse {
   error: string;
+  code?: string;
+  category?: ErrorResponseCategory;
+  requestId?: string;
+  retryable?: boolean;
+  provider?: string;
 }
 
 export interface TurnInput {

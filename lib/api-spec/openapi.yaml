@@ -43,6 +43,42 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Route not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Provider rate limit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Agent or internal error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Provider API error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Provider unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "504":
+          description: Provider timeout
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /turns:
     post:
       operationId: createTurn
@@ -87,6 +123,29 @@ components:
       type: object
       properties:
         error:
+          type: string
+        code:
+          type: string
+        category:
+          type: string
+          enum:
+            - validation_error
+            - authentication_error
+            - permission_error
+            - not_found
+            - rate_limit
+            - timeout
+            - provider_error
+            - provider_rate_limit
+            - provider_unavailable
+            - agent_error
+            - response_parse_error
+            - internal_error
+        requestId:
+          type: string
+        retryable:
+          type: boolean
+        provider:
           type: string
       required: [error]
     TurnInput:
