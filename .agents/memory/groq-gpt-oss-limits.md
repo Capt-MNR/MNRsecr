@@ -3,8 +3,8 @@ name: Groq GPT-OSS limits
 description: Provider-specific reasoning and token-budget behavior for the Groq GPT-OSS model.
 ---
 
-For Groq GPT-OSS tool-calling, request low hidden reasoning rather than the default reasoning mode, and keep live multi-turn smoke tests short or explicitly tolerant of transient 429 responses.
+For Groq GPT-OSS tool-calling, request low hidden reasoning rather than the default reasoning mode, and keep live multi-turn smoke tests short or explicitly tolerant of transient 429 responses. In the observed environment, the account-level TPD limit was reached while the provider returned a retry-after of roughly 7–8 minutes.
 
-**Why:** The provider can spend most of the output budget on reasoning before producing a tool call, and the account-level tokens-per-minute limit can reject a later request even when the request shape and model are valid.
+**Why:** The provider can spend most of the output budget on reasoning before producing a tool call, and account-level token limits can reject a later request even when the request shape and model are valid. A short application retry does not meaningfully resolve a multi-minute provider cooldown.
 
-**How to apply:** Keep retries inside the same LLM call before executing any returned tool call, log the provider rate-limit classification with the request ID, and use deterministic local gateway tests for long conversational coverage.
+**How to apply:** Keep retries inside the same LLM call before executing any returned tool call, log the provider rate-limit classification with the request ID and retry-after, and use deterministic local gateway tests for long conversational coverage.
