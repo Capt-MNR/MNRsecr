@@ -2576,17 +2576,36 @@ export type ConfiguredProvider = ProviderName | "development" | "unavailable";
 
 function asProvider(value: string | undefined): ProviderName | undefined {
   const normalized = value?.trim().toLowerCase();
-  return normalized === "gemini" || normalized === "groq" ? normalized : undefined;
+  return normalized === "gemini" || normalized === "groq" || normalized === "mistral"
+    ? normalized
+    : undefined;
 }
 
 export function configuredProviderOrder(): ProviderName[] {
   const primary = asProvider(process.env.AI_PRIMARY_PROVIDER)
     ?? asProvider(process.env.AI_PROVIDER)
-    ?? (process.env.GEMINI_API_KEY ? "gemini" : process.env.GROQ_API_KEY ? "groq" : undefined);
-  const fallback = asProvider(process.env.AI_FALLBACK_PROVIDER)
-    ?? (primary === "gemini" && process.env.GROQ_API_KEY ? "groq" : undefined)
-    ?? (primary === "groq" && process.env.GEMINI_API_KEY ? "gemini" : undefined);
-  return [primary, fallback].filter(
+    ?? (process.env.GEMINI_API_KEY
+      ? "gemini"
+      : process.env.GROQ_API_KEY
+        ? "groq"
+        : process.env.MISTRAL_API_KEY
+          ? "mistral"
+          : undefined);
+  const autoFallbacks = (["groq", "gemini", "mistral"] as ProviderName[])
+    .filter((provider) => provider !== primary)
+    .filter((provider) => (
+      provider === "groq"
+        ? Boolean(process.env.GROQ_API_KEY)
+        : provider === "gemini"
+          ? Boolean(process.env.GEMINI_API_KEY)
+          : Boolean(process.env.MISTRAL_API_KEY)
+    ));
+  return [
+    primary,
+    asProvider(process.env.AI_FALLBACK_PROVIDER),
+    asProvider(process.env.AI_SECONDARY_FALLBACK_PROVIDER),
+    ...autoFallbacks,
+  ].filter(
     (provider, index, providers): provider is ProviderName => Boolean(provider) && providers.indexOf(provider) === index,
   );
 }
@@ -2602,7 +2621,9 @@ export function phase2Enabled(): boolean {
 }
 
 function createGateway(provider: ProviderName): ModelGateway {
-  return provider === "groq" ? new GroqModelGateway() : new GeminiModelGateway();
+  if (provider === "groq") return new GroqModelGateway();
+  if (provider === "mistral") return new MistralModelGateway();
+  return new GeminiModelGateway();
 }
 
 function createConfiguredGateway(): ModelGateway {

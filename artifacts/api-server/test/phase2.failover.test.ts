@@ -12,6 +12,7 @@ import {
   GeminiModelGateway,
   Phase2AgentRuntime,
   GroqModelGateway,
+  MistralModelGateway,
   configuredProviderOrder,
   toGeminiSchema,
   toOpenAiSchema,
@@ -100,21 +101,25 @@ test("provider order is configurable and defaults to Gemini before Groq when bot
     "AI_PROVIDER",
     "AI_PRIMARY_PROVIDER",
     "AI_FALLBACK_PROVIDER",
+    "AI_SECONDARY_FALLBACK_PROVIDER",
     "GEMINI_API_KEY",
     "GROQ_API_KEY",
+    "MISTRAL_API_KEY",
   ] as const;
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   try {
     process.env.GEMINI_API_KEY = "test-gemini-key";
     process.env.GROQ_API_KEY = "test-groq-key";
+    process.env.MISTRAL_API_KEY = "test-mistral-key";
     delete process.env.AI_PROVIDER;
     delete process.env.AI_PRIMARY_PROVIDER;
     delete process.env.AI_FALLBACK_PROVIDER;
-    assert.deepEqual(configuredProviderOrder(), ["gemini", "groq"]);
+    delete process.env.AI_SECONDARY_FALLBACK_PROVIDER;
+    assert.deepEqual(configuredProviderOrder(), ["gemini", "groq", "mistral"]);
 
     process.env.AI_PRIMARY_PROVIDER = "groq";
     process.env.AI_FALLBACK_PROVIDER = "gemini";
-    assert.deepEqual(configuredProviderOrder(), ["groq", "gemini"]);
+    assert.deepEqual(configuredProviderOrder(), ["groq", "gemini", "mistral"]);
   } finally {
     for (const key of keys) {
       if (previous[key] === undefined) delete process.env[key];
@@ -123,13 +128,15 @@ test("provider order is configurable and defaults to Gemini before Groq when bot
   }
 });
 
-test("Gemini and Groq adapters independently normalize provider tool responses", async () => {
+test("Gemini, Groq, and Mistral adapters independently normalize provider tool responses", async () => {
   const previousFetch = globalThis.fetch;
   const previousGeminiKey = process.env.GEMINI_API_KEY;
   const previousGroqKey = process.env.GROQ_API_KEY;
+  const previousMistralKey = process.env.MISTRAL_API_KEY;
   try {
     process.env.GEMINI_API_KEY = "test-gemini-key";
     process.env.GROQ_API_KEY = "test-groq-key";
+    process.env.MISTRAL_API_KEY = "test-mistral-key";
     globalThis.fetch = async (input) => {
       const url = String(input);
       if (url.includes("generativelanguage.googleapis.com")) {
@@ -150,10 +157,13 @@ test("Gemini and Groq adapters independently normalize provider tool responses",
         choices: [{
           message: {
             tool_calls: [{
-              id: "groq-call",
+              id: url.includes("api.mistral.ai") ? "mistral-call" : "groq-call",
               function: {
                 name: "final_response",
-                arguments: JSON.stringify({ kind: "answer", message: "رد Groq" }),
+                arguments: JSON.stringify({
+                  kind: "answer",
+                  message: url.includes("api.mistral.ai") ? "رد Mistral" : "رد Groq",
+                }),
               },
             }],
           },
@@ -164,16 +174,21 @@ test("Gemini and Groq adapters independently normalize provider tool responses",
     const context = { requestId: "adapter-request", callNumber: 1, toolCallsExecuted: 0 };
     const gemini = await new GeminiModelGateway().generate([], context);
     const groq = await new GroqModelGateway().generate([], context);
+    const mistral = await new MistralModelGateway().generate([], context);
     assert.equal(gemini.toolCalls[0]?.name, "final_response");
     assert.equal(groq.toolCalls[0]?.name, "final_response");
+    assert.equal(mistral.toolCalls[0]?.name, "final_response");
     assert.equal(gemini.toolCalls[0]?.args.message, "رد Gemini");
     assert.equal(groq.toolCalls[0]?.args.message, "رد Groq");
+    assert.equal(mistral.toolCalls[0]?.args.message, "رد Mistral");
   } finally {
     globalThis.fetch = previousFetch;
     if (previousGeminiKey === undefined) delete process.env.GEMINI_API_KEY;
     else process.env.GEMINI_API_KEY = previousGeminiKey;
     if (previousGroqKey === undefined) delete process.env.GROQ_API_KEY;
     else process.env.GROQ_API_KEY = previousGroqKey;
+    if (previousMistralKey === undefined) delete process.env.MISTRAL_API_KEY;
+    else process.env.MISTRAL_API_KEY = previousMistralKey;
   }
 });
 
@@ -339,6 +354,34 @@ test("Groq primary can fail over to Gemini", async () => {
   assert.equal(result.provider, "gemini");
   assert.equal(result.action?.providerTrace?.fallbackReason, "PROVIDER_RATE_LIMIT");
   assert.deepEqual(result.action?.providerTrace?.providersAttempted, ["groq", "gemini"]);
+});
+
+test("failover advances to a third provider after the selected fallback is rate limited", async () => {
+  const primary = new ScriptedProvider("groq", () => {
+    throw providerResponseError("groq", 429, "rate limited");
+  });
+  const secondary = new ScriptedProvider("gemini", (_call, callNumber) => {
+    if (callNumber === 1) return toolCall("recall_context", {});
+    throw providerResponseError("gemini", 429, "rate limited");
+  });
+  const tertiary = new ScriptedProvider("mistral", () => finalResponse("اكتمل الرد من المزود الثالث."));
+  const gateway = new FailoverModelGateway(
+    { groq: primary, gemini: secondary, mistral: tertiary },
+    ["groq", "gemini", "mistral"],
+  );
+
+  const result = await new Phase2AgentRuntime(gateway).run(identity("three-provider-failover"), {
+    message: "إيه المحفوظ عندي؟",
+    requestId: "three-provider-failover-request",
+  }, { dryRun: true });
+
+  assert.equal(result.provider, "mistral");
+  assert.deepEqual(
+    result.action?.providerTrace?.providersAttempted,
+    ["groq", "gemini", "gemini", "mistral"],
+  );
+  assert.equal(secondary.calls.length, 2);
+  assert.equal(tertiary.calls.length, 1);
 });
 
 test("a read tool result is preserved when the primary fails and fallback writes the final response", async () => {
