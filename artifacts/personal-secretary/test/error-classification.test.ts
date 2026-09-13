@@ -26,6 +26,10 @@ test("classifies validation and authentication responses", () => {
 
 test("classifies not found, rate limit, provider, and server responses", () => {
   assert.equal(classifySecretaryError(apiError(404)).category, "not_found");
+  assert.equal(classifySecretaryError(apiError(409, {
+    category: "conflict_error",
+    error: "لا يمكن حذف هذا السجل لأنه مرتبط بسجلات محفوظة.",
+  })).category, "conflict");
   assert.equal(classifySecretaryError(apiError(429)).category, "rate_limit");
   assert.equal(classifySecretaryError(apiError(500, { category: "agent_error" })).category, "agent");
   assert.equal(classifySecretaryError(apiError(502)).category, "provider");

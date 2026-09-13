@@ -17,6 +17,7 @@ export const ErrorResponseCategory = {
   validation_error: 'validation_error',
   authentication_error: 'authentication_error',
   permission_error: 'permission_error',
+  conflict_error: 'conflict_error',
   not_found: 'not_found',
   rate_limit: 'rate_limit',
   timeout: 'timeout',

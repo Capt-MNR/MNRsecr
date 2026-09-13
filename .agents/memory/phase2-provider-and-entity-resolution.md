@@ -30,3 +30,9 @@ The runtime uses a failover gateway above the independent Gemini and Groq adapte
 **Why:** Retrying a write tool after a provider timeout can duplicate a financial record; provider switching must happen only on the next LLM call and never replay application tools.
 
 **How to apply:** Fail over only classified transient provider failures (429, timeout, unavailable, or transient 5xx/request failures). Preserve non-transient validation, tool, permission, and logical model errors; preserve the original `SecretaryError` classification so HTTP status and retryability remain accurate.
+
+Provider schema conversion must collapse nullable type unions only for the provider that cannot represent them; preserve schema arrays such as `required` unchanged.
+
+**Why:** Groq accepts OpenAI-style `["string", "null"]`, while Gemini rejects a union in `type`; treating every array as a union corrupts valid Gemini schema fields.
+
+**How to apply:** Keep OpenAI conversion recursive and lowercase-compatible. For Gemini, detect arrays made only of schema type names, remove `NULL`, and recursively preserve all other arrays.

@@ -1336,6 +1336,23 @@ export function toOpenAiSchema(value: unknown): unknown {
   );
 }
 
+export function toGeminiSchema(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    const isTypeUnion = value.length > 0
+      && value.every((item) => typeof item === "string"
+        && ["OBJECT", "STRING", "INTEGER", "NUMBER", "BOOLEAN", "ARRAY", "NULL"].includes(item));
+    if (!isTypeUnion) return value.map(toGeminiSchema);
+    const nonNullType = value.find((item) => item !== "NULL");
+    return nonNullType === undefined ? undefined : toGeminiSchema(nonNullType);
+  }
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .map(([key, child]) => [key, toGeminiSchema(child)] as const)
+      .filter(([, child]) => child !== undefined),
+  );
+}
+
 function toOpenAiTools() {
   return phase2Tools.map((definition) => ({
     type: "function",
@@ -1344,6 +1361,13 @@ function toOpenAiTools() {
       description: definition.description,
       parameters: toOpenAiSchema(definition.parameters),
     },
+  }));
+}
+
+function toGeminiTools() {
+  return phase2Tools.map((definition) => ({
+    ...definition,
+    parameters: toGeminiSchema(definition.parameters),
   }));
 }
 
@@ -1383,7 +1407,7 @@ export class GeminiModelGateway implements ModelGateway {
             body: JSON.stringify({
               systemInstruction: { parts: [{ text: `${systemInstruction}\n${requestGuidance}` }] },
               contents: toGeminiContents(messages),
-              tools: [{ functionDeclarations: phase2Tools }],
+              tools: [{ functionDeclarations: toGeminiTools() }],
               toolConfig: { functionCallingConfig: { mode: "AUTO" } },
               generationConfig: { temperature: 0.15, maxOutputTokens: 8192 },
             }),
@@ -1853,6 +1877,25 @@ function finalResponseFromText(text: string, history: ToolHistoryEntry[]): Final
   return safeFinalResponse("answer", message, history);
 }
 
+function recoveryResponseAfterSuccessfulWrite(history: ToolHistoryEntry[]): FinalResponse | null {
+  const successfulWrite = [...history]
+    .reverse()
+    .find((entry) => WRITE_TOOLS.has(entry.name) && entry.result.ok);
+  if (!successfulWrite) return null;
+
+  if (successfulWrite.name === "record_expense") {
+    return {
+      kind: "answer",
+      message: "تم تسجيل المصروف بنجاح، لكن تعذر إكمال الرد النهائي. لن أطلب منك إعادة المحاولة الآن حتى لا يتكرر التسجيل.",
+    };
+  }
+
+  return {
+    kind: "answer",
+    message: "تم حفظ التغيير بنجاح، لكن تعذر إكمال الرد النهائي. لن أطلب منك إعادة التنفيذ الآن حتى لا يتكرر التغيير.",
+  };
+}
+
 async function loadIdempotent(identity: Identity, key: string): Promise<Phase2TurnResult | null> {
   const [record] = await db.select().from(idempotencyRecordsTable).where(and(
     identityWhere(identity, idempotencyRecordsTable),
@@ -2010,6 +2053,10 @@ export class Phase2AgentRuntime {
         code: "AGENT_TOOL_CALL_LIMIT",
         retryable: false,
       });
+    } catch (error) {
+      const recovered = recoveryResponseAfterSuccessfulWrite(toolHistory);
+      if (recovered) return persistResult(recovered);
+      throw error;
     } finally {
       this.gateway.finishRequest?.(requestId);
     }

@@ -13,6 +13,7 @@ import {
   Phase2AgentRuntime,
   GroqModelGateway,
   configuredProviderOrder,
+  toGeminiSchema,
   toOpenAiSchema,
   type ConversationMessage,
   type GatewayCallContext,
@@ -229,6 +230,8 @@ test("Groq accepts nullable update_task and update_commitment schemas", async ()
       assert.deepEqual((taskSchema?.properties as Record<string, { type?: unknown }>).dueAt.type, ["string", "null"]);
       assert.deepEqual((commitmentSchema?.properties as Record<string, { type?: unknown }>).personId.type, ["string", "null"]);
       assert.deepEqual((commitmentSchema?.properties as Record<string, { type?: unknown }>).dueAt.type, ["string", "null"]);
+        assert.equal(toGeminiSchema(["STRING", "NULL"]), "STRING");
+        assert.deepEqual(toGeminiSchema(["kind", "message"]), ["kind", "message"]);
     }
   } finally {
     globalThis.fetch = previousFetch;

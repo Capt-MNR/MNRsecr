@@ -180,7 +180,17 @@ router.delete("/records/:recordType/:recordId", async (req, res): Promise<void> 
       [`${kind}Id`]: req.params.recordId,
     }, { requestId: requestId(req) });
     if (!result.ok) {
-      sendRouteError(req, res, 404, String(result.error ?? "السجل غير موجود."), "RECORD_DELETE_FAILED");
+      const message = String(result.error ?? "السجل غير موجود.");
+      const isDependencyConflict = message.includes("has saved records");
+      sendRouteError(
+        req,
+        res,
+        isDependencyConflict ? 409 : 404,
+        isDependencyConflict
+          ? "لا يمكن حذف هذا السجل لأنه مرتبط بسجلات محفوظة. احذف الروابط أو السجلات المرتبطة أولًا."
+          : message,
+        isDependencyConflict ? "RECORD_DELETE_CONFLICT" : "RECORD_DELETE_FAILED",
+      );
       return;
     }
     res.json(DeleteRecordResponse.parse({

@@ -331,6 +331,7 @@ components:
             - validation_error
             - authentication_error
             - permission_error
+            - conflict_error
             - not_found
             - rate_limit
             - timeout

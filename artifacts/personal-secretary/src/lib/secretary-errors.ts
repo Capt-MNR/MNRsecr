@@ -13,6 +13,7 @@ export type UserFacingError = {
     | "validation"
     | "authentication"
     | "permission"
+    | "conflict"
     | "not_found"
     | "rate_limit"
     | "provider"
@@ -94,6 +95,14 @@ export function classifySecretaryError(error: unknown): UserFacingError {
         message: isMissingRoute
           ? "خدمة السكرتير غير متاحة بهذا المسار حاليًا. حاول تحديث الصفحة."
           : "السجل المطلوب غير موجود أو لم يعد متاحًا. حدّث السجلات وحاول مرة أخرى.",
+        retryable: false,
+        requestId: payload.requestId,
+      };
+    }
+    if (status === 409 || payload.category === "conflict_error") {
+      return {
+        category: "conflict",
+        message: payload.error ?? "لا يمكن تنفيذ العملية لأن السجل مرتبط ببيانات أخرى.",
         retryable: false,
         requestId: payload.requestId,
       };

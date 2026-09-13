@@ -36,7 +36,13 @@ export function sendRouteError(
   res.status(status).json({
     error,
     code,
-    category: status === 404 ? "not_found" : status === 400 ? "validation_error" : "internal_error",
+    category: status === 409
+      ? "conflict_error"
+      : status === 404
+        ? "not_found"
+        : status === 400
+          ? "validation_error"
+          : "internal_error",
     requestId: requestId(req),
     retryable: false,
   });
