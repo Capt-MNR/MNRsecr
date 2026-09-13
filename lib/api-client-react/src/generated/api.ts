@@ -26,6 +26,7 @@ import type {
   ErrorResponse,
   HealthStatus,
   ListConversationsParams,
+  RecordCreateInput,
   RecordMutationResponse,
   RecordType,
   RecordUpdateInput,
@@ -690,6 +691,94 @@ export function useListRecords<TData = Awaited<ReturnType<typeof listRecords>>, 
 
 
 
+
+export const getCreateRecordUrl = () => {
+
+
+
+
+  return `/api/records`
+}
+
+/**
+ * @summary Create a saved record manually
+ */
+export const createRecord = async (recordCreateInput: RecordCreateInput, options?: Parameters<typeof customFetch>[1]): Promise<RecordMutationResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<RecordMutationResponse>(getCreateRecordUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(recordCreateInput)
+  }
+);}
+
+
+
+
+
+export const getCreateRecordMutationKey = () => ['createRecord'] as const;
+
+export const getCreateRecordMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createRecord>>, TError,CreateRecordMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createRecord>>, TError,CreateRecordMutationVariables, TContext> => {
+
+const mutationKey = getCreateRecordMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createRecord>>, CreateRecordMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createRecord(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateRecordMutationResult = NonNullable<Awaited<ReturnType<typeof createRecord>>>
+    export type CreateRecordMutationBody = BodyType<RecordCreateInput>
+    export type CreateRecordMutationError = ErrorType<ErrorResponse>
+    export type CreateRecordMutationVariables = {data: BodyType<RecordCreateInput>}
+
+    /**
+ * @summary Create a saved record manually
+ */
+export const useCreateRecord = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createRecord>>, TError,CreateRecordMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createRecord>>,
+        TError,
+        CreateRecordMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateRecordMutationOptions(options));
+    }
 
 export const getUpdateRecordUrl = (recordType: RecordType,
     recordId: string,) => {

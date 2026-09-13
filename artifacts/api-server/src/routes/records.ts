@@ -11,6 +11,7 @@ import {
 } from "@workspace/db";
 import {
   ListRecordsResponse,
+  CreateRecordBody,
   UpdateRecordBody,
   UpdateRecordResponse,
   DeleteRecordResponse,
@@ -119,6 +120,36 @@ function toolForUpdate(kind: RecordKind): string {
   }[kind];
 }
 
+function toolForCreate(kind: RecordKind): string {
+  return kind === "expense" ? "record_expense" : `create_${kind}`;
+}
+
+function validateCreateBody(kind: RecordKind, body: Record<string, unknown>): string | null {
+  const requiredText = (key: string, label: string) =>
+    typeof body[key] === "string" && String(body[key]).trim() ? null : `${label} مطلوب.`;
+  if (kind === "expense") {
+    if (typeof body.amountMinor !== "number" || !Number.isSafeInteger(body.amountMinor) || body.amountMinor <= 0) {
+      return "المبلغ يجب أن يكون رقمًا صحيحًا أكبر من صفر.";
+    }
+    return requiredText("description", "وصف المصروف");
+  }
+  if (kind === "person" || kind === "project") return requiredText("name", "الاسم");
+  if (kind === "task" || kind === "commitment") {
+    return requiredText("title", kind === "task" ? "عنوان المهمة" : "عنوان الالتزام");
+  }
+  if (kind === "reminder") {
+    const textError = requiredText("text", "نص التذكير");
+    if (textError) return textError;
+    return requiredText("dueAt", "موعد التذكير");
+  }
+  return null;
+}
+
+function createArgs(body: Record<string, unknown>): Record<string, unknown> {
+  const { recordType: _recordType, idempotencyKey: _idempotencyKey, ...args } = body;
+  return args;
+}
+
 function toolForDelete(kind: RecordKind): string {
   return `delete_${kind}`;
 }
@@ -156,6 +187,49 @@ function sendPendingApproval(
   });
   return true;
 }
+
+router.post("/records", async (req, res): Promise<void> => {
+  const identity = requireIdentity(req, res);
+  if (!identity) return;
+  const parsed = CreateRecordBody.safeParse(req.body);
+  if (!parsed.success) {
+    sendRouteError(req, res, 400, "بيانات السجل غير صالحة.", "INVALID_RECORD_CREATE");
+    return;
+  }
+  const kind = parsed.data.recordType;
+  const body = parsed.data as Record<string, unknown>;
+  const validationError = validateCreateBody(kind, body);
+  if (validationError) {
+    sendRouteError(req, res, 400, validationError, "INVALID_RECORD_CREATE");
+    return;
+  }
+  try {
+    const result = await executeStructuredTool(identity, toolForCreate(kind), createArgs(body), {
+      requestId: requestId(req),
+      idempotencyKey: typeof parsed.data.idempotencyKey === "string" ? parsed.data.idempotencyKey : undefined,
+    });
+    if (result.pendingApproval && result.approval) {
+      res.status(202).json({
+        ok: false,
+        recordType: kind,
+        recordId: "pending",
+        pendingApproval: true,
+        approval: result.approval,
+      });
+      return;
+    }
+    if (!result.ok) {
+      sendRouteError(req, res, 400, String(result.error ?? "تعذر إنشاء السجل."), "RECORD_CREATE_FAILED");
+      return;
+    }
+    const record = resultRecord(result, kind);
+    const recordId = typeof record?.id === "string" ? record.id : "created";
+    res.json(UpdateRecordResponse.parse({ ok: true, recordType: kind, recordId, record }));
+  } catch (error) {
+    req.log.error({ error, recordType: kind }, "Record creation failed");
+    sendRouteError(req, res, 500, "تعذر إضافة السجل.", "RECORD_CREATE_FAILED");
+  }
+});
 
 router.patch("/records/:recordType/:recordId", async (req, res): Promise<void> => {
   const identity = requireIdentity(req, res);

@@ -33,6 +33,7 @@ export * from './namedItem';
 export * from './pendingTask';
 export * from './personRecord';
 export * from './projectRecord';
+export * from './recordCreateInput';
 export * from './recordMutationResponse';
 export * from './recordMutationResponseRecord';
 export * from './recordsResponse';

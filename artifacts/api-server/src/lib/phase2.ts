@@ -704,7 +704,7 @@ async function executeTool(
         ownerUserId: identity.userId,
         name,
         nameKey: normalize(name),
-        notes: stringArg("notes") ?? null,
+        notes: args.notes === null ? null : stringArg("notes") ?? null,
       }).returning();
       result = { ok: true, created: true, person: created };
       break;
@@ -717,7 +717,8 @@ async function executeTool(
         updates.name = name;
         updates.nameKey = normalize(name);
       }
-      if (stringArg("notes")) updates.notes = stringArg("notes")!;
+      if (args.notes === null) updates.notes = null;
+      else if (stringArg("notes")) updates.notes = stringArg("notes")!;
       const [updated] = await db.update(peopleTable).set(updates).where(and(
         identityWhere(identity, peopleTable),
         eq(peopleTable.id, personId),
@@ -752,7 +753,7 @@ async function executeTool(
         ownerUserId: identity.userId,
         name,
         nameKey: normalize(name),
-        status: "active",
+        status: stringArg("status") === "archived" ? "archived" : "active",
       }).returning();
       result = { ok: true, created: true, project: created };
       break;
@@ -1232,7 +1233,11 @@ async function executeTool(
       const dueAt = dueAtValue ? new Date(dueAtValue) : null;
       if (dueAt && Number.isNaN(dueAt.getTime())) return { ok: false, error: "dueAt must be a valid ISO timestamp." };
       const [task] = await db.insert(tasksTable).values({
-        tenantId: identity.tenantId, ownerUserId: identity.userId, title, dueAt,
+        tenantId: identity.tenantId,
+        ownerUserId: identity.userId,
+        title,
+        dueAt,
+        status: stringArg("status") ?? "pending",
       }).returning();
       result = { ok: true, task };
       break;
@@ -1242,9 +1247,16 @@ async function executeTool(
       if (!title) return { ok: false, error: "Commitment title is required." };
       const dueAtValue = stringArg("dueAt");
       const dueAt = dueAtValue ? new Date(dueAtValue) : null;
+      if (personId) {
+        const [person] = await db.select({ id: peopleTable.id }).from(peopleTable).where(and(
+          identityWhere(identity, peopleTable),
+          eq(peopleTable.id, personId),
+        ));
+        if (!person) return { ok: false, error: "Person is not accessible." };
+      }
       const [commitment] = await db.insert(commitmentsTable).values({
         tenantId: identity.tenantId, ownerUserId: identity.userId, title,
-        personId: personId ?? null, dueAt,
+        personId: personId ?? null, dueAt, status: stringArg("status") ?? "open",
       }).returning();
       result = { ok: true, commitment };
       break;
@@ -1258,6 +1270,7 @@ async function executeTool(
       const [reminder] = await db.insert(remindersTable).values({
         tenantId: identity.tenantId, ownerUserId: identity.userId, text, dueAt,
         timezone: stringArg("timezone") ?? "Africa/Cairo",
+        status: stringArg("status") ?? "scheduled",
       }).returning();
       result = { ok: true, reminder };
       break;

@@ -205,6 +205,30 @@ export const RecordType = {
   commitment: 'commitment',
 } as const;
 
+export interface RecordCreateInput {
+  recordType: RecordType;
+  /** @nullable */
+  idempotencyKey?: string | null;
+  /** @minimum 1 */
+  amountMinor?: number;
+  currency?: string;
+  description?: string;
+  /** @nullable */
+  personId?: string | null;
+  /** @nullable */
+  projectId?: string | null;
+  occurredAt?: string;
+  name?: string;
+  /** @nullable */
+  notes?: string | null;
+  title?: string;
+  text?: string;
+  /** @nullable */
+  dueAt?: string | null;
+  timezone?: string;
+  status?: string;
+}
+
 export interface RecordUpdateInput {
   amountMinor?: number;
   currency?: string;

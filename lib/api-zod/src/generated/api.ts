@@ -243,6 +243,49 @@ export const ListRecordsResponse = zod.object({
 
 
 /**
+ * @summary Create a saved record manually
+ */
+
+
+
+export const CreateRecordBody = zod.object({
+  "recordType": zod.enum(['expense', 'person', 'project', 'task', 'reminder', 'commitment']),
+  "idempotencyKey": zod.string().nullish(),
+  "amountMinor": zod.number().int().min(1).optional(),
+  "currency": zod.string().optional(),
+  "description": zod.string().optional(),
+  "personId": zod.string().nullish(),
+  "projectId": zod.string().nullish(),
+  "occurredAt": zod.string().optional(),
+  "name": zod.string().optional(),
+  "notes": zod.string().nullish(),
+  "title": zod.string().optional(),
+  "text": zod.string().optional(),
+  "dueAt": zod.string().nullish(),
+  "timezone": zod.string().optional(),
+  "status": zod.string().optional()
+})
+
+export const CreateRecordResponse = zod.object({
+  "ok": zod.boolean(),
+  "recordType": zod.enum(['expense', 'person', 'project', 'task', 'reminder', 'commitment']),
+  "recordId": zod.string(),
+  "record": zod.record(zod.string(), zod.unknown()).optional(),
+  "deleted": zod.boolean().optional(),
+  "pendingApproval": zod.boolean().optional(),
+  "approval": zod.object({
+  "operationId": zod.string().uuid(),
+  "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
+  "toolName": zod.string(),
+  "display": zod.object({
+  "title": zod.string(),
+  "details": zod.array(zod.string())
+})
+}).optional()
+})
+
+
+/**
  * @summary Update one structured memory record
  */
 export const UpdateRecordParams = zod.object({

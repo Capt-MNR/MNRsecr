@@ -247,6 +247,47 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createRecord
+      tags: [records]
+      summary: Create a saved record manually
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordCreateInput"
+      responses:
+        "200":
+          description: Record created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordMutationResponse"
+        "202":
+          description: Record creation is waiting for approval
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordMutationResponse"
+        "400":
+          description: Invalid record data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Failed to create record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /records/{recordType}/{recordId}:
     patch:
       operationId: updateRecord
@@ -636,6 +677,42 @@ components:
     RecordType:
       type: string
       enum: [expense, person, project, task, reminder, commitment]
+    RecordCreateInput:
+      type: object
+      additionalProperties: false
+      properties:
+        recordType:
+          $ref: "#/components/schemas/RecordType"
+        idempotencyKey:
+          type: ["string", "null"]
+        amountMinor:
+          type: integer
+          minimum: 1
+        currency:
+          type: string
+        description:
+          type: string
+        personId:
+          type: ["string", "null"]
+        projectId:
+          type: ["string", "null"]
+        occurredAt:
+          type: string
+        name:
+          type: string
+        notes:
+          type: ["string", "null"]
+        title:
+          type: string
+        text:
+          type: string
+        dueAt:
+          type: ["string", "null"]
+        timezone:
+          type: string
+        status:
+          type: string
+      required: [recordType]
     RecordUpdateInput:
       type: object
       additionalProperties: false
