@@ -14,6 +14,7 @@ import {
   GroqModelGateway,
   MistralModelGateway,
   CohereModelGateway,
+  classifyToolScope,
   configuredProviderOrder,
   toCohereSchema,
   toGeminiSchema,
@@ -337,6 +338,133 @@ test("Groq accepts nullable update_task and update_commitment schemas", async ()
 test("Cohere removes nullable JSON Schema type arrays", () => {
   assert.equal(toCohereSchema(["STRING", "NULL"]), "string");
   assert.deepEqual(toCohereSchema(["kind", "message"]), ["kind", "message"]);
+});
+
+test("tool scope classification keeps common requests bounded and ambiguous requests full", () => {
+  assert.equal(classifyToolScope("إيه عندي النهارده؟").name, "read_only");
+  assert.equal(classifyToolScope("إيه عندي النهارده؟").allowedToolNames.size, 9);
+
+  const expenseScope = classifyToolScope("دفعت لمحمد 7500");
+  assert.equal(expenseScope.name, "expense");
+  assert.equal(expenseScope.allowedToolNames.size, 12);
+
+  const ambiguousScope = classifyToolScope("اعمل مشروع جديد وفكرني بكرة أراجعه");
+  assert.equal(ambiguousScope.name, "full");
+  assert.equal(ambiguousScope.allowedToolNames.size, 29);
+});
+
+test("all provider tool builders use the same scoped tool subset", async () => {
+  const previousFetch = globalThis.fetch;
+  const previousGeminiKey = process.env.GEMINI_API_KEY;
+  const previousGroqKey = process.env.GROQ_API_KEY;
+  const previousMistralKey = process.env.MISTRAL_API_KEY;
+  const previousCohereKey = process.env.COHERE_API_KEY;
+  const capturedBodies: Array<{ provider: string; body: Record<string, unknown> }> = [];
+  try {
+    process.env.GEMINI_API_KEY = "test-gemini-key";
+    process.env.GROQ_API_KEY = "test-groq-key";
+    process.env.MISTRAL_API_KEY = "test-mistral-key";
+    process.env.COHERE_API_KEY = "test-cohere-key";
+    globalThis.fetch = async (input, init) => {
+      const url = String(input);
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      if (url.includes("generativelanguage.googleapis.com")) {
+        capturedBodies.push({ provider: "gemini", body });
+        return new Response(JSON.stringify({
+          candidates: [{
+            content: {
+              parts: [{
+                functionCall: {
+                  name: "final_response",
+                  args: { kind: "answer", message: "تم" },
+                },
+              }],
+            },
+          }],
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      if (url.includes("api.cohere.com")) {
+        capturedBodies.push({ provider: "cohere", body });
+        return new Response(JSON.stringify({
+          message: {
+            content: [{ type: "text", text: "تم" }],
+            tool_calls: [{
+              id: "cohere-scope-call",
+              function: {
+                name: "final_response",
+                arguments: JSON.stringify({ kind: "answer", message: "تم" }),
+              },
+            }],
+          },
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      capturedBodies.push({ provider: url.includes("api.mistral.ai") ? "mistral" : "groq", body });
+      return new Response(JSON.stringify({
+        choices: [{
+          message: {
+            tool_calls: [{
+              id: "scope-call",
+              function: {
+                name: "final_response",
+                arguments: JSON.stringify({ kind: "answer", message: "تم" }),
+              },
+            }],
+          },
+        }],
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    };
+
+    const toolScope = classifyToolScope("إيه عندي النهارده؟");
+    const context = {
+      requestId: "scoped-adapter-request",
+      callNumber: 1,
+      toolCallsExecuted: 0,
+      toolScope,
+    };
+    await new GeminiModelGateway().generate([], context);
+    await new GroqModelGateway().generate([], context);
+    await new MistralModelGateway().generate([], context);
+    await new CohereModelGateway().generate([], context);
+
+    assert.equal(capturedBodies.length, 4);
+    for (const { provider, body } of capturedBodies) {
+      const tools = provider === "gemini"
+        ? ((body.tools as Array<{ functionDeclarations: unknown[] }>)[0]?.functionDeclarations ?? [])
+        : (body.tools as unknown[] ?? []);
+      assert.equal(tools.length, 9, `${provider} did not receive the read-only scope`);
+    }
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousGeminiKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = previousGeminiKey;
+    if (previousGroqKey === undefined) delete process.env.GROQ_API_KEY;
+    else process.env.GROQ_API_KEY = previousGroqKey;
+    if (previousMistralKey === undefined) delete process.env.MISTRAL_API_KEY;
+    else process.env.MISTRAL_API_KEY = previousMistralKey;
+    if (previousCohereKey === undefined) delete process.env.COHERE_API_KEY;
+    else process.env.COHERE_API_KEY = previousCohereKey;
+  }
+});
+
+test("an out-of-scope tool call widens the scope for the rest of the request", async () => {
+  const provider = new ScriptedProvider("groq", (call, callNumber) => {
+    if (callNumber === 1) {
+      assert.equal(call.context.toolScope?.name, "read_only");
+      return toolCall("create_task", { title: "مهمة اختبار" });
+    }
+    assert.equal(call.context.toolScope?.name, "full");
+    assert.equal(call.context.toolScope?.allowedToolNames.size, 29);
+    return finalResponse("اكتمل الطلب بعد توسيع النطاق.");
+  });
+  const result = await new Phase2AgentRuntime(
+    new FailoverModelGateway({ groq: provider }, ["groq"]),
+  ).run(identity("scope-fallback"), {
+    message: "إيه عندي النهارده؟",
+    requestId: "scope-fallback-request",
+  }, { dryRun: true });
+
+  assert.equal(result.response?.message, "اكتمل الطلب بعد توسيع النطاق.");
+  assert.equal(provider.calls.length, 2);
 });
 
 test("429, timeout, and unavailable primary providers fail over without changing the request", async () => {

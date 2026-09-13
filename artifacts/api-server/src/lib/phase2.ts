@@ -516,6 +516,114 @@ export const phase2Tools: ToolDefinition[] = [
   tool("recall_context", "Read the canonical saved Today context.", {}),
 ];
 
+const READ_ONLY_TOOL_NAMES = new Set([
+  "final_response",
+  "find_person",
+  "find_project",
+  "query_expenses",
+  "rank_expense_projects",
+  "get_person_expense_total",
+  "get_project_expense_total",
+  "query_reminders",
+  "recall_context",
+]);
+
+const TOOL_SCOPE_NAMES: Record<Exclude<ToolScope["name"], "full" | "read_only">, ReadonlySet<string>> = {
+  expense: new Set([
+    ...READ_ONLY_TOOL_NAMES,
+    "record_expense",
+    "update_expense",
+    "delete_expense",
+  ]),
+  reminder: new Set([
+    "final_response",
+    "query_reminders",
+    "recall_context",
+    "create_reminder",
+    "update_reminder",
+    "delete_reminder",
+  ]),
+  person: new Set([
+    "final_response",
+    "find_person",
+    "recall_context",
+    "create_person",
+    "update_person",
+    "delete_person",
+  ]),
+  project: new Set([
+    "final_response",
+    "find_project",
+    "recall_context",
+    "create_project",
+    "update_project",
+    "delete_project",
+  ]),
+  task: new Set([
+    "final_response",
+    "recall_context",
+    "create_task",
+    "update_task",
+    "delete_task",
+  ]),
+  commitment: new Set([
+    "final_response",
+    "recall_context",
+    "create_commitment",
+    "update_commitment",
+    "delete_commitment",
+  ]),
+};
+
+const TOOL_SCOPE_PATTERNS: Record<Exclude<ToolScope["name"], "full" | "read_only">, RegExp> = {
+  expense: /جنيه|دولار|ريال|مصروف|مصاريف|مبلغ|دفعت|دفع|صرف|فلوس|اخد مني|أخذ مني|اديت|أديت|سجل.*مصروف|expense|spent|paid|money/i,
+  reminder: /فكرني|ذكرني|تذكير|تذكّر|موعد|بكره|بكرة|غدا|غدًا|remind|reminder/i,
+  person: /شخص|شخصًا|الاسم|بيانات.*شخص|اضف.*شخص|أضف.*شخص|ضيف.*شخص|person|contact/i,
+  project: /مشروع|project/i,
+  task: /مهم(?:ة|ه)|task|todo/i,
+  commitment: /التزام|commitment/i,
+};
+
+const WRITE_INTENT_PATTERN = /سجل|سجّل|دفعت|دفع|صرف|اديت|أديت|أضف|اضف|ضيف|أنشئ|انشئ|اعمل|عدّل|عدل|غيّر|غير|احذف|امسح|فكرني|ذكرني|create|add|record|update|edit|change|delete|remove|remind/i;
+const READ_INTENT_PATTERN = /إيه|ايه|ما|ماذا|كم|كام|اعرض|أعرض|وريني|هات|عندي|إجمالي|اجمالي|تقرير|قائمة|استعرض|هل يوجد|what|show|list|how much|do i have|total/i;
+const AMOUNT_PATTERN = /(?:[0-9٠-٩]|جنيه|دولار|ريال)/i;
+
+function fullToolScope(): ToolScope {
+  return {
+    name: "full",
+    allowedToolNames: new Set(phase2Tools.map((definition) => definition.name)),
+    isFull: true,
+  };
+}
+
+function namedToolScope(name: Exclude<ToolScope["name"], "full">): ToolScope {
+  const allowedToolNames = name === "read_only" ? READ_ONLY_TOOL_NAMES : TOOL_SCOPE_NAMES[name];
+  return {
+    name,
+    allowedToolNames,
+    isFull: false,
+  };
+}
+
+export function classifyToolScope(message: string): ToolScope {
+  const matchedDomains = (Object.keys(TOOL_SCOPE_PATTERNS) as Array<Exclude<ToolScope["name"], "full" | "read_only">>)
+    .filter((domain) => TOOL_SCOPE_PATTERNS[domain].test(message));
+  const isReadIntent = READ_INTENT_PATTERN.test(message) && !WRITE_INTENT_PATTERN.test(message);
+  if (isReadIntent) return namedToolScope("read_only");
+
+  const isLikelyWrite = WRITE_INTENT_PATTERN.test(message)
+    || (matchedDomains.includes("expense") && AMOUNT_PATTERN.test(message));
+  if (isLikelyWrite && matchedDomains.length === 1) {
+    return namedToolScope(matchedDomains[0]);
+  }
+  return fullToolScope();
+}
+
+function scopedToolDefinitions(scope: ToolScope | undefined): ToolDefinition[] {
+  if (!scope || scope.isFull) return phase2Tools;
+  return phase2Tools.filter((definition) => scope.allowedToolNames.has(definition.name));
+}
+
 async function findPeople(identity: Identity, name: string): Promise<Person[]> {
   const exact = normalize(name);
   const rows = await db
@@ -1594,8 +1702,8 @@ export function toGeminiSchema(value: unknown): unknown {
   );
 }
 
-function toOpenAiTools() {
-  return phase2Tools.map((definition) => ({
+function toOpenAiTools(scope?: ToolScope) {
+  return scopedToolDefinitions(scope).map((definition) => ({
     type: "function",
     function: {
       name: definition.name,
@@ -1605,8 +1713,8 @@ function toOpenAiTools() {
   }));
 }
 
-function toCohereTools() {
-  return phase2Tools.map((definition) => ({
+function toCohereTools(scope?: ToolScope) {
+  return scopedToolDefinitions(scope).map((definition) => ({
     type: "function",
     function: {
       name: definition.name,
@@ -1616,8 +1724,8 @@ function toCohereTools() {
   }));
 }
 
-function toGeminiTools() {
-  return phase2Tools.map((definition) => ({
+function toGeminiTools(scope?: ToolScope) {
+  return scopedToolDefinitions(scope).map((definition) => ({
     ...definition,
     parameters: toGeminiSchema(definition.parameters),
   }));
@@ -1637,7 +1745,7 @@ export class GeminiModelGateway implements ModelGateway {
     if (!this.apiKey) throw new Error("GEMINI_API_KEY is not configured.");
     const systemText = `${systemInstruction}\n${requestGuidance}`;
     const contents = toGeminiContents(messages);
-    const toolDefinitions = toGeminiTools();
+    const toolDefinitions = toGeminiTools(context.toolScope);
     const requestBody = JSON.stringify({
       systemInstruction: { parts: [{ text: systemText }] },
       contents,
@@ -1748,7 +1856,7 @@ export class GroqModelGateway implements ModelGateway {
 
   async generate(messages: ConversationMessage[], context: GatewayCallContext): Promise<GatewayResponse> {
     if (!this.apiKey) throw new Error("GROQ_API_KEY is not configured.");
-    const tools = toOpenAiTools();
+    const tools = toOpenAiTools(context.toolScope);
     const apiMessages = [
       {
         role: "system",
@@ -1904,7 +2012,7 @@ export class MistralModelGateway implements ModelGateway {
 
   async generate(messages: ConversationMessage[], context: GatewayCallContext): Promise<GatewayResponse> {
     if (!this.apiKey) throw new Error("MISTRAL_API_KEY is not configured.");
-    const tools = toOpenAiTools();
+    const tools = toOpenAiTools(context.toolScope);
     const apiMessages = [
       {
         role: "system",
@@ -2430,6 +2538,7 @@ export class Phase2AgentRuntime {
       ...conversationContextMessages(conversationMemory),
       { role: "user", text: input.message.trim() },
     ];
+    let activeToolScope = classifyToolScope(input.message);
     let toolCalls = 0;
     let llmCalls = 0;
     const metrics = createGatewayMetrics();
@@ -2520,10 +2629,26 @@ export class Phase2AgentRuntime {
           requestId,
           callNumber: llmCalls,
           toolCallsExecuted: toolCalls,
+          toolScope: activeToolScope,
           metrics,
         });
         if (response.toolCalls.length === 0) {
           return persistResult(finalResponseFromText(response.text, toolHistory));
+        }
+
+        const outOfScopeCall = response.toolCalls.find(
+          (call) => !activeToolScope.allowedToolNames.has(call.name),
+        );
+        if (outOfScopeCall && !activeToolScope.isFull) {
+          const previousScope = activeToolScope;
+          activeToolScope = fullToolScope();
+          logger.warn({
+            requestId,
+            scope: previousScope.name,
+            outOfScopeTool: outOfScopeCall.name,
+            scopedToolCount: previousScope.allowedToolNames.size,
+            widenedToolCount: activeToolScope.allowedToolNames.size,
+          }, "agent tool scope widened due to out-of-scope tool call");
         }
 
         messages.push({
@@ -2625,7 +2750,7 @@ export class CohereModelGateway implements ModelGateway {
 
   async generate(messages: ConversationMessage[], context: GatewayCallContext): Promise<GatewayResponse> {
     if (!this.apiKey) throw new Error("COHERE_API_KEY is not configured.");
-    const tools = toCohereTools();
+    const tools = toCohereTools(context.toolScope);
     const apiMessages = [
       {
         role: "system",

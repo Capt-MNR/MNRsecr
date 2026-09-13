@@ -49,6 +49,12 @@ Provider tool schemas must be normalized per provider even when the request enve
 
 **How to apply:** Keep a provider-specific schema converter for each gateway. Collapse only arrays composed of schema type names for providers that do not support them, while preserving enum and other value arrays.
 
+Tool-scope filtering must be a per-request optimization, not a hard permission boundary: if the model requests a known tool outside the narrowed scope, widen to the full set for the remainder of that request and record the event.
+
+**Why:** Conservative keyword classification can miss multi-step intent; refusing the tool would trade token savings for an incomplete turn, while widening preserves the existing orchestration behavior without affecting later requests.
+
+**How to apply:** Keep the active scope in the request context, carry it through every provider in failover, and replace it with the full scope only after logging an out-of-scope tool call.
+
 The browser timeout for an agent turn must exceed the combined provider failover budget, not just one provider call.
 
 **Why:** A primary provider timeout followed by fallback can legitimately outlive a short client timeout while a write is still being finalized.
