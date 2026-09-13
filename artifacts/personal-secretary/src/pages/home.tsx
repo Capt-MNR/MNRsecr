@@ -108,10 +108,13 @@ function Home() {
     },
   });
   const createTurn = useCreateTurn({
-    request: { timeoutMs: 30_000 },
+    request: { timeoutMs: 90_000 },
   });
   const context = todayQuery.data?.context;
   const sendError = createTurn.isError ? classifySecretaryError(createTurn.error) : null;
+  const sendErrorMessage = sendError?.category === 'timeout'
+    ? 'لم يصل الرد في الوقت المتوقع. قد يكون الطلب ما زال قيد التنفيذ؛ لا تعيد إرسال طلب حفظ الآن، وتحقق من السجلات أولًا.'
+    : sendError?.message;
 
   const dateLabel = useMemo(
     () => formatDate(context?.asOf ?? new Date().toISOString()),
@@ -358,7 +361,7 @@ function Home() {
                       role="alert"
                     >
                       <CircleAlert className="size-3.5 shrink-0" />
-                      {sendError.message}
+                      {sendErrorMessage}
                     </div>
                   )}
                 </div>

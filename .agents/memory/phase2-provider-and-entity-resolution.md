@@ -36,3 +36,9 @@ Provider schema conversion must collapse nullable type unions only for the provi
 **Why:** Groq accepts OpenAI-style `["string", "null"]`, while Gemini rejects a union in `type`; treating every array as a union corrupts valid Gemini schema fields.
 
 **How to apply:** Keep OpenAI conversion recursive and lowercase-compatible. For Gemini, detect arrays made only of schema type names, remove `NULL`, and recursively preserve all other arrays.
+
+The browser timeout for an agent turn must exceed the combined provider failover budget, not just one provider call.
+
+**Why:** A primary provider timeout followed by fallback can legitimately outlive a short client timeout while a write is still being finalized.
+
+**How to apply:** When provider call limits or retry counts change, recalculate the frontend request timeout and make timeout copy warn users not to repeat an unresolved write immediately.
