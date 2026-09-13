@@ -117,7 +117,7 @@ export type FinalResponse = {
   groundedFacts?: GroundedFact[];
 };
 
-export type ProviderName = "gemini" | "groq";
+export type ProviderName = "gemini" | "groq" | "mistral";
 
 export type GatewayCallContext = {
   requestId: string;
@@ -219,6 +219,8 @@ const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.6-flash";
 const GEMINI_FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL ?? "gemini-3-flash-preview";
 const GROQ_MODEL = process.env.GROQ_MODEL ?? "openai/gpt-oss-20b";
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
+const MISTRAL_MODEL = process.env.MISTRAL_MODEL ?? "mistral-small-latest";
+const MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions";
 const DEFAULT_TIMEZONE = "Africa/Cairo";
 const WRITE_TOOLS = new Set([
   "create_person",
@@ -1849,6 +1851,152 @@ export class GroqModelGateway implements ModelGateway {
   }
 }
 
+export class MistralModelGateway implements ModelGateway {
+  readonly provider = "mistral" as const;
+  private readonly apiKey = process.env.MISTRAL_API_KEY;
+  readonly model = MISTRAL_MODEL;
+
+  get modelName(): string {
+    return this.model;
+  }
+
+  async generate(messages: ConversationMessage[], context: GatewayCallContext): Promise<GatewayResponse> {
+    if (!this.apiKey) throw new Error("MISTRAL_API_KEY is not configured.");
+    const tools = toOpenAiTools();
+    const apiMessages = [
+      {
+        role: "system",
+        content: `${systemInstruction}\n${requestGuidance}`,
+      },
+      ...messages.map((message) => {
+        if (message.role === "assistant") {
+          return {
+            role: "assistant",
+            content: message.text || null,
+            tool_calls: (message.toolCalls ?? []).map((call) => ({
+              id: call.id,
+              type: "function",
+              function: { name: call.name, arguments: JSON.stringify(call.args) },
+            })),
+          };
+        }
+        if (message.role === "tool") {
+          return {
+            role: "tool",
+            tool_call_id: message.toolCallId,
+            name: message.toolName,
+            content: message.text ?? "{}",
+          };
+        }
+        return { role: "user", content: message.text ?? "" };
+      }),
+    ];
+    const requestBody = JSON.stringify({
+      model: this.model,
+      messages: apiMessages,
+      tools,
+      tool_choice: "auto",
+      temperature: 0.15,
+      max_tokens: 2048,
+    });
+    const systemText = `${systemInstruction}\n${requestGuidance}`;
+    recordProviderRequest(context, "mistral", {
+      requestBytes: Buffer.byteLength(requestBody),
+      systemPromptChars: systemText.length,
+      toolDefinitionsChars: JSON.stringify(tools).length,
+      toolDefinitionsCount: tools.length,
+      conversationChars: JSON.stringify(apiMessages.slice(1)).length,
+    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25_000);
+    const startedAt = Date.now();
+    logger.info({
+      requestId: context.requestId,
+      provider: this.provider,
+      model: this.model,
+      llmCall: context.callNumber,
+      attempt: 1,
+      requestBytes: Buffer.byteLength(requestBody),
+      systemPromptChars: systemText.length,
+      toolDefinitionsChars: JSON.stringify(tools).length,
+      toolDefinitionsCount: tools.length,
+      conversationChars: JSON.stringify(apiMessages.slice(1)).length,
+    }, "agent llm call started");
+    try {
+      const response = await fetch(MISTRAL_API_URL, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${this.apiKey}`,
+        },
+        body: requestBody,
+        signal: controller.signal,
+      });
+      const raw = await response.text();
+      if (response.ok) {
+        const payload = JSON.parse(raw) as {
+          choices?: Array<{
+            message?: {
+              content?: string | null;
+              tool_calls?: Array<{
+                id: string;
+                function: { name: string; arguments: string };
+              }>;
+            };
+          }>;
+          usage?: unknown;
+        };
+        const message = payload.choices?.[0]?.message;
+        const responseResult = {
+          text: message?.content?.trim() ?? "",
+          toolCalls: (message?.tool_calls ?? []).map((call) => ({
+            id: call.id,
+            name: call.function.name,
+            args: parseJsonObject(call.function.arguments),
+          })),
+          usage: payload.usage,
+        };
+        logger.info({
+          requestId: context.requestId,
+          provider: this.provider,
+          model: this.model,
+          llmCall: context.callNumber,
+          attempt: 1,
+          toolCalls: responseResult.toolCalls.length,
+          latencyMs: Date.now() - startedAt,
+        }, "agent llm call completed");
+        return responseResult;
+      }
+      const error = providerResponseError(
+        "mistral",
+        response.status,
+        raw,
+        parseRetryAfter(response.headers.get("retry-after")),
+      );
+      if (response.status === 429) {
+        logger.warn({
+          requestId: context.requestId,
+          provider: this.provider,
+          model: this.model,
+          llmCall: context.callNumber,
+          attempt: 1,
+          retryAfterSeconds: error.retryAfterSeconds,
+          safeToRetry: false,
+        }, "agent llm rate limit deferred to failover");
+      }
+      throw error;
+    } catch (error) {
+      const classified = error instanceof SecretaryError
+        ? error
+        : providerExceptionError("mistral", error);
+      logLlmFailure("mistral", this.model, context, 1, classified);
+      throw classified;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+}
+
 type CircuitState = {
   consecutiveFailures: number;
   openUntil: number;
@@ -1857,6 +2005,7 @@ type CircuitState = {
 type RequestProviderState = {
   fallbackProvider?: ProviderName;
   selectedProvider?: ProviderName;
+  providerIndex?: number;
   primaryError?: SecretaryError;
   expiresAt: number;
 };
@@ -1985,10 +2134,8 @@ export class FailoverModelGateway implements ModelGateway {
   async generate(messages: ConversationMessage[], context: GatewayCallContext): Promise<GatewayResponse> {
     if (context.metrics) this.metrics.set(context.requestId, context.metrics);
     const request = this.requestState(context.requestId);
-    const lockedProvider = request?.fallbackProvider;
-    const preferredProviders = lockedProvider
-      ? [lockedProvider]
-      : this.order;
+    const startIndex = request?.providerIndex ?? 0;
+    const preferredProviders = this.order.slice(startIndex);
     const trace = this.trace(context.requestId);
     const candidates = preferredProviders.filter((provider) => this.gateways[provider]);
     const available = candidates.filter((provider) => !this.isCircuitOpen(provider));
@@ -2034,6 +2181,7 @@ export class FailoverModelGateway implements ModelGateway {
         this.requests.set(context.requestId, {
           ...(trace.fallbackOccurred ? { fallbackProvider: provider } : {}),
           selectedProvider: provider,
+          providerIndex: this.order.indexOf(provider),
           expiresAt: Date.now() + REQUEST_PROVIDER_STATE_TTL_MS,
         });
         return response;
@@ -2053,6 +2201,7 @@ export class FailoverModelGateway implements ModelGateway {
           if (context.metrics) context.metrics.providerFallbackAttempts += 1;
           this.requests.set(context.requestId, {
             fallbackProvider: nextProvider,
+            providerIndex: this.order.indexOf(nextProvider),
             ...(provider === this.order[0] ? { primaryError: classified } : {}),
             expiresAt: Date.now() + REQUEST_PROVIDER_STATE_TTL_MS,
           });
