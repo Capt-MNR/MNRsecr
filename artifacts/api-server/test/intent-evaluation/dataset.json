@@ -1,0 +1,475 @@
+{
+  "version": 1,
+  "description": "Arabic intent and tool-selection regression dataset for real-provider evaluation.",
+  "contextPolicy": "Cases marked contextRequired are evaluated as standalone clarification cases unless a future runner supplies a persisted conversation fixture.",
+  "cases": [
+    {
+      "id": "A01",
+      "category": "expense_intent",
+      "message": "دفعت لمحمد 7500",
+      "contextMode": "none",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": ["find_person", "record_expense"],
+        "clarification": false,
+        "write": false
+      }
+    },
+    {
+      "id": "A02",
+      "category": "expense_intent",
+      "message": "محمد خد مني 7500",
+      "contextMode": "none",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": ["find_person", "record_expense"],
+        "clarification": false,
+        "write": false
+      }
+    },
+    {
+      "id": "A03",
+      "category": "expense_intent",
+      "message": "اديت محمد 7500",
+      "contextMode": "none",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": ["find_person", "record_expense"],
+        "clarification": false,
+        "write": false
+      }
+    },
+    {
+      "id": "A04",
+      "category": "expense_intent",
+      "message": "أنا دفعت لمحمد سبعة آلاف ونص",
+      "contextMode": "none",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": ["find_person", "record_expense"],
+        "clarification": false,
+        "write": false
+      }
+    },
+    {
+      "id": "A05",
+      "category": "expense_intent",
+      "message": "النهارده دفعت لمحمد 7500 جنيه",
+      "contextMode": "none",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": ["find_person", "record_expense"],
+        "clarification": false,
+        "write": false
+      }
+    },
+    {
+      "id": "A06",
+      "category": "expense_intent",
+      "message": "الـ7500 اللي دفعتها لمحمد سجلها",
+      "contextMode": "none",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": ["find_person", "record_expense"],
+        "clarification": false,
+        "write": false
+      }
+    },
+    {
+      "id": "A07",
+      "category": "expense_intent",
+      "message": "سجلها على محمد",
+      "contextMode": "context_required",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": ["find_person", "record_expense", "final_response"],
+        "clarification": true,
+        "write": false
+      }
+    },
+    {
+      "id": "A08",
+      "category": "expense_intent",
+      "message": "حولت لمحمد ألفين جنيه امبارح",
+      "contextMode": "none",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": ["find_person", "record_expense"],
+        "clarification": false,
+        "write": false
+      }
+    },
+    {
+      "id": "B01",
+      "category": "create_person",
+      "message": "أضف محمد كشخص",
+      "contextMode": "none",
+      "expected": {
+        "intent": "create_person",
+        "primaryTool": "create_person",
+        "acceptableTools": ["create_person"],
+        "clarification": false,
+        "write": false
+      }
+    },
+    {
+      "id": "B02",
+      "category": "create_person",
+      "message": "عايز أضيف شخص اسمه محمد",
+      "contextMode": "none",
+      "expected": {
+        "intent": "create_person",
+        "primaryTool": "create_person",
+        "acceptableTools": ["create_person"],
+        "clarification": false,
+        "write": false
+      }
+    },
+    {
+      "id": "B03",
+      "category": "create_person",
+      "message": "سجل محمد عندي كشخص",
+      "contextMode": "none",
+      "expected": {
+        "intent": "create_person",
+        "primaryTool": "create_person",
+        "acceptableTools": ["create_person"],
+        "clarification": false,
+        "write": false
+      }
+    },
+    {
+      "id": "B04",
+      "category": "create_person",
+      "message": "اعمل شخص جديد اسمه محمد",
+      "contextMode": "none",
+      "expected": {
+        "intent": "create_person",
+        "primaryTool": "create_person",
+        "acceptableTools": ["create_person"],
+        "clarification": false,
+        "write": false
+      }
+    },
+    {
+      "id": "C01",
+      "category": "ambiguous",
+      "message": "محمد",
+      "contextMode": "none",
+      "expected": {
+        "intent": "clarification",
+        "primaryTool": "final_response",
+        "acceptableTools": ["final_response", "find_person"],
+        "clarification": true,
+        "write": false
+      }
+    },
+    {
+      "id": "C02",
+      "category": "ambiguous",
+      "message": "سجل محمد",
+      "contextMode": "none",
+      "expected": {
+        "intent": "clarification",
+        "primaryTool": "final_response",
+        "acceptableTools": ["final_response", "find_person"],
+        "clarification": true,
+        "write": false
+      }
+    },
+    {
+      "id": "C03",
+      "category": "ambiguous",
+      "message": "محمد خدها",
+      "contextMode": "none",
+      "expected": {
+        "intent": "clarification",
+        "primaryTool": "final_response",
+        "acceptableTools": ["final_response", "find_person"],
+        "clarification": true,
+        "write": false
+      }
+    },
+    {
+      "id": "C04",
+      "category": "ambiguous",
+      "message": "سجلها",
+      "contextMode": "none",
+      "expected": {
+        "intent": "clarification",
+        "primaryTool": "final_response",
+        "acceptableTools": ["final_response"],
+        "clarification": true,
+        "write": false
+      }
+    },
+    {
+      "id": "C05",
+      "category": "ambiguous",
+      "message": "الفلوس دي",
+      "contextMode": "none",
+      "expected": {
+        "intent": "clarification",
+        "primaryTool": "final_response",
+        "acceptableTools": ["final_response"],
+        "clarification": true,
+        "write": false
+      }
+    },
+    {
+      "id": "C06",
+      "category": "ambiguous",
+      "message": "التاني",
+      "contextMode": "none",
+      "expected": {
+        "intent": "clarification",
+        "primaryTool": "final_response",
+        "acceptableTools": ["final_response"],
+        "clarification": true,
+        "write": false
+      }
+    },
+    {
+      "id": "C07",
+      "category": "ambiguous",
+      "message": "ماشي",
+      "contextMode": "none",
+      "expected": {
+        "intent": "clarification",
+        "primaryTool": "final_response",
+        "acceptableTools": ["final_response"],
+        "clarification": true,
+        "write": false
+      }
+    },
+    {
+      "id": "D01",
+      "category": "expense_with_project",
+      "message": "دفعت لمحمد 7500 على مشروع التشطيبات",
+      "contextMode": "none",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": ["find_person", "find_project", "record_expense"],
+        "clarification": false,
+        "write": false
+      }
+    },
+    {
+      "id": "D02",
+      "category": "expense_with_project",
+      "message": "سجلت 12000 جنيه لأحمد على مشروع الشقة الجديدة",
+      "contextMode": "none",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": ["find_person", "find_project", "record_expense"],
+        "clarification": false,
+        "write": false
+      }
+    },
+    {
+      "id": "D03",
+      "category": "expense_with_project",
+      "message": "اديت سارة 3000 في مشروع المكتب",
+      "contextMode": "none",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": ["find_person", "find_project", "record_expense"],
+        "clarification": false,
+        "write": false
+      }
+    },
+    {
+      "id": "D04",
+      "category": "expense_with_project",
+      "message": "محمد خد مني 8500 بتوع مشروع السفر",
+      "contextMode": "none",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": ["find_person", "find_project", "record_expense"],
+        "clarification": false,
+        "write": false
+      }
+    },
+    {
+      "id": "D05",
+      "category": "expense_with_project",
+      "message": "سجل مصروف 4200 لمحمد على المشروع التاني",
+      "contextMode": "context_required",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": ["find_person", "find_project", "record_expense", "final_response"],
+        "clarification": true,
+        "write": false
+      }
+    },
+    {
+      "id": "E01",
+      "category": "correction",
+      "message": "لا مش محمد، أحمد",
+      "contextMode": "context_required",
+      "expected": {
+        "intent": "correction",
+        "primaryTool": "update_expense",
+        "acceptableTools": ["update_expense", "find_person", "final_response"],
+        "clarification": true,
+        "write": false
+      }
+    },
+    {
+      "id": "E02",
+      "category": "correction",
+      "message": "المبلغ 8500 مش 7500",
+      "contextMode": "context_required",
+      "expected": {
+        "intent": "correction",
+        "primaryTool": "update_expense",
+        "acceptableTools": ["update_expense", "final_response"],
+        "clarification": true,
+        "write": false
+      }
+    },
+    {
+      "id": "E03",
+      "category": "correction",
+      "message": "على المشروع التاني",
+      "contextMode": "context_required",
+      "expected": {
+        "intent": "correction",
+        "primaryTool": "update_expense",
+        "acceptableTools": ["update_expense", "find_project", "final_response"],
+        "clarification": true,
+        "write": false
+      }
+    },
+    {
+      "id": "E04",
+      "category": "correction",
+      "message": "قصدي المصروف اللي فات",
+      "contextMode": "context_required",
+      "expected": {
+        "intent": "correction",
+        "primaryTool": "update_expense",
+        "acceptableTools": ["update_expense", "query_expenses", "final_response"],
+        "clarification": true,
+        "write": false
+      }
+    },
+    {
+      "id": "E05",
+      "category": "correction",
+      "message": "لا، سجلها على مشروع التشطيبات",
+      "contextMode": "context_required",
+      "expected": {
+        "intent": "correction",
+        "primaryTool": "update_expense",
+        "acceptableTools": ["update_expense", "find_project", "final_response"],
+        "clarification": true,
+        "write": false
+      }
+    },
+    {
+      "id": "F01",
+      "category": "negative_guard",
+      "message": "أضف محمد كشخص من غير ما تسجل أي مصروف",
+      "contextMode": "none",
+      "expected": {
+        "intent": "create_person",
+        "primaryTool": "create_person",
+        "acceptableTools": ["create_person"],
+        "clarification": false,
+        "write": false
+      }
+    },
+    {
+      "id": "F02",
+      "category": "negative_guard",
+      "message": "دفعت لمحمد 100 جنيه، وما تضيفوش كشخص",
+      "contextMode": "none",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": ["find_person", "record_expense"],
+        "clarification": false,
+        "write": false
+      }
+    },
+    {
+      "id": "F03",
+      "category": "negative_guard",
+      "message": "محمد",
+      "contextMode": "none",
+      "expected": {
+        "intent": "clarification",
+        "primaryTool": "final_response",
+        "acceptableTools": ["final_response", "find_person"],
+        "clarification": true,
+        "write": false
+      }
+    },
+    {
+      "id": "F04",
+      "category": "negative_guard",
+      "message": "عايز أضيف شخص اسمه أحمد، مش أسجل له فلوس",
+      "contextMode": "none",
+      "expected": {
+        "intent": "create_person",
+        "primaryTool": "create_person",
+        "acceptableTools": ["create_person"],
+        "clarification": false,
+        "write": false
+      }
+    },
+    {
+      "id": "F05",
+      "category": "negative_guard",
+      "message": "سجل مصروف لمحمد بمبلغ 600 جنيه",
+      "contextMode": "none",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": ["find_person", "record_expense"],
+        "clarification": false,
+        "write": false
+      }
+    },
+    {
+      "id": "F06",
+      "category": "negative_guard",
+      "message": "محمد موجود عندي بالفعل",
+      "contextMode": "none",
+      "expected": {
+        "intent": "clarification",
+        "primaryTool": "final_response",
+        "acceptableTools": ["final_response", "find_person"],
+        "clarification": true,
+        "write": false
+      }
+    },
+    {
+      "id": "F07",
+      "category": "negative_guard",
+      "message": "اديت أحمد 1250 ومش عايز أعمله كشخص جديد",
+      "contextMode": "none",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": ["find_person", "record_expense"],
+        "clarification": false,
+        "write": false
+      }
+    }
+  ]
+}

@@ -9,7 +9,9 @@
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:phase2": "node --test test/phase2.integration.mjs",
-    "test:expense-report": "node --experimental-strip-types --test test/expense-report.test.ts"
+    "test:expense-report": "node --experimental-strip-types --test test/expense-report.test.ts",
+    "test:intent-eval-dataset": "node --test test/intent-evaluation/dataset.test.mjs",
+    "test:intent-eval": "../../scripts/node_modules/.bin/tsx ./test/intent-evaluation/runner.ts"
   },
   "dependencies": {
     "@workspace/api-zod": "workspace:*",

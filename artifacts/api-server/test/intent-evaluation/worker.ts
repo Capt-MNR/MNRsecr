@@ -1,0 +1,171 @@
+import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import {
+  classifySecretaryError,
+  type SecretaryError,
+} from "../../src/lib/error-contract.ts";
+import {
+  FailoverModelGateway,
+  GeminiModelGateway,
+  GroqModelGateway,
+  Phase2AgentRuntime,
+  type ConversationMessage,
+  type GatewayCallContext,
+  type GatewayResponse,
+  type ModelGateway,
+  type ProviderName,
+} from "../../src/lib/phase2.ts";
+
+type EvaluationCase = {
+  id: string;
+  category: string;
+  message: string;
+  contextMode: "none" | "context_required";
+  expected: {
+    intent: string;
+    primaryTool: string;
+    acceptableTools: string[];
+    clarification: boolean;
+    write: boolean;
+  };
+};
+
+type Dataset = {
+  version: number;
+  cases: EvaluationCase[];
+};
+
+class RecordingGateway implements ModelGateway {
+  readonly usage: unknown[] = [];
+
+  constructor(private readonly inner: ModelGateway) {}
+
+  get provider(): ProviderName {
+    return this.inner.provider;
+  }
+
+  get modelName(): string {
+    return this.inner.modelName;
+  }
+
+  async generate(
+    messages: ConversationMessage[],
+    context: GatewayCallContext,
+  ): Promise<GatewayResponse> {
+    const response = await this.inner.generate(messages, context);
+    if (response.usage !== undefined) this.usage.push(response.usage);
+    return response;
+  }
+
+  getProviderForRequest(requestId: string): { provider: ProviderName; model: string } {
+    return this.inner.getProviderForRequest?.(requestId) ?? {
+      provider: this.inner.provider,
+      model: this.inner.modelName,
+    };
+  }
+
+  getTrace(requestId: string) {
+    return this.inner.getTrace?.(requestId);
+  }
+
+  finishRequest(requestId: string): void {
+    this.inner.finishRequest?.(requestId);
+  }
+}
+
+function readArg(name: string): string | undefined {
+  const index = process.argv.indexOf(name);
+  return index >= 0 ? process.argv[index + 1] : undefined;
+}
+
+function gatewayForMode(mode: string): RecordingGateway {
+  const order: ProviderName[] = mode === "groq"
+    ? ["groq"]
+    : mode === "gemini"
+      ? ["gemini"]
+      : ["groq", "gemini"];
+  const gateways: Partial<Record<ProviderName, ModelGateway>> = {};
+  for (const provider of order) {
+    gateways[provider] = provider === "groq"
+      ? new GroqModelGateway()
+      : new GeminiModelGateway();
+  }
+  return new RecordingGateway(new FailoverModelGateway(gateways, order));
+}
+
+function errorPayload(error: unknown): Record<string, unknown> {
+  const classified = classifySecretaryError(error) as SecretaryError;
+  return {
+    message: classified.message,
+    status: classified.status,
+    category: classified.category,
+    code: classified.code,
+    provider: classified.provider,
+    retryable: classified.retryable,
+    retryAfterSeconds: classified.retryAfterSeconds,
+  };
+}
+
+async function main(): Promise<void> {
+  const caseId = readArg("--case");
+  const mode = readArg("--mode") ?? "groq";
+  if (!caseId) throw new Error("--case is required");
+
+  const dataset = JSON.parse(
+    await readFile(new URL("./dataset.json", import.meta.url), "utf8"),
+  ) as Dataset;
+  const evaluationCase = dataset.cases.find((item) => item.id === caseId);
+  if (!evaluationCase) throw new Error(`Unknown evaluation case: ${caseId}`);
+
+  const gateway = gatewayForMode(mode);
+  const runtime = new Phase2AgentRuntime(gateway);
+  const requestId = `intent-eval-${mode}-${evaluationCase.id}-${randomUUID()}`;
+  const identity = {
+    tenantId: process.env.INTENT_EVAL_TENANT_ID
+      ?? `intent-eval-read-only-${mode}-${evaluationCase.id}`,
+    userId: process.env.INTENT_EVAL_USER_ID ?? "intent-eval-read-only",
+  };
+  const conversationId = process.env.INTENT_EVAL_CONVERSATION_ID
+    ?? `intent-eval-${mode}-${evaluationCase.id}`;
+  const startedAt = Date.now();
+
+  try {
+    const result = await runtime.run(identity, {
+      message: evaluationCase.message,
+      conversationId,
+      requestId,
+    }, { dryRun: true });
+    const action = result.action ?? {};
+    process.stdout.write(`EVAL_RESULT ${JSON.stringify({
+      ok: true,
+      caseId,
+      mode,
+      dryRun: true,
+      elapsedMs: Date.now() - startedAt,
+      provider: result.provider,
+      model: result.model,
+      responseKind: result.response?.kind,
+      assistantMessage: result.assistantMessage,
+      action: {
+        type: action.type,
+        lastTool: action.lastTool,
+        llmCalls: action.llmCalls,
+        toolCalls: action.toolCalls,
+        providerTrace: action.providerTrace,
+      },
+      tokenUsage: gateway.usage,
+    })}\n`);
+  } catch (error) {
+    process.stdout.write(`EVAL_RESULT ${JSON.stringify({
+      ok: false,
+      caseId,
+      mode,
+      dryRun: true,
+      elapsedMs: Date.now() - startedAt,
+      error: errorPayload(error),
+      tokenUsage: gateway.usage,
+    })}\n`);
+  }
+}
+
+await main();
