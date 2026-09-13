@@ -123,6 +123,22 @@ export type GatewayCallContext = {
   requestId: string;
   callNumber: number;
   toolCallsExecuted: number;
+  metrics?: GatewayRequestMetrics;
+};
+
+export type GatewayRequestMetrics = {
+  logicalLlmCalls: number;
+  httpAttempts: number;
+  httpAttemptsByProvider: Partial<Record<ProviderName, number>>;
+  retryCount: number;
+  providerFallbackAttempts: number;
+  modelFallbackAttempts: number;
+  requestBytesByProvider: Partial<Record<ProviderName, number>>;
+  maxRequestBytes: number;
+  systemPromptChars: number;
+  toolDefinitionsChars: number;
+  toolDefinitionsCount: number;
+  maxConversationChars: number;
 };
 
 function logLlmFailure(
@@ -142,6 +158,7 @@ function logLlmFailure(
     errorCode: classified.code,
     upstreamStatus: classified.upstreamStatus,
     providerError: classified.providerError,
+    retryAfterSeconds: classified.retryAfterSeconds,
   }, "agent llm call failed");
 }
 
@@ -162,6 +179,18 @@ export type ProviderTrace = {
   fallbackOccurred: boolean;
   fallbackReason?: string;
   toolCallsExecutedBeforeFailure?: number;
+  logicalLlmCalls?: number;
+  httpAttempts?: number;
+  httpAttemptsByProvider?: Partial<Record<ProviderName, number>>;
+  retryCount?: number;
+  providerFallbackAttempts?: number;
+  modelFallbackAttempts?: number;
+  requestBytesByProvider?: Partial<Record<ProviderName, number>>;
+  maxRequestBytes?: number;
+  systemPromptChars?: number;
+  toolDefinitionsChars?: number;
+  toolDefinitionsCount?: number;
+  maxConversationChars?: number;
 };
 
 type GeminiResponse = {
@@ -182,6 +211,10 @@ type ToolResult = {
 };
 
 const MAX_TOOL_CALLS = 8;
+const MAX_LOGICAL_LLM_CALLS = 4;
+const MAX_PROVIDER_HTTP_ATTEMPTS = 6;
+const MAX_GROQ_HTTP_ATTEMPTS = 1;
+const MAX_CIRCUIT_COOLDOWN_MS = 15 * 60_000;
 const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.6-flash";
 const GEMINI_FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL ?? "gemini-3-flash-preview";
 const GROQ_MODEL = process.env.GROQ_MODEL ?? "openai/gpt-oss-20b";
@@ -329,10 +362,10 @@ export const phase2Tools: ToolDefinition[] = [
     },
     ["kind", "message"],
   ),
-  tool("find_person", "Find accessible people by name. Always call before using a person.", {
+  tool("find_person", "Find accessible people by name. Use this before linking a person to an expense or other record. A failed search does not mean the user asked to create the person.", {
     name: { type: "STRING", description: "The known person name" },
   }, ["name"]),
-  tool("create_person", "Create a person only when no suitable match exists.", {
+  tool("create_person", "Create a person only after an explicit request to add or create a person, and only after checking for matches. Do not use this just because a person name appears in a financial sentence such as 'دفعت لمحمد 7500'.", {
     name: { type: "STRING" },
     notes: { type: "STRING" },
   }, ["name"]),
@@ -361,7 +394,7 @@ export const phase2Tools: ToolDefinition[] = [
     relationshipId: { type: "STRING" },
     relationship: { type: "STRING" },
   }, ["relationshipId", "relationship"]),
-  tool("record_expense", "Record an expense using integer minor units. The recipient person and project are optional; use description for the purpose when no project is confirmed.", {
+  tool("record_expense", "Record a financial transaction using integer minor units. Use this when the user says they paid, gave, received, or asks to record an amount, even if the word 'expense' is absent. Resolve a mentioned person first; the recipient person and project are optional, and use description for the purpose when no project is confirmed. Never use create_person merely because the recipient name is new or unresolved.", {
     amountMinor: { type: "INTEGER", description: "Money in minor units, e.g. 1150000 for 11500.00" },
     currency: { type: "STRING", description: "ISO currency code" },
     description: { type: "STRING" },
@@ -1361,7 +1394,10 @@ const systemInstruction = `أنت سكرتير شخصي عربي يعمل داخ
 22. إذا فشل مزود، لا تعرض رسالة تقنية ولا تقل إن الكتابة تمت. استخدم final_response برسالة عربية قصيرة توضّح أن الطلب لم يكتمل وأن البيانات لم تتغير.`;
 
 const requestGuidance = `إرشادات تنفيذ إضافية:
-- إذا كانت الرسالة جملة دفع/إعطاء/استلام وبها شخص ومبلغ وعملة، نفّذ find_person ثم record_expense مباشرة. لا تستدع recall_context أولًا. إذا لم يذكر المستخدم وصفًا، استخدم وصفًا صادقًا مثل "دفعة إلى <الاسم>".
+- جملة الدفع أو الإعطاء أو الاستلام التي تحتوي على اسم شخص ومبلغ هي نية تسجيل مصروف، حتى لو لم تُذكر كلمة "مصروف" أو العملة. أمثلة: "دفعت لمحمد 7500"، "محمد خد مني 7500"، "اديت محمد 7500". نفّذ find_person ثم record_expense مباشرة، ولا تستخدم create_person لمجرد ذكر الاسم.
+- استخدم create_person فقط عندما يطلب المستخدم صراحة إضافة أو إنشاء شخص، مثل "أضف محمد كشخص" أو "عايز أضيف شخص اسمه محمد". إذا كانت النية مالية والشخص غير موجود، لا تنشئه تلقائيًا؛ اطلب توضيحًا بين تسجيل المصروف بدون ربط بالشخص أو إضافة الشخص أولًا.
+- إذا قال المستخدم إن الشخص موجود بالفعل، لا تنشئه. استخدم find_person عند الحاجة للتحقق، وإذا لم توجد عملية واضحة فاطلب التوضيح بدل تسجيل مصروف.
+- لا تجعل وجود اسم شخص وحده نية إنشاء. الفعل المالي + المبلغ يتغلب على مجرد ذكر الاسم، مع بقاء قرار الكتابة خاضعًا للموافقة.
 - إذا كانت الرسالة تسأل عن إجمالي ما صُرف على وصف أو فئة مثل "التشطيبات" من دون ذكر مشروع صريح، استخدم query_expenses مع description ثم احسب الناتج من الصفوف. لا تخترع مشروعًا اسمه الفئة.
 - إذا كانت الرسالة تسأل "محمد أخد مني كام؟"، نفّذ find_person ثم get_person_expense_total.
 - إذا كان اسم المشروع أو الشخص يطابق أكثر من كيان، لا تختار أي نتيجة عشوائيًا؛ اسأل المستخدم، إلا إذا كان السياق السابق يحتوي على اختيار واضح.
@@ -1379,6 +1415,69 @@ function parseJsonObject(value: string | undefined): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+function parseRetryAfter(value: string | null): number | undefined {
+  if (!value) return undefined;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds);
+  const date = Date.parse(value);
+  if (!Number.isFinite(date)) return undefined;
+  return Math.max(0, Math.ceil((date - Date.now()) / 1000));
+}
+
+function createGatewayMetrics(): GatewayRequestMetrics {
+  return {
+    logicalLlmCalls: 0,
+    httpAttempts: 0,
+    httpAttemptsByProvider: {},
+    retryCount: 0,
+    providerFallbackAttempts: 0,
+    modelFallbackAttempts: 0,
+    requestBytesByProvider: {},
+    maxRequestBytes: 0,
+    systemPromptChars: 0,
+    toolDefinitionsChars: 0,
+    toolDefinitionsCount: phase2Tools.length,
+    maxConversationChars: 0,
+  };
+}
+
+function recordProviderRequest(
+  context: GatewayCallContext,
+  provider: ProviderName,
+  payload: {
+    requestBytes: number;
+    systemPromptChars: number;
+    toolDefinitionsChars: number;
+    toolDefinitionsCount: number;
+    conversationChars: number;
+  },
+): void {
+  const metrics = context.metrics;
+  if (!metrics) return;
+  if (metrics.httpAttempts >= MAX_PROVIDER_HTTP_ATTEMPTS) {
+    throw new SecretaryError("The provider request budget was exhausted.", {
+      status: 503,
+      category: "provider_unavailable",
+      code: "PROVIDER_HTTP_ATTEMPT_BUDGET_EXCEEDED",
+      retryable: false,
+      provider,
+    });
+  }
+  metrics.httpAttempts += 1;
+  metrics.httpAttemptsByProvider[provider] = (metrics.httpAttemptsByProvider[provider] ?? 0) + 1;
+  metrics.requestBytesByProvider[provider] = (metrics.requestBytesByProvider[provider] ?? 0) + payload.requestBytes;
+  metrics.maxRequestBytes = Math.max(metrics.maxRequestBytes, payload.requestBytes);
+  metrics.systemPromptChars = Math.max(metrics.systemPromptChars, payload.systemPromptChars);
+  metrics.toolDefinitionsChars = Math.max(metrics.toolDefinitionsChars, payload.toolDefinitionsChars);
+  metrics.toolDefinitionsCount = Math.max(metrics.toolDefinitionsCount, payload.toolDefinitionsCount);
+  metrics.maxConversationChars = Math.max(metrics.maxConversationChars, payload.conversationChars);
+}
+
+function compactToolResultForPrompt(toolResult: ToolResult): string {
+  const compact = compactActionForMemory({ toolResult: jsonSafe(toolResult) }) as { toolResult?: unknown } | undefined;
+  return JSON.stringify(compact?.toolResult ?? toolResult);
 }
 
 function toGeminiContents(messages: ConversationMessage[]): Array<{ role: string; parts: GeminiPart[] }> {
@@ -1492,20 +1591,43 @@ export class GeminiModelGateway implements ModelGateway {
 
   async generate(messages: ConversationMessage[], context: GatewayCallContext): Promise<GatewayResponse> {
     if (!this.apiKey) throw new Error("GEMINI_API_KEY is not configured.");
+    const systemText = `${systemInstruction}\n${requestGuidance}`;
+    const contents = toGeminiContents(messages);
+    const toolDefinitions = toGeminiTools();
+    const requestBody = JSON.stringify({
+      systemInstruction: { parts: [{ text: systemText }] },
+      contents,
+      tools: [{ functionDeclarations: toolDefinitions }],
+      toolConfig: { functionCallingConfig: { mode: "AUTO" } },
+      generationConfig: { temperature: 0.15, maxOutputTokens: 8192 },
+    });
     let lastError: Error | null = null;
     const models = this.model === GEMINI_FALLBACK_MODEL
       ? [this.model]
       : [this.model, GEMINI_FALLBACK_MODEL];
 
-    for (const model of models) {
+    for (const [modelIndex, model] of models.entries()) {
+      if (modelIndex > 0 && context.metrics) context.metrics.modelFallbackAttempts += 1;
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 25_000);
       const startedAt = Date.now();
+      recordProviderRequest(context, "gemini", {
+        requestBytes: Buffer.byteLength(requestBody),
+        systemPromptChars: systemText.length,
+        toolDefinitionsChars: JSON.stringify(toolDefinitions).length,
+        toolDefinitionsCount: toolDefinitions.length,
+        conversationChars: JSON.stringify(contents).length,
+      });
       logger.info({
         requestId: context.requestId,
         provider: this.provider,
         model,
         llmCall: context.callNumber,
+        requestBytes: Buffer.byteLength(requestBody),
+        systemPromptChars: systemText.length,
+        toolDefinitionsChars: JSON.stringify(toolDefinitions).length,
+        toolDefinitionsCount: toolDefinitions.length,
+        conversationChars: JSON.stringify(contents).length,
       }, "agent llm call started");
       try {
         const response = await fetch(
@@ -1513,13 +1635,7 @@ export class GeminiModelGateway implements ModelGateway {
           {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              systemInstruction: { parts: [{ text: `${systemInstruction}\n${requestGuidance}` }] },
-              contents: toGeminiContents(messages),
-              tools: [{ functionDeclarations: toGeminiTools() }],
-              toolConfig: { functionCallingConfig: { mode: "AUTO" } },
-              generationConfig: { temperature: 0.15, maxOutputTokens: 8192 },
-            }),
+            body: requestBody,
             signal: controller.signal,
           },
         );
@@ -1550,17 +1666,28 @@ export class GeminiModelGateway implements ModelGateway {
           }, "agent llm call completed");
           return responseResult;
         }
-        lastError = providerResponseError("gemini", response.status, raw);
+        lastError = providerResponseError(
+          "gemini",
+          response.status,
+          raw,
+          parseRetryAfter(response.headers.get("retry-after")),
+        );
+        if (response.status === 429) throw lastError;
         if (![404, 429, 500, 502, 503, 504].includes(response.status)) throw lastError;
       } catch (error) {
         lastError = error instanceof SecretaryError
           ? error
           : providerExceptionError("gemini", error);
         logLlmFailure("gemini", model, context, 1, lastError);
+        if (lastError instanceof SecretaryError
+          && (lastError.code === "PROVIDER_RATE_LIMIT"
+            || lastError.code === "PROVIDER_HTTP_ATTEMPT_BUDGET_EXCEEDED")) break;
       } finally {
         clearTimeout(timeout);
       }
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      if (modelIndex < models.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
     }
     throw lastError ?? new Error("Gemini request failed.");
   }
@@ -1577,6 +1704,7 @@ export class GroqModelGateway implements ModelGateway {
 
   async generate(messages: ConversationMessage[], context: GatewayCallContext): Promise<GatewayResponse> {
     if (!this.apiKey) throw new Error("GROQ_API_KEY is not configured.");
+    const tools = toOpenAiTools();
     const apiMessages = [
       {
         role: "system",
@@ -1605,8 +1733,26 @@ export class GroqModelGateway implements ModelGateway {
         return { role: "user", content: message.text ?? "" };
       }),
     ];
+    const requestBody = JSON.stringify({
+      model: this.model,
+      messages: apiMessages,
+      tools,
+      tool_choice: "auto",
+      reasoning_effort: "low",
+      include_reasoning: false,
+      temperature: 0.15,
+      max_tokens: 2048,
+    });
+    const systemText = `${systemInstruction}\n${requestGuidance}`;
+    recordProviderRequest(context, "groq", {
+      requestBytes: Buffer.byteLength(requestBody),
+      systemPromptChars: systemText.length,
+      toolDefinitionsChars: JSON.stringify(tools).length,
+      toolDefinitionsCount: tools.length,
+      conversationChars: JSON.stringify(apiMessages.slice(1)).length,
+    });
     let lastError: Error | null = null;
-    for (let attempt = 0; attempt < 2; attempt += 1) {
+    for (let attempt = 0; attempt < MAX_GROQ_HTTP_ATTEMPTS; attempt += 1) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 25_000);
       const startedAt = Date.now();
@@ -1616,6 +1762,11 @@ export class GroqModelGateway implements ModelGateway {
         model: this.model,
         llmCall: context.callNumber,
         attempt: attempt + 1,
+        requestBytes: Buffer.byteLength(requestBody),
+        systemPromptChars: systemText.length,
+        toolDefinitionsChars: JSON.stringify(tools).length,
+        toolDefinitionsCount: tools.length,
+        conversationChars: JSON.stringify(apiMessages.slice(1)).length,
       }, "agent llm call started");
       try {
         const response = await fetch(GROQ_API_URL, {
@@ -1624,16 +1775,7 @@ export class GroqModelGateway implements ModelGateway {
             "content-type": "application/json",
             authorization: `Bearer ${this.apiKey}`,
           },
-          body: JSON.stringify({
-            model: this.model,
-            messages: apiMessages,
-            tools: toOpenAiTools(),
-            tool_choice: "auto",
-            reasoning_effort: "low",
-            include_reasoning: false,
-            temperature: 0.15,
-            max_tokens: 2048,
-          }),
+          body: requestBody,
           signal: controller.signal,
         });
         const raw = await response.text();
@@ -1671,19 +1813,26 @@ export class GroqModelGateway implements ModelGateway {
           }, "agent llm call completed");
           return responseResult;
         }
-        lastError = providerResponseError("groq", response.status, raw);
-        if (response.status !== 429 || attempt === 1) throw lastError;
-        const retryAfter = Number(response.headers.get("retry-after") ?? 1);
-        logger.warn({
-          requestId: context.requestId,
-          provider: this.provider,
-          model: this.model,
-          llmCall: context.callNumber,
-          attempt: attempt + 1,
-          retryAfterSeconds: retryAfter,
-          safeToRetry: true,
-        }, "agent llm rate limit retry");
-        await new Promise((resolve) => setTimeout(resolve, Math.min(Math.max(retryAfter * 1000, 500), 3_000)));
+        lastError = providerResponseError(
+          "groq",
+          response.status,
+          raw,
+          parseRetryAfter(response.headers.get("retry-after")),
+        );
+        if (response.status === 429) {
+          logger.warn({
+            requestId: context.requestId,
+            provider: this.provider,
+            model: this.model,
+            llmCall: context.callNumber,
+            attempt: attempt + 1,
+            retryAfterSeconds: lastError instanceof SecretaryError
+              ? lastError.retryAfterSeconds
+              : undefined,
+            safeToRetry: false,
+          }, "agent llm rate limit deferred to failover");
+        }
+        throw lastError;
       } catch (error) {
         lastError = error instanceof SecretaryError
           ? error
@@ -1720,6 +1869,7 @@ export class FailoverModelGateway implements ModelGateway {
   private readonly circuits = new Map<ProviderName, CircuitState>();
   private readonly requests = new Map<string, RequestProviderState>();
   private readonly traces = new Map<string, ProviderTrace>();
+  private readonly metrics = new Map<string, GatewayRequestMetrics>();
 
   constructor(
     private readonly gateways: Partial<Record<ProviderName, ModelGateway>>,
@@ -1748,18 +1898,28 @@ export class FailoverModelGateway implements ModelGateway {
     return this.circuit(provider).openUntil > Date.now();
   }
 
+  private circuitRetryAfterSeconds(provider: ProviderName): number | undefined {
+    const remainingMs = this.circuit(provider).openUntil - Date.now();
+    return remainingMs > 0 ? Math.ceil(remainingMs / 1000) : undefined;
+  }
+
   private markSuccess(provider: ProviderName): void {
     this.circuits.set(provider, { consecutiveFailures: 0, openUntil: 0 });
   }
 
-  private markTransientFailure(provider: ProviderName): void {
+  private markTransientFailure(provider: ProviderName, error: SecretaryError): void {
     const current = this.circuit(provider);
     const consecutiveFailures = current.consecutiveFailures + 1;
+    const providerCooldownMs = error.category === "provider_rate_limit" && error.retryAfterSeconds !== undefined
+      ? Math.min(Math.max(error.retryAfterSeconds * 1000, CIRCUIT_OPEN_MS), MAX_CIRCUIT_COOLDOWN_MS)
+      : undefined;
     this.circuits.set(provider, {
       consecutiveFailures,
-      openUntil: consecutiveFailures >= CIRCUIT_FAILURE_THRESHOLD
-        ? Date.now() + CIRCUIT_OPEN_MS
-        : current.openUntil,
+      openUntil: providerCooldownMs !== undefined
+        ? Date.now() + providerCooldownMs
+        : consecutiveFailures >= CIRCUIT_FAILURE_THRESHOLD
+          ? Date.now() + CIRCUIT_OPEN_MS
+          : current.openUntil,
     });
   }
 
@@ -1795,15 +1955,35 @@ export class FailoverModelGateway implements ModelGateway {
   }
 
   getTrace(requestId: string): ProviderTrace {
-    return this.trace(requestId);
+    const trace = this.trace(requestId);
+    const metrics = this.metrics.get(requestId);
+    return {
+      ...trace,
+      ...(metrics ? {
+        logicalLlmCalls: metrics.logicalLlmCalls,
+        httpAttempts: metrics.httpAttempts,
+        httpAttemptsByProvider: metrics.httpAttemptsByProvider,
+        retryCount: metrics.retryCount,
+        providerFallbackAttempts: metrics.providerFallbackAttempts,
+        modelFallbackAttempts: metrics.modelFallbackAttempts,
+        requestBytesByProvider: metrics.requestBytesByProvider,
+        maxRequestBytes: metrics.maxRequestBytes,
+        systemPromptChars: metrics.systemPromptChars,
+        toolDefinitionsChars: metrics.toolDefinitionsChars,
+        toolDefinitionsCount: metrics.toolDefinitionsCount,
+        maxConversationChars: metrics.maxConversationChars,
+      } : {}),
+    };
   }
 
   finishRequest(requestId: string): void {
     this.requests.delete(requestId);
     this.traces.delete(requestId);
+    this.metrics.delete(requestId);
   }
 
   async generate(messages: ConversationMessage[], context: GatewayCallContext): Promise<GatewayResponse> {
+    if (context.metrics) this.metrics.set(context.requestId, context.metrics);
     const request = this.requestState(context.requestId);
     const lockedProvider = request?.fallbackProvider;
     const preferredProviders = lockedProvider
@@ -1812,7 +1992,21 @@ export class FailoverModelGateway implements ModelGateway {
     const trace = this.trace(context.requestId);
     const candidates = preferredProviders.filter((provider) => this.gateways[provider]);
     const available = candidates.filter((provider) => !this.isCircuitOpen(provider));
-    const providersToTry = available.length > 0 ? available : candidates.slice(0, 1);
+    const providersToTry = available;
+    if (providersToTry.length === 0) {
+      const cooldownProvider = candidates[0];
+      const retryAfterSeconds = cooldownProvider
+        ? this.circuitRetryAfterSeconds(cooldownProvider)
+        : undefined;
+      throw new SecretaryError("All configured LLM providers are in cooldown.", {
+        status: 503,
+        category: "provider_unavailable",
+        code: "PROVIDER_COOLDOWN_ACTIVE",
+        retryable: true,
+        provider: cooldownProvider,
+        ...(retryAfterSeconds !== undefined ? { retryAfterSeconds } : {}),
+      });
+    }
     let primaryError = request?.primaryError;
 
     for (const [index, provider] of providersToTry.entries()) {
@@ -1822,6 +2016,7 @@ export class FailoverModelGateway implements ModelGateway {
         trace.fallbackOccurred = true;
         trace.fallbackReason = "circuit_open";
         trace.toolCallsExecutedBeforeFailure = context.toolCallsExecuted;
+        if (context.metrics) context.metrics.providerFallbackAttempts += 1;
         logger.warn({
           requestId: context.requestId,
           primaryProvider: this.order[0],
@@ -1847,7 +2042,7 @@ export class FailoverModelGateway implements ModelGateway {
           ? error
           : providerExceptionError(provider, error);
         if (!isTransientProviderFailure(classified)) throw classified;
-        this.markTransientFailure(provider);
+        this.markTransientFailure(provider, classified);
         trace.fallbackReason = classified.code;
         trace.toolCallsExecutedBeforeFailure = context.toolCallsExecuted;
         primaryError ??= classified;
@@ -1855,6 +2050,7 @@ export class FailoverModelGateway implements ModelGateway {
         const nextProvider = providersToTry[index + 1];
         if (nextProvider) {
           trace.fallbackOccurred = true;
+          if (context.metrics) context.metrics.providerFallbackAttempts += 1;
           this.requests.set(context.requestId, {
             fallbackProvider: nextProvider,
             ...(provider === this.order[0] ? { primaryError: classified } : {}),
@@ -2045,6 +2241,7 @@ export class Phase2AgentRuntime {
     ];
     let toolCalls = 0;
     let llmCalls = 0;
+    const metrics = createGatewayMetrics();
     let action: Record<string, unknown> | undefined;
     const toolHistory: ToolHistoryEntry[] = [];
     let conversationState: ConversationState = conversationMemory.state;
@@ -2118,11 +2315,21 @@ export class Phase2AgentRuntime {
 
     try {
       while (toolCalls < MAX_TOOL_CALLS) {
+        if (llmCalls >= MAX_LOGICAL_LLM_CALLS) {
+          throw new SecretaryError(`Agent stopped after ${MAX_LOGICAL_LLM_CALLS} logical LLM calls.`, {
+            status: 500,
+            category: "agent_error",
+            code: "AGENT_LLM_CALL_LIMIT",
+            retryable: false,
+          });
+        }
         llmCalls += 1;
+        metrics.logicalLlmCalls = llmCalls;
         const response = await this.gateway.generate(messages, {
           requestId,
           callNumber: llmCalls,
           toolCallsExecuted: toolCalls,
+          metrics,
         });
         if (response.toolCalls.length === 0) {
           return persistResult(finalResponseFromText(response.text, toolHistory));
@@ -2195,7 +2402,7 @@ export class Phase2AgentRuntime {
             role: "tool",
             toolCallId: call.id,
             toolName: call.name,
-            text: JSON.stringify(toolResult),
+            text: compactToolResultForPrompt(toolResult),
           });
         }
       }

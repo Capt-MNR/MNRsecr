@@ -19,7 +19,7 @@ export type ConversationMemorySnapshot = {
 
 export const RECENT_CONVERSATION_TURNS = 6;
 export const SUMMARY_TRIGGER_TURNS = 7;
-const SUMMARY_MAX_CHARS = 5000;
+const SUMMARY_MAX_CHARS = 3200;
 const MEMORY_VALUE_MAX_CHARS = 320;
 const STATE_MARKER = "\n[حالة المحادثة المنظمة]\n";
 

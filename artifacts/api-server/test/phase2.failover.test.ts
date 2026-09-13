@@ -17,6 +17,7 @@ import {
   toOpenAiSchema,
   type ConversationMessage,
   type GatewayCallContext,
+  type GatewayRequestMetrics,
   type GatewayResponse,
   type ModelGateway,
   type ProviderName,
@@ -171,6 +172,55 @@ test("Gemini and Groq adapters independently normalize provider tool responses",
     globalThis.fetch = previousFetch;
     if (previousGeminiKey === undefined) delete process.env.GEMINI_API_KEY;
     else process.env.GEMINI_API_KEY = previousGeminiKey;
+    if (previousGroqKey === undefined) delete process.env.GROQ_API_KEY;
+    else process.env.GROQ_API_KEY = previousGroqKey;
+  }
+});
+
+test("Groq does not repeat a long 429 cooldown and records the real retry-after", async () => {
+  const previousFetch = globalThis.fetch;
+  const previousGroqKey = process.env.GROQ_API_KEY;
+  let requestCount = 0;
+  try {
+    process.env.GROQ_API_KEY = "test-groq-key";
+    globalThis.fetch = async () => {
+      requestCount += 1;
+      return new Response(JSON.stringify({ error: { message: "rate limited" } }), {
+        status: 429,
+        headers: { "content-type": "application/json", "retry-after": "447" },
+      });
+    };
+    const metrics: GatewayRequestMetrics = {
+      logicalLlmCalls: 1,
+      httpAttempts: 0,
+      httpAttemptsByProvider: {},
+      retryCount: 0,
+      providerFallbackAttempts: 0,
+      modelFallbackAttempts: 0,
+      requestBytesByProvider: {},
+      maxRequestBytes: 0,
+      systemPromptChars: 0,
+      toolDefinitionsChars: 0,
+      toolDefinitionsCount: 0,
+      maxConversationChars: 0,
+    };
+
+    await assert.rejects(
+      () => new GroqModelGateway().generate([], {
+        requestId: "groq-rate-limit-request",
+        callNumber: 1,
+        toolCallsExecuted: 0,
+        metrics,
+      }),
+      (error: unknown) => error instanceof SecretaryError
+        && error.code === "PROVIDER_RATE_LIMIT"
+        && error.retryAfterSeconds === 447,
+    );
+    assert.equal(requestCount, 1);
+    assert.equal(metrics.httpAttempts, 1);
+    assert.equal(metrics.retryCount, 0);
+  } finally {
+    globalThis.fetch = previousFetch;
     if (previousGroqKey === undefined) delete process.env.GROQ_API_KEY;
     else process.env.GROQ_API_KEY = previousGroqKey;
   }

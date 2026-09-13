@@ -20,6 +20,7 @@ export type ApiErrorOptions = {
   provider?: string;
   upstreamStatus?: number;
   providerError?: string;
+  retryAfterSeconds?: number;
   toolName?: string;
   cause?: unknown;
 };
@@ -32,6 +33,7 @@ export class SecretaryError extends Error {
   readonly provider?: string;
   readonly upstreamStatus?: number;
   readonly providerError?: string;
+  readonly retryAfterSeconds?: number;
   readonly toolName?: string;
 
   constructor(message: string, options: ApiErrorOptions) {
@@ -45,6 +47,7 @@ export class SecretaryError extends Error {
     this.provider = options.provider;
     this.upstreamStatus = options.upstreamStatus;
     this.providerError = options.providerError;
+    this.retryAfterSeconds = options.retryAfterSeconds;
     this.toolName = options.toolName;
   }
 }
@@ -61,6 +64,7 @@ export function providerResponseError(
   provider: string,
   upstreamStatus: number,
   providerError: string,
+  retryAfterSeconds?: number,
 ): SecretaryError {
   if (upstreamStatus === 429) {
     return new SecretaryError("The configured provider rate limit was reached.", {
@@ -71,6 +75,7 @@ export function providerResponseError(
       provider,
       upstreamStatus,
       providerError: sanitizeProviderError(providerError),
+      ...(retryAfterSeconds !== undefined ? { retryAfterSeconds } : {}),
     });
   }
 
@@ -137,6 +142,9 @@ export function providerFailoverError(
     provider: fallbackProvider,
     upstreamStatus: fallbackError.upstreamStatus,
     providerError: sanitizeProviderError(`${primaryDetail}; ${fallbackDetail}`),
+    ...(fallbackError.retryAfterSeconds !== undefined
+      ? { retryAfterSeconds: fallbackError.retryAfterSeconds }
+      : {}),
     cause: fallbackError,
   });
 }
@@ -196,6 +204,7 @@ export function errorLogFields(error: SecretaryError): Record<string, unknown> {
     ...(error.provider ? { provider: error.provider } : {}),
     ...(error.upstreamStatus ? { upstreamStatus: error.upstreamStatus } : {}),
     ...(error.providerError ? { providerError: error.providerError } : {}),
+    ...(error.retryAfterSeconds !== undefined ? { retryAfterSeconds: error.retryAfterSeconds } : {}),
     ...(error.toolName ? { toolName: error.toolName } : {}),
     ...(causeMessage ? { cause: causeMessage } : {}),
   };
