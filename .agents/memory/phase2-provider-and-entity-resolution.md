@@ -31,6 +31,12 @@ The runtime uses a failover gateway above the independent Gemini and Groq adapte
 
 **How to apply:** Fail over only classified transient provider failures (429, timeout, unavailable, or transient 5xx/request failures). Preserve non-transient validation, tool, permission, and logical model errors; preserve the original `SecretaryError` classification so HTTP status and retryability remain accurate.
 
+When more than two providers are configured, failover must advance monotonically through the configured order for the rest of the request; it must not return to a provider already rejected in that request.
+
+**Why:** A fallback provider can hit its own quota during a multi-call tool loop. Locking the request to only the first fallback turns a usable third provider into dead configuration.
+
+**How to apply:** Track the current provider index per request, preserve executed tool results, and continue only with later providers after a transient failure. Keep provider keys and availability separate from application success.
+
 Provider schema conversion must collapse nullable type unions only for the provider that cannot represent them; preserve schema arrays such as `required` unchanged.
 
 **Why:** Groq accepts OpenAI-style `["string", "null"]`, while Gemini rejects a union in `type`; treating every array as a union corrupts valid Gemini schema fields.
