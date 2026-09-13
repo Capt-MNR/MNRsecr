@@ -34,7 +34,11 @@ import {
 import {
   createPendingOperation,
 } from "./secretary-operations";
-import { isBroadExpenseReportRequest } from "./expense-report";
+import {
+  isBroadExpenseReportRequest,
+  isExpenseTotalCorrectionRequest,
+  isGlobalExpenseTotalRequest,
+} from "./expense-report";
 
 export type Phase2TurnInput = {
   message: string;
@@ -2639,7 +2643,15 @@ export class Phase2AgentRuntime {
       return result;
     };
 
-    if (isBroadExpenseReportRequest(input.message)) {
+    const recentExpenseTotalContext = conversationMemory.recentTurns.some((turn) =>
+      isGlobalExpenseTotalRequest(turn.userMessage)
+      || /(?:إجمالي|اجمالي|مجموع)\s+(?:المصروفات|المصاريف)/i.test(turn.assistantMessage),
+    );
+    const deterministicExpenseSummaryRequested = isBroadExpenseReportRequest(input.message)
+      || isGlobalExpenseTotalRequest(input.message)
+      || (isExpenseTotalCorrectionRequest(input.message) && recentExpenseTotalContext);
+
+    if (deterministicExpenseSummaryRequested) {
       const report = await executeStructuredTool(identity, "query_expenses", { limit: 50 }, {
         requestId,
         conversationId,

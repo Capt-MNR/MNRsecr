@@ -32,6 +32,10 @@ import {
   SecretaryError,
 } from "../src/lib/error-contract.ts";
 import type { Identity } from "../src/lib/secretary.ts";
+import {
+  isExpenseTotalCorrectionRequest,
+  isGlobalExpenseTotalRequest,
+} from "../src/lib/expense-report.ts";
 
 type GatewayCall = {
   messages: ConversationMessage[];
@@ -351,6 +355,13 @@ test("tool scope classification keeps common requests bounded and ambiguous requ
   const ambiguousScope = classifyToolScope("اعمل مشروع جديد وفكرني بكرة أراجعه");
   assert.equal(ambiguousScope.name, "full");
   assert.equal(ambiguousScope.allowedToolNames.size, 29);
+});
+
+test("global expense totals and zero corrections use the deterministic report path", () => {
+  assert.equal(isGlobalExpenseTotalRequest("اجمالي المصروفات كام؟"), true);
+  assert.equal(isGlobalExpenseTotalRequest("إجمالي مصروفات المشروع"), false);
+  assert.equal(isExpenseTotalCorrectionRequest("اعتقد فيه صفر زيادة"), true);
+  assert.equal(isExpenseTotalCorrectionRequest("عدّل وصف المصروف"), false);
 });
 
 test("all provider tool builders use the same scoped tool subset", async () => {
