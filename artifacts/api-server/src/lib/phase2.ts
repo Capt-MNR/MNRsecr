@@ -130,6 +130,7 @@ export type GatewayCallContext = {
   callNumber: number;
   toolCallsExecuted: number;
   toolScope?: ToolScope;
+  finalResponseOnly?: boolean;
   metrics?: GatewayRequestMetrics;
 };
 
@@ -619,7 +620,13 @@ export function classifyToolScope(message: string): ToolScope {
   return fullToolScope();
 }
 
-function scopedToolDefinitions(scope: ToolScope | undefined): ToolDefinition[] {
+function scopedToolDefinitions(
+  scope: ToolScope | undefined,
+  finalResponseOnly = false,
+): ToolDefinition[] {
+  if (finalResponseOnly) {
+    return phase2Tools.filter((definition) => definition.name === "final_response");
+  }
   if (!scope || scope.isFull) return phase2Tools;
   return phase2Tools.filter((definition) => scope.allowedToolNames.has(definition.name));
 }
@@ -1702,8 +1709,8 @@ export function toGeminiSchema(value: unknown): unknown {
   );
 }
 
-function toOpenAiTools(scope?: ToolScope) {
-  return scopedToolDefinitions(scope).map((definition) => ({
+function toOpenAiTools(scope?: ToolScope, finalResponseOnly = false) {
+  return scopedToolDefinitions(scope, finalResponseOnly).map((definition) => ({
     type: "function",
     function: {
       name: definition.name,
@@ -1713,8 +1720,8 @@ function toOpenAiTools(scope?: ToolScope) {
   }));
 }
 
-function toCohereTools(scope?: ToolScope) {
-  return scopedToolDefinitions(scope).map((definition) => ({
+function toCohereTools(scope?: ToolScope, finalResponseOnly = false) {
+  return scopedToolDefinitions(scope, finalResponseOnly).map((definition) => ({
     type: "function",
     function: {
       name: definition.name,
@@ -1724,8 +1731,8 @@ function toCohereTools(scope?: ToolScope) {
   }));
 }
 
-function toGeminiTools(scope?: ToolScope) {
-  return scopedToolDefinitions(scope).map((definition) => ({
+function toGeminiTools(scope?: ToolScope, finalResponseOnly = false) {
+  return scopedToolDefinitions(scope, finalResponseOnly).map((definition) => ({
     ...definition,
     parameters: toGeminiSchema(definition.parameters),
   }));
@@ -1745,7 +1752,7 @@ export class GeminiModelGateway implements ModelGateway {
     if (!this.apiKey) throw new Error("GEMINI_API_KEY is not configured.");
     const systemText = `${systemInstruction}\n${requestGuidance}`;
     const contents = toGeminiContents(messages);
-    const toolDefinitions = toGeminiTools(context.toolScope);
+    const toolDefinitions = toGeminiTools(context.toolScope, context.finalResponseOnly);
     const requestBody = JSON.stringify({
       systemInstruction: { parts: [{ text: systemText }] },
       contents,
@@ -1856,7 +1863,7 @@ export class GroqModelGateway implements ModelGateway {
 
   async generate(messages: ConversationMessage[], context: GatewayCallContext): Promise<GatewayResponse> {
     if (!this.apiKey) throw new Error("GROQ_API_KEY is not configured.");
-    const tools = toOpenAiTools(context.toolScope);
+    const tools = toOpenAiTools(context.toolScope, context.finalResponseOnly);
     const apiMessages = [
       {
         role: "system",
@@ -2012,7 +2019,7 @@ export class MistralModelGateway implements ModelGateway {
 
   async generate(messages: ConversationMessage[], context: GatewayCallContext): Promise<GatewayResponse> {
     if (!this.apiKey) throw new Error("MISTRAL_API_KEY is not configured.");
-    const tools = toOpenAiTools(context.toolScope);
+    const tools = toOpenAiTools(context.toolScope, context.finalResponseOnly);
     const apiMessages = [
       {
         role: "system",
@@ -2500,6 +2507,44 @@ function recoveryResponseAfterSuccessfulWrite(history: ToolHistoryEntry[]): Fina
   };
 }
 
+function recoveryResponseAfterToolLimit(history: ToolHistoryEntry[]): FinalResponse {
+  const lastSuccessful = [...history]
+    .reverse()
+    .find((entry) => entry.result.ok);
+  if (lastSuccessful?.name === "query_expenses") {
+    const summary = lastSuccessful.result.summary && typeof lastSuccessful.result.summary === "object"
+      ? lastSuccessful.result.summary as {
+          count?: unknown;
+          totalMinor?: unknown;
+          currency?: unknown;
+        }
+      : {};
+    const count = typeof summary.count === "number" ? summary.count : 0;
+    const totalMinor = typeof summary.totalMinor === "number" ? summary.totalMinor : 0;
+    const currency = typeof summary.currency === "string" ? summary.currency : "EGP";
+    const amount = new Intl.NumberFormat("ar-EG", {
+      style: "currency",
+      currency,
+    }).format(totalMinor / 100);
+    return safeFinalResponse(
+      "answer",
+      count === 0
+        ? "راجعت المصروفات المحفوظة، ولا توجد نتائج مطابقة."
+        : `راجعت المصروفات المحفوظة ووجدت ${count} مصروف بإجمالي ${amount}.`,
+      history,
+      [
+        { type: "money", value: totalMinor, currency, label: "إجمالي المصروفات" },
+        { type: "count", value: count, label: "عدد المصروفات" },
+      ],
+    );
+  }
+
+  return {
+    kind: "answer",
+    message: "راجعت البيانات المحفوظة، لكن احتاج الطلب خطوة إضافية لإكمال الرد. لم يتم تغيير أي بيانات.",
+  };
+}
+
 async function loadIdempotent(identity: Identity, key: string): Promise<Phase2TurnResult | null> {
   const [record] = await db.select().from(idempotencyRecordsTable).where(and(
     identityWhere(identity, idempotencyRecordsTable),
@@ -2544,6 +2589,7 @@ export class Phase2AgentRuntime {
     const metrics = createGatewayMetrics();
     let action: Record<string, unknown> | undefined;
     const toolHistory: ToolHistoryEntry[] = [];
+    let finalizationAttempted = false;
     let conversationState: ConversationState = conversationMemory.state;
 
     const persistResult = async (finalResponse: FinalResponse): Promise<Phase2TurnResult> => {
@@ -2616,6 +2662,43 @@ export class Phase2AgentRuntime {
     try {
       while (toolCalls < MAX_TOOL_CALLS) {
         if (llmCalls >= MAX_LOGICAL_LLM_CALLS) {
+          if (!finalizationAttempted && toolHistory.length > 0) {
+            finalizationAttempted = true;
+            messages.push({
+              role: "user",
+              text: "استخدم النتائج التي جُمعت حتى الآن وأرسل final_response فقط. لا تستدعِ أي أداة أخرى ولا تذكر تفاصيل النظام.",
+            });
+            llmCalls += 1;
+            metrics.logicalLlmCalls = llmCalls;
+            try {
+              const finalization = await this.gateway.generate(messages, {
+                requestId,
+                callNumber: llmCalls,
+                toolCallsExecuted: toolCalls,
+                toolScope: activeToolScope,
+                finalResponseOnly: true,
+                metrics,
+              });
+              const finalCall = finalization.toolCalls.find((call) => call.name === "final_response");
+              if (finalCall) {
+                return persistResult(finalResponseFromArgs(finalCall.args, toolHistory));
+              }
+              if (finalization.text.trim()) {
+                return persistResult(finalResponseFromText(finalization.text, toolHistory));
+              }
+              return persistResult(recoveryResponseAfterToolLimit(toolHistory));
+            } catch (error) {
+              logger.warn({
+                requestId,
+                errorCode: error instanceof SecretaryError ? error.code : "FINALIZATION_FAILED",
+                toolCalls,
+                llmCalls,
+              }, "agent finalization after call limit failed");
+              const recovered = recoveryResponseAfterSuccessfulWrite(toolHistory)
+                ?? recoveryResponseAfterToolLimit(toolHistory);
+              return persistResult(recovered);
+            }
+          }
           throw new SecretaryError(`Agent stopped after ${MAX_LOGICAL_LLM_CALLS} logical LLM calls.`, {
             status: 500,
             category: "agent_error",
@@ -2750,7 +2833,7 @@ export class CohereModelGateway implements ModelGateway {
 
   async generate(messages: ConversationMessage[], context: GatewayCallContext): Promise<GatewayResponse> {
     if (!this.apiKey) throw new Error("COHERE_API_KEY is not configured.");
-    const tools = toCohereTools(context.toolScope);
+    const tools = toCohereTools(context.toolScope, context.finalResponseOnly);
     const apiMessages = [
       {
         role: "system",

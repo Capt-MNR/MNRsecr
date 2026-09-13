@@ -467,6 +467,27 @@ test("an out-of-scope tool call widens the scope for the rest of the request", a
   assert.equal(provider.calls.length, 2);
 });
 
+test("finalizes with the collected tool results after the logical call budget", async () => {
+  const provider = new ScriptedProvider("gemini", (call, callNumber) => {
+    if (callNumber <= 4) {
+      return toolCall("create_task", { title: `مهمة مؤقتة ${callNumber}` });
+    }
+    assert.equal(call.context.finalResponseOnly, true);
+    assert.equal(call.context.toolCallsExecuted, 4);
+    return finalResponse("راجعت البيانات وأكملت الرد.");
+  });
+  const result = await new Phase2AgentRuntime(
+    new FailoverModelGateway({ gemini: provider }, ["gemini"]),
+  ).run(identity("call-limit-finalization"), {
+    message: "إيه عندي النهارده؟",
+    requestId: "call-limit-finalization-request",
+  }, { dryRun: true });
+
+  assert.equal(result.response?.message, "راجعت البيانات وأكملت الرد.");
+  assert.equal(result.action?.llmCalls, 5);
+  assert.equal(provider.calls.length, 5);
+});
+
 test("429, timeout, and unavailable primary providers fail over without changing the request", async () => {
   const cases = [
     ["rate-limit", providerResponseError("gemini", 429, "rate limited")],
