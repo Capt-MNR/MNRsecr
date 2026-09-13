@@ -1,0 +1,537 @@
+We are implementing PHASE 1 ONLY of the stabilization/audit fixes for the Personal AI Secretary.
+
+I want you to make code changes, but keep the scope extremely strict.
+
+CRITICAL SCOPE RULE
+
+Implement ONLY these two areas:
+
+1. User approval before write operations
+2. Strong idempotency / duplicate-write protection
+
+Do NOT modify or refactor:
+
+- Authentication / identity
+- Provider configuration
+- Groq/Gemini models
+- Failover architecture
+- Conversation memory
+- Tool schemas unless strictly required for approval
+- Tool routing architecture unless strictly required
+- Undo
+- Optimistic concurrency
+- Records dependency logic
+- UI redesign
+- Database schema unrelated to these two requirements
+- Any unrelated code
+
+Do not "clean up" unrelated issues.
+
+Before changing anything, inspect the current implementation and identify the smallest safe integration points.
+
+---
+
+PART 1 — WRITE APPROVAL
+
+Current problem
+
+The audit found that there are 20 write tools:
+
+- create_person
+- update_person
+- delete_person
+- create_project
+- update_project
+- delete_project
+- link_person_to_project
+- update_person_project_relationship
+- record_expense
+- update_expense
+- delete_expense
+- create_task
+- update_task
+- delete_task
+- create_commitment
+- update_commitment
+- delete_commitment
+- create_reminder
+- update_reminder
+- delete_reminder
+
+Currently the LLM can execute these directly without explicit user approval.
+
+This violates a core product requirement:
+
+The agent must NEVER execute a write action without the user's explicit permission for that specific action.
+
+Required behavior
+
+When the LLM decides that a write operation is needed:
+
+1. The write MUST NOT execute immediately.
+2. The system must create a pending approval/action request.
+3. The API must return enough structured information for the frontend to show the user what will happen.
+4. The user must explicitly approve that specific pending action.
+5. Only after approval may the actual write tool execute.
+6. The approval must be bound to the exact pending action, not just a generic conversation-level "yes".
+7. If the user rejects/cancels it, the write must never execute.
+8. A stale, already-approved, already-rejected, or already-consumed approval must not execute the action again.
+9. Approval must be scoped to the authenticated/current tenant and user context already used by the application.
+10. Never trust an action payload supplied by the frontend without validating it against the stored pending action.
+
+Important security rule
+
+The frontend should NOT be able to say:
+
+"approve this arbitrary create/update/delete payload"
+
+and have the server execute it.
+
+Instead:
+
+- server creates a pending action
+- server stores the exact action/tool/arguments
+- frontend receives only the pending action identifier and display information
+- approval endpoint references the pending action
+- server loads the stored action
+- server verifies ownership/scope/status
+- server executes exactly the stored action
+
+The client must not be able to modify the tool name or arguments during approval.
+
+Approval UI
+
+Use the existing frontend architecture and styling.
+
+Do NOT redesign the application.
+
+Add the smallest possible UI needed to make approval usable.
+
+The user should be able to clearly see:
+
+- what action will happen
+- relevant record/entity
+- important values/changes
+- Approve
+- Cancel/Reject
+
+For example, for an expense:
+
+"Record expense: 11,500 EGP — Company — Finishing"
+
+The exact presentation should follow the existing UI conventions.
+
+Important UX requirement
+
+Do not require approval for read-only tools.
+
+Read-only tools should continue working normally.
+
+Only actual state-changing operations require approval.
+
+Do not classify an operation as read-only merely because it has "update" in its name. Use the actual tool classification.
+
+Conversational behavior
+
+If the user says something like:
+
+"سجل مصروف 11500 جنيه تشطيبات للشركة"
+
+the agent should NOT silently write it.
+
+It should reach a pending approval state and ask for confirmation.
+
+If the user approves:
+
+"موافق"
+
+the server should execute the previously stored pending action.
+
+If the user says:
+
+"لا"
+
+the pending action should be rejected and must never execute.
+
+Do not rely solely on the LLM understanding "موافق" as permission. The approval must be enforced server-side.
+
+Prevent approval replay
+
+Once an approval is consumed:
+
+- approving the same pending action again must not execute another write
+- refreshing the page must not execute it again
+- repeating the approval request must not execute it again
+
+The action should have an explicit lifecycle/status such as:
+
+pending
+approved/executing
+completed
+rejected
+expired
+failed
+
+Use the simplest safe state model compatible with the existing architecture.
+
+---
+
+PART 2 — IDEMPOTENCY / DUPLICATE WRITE PROTECTION
+
+Current problem
+
+The audit found this serious scenario:
+
+Request A:
+
+- idempotencyKey = key-A
+- write executes
+- final response fails or browser times out
+
+User retries.
+
+Request B:
+
+- idempotencyKey = key-B
+- server sees a new key
+- write may execute again
+
+This can create duplicate expenses, people, tasks, reminders, etc.
+
+We need to eliminate this risk.
+
+Required behavior
+
+A browser/network timeout must NOT allow the same logical user action to create a duplicate write merely because the frontend generated a new idempotency key.
+
+However, do NOT guess at semantic equality using arbitrary text.
+
+Use the application's existing turn/request/action model wherever possible.
+
+The safest design is to make the actual approved action itself durable and uniquely executable.
+
+Important principle
+
+The approval action should become the durable unit of execution.
+
+Once a specific pending action is approved:
+
+- it gets a stable action/operation ID
+- execution is associated with that operation ID
+- retries of the same operation must return the existing result/status
+- the write must execute at most once
+
+Do NOT depend exclusively on the browser-generated idempotency key.
+
+Atomicity
+
+The current implementation apparently does:
+
+load idempotency key
+→ execute
+→ save result
+
+which is vulnerable to concurrent requests.
+
+Fix this.
+
+Two concurrent requests for the same operation must NOT both execute the write.
+
+Use an atomic database mechanism compatible with the existing database:
+
+- unique constraint
+- insert-if-not-exists
+- transaction
+- row lock
+- or equivalent
+
+Choose the smallest safe mechanism supported by the existing stack.
+
+Do NOT introduce Redis or a new external dependency just for this.
+
+Write operation identity
+
+Create a stable operation/action identifier at the point where the pending write action is created.
+
+That identifier must survive:
+
+- frontend retry
+- HTTP timeout
+- provider fallback
+- repeated approval request
+- page refresh
+
+The operation must not get a new identity just because the HTTP request is retried.
+
+Provider failure scenario
+
+We specifically need to protect this sequence:
+
+LLM requests write
+→ user approves
+→ write executes successfully
+→ final LLM response fails
+→ browser sees timeout/5xx
+→ user retries
+
+The retry must NOT execute the write again.
+
+If the original operation already completed, the retry should recover the existing operation result/status.
+
+Important
+
+Do NOT attempt to solve duplicate writes by simply changing:
+
+crypto.randomUUID()
+
+to another UUID.
+
+The problem is the logical operation identity, not UUID quality.
+
+---
+
+PART 3 — INTERACTION BETWEEN APPROVAL AND IDEMPOTENCY
+
+These two systems must work together.
+
+Required lifecycle:
+
+User request
+→ LLM determines a write is needed
+→ pending action created with stable operation ID
+→ user sees approval request
+→ user approves
+→ server atomically claims operation
+→ write executes exactly once
+→ result stored
+→ operation marked completed
+→ result returned
+
+If the network fails after execution:
+
+retry
+→ same operation ID
+→ server finds completed operation
+→ return stored result
+→ DO NOT execute write again
+
+If two approval requests arrive simultaneously:
+
+request A + request B
+→ only one can claim the operation
+→ only one executes the write
+→ other request receives current operation status/result
+→ no duplicate write
+
+---
+
+PART 4 — DATABASE CHANGES
+
+Before modifying the database schema:
+
+1. Inspect the existing schema/migrations.
+2. Reuse existing tables if a safe mechanism already exists.
+3. Only add a new table/columns if necessary.
+4. Keep migrations reversible where the existing migration system supports that.
+5. Do not alter existing business records unnecessarily.
+
+If a new table is necessary, it should conceptually contain:
+
+- operation/action ID
+- tenant ID
+- user/owner ID
+- conversation/turn reference if available
+- action/tool name
+- immutable action arguments
+- status
+- created timestamp
+- approved timestamp if applicable
+- completed timestamp if applicable
+- result/error information
+- expiry information if needed
+
+Use the existing project's naming conventions and database technology.
+
+Do not blindly create this exact schema if an existing structure can safely provide the same guarantees.
+
+---
+
+PART 5 — ERROR HANDLING
+
+Handle these states explicitly:
+
+Pending
+
+Action exists but user has not approved it.
+
+Rejected
+
+User explicitly rejected it.
+
+Approved / Executing
+
+The operation has been claimed for execution.
+
+Completed
+
+Write succeeded and result is stored.
+
+Failed
+
+Write was attempted but failed.
+
+Expired
+
+Optional, if the existing architecture supports expiration safely.
+
+Important:
+
+A failed operation must not silently become executable again in a way that can duplicate a partially successful write.
+
+If a write can partially succeed, inspect the existing tools and database behavior and make the safest minimal decision.
+
+---
+
+PART 6 — TESTS
+
+This part is mandatory.
+
+Add or update tests specifically for Phase 1.
+
+At minimum test:
+
+Approval
+
+1. Read-only tool executes without approval.
+2. Write tool creates pending action and does NOT execute.
+3. Pending action can be approved.
+4. Approved action executes.
+5. Rejected action does not execute.
+6. Same approval cannot execute the action twice.
+7. User cannot approve another user's/tenant's pending action.
+8. Frontend cannot modify the stored tool arguments through the approval request.
+9. Expired/consumed approval cannot execute again.
+
+Idempotency
+
+10. Same operation retried after success does not execute twice.
+11. Same operation retried after simulated HTTP/network failure does not execute twice.
+12. Two concurrent approvals for the same operation result in exactly ONE write.
+13. A final-response failure after a successful write does not cause a duplicate on retry.
+14. Provider failover does not cause the write to execute twice.
+15. Reusing the same browser request should recover the stored result/status.
+
+Regression
+
+16. Existing read-only conversation flows still work.
+17. Existing record edit/delete routes still work.
+18. Existing tenant/owner predicates remain intact.
+19. Existing failover tests remain passing.
+20. Existing test suite remains passing.
+
+Use the project's correct test runner ("tsx" or whatever the workspace currently uses). Do NOT rely on the failing direct Node 24 TypeScript command identified in the audit.
+
+---
+
+PART 7 — MANUAL VERIFICATION
+
+After implementation, perform a small manual/integration verification if the environment allows it.
+
+Verify this exact scenario:
+
+1. User asks to record a new expense.
+2. No database write occurs before approval.
+3. Approval appears.
+4. User approves.
+5. Exactly one expense is created.
+6. Simulate/reproduce a response failure after the write if possible.
+7. Retry/recover the operation.
+8. Confirm there is still exactly one expense.
+
+Also verify:
+
+- read-only question does not trigger approval
+- rejected write creates no record
+
+---
+
+PART 8 — DO NOT FIX THESE YET
+
+The previous audit identified other issues, but they are intentionally OUT OF SCOPE for this task:
+
+- Production authentication
+- Groq TPD/rate-limit situation
+- Gemini 503 stability
+- Gemini → Groq live failover test
+- Live provider contract tests
+- Sending fewer than 29 tools
+- Prompt/memory optimization
+- Token instrumentation
+- Optimistic concurrency for normal record updates
+- Undo TOCTOU
+- Transactional dependency checks
+- Conversation deletion semantics
+- Test runner cleanup
+
+Do NOT modify these in this phase.
+
+If you discover that one of them is technically blocking the approval/idempotency implementation, STOP and report it rather than silently expanding scope.
+
+---
+
+PART 9 — SAFETY / CHANGE DISCIPLINE
+
+Before editing:
+
+1. Inspect the current architecture.
+2. Identify exact files that need modification.
+3. Make the smallest safe changes.
+4. Preserve all existing working behavior.
+5. Do not rewrite the agent/runtime architecture.
+6. Do not change provider behavior.
+7. Do not change authentication.
+8. Do not introduce unnecessary dependencies.
+9. Do not modify secrets.
+10. Do not modify unrelated workflows.
+
+After editing:
+
+- run the relevant tests
+- run the full existing test suite
+- report exactly which files were changed
+- report database migrations added
+- report tests added/changed
+- report test results
+- report any remaining known limitations
+
+VERY IMPORTANT
+
+Do not tell me that the system is "production ready" merely because tests pass.
+
+At the end, give me a concise report with:
+
+Changed
+
+Exact files and purpose.
+
+Approval
+
+How write approval is enforced server-side.
+
+Idempotency
+
+How duplicate writes are prevented, including concurrent requests.
+
+Tests
+
+Passed / failed / skipped.
+
+Remaining risks
+
+Only risks still relevant after this implementation.
+
+Out of scope
+
+Confirm that Authentication, Provider optimization, Memory optimization, Undo, etc. were NOT modified.
+
+Do not make any changes outside Phase 1.
