@@ -21,9 +21,11 @@ import {
 import {
   getGetTodayContextQueryKey,
   getHealthCheckQueryKey,
+  useApproveSecretaryOperation,
   useCreateTurn,
   useGetTodayContext,
   useHealthCheck,
+  useRejectSecretaryOperation,
 } from '@workspace/api-client-react';
 import type { ConversationDetail } from '@workspace/api-client-react';
 import { classifySecretaryError } from '../lib/secretary-errors';
@@ -35,7 +37,14 @@ type LocalMessage = {
   text: string;
   time: string;
   meta?: string;
+  approval?: {
+    operationId: string;
+    title: string;
+    details: string[];
+    status: 'pending' | 'executing' | 'completed' | 'rejected' | 'expired' | 'failed';
+  };
 };
+type ApprovalStatus = NonNullable<LocalMessage['approval']>['status'];
 
 const starterMessage: LocalMessage = {
   id: 'welcome',
@@ -85,6 +94,21 @@ function EmptyLine({ children }: { children: string }) {
   return <p className="py-2 text-sm text-muted-foreground" data-testid="empty-context">{children}</p>;
 }
 
+function approvalFromAction(action: Record<string, unknown> | undefined): LocalMessage['approval'] | undefined {
+  if (!action || action.type !== 'approval_required' || typeof action.operationId !== 'string') return undefined;
+  const display = action.display && typeof action.display === 'object'
+    ? action.display as { title?: unknown; details?: unknown }
+    : {};
+  return {
+    operationId: action.operationId,
+    title: typeof display.title === 'string' ? display.title : 'تأكيد التغيير',
+    details: Array.isArray(display.details)
+      ? display.details.filter((detail): detail is string => typeof detail === 'string')
+      : [],
+    status: action.status === 'pending' ? 'pending' : 'pending',
+  };
+}
+
 function Home() {
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState('');
@@ -93,6 +117,7 @@ function Home() {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [selectedConversationId, setSelectedConversationId] = useState<string | undefined>();
   const [messages, setMessages] = useState<LocalMessage[]>([starterMessage]);
+  const [approvalError, setApprovalError] = useState<string | null>(null);
 
   const todayQuery = useGetTodayContext({
     query: {
@@ -108,6 +133,12 @@ function Home() {
     },
   });
   const createTurn = useCreateTurn({
+    request: { timeoutMs: 90_000 },
+  });
+  const approveOperation = useApproveSecretaryOperation({
+    request: { timeoutMs: 90_000 },
+  });
+  const rejectOperation = useRejectSecretaryOperation({
     request: { timeoutMs: 90_000 },
   });
   const context = todayQuery.data?.context;
@@ -177,8 +208,10 @@ function Home() {
       },
       {
         onSuccess: (response) => {
+          const approval = approvalFromAction(response.action);
           setConversationId(response.conversationId);
           setSelectedConversationId(response.conversationId);
+          setApprovalError(null);
           setMessages((current) => [
             ...current,
             {
@@ -187,11 +220,55 @@ function Home() {
               text: response.assistantMessage,
               time: formatTime(new Date().toISOString()),
               meta: response.provider ? `${response.provider} · ${response.model}` : 'سكرتيرك الخاص',
+              ...(approval ? { approval } : {}),
             },
           ]);
           queryClient.invalidateQueries({ queryKey: getGetTodayContextQueryKey() });
           queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
         },
+      },
+    );
+  }
+
+  function handleApprovalResponse(response: {
+    operationId: string;
+    status: ApprovalStatus;
+    assistantMessage: string;
+  }) {
+    setApprovalError(null);
+    setMessages((current) => current.map((message) => (
+      message.approval?.operationId === response.operationId
+        ? {
+            ...message,
+            text: response.assistantMessage,
+            approval: { ...message.approval, status: response.status },
+          }
+        : message
+    )));
+    queryClient.invalidateQueries({ queryKey: getGetTodayContextQueryKey() });
+    queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
+  }
+
+  function approve(operationId: string) {
+    if (approveOperation.isPending || rejectOperation.isPending) return;
+    setApprovalError(null);
+    approveOperation.mutate(
+      { operationId },
+      {
+        onSuccess: handleApprovalResponse,
+        onError: (error) => setApprovalError(classifySecretaryError(error)?.message ?? 'تعذر تنفيذ الموافقة.'),
+      },
+    );
+  }
+
+  function reject(operationId: string) {
+    if (approveOperation.isPending || rejectOperation.isPending) return;
+    setApprovalError(null);
+    rejectOperation.mutate(
+      { operationId },
+      {
+        onSuccess: handleApprovalResponse,
+        onError: (error) => setApprovalError(classifySecretaryError(error)?.message ?? 'تعذر إلغاء العملية.'),
       },
     );
   }
@@ -336,6 +413,55 @@ function Home() {
                           <span>{message.time}</span>
                           {message.meta && <><span>·</span><span>{message.meta}</span></>}
                         </div>
+                        {message.approval && (
+                          <div
+                            className="mt-3 rounded-2xl border border-primary/20 bg-primary/5 p-3 text-right"
+                            data-testid={`approval-${message.approval.operationId}`}
+                          >
+                            <div className="flex items-start gap-2">
+                              <CircleAlert className="mt-0.5 size-4 shrink-0 text-primary" />
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-semibold text-foreground">{message.approval.title}</p>
+                                {message.approval.details.length > 0 && (
+                                  <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+                                    {message.approval.details.map((detail) => <li key={detail}>{detail}</li>)}
+                                  </ul>
+                                )}
+                              </div>
+                            </div>
+                            {message.approval.status === 'pending' ? (
+                              <div className="mt-3 flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => approve(message.approval!.operationId)}
+                                  disabled={approveOperation.isPending || rejectOperation.isPending}
+                                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-colors hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+                                  data-testid={`button-approve-${message.approval.operationId}`}
+                                >
+                                  {approveOperation.isPending ? <LoaderCircle className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+                                  موافق
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => reject(message.approval!.operationId)}
+                                  disabled={approveOperation.isPending || rejectOperation.isPending}
+                                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                                  data-testid={`button-reject-${message.approval.operationId}`}
+                                >
+                                  {rejectOperation.isPending ? <LoaderCircle className="size-3.5 animate-spin" /> : <X className="size-3.5" />}
+                                  إلغاء
+                                </button>
+                              </div>
+                            ) : (
+                              <p className="mt-2 text-xs font-medium text-muted-foreground">
+                                {message.approval.status === 'completed' ? 'تم التنفيذ.' : message.approval.status === 'rejected' ? 'تم الإلغاء.' : 'هذه العملية لم تعد قابلة للتنفيذ.'}
+                              </p>
+                            )}
+                            {approvalError && message.approval.status === 'pending' && (
+                              <p className="mt-2 text-xs text-destructive" role="alert">{approvalError}</p>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </article>
                   ))}

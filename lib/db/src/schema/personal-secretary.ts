@@ -179,6 +179,44 @@ export const idempotencyRecordsTable = pgTable(
   ],
 );
 
+export const secretaryOperationsTable = pgTable(
+  "secretary_operations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    conversationId: text("conversation_id"),
+    idempotencyKey: text("idempotency_key"),
+    toolName: text("tool_name").notNull(),
+    argumentsJson: text("arguments_json").notNull(),
+    displayJson: text("display_json").notNull(),
+    status: text("status").notNull().default("pending"),
+    resultJson: text("result_json"),
+    errorJson: text("error_json"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("secretary_operations_owner_status_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.status,
+    ),
+    index("secretary_operations_owner_conversation_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.conversationId,
+    ),
+    uniqueIndex("secretary_operations_owner_idempotency_unique").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.idempotencyKey,
+    ),
+  ],
+);
+
 export const conversationMemoryTable = pgTable(
   "conversation_memory",
   {
@@ -232,6 +270,7 @@ export type Task = typeof tasksTable.$inferSelect;
 export type ProjectPerson = typeof projectPeopleTable.$inferSelect;
 export type Commitment = typeof commitmentsTable.$inferSelect;
 export type ConversationMemory = typeof conversationMemoryTable.$inferSelect;
+export type SecretaryOperation = typeof secretaryOperationsTable.$inferSelect;
 export type InsertPerson = z.infer<typeof insertPersonSchema>;
 export type InsertProject = z.infer<typeof insertProjectSchema>;
 export type InsertExpense = z.infer<typeof insertExpenseSchema>;

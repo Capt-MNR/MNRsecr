@@ -89,6 +89,62 @@ export const CreateTurnResponse = zod.object({
 
 
 /**
+ * @summary Approve and execute one stored secretary operation
+ */
+export const ApproveSecretaryOperationParams = zod.object({
+  "operationId": zod.coerce.string().uuid()
+})
+
+export const ApproveSecretaryOperationResponse = zod.object({
+  "operationId": zod.string().uuid(),
+  "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
+  "conversationId": zod.string(),
+  "assistantMessage": zod.string(),
+  "action": zod.record(zod.string(), zod.unknown()).optional(),
+  "response": zod.object({
+  "kind": zod.enum(['answer', 'clarification', 'not_found', 'error']),
+  "message": zod.string(),
+  "groundedFacts": zod.array(zod.object({
+  "type": zod.enum(['money', 'count']),
+  "value": zod.number().int(),
+  "currency": zod.string().optional(),
+  "label": zod.string().optional()
+})).optional()
+}).optional(),
+  "provider": zod.string(),
+  "model": zod.string()
+})
+
+
+/**
+ * @summary Reject one stored secretary operation
+ */
+export const RejectSecretaryOperationParams = zod.object({
+  "operationId": zod.coerce.string().uuid()
+})
+
+export const RejectSecretaryOperationResponse = zod.object({
+  "operationId": zod.string().uuid(),
+  "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
+  "conversationId": zod.string(),
+  "assistantMessage": zod.string(),
+  "action": zod.record(zod.string(), zod.unknown()).optional(),
+  "response": zod.object({
+  "kind": zod.enum(['answer', 'clarification', 'not_found', 'error']),
+  "message": zod.string(),
+  "groundedFacts": zod.array(zod.object({
+  "type": zod.enum(['money', 'count']),
+  "value": zod.number().int(),
+  "currency": zod.string().optional(),
+  "label": zod.string().optional()
+})).optional()
+}).optional(),
+  "provider": zod.string(),
+  "model": zod.string()
+})
+
+
+/**
  * @summary List recent conversations
  */
 export const ListConversationsQueryParams = zod.object({

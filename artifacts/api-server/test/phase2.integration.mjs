@@ -77,6 +77,32 @@ async function sendTurn(message, conversationId, idempotencyKey = `${conversatio
   return response.json();
 }
 
+async function approveOperation(operationId) {
+  const response = await fetch(`${baseUrl}/approvals/${operationId}/approve`, {
+    method: "POST",
+    headers,
+  });
+  const payload = await response.json();
+  assert.equal(response.status, 200, JSON.stringify(payload));
+  return payload;
+}
+
+async function rejectOperation(operationId) {
+  const response = await fetch(`${baseUrl}/approvals/${operationId}/reject`, {
+    method: "POST",
+    headers,
+  });
+  const payload = await response.json();
+  assert.equal(response.status, 200, JSON.stringify(payload));
+  return payload;
+}
+
+async function sendApprovedTurn(message, conversationId, idempotencyKey) {
+  const pending = await sendTurn(message, conversationId, idempotencyKey);
+  if (pending.action?.type !== "approval_required") return pending;
+  return approveOperation(pending.action.operationId);
+}
+
 async function sendRealTurnOrSkip(t, message, conversationId, idempotencyKey) {
   try {
     return await sendTurn(message, conversationId, idempotencyKey);
@@ -189,7 +215,15 @@ test("persists a natural-language expense and deduplicates an idempotent retry",
   assert.equal(first.status, 200);
   const firstPayload = await first.json();
   assert.equal(firstPayload.provider, "development");
-  assert.equal(firstPayload.action.type, "expense_recorded");
+  assert.equal(firstPayload.action.type, "approval_required");
+  assert.equal(firstPayload.action.status, "pending");
+  assert.equal(Number(queryDb(
+    `SELECT count(*) FROM expenses WHERE ${scopedWhere} AND description = 'اختبار تكامل'`,
+  )), 0);
+
+  const approved = await approveOperation(firstPayload.action.operationId);
+  assert.equal(approved.status, "completed");
+  assert.equal(approved.action.type, "expense_recorded");
 
   const retry = await fetch(`${baseUrl}/turns`, {
     method: "POST",
@@ -198,7 +232,11 @@ test("persists a natural-language expense and deduplicates an idempotent retry",
   });
   assert.equal(retry.status, 200);
   const retryPayload = await retry.json();
-  assert.equal(retryPayload.action.expenseId, firstPayload.action.expenseId);
+  assert.equal(retryPayload.action.operationId, firstPayload.action.operationId);
+
+  const approvalRetry = await approveOperation(firstPayload.action.operationId);
+  assert.equal(approvalRetry.status, "completed");
+  assert.equal(approvalRetry.action.expenseId, approved.action.expenseId);
 
   const today = await fetch(`${baseUrl}/today`, {
     headers: { Authorization: "Bearer dev-user" },
@@ -207,9 +245,66 @@ test("persists a natural-language expense and deduplicates an idempotent retry",
   const todayPayload = await today.json();
   assert.ok(
     todayPayload.context.recentExpenses.some(
-      (expense) => expense.id === firstPayload.action.expenseId,
+      (expense) => expense.id === approved.action.expenseId,
     ),
   );
+});
+
+test("read-only turns do not create approval operations", async () => {
+  const response = await sendTurn("إيه عندي النهارده؟", `readonly-${Date.now()}`, `readonly-${Date.now()}`);
+  assert.notEqual(response.action?.type, "approval_required");
+  assert.equal(response.provider, "development");
+});
+
+test("rejected approval never writes and cannot be replayed", async () => {
+  const description = `رفض approval ${Date.now()}`;
+  const pending = await sendTurn(`دفعت ${description} 125 جنيه`, `reject-${Date.now()}`, `reject-${Date.now()}`);
+  assert.equal(pending.action.type, "approval_required");
+  const rejected = await rejectOperation(pending.action.operationId);
+  assert.equal(rejected.status, "rejected");
+  const replay = await approveOperation(pending.action.operationId);
+  assert.equal(replay.status, "rejected");
+  assert.equal(Number(queryDb(
+    `SELECT count(*) FROM expenses WHERE ${scopedWhere} AND description = '${description}'`,
+  )), 0);
+});
+
+test("approval executes the stored action even when the client sends a different payload", async () => {
+  const description = `stored approval ${Date.now()}`;
+  const pending = await sendTurn(`دفعت ${description} 135 جنيه`, `stored-${Date.now()}`, `stored-${Date.now()}`);
+  assert.equal(pending.action.type, "approval_required");
+  const response = await fetch(`${baseUrl}/approvals/${pending.action.operationId}/approve`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      toolName: "create_project",
+      arguments: { name: "يجب ألا ينشأ هذا المشروع" },
+    }),
+  });
+  const payload = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(payload.status, "completed");
+  assert.equal(payload.action.type, "expense_recorded");
+  assert.equal(Number(queryDb(
+    `SELECT count(*) FROM expenses WHERE ${scopedWhere} AND description ILIKE '%stored approval%'`,
+  )), 1);
+  assert.equal(Number(queryDb(
+    `SELECT count(*) FROM projects WHERE ${scopedWhere} AND name = 'يجب ألا ينشأ هذا المشروع'`,
+  )), 0);
+});
+
+test("concurrent approval requests claim one operation and write once", async () => {
+  const description = `concurrent approval ${Date.now()}`;
+  const pending = await sendTurn(`دفعت ${description} 145 جنيه`, `concurrent-${Date.now()}`, `concurrent-${Date.now()}`);
+  assert.equal(pending.action.type, "approval_required");
+  const results = await Promise.all([
+    approveOperation(pending.action.operationId),
+    approveOperation(pending.action.operationId),
+  ]);
+  assert.ok(results.every((result) => ["completed", "executing"].includes(result.status)));
+  assert.equal(Number(queryDb(
+    `SELECT count(*) FROM expenses WHERE ${scopedWhere} AND description ILIKE '%concurrent approval%'`,
+  )), 1);
 });
 
 test("understands equivalent natural expense phrases without punctuation", async () => {
@@ -222,7 +317,7 @@ test("understands equivalent natural expense phrases without punctuation", async
   ];
 
   for (const [index, message] of messages.entries()) {
-    const response = await sendTurn(message, `natural-variants-${index}`, `natural-variants-${index}`);
+    const response = await sendApprovedTurn(message, `natural-variants-${index}`, `natural-variants-${index}`);
     assert.equal(response.action.type, "expense_recorded");
     assert.equal(response.action.amountMinor, 750000);
     assert.equal(response.action.personName, "محمد");
@@ -235,7 +330,7 @@ test("asks for a missing amount and completes the expense on the next turn", asy
   assert.equal(clarification.action.type, "clarification_needed");
   assert.equal(clarification.action.awaitingAmount, true);
 
-  const completed = await sendTurn("7500", conversationId, `${conversationId}-amount`);
+  const completed = await sendApprovedTurn("7500", conversationId, `${conversationId}-amount`);
   assert.equal(completed.action.type, "expense_recorded");
   assert.equal(completed.action.amountMinor, 750000);
   assert.equal(completed.action.personName, "محمد");
@@ -243,9 +338,9 @@ test("asks for a missing amount and completes the expense on the next turn", asy
 
 test("corrects a previous amount without creating another expense", async () => {
   const conversationId = `natural-correction-${Date.now()}`;
-  const first = await sendTurn("سجلت لمحمد 5000", conversationId, `${conversationId}-first`);
+  const first = await sendApprovedTurn("سجلت لمحمد 5000", conversationId, `${conversationId}-first`);
   assert.equal(first.action.type, "expense_recorded");
-  const corrected = await sendTurn("لا، قصدي 7500", conversationId, `${conversationId}-correct`);
+  const corrected = await sendApprovedTurn("لا، قصدي 7500", conversationId, `${conversationId}-correct`);
   assert.equal(corrected.action.type, "expense_corrected");
   assert.equal(corrected.action.expenseId, first.action.expenseId);
   assert.equal(corrected.action.amountMinor, 750000);
@@ -273,12 +368,12 @@ test("asks about duplicate projects and uses the selected project in later turns
   assert.equal(clarification.action.reason, "ambiguous_project");
   assert.equal(clarification.action.projectCandidates.length, 2);
 
-  const selected = await sendTurn("الأول", conversationId, `${conversationId}-select`);
+  const selected = await sendApprovedTurn("الأول", conversationId, `${conversationId}-select`);
   assert.equal(selected.action.type, "expense_recorded");
   assert.equal(selected.action.projectId, clarification.action.projectCandidates[0].id);
   assert.equal(selected.action.projectCandidates.length, 2);
 
-  const corrected = await sendTurn(
+  const corrected = await sendApprovedTurn(
     "مش ده، المشروع التاني",
     conversationId,
     `${conversationId}-project-correction`,
@@ -291,22 +386,22 @@ test("keeps conversation state across a restart and applies a multi-turn correct
   const conversationId = `memory-correction-${Date.now()}`;
   const projectName = `المحجر-${Date.now()}`;
 
-  const project = await sendTurn(`بدأت مشروع اسمه ${projectName}`, conversationId, `${conversationId}-project`);
+  const project = await sendApprovedTurn(`بدأت مشروع اسمه ${projectName}`, conversationId, `${conversationId}-project`);
   assert.equal(project.action.type, "project_created");
 
   await stopServer();
   await startServer();
 
-  const person = await sendTurn("محمد هو المقاول", conversationId, `${conversationId}-person`);
+  const person = await sendApprovedTurn("محمد هو المقاول", conversationId, `${conversationId}-person`);
   assert.equal(person.action.type, "person_linked");
   assert.equal(person.action.projectName, projectName);
 
-  const expense = await sendTurn("ودفعتله 5000", conversationId, `${conversationId}-expense`);
+  const expense = await sendApprovedTurn("ودفعتله 5000", conversationId, `${conversationId}-expense`);
   assert.equal(expense.action.type, "expense_recorded");
   assert.equal(expense.action.amountMinor, 500000);
   assert.equal(expense.action.projectName, projectName);
 
-  const corrected = await sendTurn("لا، المبلغ كان 7500", conversationId, `${conversationId}-correction`);
+  const corrected = await sendApprovedTurn("لا، المبلغ كان 7500", conversationId, `${conversationId}-correction`);
   assert.equal(corrected.action.type, "expense_corrected");
   assert.equal(corrected.action.amountMinor, 750000);
   assert.equal(corrected.action.expenseId, expense.action.expenseId);

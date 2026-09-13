@@ -113,6 +113,68 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /approvals/{operationId}/approve:
+    post:
+      operationId: approveSecretaryOperation
+      tags: [secretary]
+      summary: Approve and execute one stored secretary operation
+      parameters:
+        - name: operationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Approval status or stored operation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApprovalResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Approval operation not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /approvals/{operationId}/reject:
+    post:
+      operationId: rejectSecretaryOperation
+      tags: [secretary]
+      summary: Reject one stored secretary operation
+      parameters:
+        - name: operationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Rejection status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApprovalResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Approval operation not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /conversations:
     get:
       operationId: listConversations
@@ -402,6 +464,28 @@ components:
         model:
           type: string
       required: [conversationId, assistantMessage, provider, model]
+    ApprovalResponse:
+      type: object
+      properties:
+        operationId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, executing, completed, rejected, expired, failed]
+        conversationId:
+          type: string
+        assistantMessage:
+          type: string
+        action:
+          $ref: "#/components/schemas/ActionResult"
+        response:
+          $ref: "#/components/schemas/FinalResponse"
+        provider:
+          type: string
+        model:
+          type: string
+      required: [operationId, status, conversationId, assistantMessage, provider, model]
     ReminderSummary:
       type: object
       properties:

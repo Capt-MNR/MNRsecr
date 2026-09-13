@@ -6,9 +6,19 @@ import {
 } from "@workspace/api-zod";
 import {
   agentRuntime,
+  executeApprovedOperation,
   persistence,
+  saveApprovedOperationTurn,
   type Identity,
 } from "../lib/secretary";
+import {
+  claimOperation,
+  completeOperation,
+  failOperation,
+  rejectOperation,
+  type OperationExecutionResult,
+  type PendingOperation,
+} from "../lib/secretary-operations";
 import { configuredProvider } from "../lib/phase2";
 import {
   classifySecretaryError,
@@ -57,6 +67,51 @@ function sendError(
     requestId: requestId(req),
     retryable: classified.retryable,
     ...(provider ? { provider } : {}),
+  });
+}
+
+function operationResultResponse(
+  operation: PendingOperation,
+): OperationExecutionResult & { operationId: string; status: string } {
+  if (operation.result) {
+    return {
+      ...operation.result,
+      operationId: operation.operationId,
+      status: operation.status,
+    };
+  }
+  const assistantMessage = operation.status === "rejected"
+    ? "تم إلغاء العملية، ولن يتم تنفيذ أي تغيير."
+    : operation.status === "expired"
+      ? "انتهت صلاحية طلب التأكيد، ولم يتم تنفيذ أي تغيير."
+      : operation.status === "failed"
+        ? "تعذر تنفيذ العملية. لن أعيد تشغيلها تلقائيًا."
+        : operation.status === "executing"
+          ? "العملية قيد التنفيذ. لا ترسل تأكيدًا آخر."
+          : "العملية ما زالت في انتظار موافقتك.";
+  return {
+    conversationId: operation.conversationId ?? "",
+    assistantMessage,
+    action: {
+      type: `approval_${operation.status}`,
+      operationId: operation.operationId,
+      status: operation.status,
+      toolName: operation.toolName,
+      ...(operation.error ? { error: operation.error.message } : {}),
+    },
+    provider: "server",
+    model: "approval-operation",
+    operationId: operation.operationId,
+    status: operation.status,
+  };
+}
+
+function approvalError(message: string, code: string, status: number): SecretaryError {
+  return new SecretaryError(message, {
+    status,
+    category: status === 404 ? "not_found" : "validation_error",
+    code,
+    retryable: false,
   });
 }
 
@@ -126,6 +181,75 @@ router.post("/turns", async (req, res): Promise<void> => {
     const classified = classifySecretaryError(error);
     const provider = configuredProvider() === "unavailable" ? undefined : configuredProvider();
     sendError(req, res, classified, "error", provider);
+  }
+});
+
+router.post("/approvals/:operationId/approve", async (req, res): Promise<void> => {
+  const identity = getIdentity(req);
+  if (!identity) {
+    sendError(req, res, new SecretaryError("Authentication required.", {
+      status: 401,
+      category: "authentication_error",
+      code: "AUTHENTICATION_REQUIRED",
+      retryable: false,
+    }), "warn");
+    return;
+  }
+
+  const operationId = req.params.operationId;
+  try {
+    const claim = await claimOperation(identity, operationId);
+    if (claim.kind === "existing") {
+      res.json(operationResultResponse(claim.operation));
+      return;
+    }
+
+    let result: OperationExecutionResult;
+    try {
+      result = await executeApprovedOperation(identity, claim.operation);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "تعذر تنفيذ العملية.";
+      const failed = await failOperation(identity, operationId, message);
+      res.status(500).json({
+        ...operationResultResponse(failed),
+        error: "تعذر تنفيذ العملية.",
+        code: "APPROVED_OPERATION_FAILED",
+        category: "agent_error",
+        requestId: requestId(req),
+        retryable: false,
+      });
+      return;
+    }
+
+    const completed = await completeOperation(identity, operationId, result);
+    await saveApprovedOperationTurn(identity, claim.operation, result);
+    res.json(operationResultResponse(completed));
+  } catch (error) {
+    sendError(req, res, error instanceof Error && error.message === "Pending operation was not found."
+      ? approvalError("Pending operation was not found.", "APPROVAL_NOT_FOUND", 404)
+      : error);
+  }
+});
+
+router.post("/approvals/:operationId/reject", async (req, res): Promise<void> => {
+  const identity = getIdentity(req);
+  if (!identity) {
+    sendError(req, res, new SecretaryError("Authentication required.", {
+      status: 401,
+      category: "authentication_error",
+      code: "AUTHENTICATION_REQUIRED",
+      retryable: false,
+    }), "warn");
+    return;
+  }
+
+  try {
+    const operation = await rejectOperation(identity, req.params.operationId);
+    res.json(operationResultResponse(operation));
+  } catch (error) {
+    sendError(req, res, error instanceof Error && error.message === "Pending operation was not found."
+      ? approvalError("Pending operation was not found.", "APPROVAL_NOT_FOUND", 404)
+      : error);
   }
 });
 

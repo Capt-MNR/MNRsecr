@@ -31,6 +31,9 @@ import {
   providerResponseError,
   SecretaryError,
 } from "./error-contract";
+import {
+  createPendingOperation,
+} from "./secretary-operations";
 
 export type Phase2TurnInput = {
   message: string;
@@ -577,7 +580,14 @@ async function executeTool(
   identity: Identity,
   name: string,
   rawArgs: Record<string, unknown>,
-  options: { requestId: string; callId?: string; dryRun?: boolean },
+  options: {
+    requestId: string;
+    callId?: string;
+    dryRun?: boolean;
+    conversationId?: string | null;
+    idempotencyKey?: string | null;
+    approvedOperationId?: string;
+  },
 ): Promise<ToolResult> {
   const args = rawArgs ?? {};
   logger.info({
@@ -603,6 +613,32 @@ async function executeTool(
       dryRun: true,
     }, "agent tool result");
     return preview;
+  }
+
+  if (WRITE_TOOLS.has(name) && !options.approvedOperationId) {
+    const pending = await createPendingOperation(identity, {
+      conversationId: options.conversationId,
+      idempotencyKey: options.idempotencyKey,
+      toolName: name,
+      args,
+    });
+    const result: ToolResult = {
+      ok: true,
+      pendingApproval: true,
+      approval: {
+        operationId: pending.operationId,
+        status: pending.status,
+        toolName: pending.toolName,
+        display: pending.display,
+      },
+    };
+    logger.info({
+      requestId: options.requestId,
+      tool: name,
+      toolCallId: options.callId,
+      operationId: pending.operationId,
+    }, "agent write awaiting approval");
+    return result;
   }
 
   const stringArg = (key: string): string | undefined =>
@@ -1244,7 +1280,13 @@ export async function executeStructuredTool(
   identity: Identity,
   name: string,
   args: Record<string, unknown>,
-  options: { requestId: string; dryRun?: boolean } = { requestId: crypto.randomUUID() },
+  options: {
+    requestId: string;
+    dryRun?: boolean;
+    conversationId?: string | null;
+    idempotencyKey?: string | null;
+    approvedOperationId?: string;
+  } = { requestId: crypto.randomUUID() },
 ): Promise<ToolResult> {
   return executeTool(identity, name, args, options);
 }
@@ -2022,6 +2064,8 @@ export class Phase2AgentRuntime {
               requestId,
               callId: call.id,
               dryRun: options.dryRun,
+              conversationId,
+              idempotencyKey: input.idempotencyKey,
             });
           } catch (error) {
             throw agentToolError(call.name, error);
@@ -2038,6 +2082,28 @@ export class Phase2AgentRuntime {
               toolResult: jsonSafe(toolResult),
             })?.toolResult,
           };
+          if (toolResult.pendingApproval && toolResult.approval
+            && typeof toolResult.approval === "object") {
+            const approval = toolResult.approval as Record<string, unknown>;
+            const display = approval.display && typeof approval.display === "object"
+              ? approval.display as { title?: unknown; details?: unknown }
+              : {};
+            const title = typeof display.title === "string" ? display.title : "هذا التغيير";
+            const details = Array.isArray(display.details)
+              ? display.details.filter((detail): detail is string => typeof detail === "string")
+              : [];
+            action = {
+              type: "approval_required",
+              operationId: approval.operationId,
+              status: approval.status,
+              toolName: approval.toolName,
+              display: { title, details },
+            };
+            return persistResult({
+              kind: "clarification",
+              message: `قبل ما أنفذ ${title}${details.length > 0 ? ` (${details.join(" — ")})` : ""}، هل توافق؟`,
+            });
+          }
           messages.push({
             role: "tool",
             toolCallId: call.id,

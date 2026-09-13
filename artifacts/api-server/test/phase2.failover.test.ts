@@ -315,7 +315,7 @@ test("a read tool result is preserved when the primary fails and fallback writes
   assert.equal(fallback.calls.length, 1);
 });
 
-test("a write tool is executed once, then fallback continues without replaying it", async () => {
+test("a write tool creates approval without executing or falling back", async () => {
   const testIdentity = identity("write-once");
   const primary = new ScriptedProvider("gemini", (_call, callNumber) => {
     if (callNumber === 1) {
@@ -326,7 +326,7 @@ test("a write tool is executed once, then fallback continues without replaying i
     }
     throw providerTimeoutError("gemini");
   });
-  const fallback = new ScriptedProvider("groq", () => finalResponse("تم تسجيل الدفعة مرة واحدة."));
+  const fallback = new ScriptedProvider("groq", () => finalResponse("يجب ألا يصل fallback إلى write غير معتمد."));
   const gateway = new FailoverModelGateway(
     { gemini: primary, groq: fallback },
     ["gemini", "groq"],
@@ -340,12 +340,11 @@ test("a write tool is executed once, then fallback continues without replaying i
     eq(expensesTable.tenantId, testIdentity.tenantId),
     eq(expensesTable.ownerUserId, testIdentity.userId),
   ));
-  assert.equal(result.provider, "groq");
+  assert.equal(result.action?.type, "approval_required");
   assert.equal(result.action?.toolCalls, 1);
-  assert.equal(primary.calls.length, 2);
-  assert.equal(fallback.calls.length, 1);
-  assert.equal(expenses.length, 1);
-  assert.equal(expenses[0]?.amountMinor, 750000);
+  assert.equal(primary.calls.length, 1);
+  assert.equal(fallback.calls.length, 0);
+  assert.equal(expenses.length, 0);
 });
 
 test("dryRun prevents writes even when failover happens", async () => {

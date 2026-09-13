@@ -89,6 +89,29 @@ export interface TurnResponse {
   model: string;
 }
 
+export type ApprovalResponseStatus = typeof ApprovalResponseStatus[keyof typeof ApprovalResponseStatus];
+
+
+export const ApprovalResponseStatus = {
+  pending: 'pending',
+  executing: 'executing',
+  completed: 'completed',
+  rejected: 'rejected',
+  expired: 'expired',
+  failed: 'failed',
+} as const;
+
+export interface ApprovalResponse {
+  operationId: string;
+  status: ApprovalResponseStatus;
+  conversationId: string;
+  assistantMessage: string;
+  action?: ActionResult;
+  response?: FinalResponse;
+  provider: string;
+  model: string;
+}
+
 export interface ReminderSummary {
   id: string;
   text: string;

@@ -7,6 +7,8 @@
  */
 
 export * from './actionResult';
+export * from './approvalResponse';
+export * from './approvalResponseStatus';
 export * from './commitmentRecord';
 export * from './conversationDetail';
 export * from './conversationDetailState';

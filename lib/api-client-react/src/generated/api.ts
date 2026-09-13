@@ -20,6 +20,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  ApprovalResponse,
   ConversationDetail,
   ConversationListResponse,
   ErrorResponse,
@@ -302,6 +303,154 @@ export const useCreateTurn = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getCreateTurnMutationOptions(options));
+    }
+
+export const getApproveSecretaryOperationUrl = (operationId: string,) => {
+
+
+
+
+  return `/api/approvals/${operationId}/approve`
+}
+
+/**
+ * @summary Approve and execute one stored secretary operation
+ */
+export const approveSecretaryOperation = async (operationId: string, options?: Parameters<typeof customFetch>[1]): Promise<ApprovalResponse> => {
+
+  return customFetch<ApprovalResponse>(getApproveSecretaryOperationUrl(operationId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getApproveSecretaryOperationMutationKey = () => ['approveSecretaryOperation'] as const;
+
+export const getApproveSecretaryOperationMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveSecretaryOperation>>, TError,ApproveSecretaryOperationMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof approveSecretaryOperation>>, TError,ApproveSecretaryOperationMutationVariables, TContext> => {
+
+const mutationKey = getApproveSecretaryOperationMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof approveSecretaryOperation>>, ApproveSecretaryOperationMutationVariables> = (props) => {
+          const {operationId} = props ?? {};
+
+          return  approveSecretaryOperation(operationId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApproveSecretaryOperationMutationResult = NonNullable<Awaited<ReturnType<typeof approveSecretaryOperation>>>
+
+    export type ApproveSecretaryOperationMutationError = ErrorType<ErrorResponse>
+    export type ApproveSecretaryOperationMutationVariables = {operationId: string}
+
+    /**
+ * @summary Approve and execute one stored secretary operation
+ */
+export const useApproveSecretaryOperation = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveSecretaryOperation>>, TError,ApproveSecretaryOperationMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof approveSecretaryOperation>>,
+        TError,
+        ApproveSecretaryOperationMutationVariables,
+        TContext
+      > => {
+      return useMutation(getApproveSecretaryOperationMutationOptions(options));
+    }
+
+export const getRejectSecretaryOperationUrl = (operationId: string,) => {
+
+
+
+
+  return `/api/approvals/${operationId}/reject`
+}
+
+/**
+ * @summary Reject one stored secretary operation
+ */
+export const rejectSecretaryOperation = async (operationId: string, options?: Parameters<typeof customFetch>[1]): Promise<ApprovalResponse> => {
+
+  return customFetch<ApprovalResponse>(getRejectSecretaryOperationUrl(operationId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRejectSecretaryOperationMutationKey = () => ['rejectSecretaryOperation'] as const;
+
+export const getRejectSecretaryOperationMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rejectSecretaryOperation>>, TError,RejectSecretaryOperationMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof rejectSecretaryOperation>>, TError,RejectSecretaryOperationMutationVariables, TContext> => {
+
+const mutationKey = getRejectSecretaryOperationMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof rejectSecretaryOperation>>, RejectSecretaryOperationMutationVariables> = (props) => {
+          const {operationId} = props ?? {};
+
+          return  rejectSecretaryOperation(operationId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RejectSecretaryOperationMutationResult = NonNullable<Awaited<ReturnType<typeof rejectSecretaryOperation>>>
+
+    export type RejectSecretaryOperationMutationError = ErrorType<ErrorResponse>
+    export type RejectSecretaryOperationMutationVariables = {operationId: string}
+
+    /**
+ * @summary Reject one stored secretary operation
+ */
+export const useRejectSecretaryOperation = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rejectSecretaryOperation>>, TError,RejectSecretaryOperationMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof rejectSecretaryOperation>>,
+        TError,
+        RejectSecretaryOperationMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRejectSecretaryOperationMutationOptions(options));
     }
 
 export const getListConversationsUrl = (params?: ListConversationsParams,) => {

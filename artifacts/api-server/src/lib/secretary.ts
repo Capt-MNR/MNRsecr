@@ -25,10 +25,17 @@ import {
 } from "@workspace/db";
 import {
   configuredProvider,
+  executeStructuredTool,
   phase2AgentRuntime,
   phase2Enabled,
   unavailableAgentRuntime,
 } from "./phase2";
+import {
+  createPendingOperation,
+  displayForOperation,
+  type OperationExecutionResult,
+  type PendingOperation,
+} from "./secretary-operations";
 import {
   loadConversationMemory,
   saveConversationTurn,
@@ -770,6 +777,7 @@ async function saveDeterministicExpense(
   persistence: PersistencePort,
   identity: Identity,
   conversationId: string,
+  idempotencyKey: string | null | undefined,
   input: {
     amountMinor: number;
     currency: string;
@@ -780,20 +788,51 @@ async function saveDeterministicExpense(
     projectCandidates?: Array<{ id: string; name: string }>;
   },
 ): Promise<TurnResult> {
-  const saved = await persistence.createExpense(identity, input);
+  const pending = await createPendingOperation(identity, {
+    conversationId,
+    idempotencyKey,
+    toolName: "record_expense",
+    args: input,
+  });
   return {
     conversationId,
-    assistantMessage: `تمام، سجلت ${moneyLabel(saved.amountMinor, saved.currency)} لـ${saved.personName ?? input.personName ?? "الشخص"}${saved.projectName ? ` على مشروع ${saved.projectName}` : ""}.`,
+    assistantMessage: `قبل ما أسجل المصروف، أحتاج موافقتك: ${pending.display.details.join(" — ")}.`,
     action: {
-      type: "expense_recorded",
-      expenseId: saved.id,
-      amountMinor: saved.amountMinor,
-      currency: saved.currency,
-      personId: saved.personId,
-      projectId: saved.projectId,
-      personName: saved.personName,
-      projectName: saved.projectName,
-      ...(input.projectCandidates ? { projectCandidates: input.projectCandidates } : {}),
+      type: "approval_required",
+      operationId: pending.operationId,
+      status: pending.status,
+      toolName: pending.toolName,
+      display: pending.display,
+    },
+    provider: "development",
+    model: "deterministic-ar-v1",
+  };
+}
+
+async function pendingDeterministicAction(
+  identity: Identity,
+  conversationId: string,
+  idempotencyKey: string | null | undefined,
+  toolName: string,
+  args: Record<string, unknown>,
+): Promise<TurnResult> {
+  const pending = await createPendingOperation(identity, {
+    conversationId,
+    idempotencyKey,
+    toolName,
+    args,
+    display: displayForOperation(toolName, args),
+  });
+  const details = pending.display.details.join(" — ");
+  return {
+    conversationId,
+    assistantMessage: `قبل ما أنفذ ${pending.display.title}${details ? ` (${details})` : ""}، هل توافق؟`,
+    action: {
+      type: "approval_required",
+      operationId: pending.operationId,
+      status: pending.status,
+      toolName: pending.toolName,
+      display: pending.display,
     },
     provider: "development",
     model: "deterministic-ar-v1",
@@ -835,113 +874,45 @@ export class DeterministicAgentRuntime {
     const personRelationshipMatch = message.match(/^(.+?)\s+هو\s+(.+)$/i);
 
     if (projectMatch) {
-      const project = await this.persistence.createProject(identity, projectMatch[1].trim());
-      result = {
-        conversationId,
-        assistantMessage: `تمام، سجلت مشروع ${project.name}.`,
-        action: {
-          type: "project_created",
-          projectId: project.id,
-          projectName: project.name,
-        },
-        provider: "development",
-        model: "deterministic-ar-v1",
-      };
+      result = await pendingDeterministicAction(identity, conversationId, input.idempotencyKey, "create_project", {
+        name: projectMatch[1].trim(),
+      });
     } else if (personRelationshipMatch) {
-      const person = await this.persistence.createPerson(identity, personRelationshipMatch[1].trim());
       const projectId = recentActionValue(conversationMemory, "projectId");
       const projectName = recentActionValue(conversationMemory, "projectName");
       if (typeof projectId !== "string") {
         result = {
           conversationId,
-          assistantMessage: "حدّد المشروع المرتبط بمحمد أولًا.",
-          action: { type: "clarification_needed", personId: person.id, personName: person.name },
+          assistantMessage: "حدّد المشروع المرتبط بالشخص أولًا.",
+          action: { type: "clarification_needed", personName: personRelationshipMatch[1].trim() },
           provider: "development",
           model: "deterministic-ar-v1",
         };
       } else {
-        await this.persistence.linkPersonToProject(identity, {
-          personId: person.id,
+        result = await pendingDeterministicAction(identity, conversationId, input.idempotencyKey, "create_person_and_link_person_to_project", {
+          personName: personRelationshipMatch[1].trim(),
           projectId,
+          projectName,
           relationship: personRelationshipMatch[2].trim(),
         });
-        result = {
-          conversationId,
-          assistantMessage: `تمام، ربطت ${person.name} بمشروع ${typeof projectName === "string" ? projectName : "المشروع السابق"} كـ${personRelationshipMatch[2].trim()}.`,
-          action: {
-            type: "person_linked",
-            personId: person.id,
-            personName: person.name,
-            projectId,
-            projectName,
-            relationship: personRelationshipMatch[2].trim(),
-          },
-          provider: "development",
-          model: "deterministic-ar-v1",
-        };
       }
     } else if (projectCorrection) {
-      const saved = await this.persistence.updateExpense(identity, projectCorrection);
-      result = saved
-        ? {
-            conversationId,
-            assistantMessage: `تمام، نقلت المصروف إلى مشروع ${saved.projectName ?? projectCorrection.projectName ?? "المشروع المقصود"}.`,
-            action: {
-              type: "expense_project_corrected",
-              expenseId: saved.id,
-              projectId: saved.projectId,
-              projectName: saved.projectName,
-              personId: saved.personId,
-              personName: saved.personName,
-            },
-            provider: "development",
-            model: "deterministic-ar-v1",
-          }
-        : {
-            conversationId,
-            assistantMessage: "لم أجد المصروف السابق لتغيير المشروع.",
-            action: { type: "clarification_needed", reason: "expense_not_found" },
-            provider: "development",
-            model: "deterministic-ar-v1",
-          };
+      result = await pendingDeterministicAction(identity, conversationId, input.idempotencyKey, "update_expense", projectCorrection);
     } else if (correction) {
-      const saved = await this.persistence.updateExpense(identity, correction);
-      result = saved
-        ? {
-            conversationId,
-            assistantMessage: `تمام، صححت المبلغ إلى ${moneyLabel(saved.amountMinor, saved.currency)} بدلًا من تسجيل دفعة جديدة.`,
-            action: {
-              type: "expense_corrected",
-              expenseId: saved.id,
-              amountMinor: saved.amountMinor,
-              currency: saved.currency,
-              personId: saved.personId,
-              projectId: saved.projectId,
-              personName: saved.personName,
-              projectName: saved.projectName,
-            },
-            provider: "development",
-            model: "deterministic-ar-v1",
-          }
-        : {
-            conversationId,
-            assistantMessage: "لم أجد الدفعة السابقة لتصحيحها.",
-            action: { type: "clarification_needed", reason: "expense_not_found" },
-            provider: "development",
-            model: "deterministic-ar-v1",
-          };
+      result = await pendingDeterministicAction(identity, conversationId, input.idempotencyKey, "update_expense", correction);
     } else if (contextualExpense) {
       result = await saveDeterministicExpense(
         this.persistence,
         identity,
         conversationId,
+        input.idempotencyKey,
         contextualExpense,
       );
     } else if (pendingProjectSelection) {
       const pending = pendingProjectSelection as Record<string, unknown>;
       if (typeof pending.amountMinor === "number" && typeof pending.currency === "string"
         && typeof pending.description === "string") {
-        result = await saveDeterministicExpense(this.persistence, identity, conversationId, {
+          result = await saveDeterministicExpense(this.persistence, identity, conversationId, input.idempotencyKey, {
           amountMinor: pending.amountMinor,
           currency: pending.currency,
           description: pending.description,
@@ -1020,7 +991,7 @@ export class DeterministicAgentRuntime {
             model: "deterministic-ar-v1",
           };
         } else {
-          result = await saveDeterministicExpense(this.persistence, identity, conversationId, expense);
+          result = await saveDeterministicExpense(this.persistence, identity, conversationId, input.idempotencyKey, expense);
         }
       }
     } else {
@@ -1036,22 +1007,11 @@ export class DeterministicAgentRuntime {
 
       if (reminderMatch) {
         const text = message.replace(/^فكرني\s+بكر[هة]\s*/i, "").trim();
-        const reminder = await this.persistence.createReminder(identity, {
+        result = await pendingDeterministicAction(identity, conversationId, input.idempotencyKey, "create_reminder", {
           text: text || "راجع تذكيرك",
-          dueAt: tomorrowAtNine(),
+          dueAt: tomorrowAtNine().toISOString(),
           timezone: "Africa/Cairo",
         });
-        result = {
-          conversationId,
-          assistantMessage: `حاضر، هفكرك بكرة الساعة ٩ صباحًا: ${reminder.text}.`,
-          action: {
-            type: "reminder_created",
-            reminderId: reminder.id,
-            dueAt: reminder.dueAt.toISOString(),
-          },
-          provider: "development",
-          model: "deterministic-ar-v1",
-        };
       } else if (totalMatch) {
         const personName = totalMatch[1].trim();
         const total = await this.persistence.totalPaidToPerson(
@@ -1131,6 +1091,168 @@ export class DeterministicAgentRuntime {
     });
     return result;
   }
+}
+
+function operationStringArg(operation: PendingOperation, key: string): string | undefined {
+  const value = operation.args[key];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function operationNumberArg(operation: PendingOperation, key: string): number | undefined {
+  const value = operation.args[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+export async function executeApprovedOperation(
+  identity: Identity,
+  operation: PendingOperation,
+): Promise<OperationExecutionResult> {
+  const conversationId = operation.conversationId ?? randomUUID();
+  let action: Record<string, unknown>;
+  let assistantMessage: string;
+
+  if (operation.toolName === "record_expense") {
+    const amountMinor = operationNumberArg(operation, "amountMinor");
+    const description = operationStringArg(operation, "description");
+    const currency = operationStringArg(operation, "currency") ?? "EGP";
+    if (amountMinor === undefined || !description) throw new Error("بيانات المصروف غير مكتملة.");
+    const saved = await persistence.createExpense(identity, {
+      amountMinor,
+      currency,
+      description,
+      personName: operationStringArg(operation, "personName"),
+      projectName: operationStringArg(operation, "projectName"),
+      projectId: operationStringArg(operation, "projectId"),
+    });
+    assistantMessage = `تمام، سجلت ${moneyLabel(saved.amountMinor, saved.currency)} لـ${saved.personName ?? operationStringArg(operation, "personName") ?? "الشخص"}${saved.projectName ? ` على مشروع ${saved.projectName}` : ""}.`;
+    action = {
+      type: "expense_recorded",
+      operationId: operation.operationId,
+      expenseId: saved.id,
+      amountMinor: saved.amountMinor,
+      currency: saved.currency,
+      personId: saved.personId,
+      projectId: saved.projectId,
+      personName: saved.personName,
+      projectName: saved.projectName,
+      ...(Array.isArray(operation.args.projectCandidates)
+        ? { projectCandidates: operation.args.projectCandidates }
+        : {}),
+    };
+  } else if (operation.toolName === "create_project") {
+    const name = operationStringArg(operation, "name");
+    if (!name) throw new Error("اسم المشروع غير موجود.");
+    const project = await persistence.createProject(identity, name);
+    assistantMessage = `تمام، سجلت مشروع ${project.name}.`;
+    action = { type: "project_created", operationId: operation.operationId, projectId: project.id, projectName: project.name };
+  } else if (operation.toolName === "create_person") {
+    const name = operationStringArg(operation, "name");
+    if (!name) throw new Error("اسم الشخص غير موجود.");
+    const person = await persistence.createPerson(identity, name);
+    assistantMessage = `تمام، سجلت ${person.name}.`;
+    action = { type: "person_created", operationId: operation.operationId, personId: person.id, personName: person.name };
+  } else if (operation.toolName === "create_person_and_link_person_to_project") {
+    const name = operationStringArg(operation, "personName");
+    const projectId = operationStringArg(operation, "projectId");
+    const relationship = operationStringArg(operation, "relationship");
+    if (!name || !projectId || !relationship) throw new Error("بيانات العلاقة غير مكتملة.");
+    const person = await persistence.createPerson(identity, name);
+    await persistence.linkPersonToProject(identity, { personId: person.id, projectId, relationship });
+    assistantMessage = `تمام، ربطت ${person.name} بمشروع ${operationStringArg(operation, "projectName") ?? "المشروع المحدد"} كـ${relationship}.`;
+    action = {
+      type: "person_linked",
+      operationId: operation.operationId,
+      personId: person.id,
+      personName: person.name,
+      projectId,
+      projectName: operationStringArg(operation, "projectName"),
+      relationship,
+    };
+  } else if (operation.toolName === "update_expense") {
+    const expenseId = operationStringArg(operation, "expenseId");
+    if (!expenseId) throw new Error("معرف المصروف غير موجود.");
+    const projectCorrection = operationNumberArg(operation, "amountMinor") === undefined
+      && Boolean(operationStringArg(operation, "projectId"));
+    const updated = await persistence.updateExpense(identity, {
+      expenseId,
+      ...(operationNumberArg(operation, "amountMinor") !== undefined
+        ? { amountMinor: operationNumberArg(operation, "amountMinor") }
+        : {}),
+      ...(operationStringArg(operation, "projectId")
+        ? { projectId: operationStringArg(operation, "projectId") }
+        : {}),
+    });
+    if (!updated) throw new Error("لم أجد المصروف المطلوب.");
+    assistantMessage = projectCorrection
+      ? "تمام، نقلت المصروف إلى المشروع الآخر."
+      : `تمام، صححت المصروف إلى ${moneyLabel(updated.amountMinor, updated.currency)}.`;
+    action = {
+      type: projectCorrection ? "expense_project_corrected" : "expense_corrected",
+      operationId: operation.operationId,
+      expenseId: updated.id,
+      amountMinor: updated.amountMinor,
+      currency: updated.currency,
+      personId: updated.personId,
+      projectId: updated.projectId,
+      personName: updated.personName,
+      projectName: updated.projectName,
+    };
+  } else if (operation.toolName === "create_reminder") {
+    const text = operationStringArg(operation, "text");
+    const dueAt = operationStringArg(operation, "dueAt");
+    const timezone = operationStringArg(operation, "timezone") ?? "Africa/Cairo";
+    if (!text || !dueAt || Number.isNaN(new Date(dueAt).getTime())) throw new Error("بيانات التذكير غير مكتملة.");
+    const reminder = await persistence.createReminder(identity, {
+      text,
+      dueAt: new Date(dueAt),
+      timezone,
+    });
+    assistantMessage = `حاضر، هفكرك: ${reminder.text}.`;
+    action = {
+      type: "reminder_created",
+      operationId: operation.operationId,
+      reminderId: reminder.id,
+      dueAt: reminder.dueAt.toISOString(),
+    };
+  } else {
+    const toolResult = await executeStructuredTool(identity, operation.toolName, operation.args, {
+      requestId: `approval-${operation.operationId}`,
+      conversationId,
+      approvedOperationId: operation.operationId,
+    });
+    if (!toolResult.ok || toolResult.pendingApproval) {
+      throw new Error(typeof toolResult.error === "string" ? toolResult.error : "تعذر تنفيذ العملية.");
+    }
+    assistantMessage = "تم تنفيذ التغيير المطلوب.";
+    action = {
+      type: "operation_completed",
+      operationId: operation.operationId,
+      toolName: operation.toolName,
+      toolResult,
+    };
+  }
+
+  return {
+    conversationId,
+    assistantMessage,
+    action,
+    provider: "server",
+    model: "approved-operation",
+  };
+}
+
+export async function saveApprovedOperationTurn(
+  identity: Identity,
+  operation: PendingOperation,
+  result: OperationExecutionResult,
+): Promise<void> {
+  if (!operation.conversationId) return;
+  const memory = await loadConversationMemory(identity, operation.conversationId);
+  await saveConversationTurn(identity, memory, {
+    userMessage: "موافقة على العملية",
+    assistantMessage: result.assistantMessage,
+    action: result.action,
+  });
 }
 
 export const persistence: PersistencePort = new DrizzlePersistence();

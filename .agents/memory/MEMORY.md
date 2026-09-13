@@ -4,3 +4,4 @@
 - [Deterministic expense reports](deterministic-expense-reports.md) — broad reports must use a bounded canonical read instead of letting the model choose an inconsistent query limit.
 - [Groq GPT-OSS limits](groq-gpt-oss-limits.md) — low hidden reasoning keeps tool calls usable under the provider's token-per-minute budget.
 - [Workspace test runner](workspace-test-runner.md) — direct Node 24 TypeScript tests can fail on workspace directory imports even when builds and workflows are healthy.
+- [Approval lifecycle memory](approval-lifecycle.md) — persist the post-approval result as a separate conversation event so later corrections use committed state.
