@@ -117,7 +117,7 @@ export type FinalResponse = {
   groundedFacts?: GroundedFact[];
 };
 
-export type ProviderName = "gemini" | "groq" | "mistral";
+export type ProviderName = "gemini" | "groq" | "mistral" | "cohere";
 
 export type GatewayCallContext = {
   requestId: string;
@@ -221,6 +221,8 @@ const GROQ_MODEL = process.env.GROQ_MODEL ?? "openai/gpt-oss-20b";
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const MISTRAL_MODEL = process.env.MISTRAL_MODEL ?? "mistral-small-latest";
 const MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions";
+const COHERE_MODEL = process.env.COHERE_MODEL ?? "command-r-08-2024";
+const COHERE_API_URL = "https://api.cohere.com/v2/chat";
 const DEFAULT_TIMEZONE = "Africa/Cairo";
 const WRITE_TOOLS = new Set([
   "create_person",
@@ -1546,6 +1548,28 @@ export function toOpenAiSchema(value: unknown): unknown {
   );
 }
 
+export function toCohereSchema(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    const isTypeUnion = value.length > 0
+      && value.every((item) => typeof item === "string"
+        && ["OBJECT", "STRING", "INTEGER", "NUMBER", "BOOLEAN", "ARRAY", "NULL"].includes(item));
+    if (isTypeUnion) {
+      const nonNullType = value.find((item) => item !== "NULL");
+      return nonNullType === undefined ? "string" : toCohereSchema(nonNullType);
+    }
+    return value.map(toCohereSchema);
+  }
+  if (!value || typeof value !== "object") {
+    return typeof value === "string"
+      && ["OBJECT", "STRING", "INTEGER", "NUMBER", "BOOLEAN", "ARRAY", "NULL"].includes(value)
+      ? value.toLowerCase()
+      : value;
+  }
+  return Object.fromEntries(
+    Object.entries(value).map(([key, child]) => [key, toCohereSchema(child)]),
+  );
+}
+
 export function toGeminiSchema(value: unknown): unknown {
   if (Array.isArray(value)) {
     const isTypeUnion = value.length > 0
@@ -1570,6 +1594,17 @@ function toOpenAiTools() {
       name: definition.name,
       description: definition.description,
       parameters: toOpenAiSchema(definition.parameters),
+    },
+  }));
+}
+
+function toCohereTools() {
+  return phase2Tools.map((definition) => ({
+    type: "function",
+    function: {
+      name: definition.name,
+      description: definition.description,
+      parameters: toCohereSchema(definition.parameters),
     },
   }));
 }
@@ -2572,11 +2607,172 @@ export class Phase2AgentRuntime {
   }
 }
 
+export class CohereModelGateway implements ModelGateway {
+  readonly provider = "cohere" as const;
+  private readonly apiKey = process.env.COHERE_API_KEY;
+  readonly model = COHERE_MODEL;
+
+  get modelName(): string {
+    return this.model;
+  }
+
+  async generate(messages: ConversationMessage[], context: GatewayCallContext): Promise<GatewayResponse> {
+    if (!this.apiKey) throw new Error("COHERE_API_KEY is not configured.");
+    const tools = toCohereTools();
+    const apiMessages = [
+      {
+        role: "system",
+        content: `${systemInstruction}\n${requestGuidance}`,
+      },
+      ...messages.map((message) => {
+        if (message.role === "assistant") {
+          return {
+            role: "assistant",
+            ...(message.text ? { content: message.text } : {}),
+            ...(message.toolCalls?.length
+              ? {
+                  tool_calls: message.toolCalls.map((call) => ({
+                    id: call.id,
+                    type: "function",
+                    function: { name: call.name, arguments: JSON.stringify(call.args) },
+                  })),
+                }
+              : {}),
+          };
+        }
+        if (message.role === "tool") {
+          return {
+            role: "tool",
+            tool_call_id: message.toolCallId,
+            content: [{
+              type: "document",
+              document: { data: message.text ?? "{}" },
+            }],
+          };
+        }
+        return { role: message.role, content: message.text ?? "" };
+      }),
+    ];
+    const requestBody = JSON.stringify({
+      model: this.model,
+      messages: apiMessages,
+      tools,
+      tool_choice: "AUTO",
+      temperature: 0.15,
+      max_tokens: 2048,
+    });
+    const systemText = `${systemInstruction}\n${requestGuidance}`;
+    recordProviderRequest(context, "cohere", {
+      requestBytes: Buffer.byteLength(requestBody),
+      systemPromptChars: systemText.length,
+      toolDefinitionsChars: JSON.stringify(tools).length,
+      toolDefinitionsCount: tools.length,
+      conversationChars: JSON.stringify(apiMessages.slice(1)).length,
+    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25_000);
+    const startedAt = Date.now();
+    logger.info({
+      requestId: context.requestId,
+      provider: this.provider,
+      model: this.model,
+      llmCall: context.callNumber,
+      attempt: 1,
+      requestBytes: Buffer.byteLength(requestBody),
+      systemPromptChars: systemText.length,
+      toolDefinitionsChars: JSON.stringify(tools).length,
+      toolDefinitionsCount: tools.length,
+      conversationChars: JSON.stringify(apiMessages.slice(1)).length,
+    }, "agent llm call started");
+    try {
+      const response = await fetch(COHERE_API_URL, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json",
+          authorization: `Bearer ${this.apiKey}`,
+        },
+        body: requestBody,
+        signal: controller.signal,
+      });
+      const raw = await response.text();
+      if (response.ok) {
+        const payload = JSON.parse(raw) as {
+          message?: {
+            content?: string | Array<{ type?: string; text?: string }>;
+            tool_calls?: Array<{
+              id: string;
+              function: { name: string; arguments: string };
+            }>;
+          };
+          usage?: unknown;
+        };
+        const message = payload.message;
+        const text = Array.isArray(message?.content)
+          ? message.content
+            .filter((part) => part.type === "text")
+            .map((part) => part.text ?? "")
+            .join("")
+            .trim()
+          : message?.content?.trim() ?? "";
+        const responseResult = {
+          text,
+          toolCalls: (message?.tool_calls ?? []).map((call) => ({
+            id: call.id,
+            name: call.function.name,
+            args: parseJsonObject(call.function.arguments),
+          })),
+          usage: payload.usage,
+        };
+        logger.info({
+          requestId: context.requestId,
+          provider: this.provider,
+          model: this.model,
+          llmCall: context.callNumber,
+          attempt: 1,
+          toolCalls: responseResult.toolCalls.length,
+          latencyMs: Date.now() - startedAt,
+        }, "agent llm call completed");
+        return responseResult;
+      }
+      const error = providerResponseError(
+        "cohere",
+        response.status,
+        raw,
+        parseRetryAfter(response.headers.get("retry-after")),
+      );
+      if (response.status === 429) {
+        logger.warn({
+          requestId: context.requestId,
+          provider: this.provider,
+          model: this.model,
+          llmCall: context.callNumber,
+          attempt: 1,
+          retryAfterSeconds: error.retryAfterSeconds,
+          safeToRetry: false,
+        }, "agent llm rate limit deferred to failover");
+      }
+      throw error;
+    } catch (error) {
+      const classified = error instanceof SecretaryError
+        ? error
+        : providerExceptionError("cohere", error);
+      logLlmFailure("cohere", this.model, context, 1, classified);
+      throw classified;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+}
+
 export type ConfiguredProvider = ProviderName | "development" | "unavailable";
 
 function asProvider(value: string | undefined): ProviderName | undefined {
   const normalized = value?.trim().toLowerCase();
-  return normalized === "gemini" || normalized === "groq" || normalized === "mistral"
+  return normalized === "gemini"
+    || normalized === "groq"
+    || normalized === "mistral"
+    || normalized === "cohere"
     ? normalized
     : undefined;
 }
@@ -2590,15 +2786,19 @@ export function configuredProviderOrder(): ProviderName[] {
         ? "groq"
         : process.env.MISTRAL_API_KEY
           ? "mistral"
+          : process.env.COHERE_API_KEY
+            ? "cohere"
           : undefined);
-  const autoFallbacks = (["groq", "gemini", "mistral"] as ProviderName[])
+  const autoFallbacks = (["groq", "gemini", "mistral", "cohere"] as ProviderName[])
     .filter((provider) => provider !== primary)
     .filter((provider) => (
       provider === "groq"
         ? Boolean(process.env.GROQ_API_KEY)
         : provider === "gemini"
           ? Boolean(process.env.GEMINI_API_KEY)
-          : Boolean(process.env.MISTRAL_API_KEY)
+          : provider === "mistral"
+            ? Boolean(process.env.MISTRAL_API_KEY)
+            : Boolean(process.env.COHERE_API_KEY)
     ));
   return [
     primary,
@@ -2623,6 +2823,7 @@ export function phase2Enabled(): boolean {
 function createGateway(provider: ProviderName): ModelGateway {
   if (provider === "groq") return new GroqModelGateway();
   if (provider === "mistral") return new MistralModelGateway();
+  if (provider === "cohere") return new CohereModelGateway();
   return new GeminiModelGateway();
 }
 

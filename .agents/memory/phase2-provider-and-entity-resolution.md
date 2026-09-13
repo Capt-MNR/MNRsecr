@@ -43,6 +43,12 @@ Provider schema conversion must collapse nullable type unions only for the provi
 
 **How to apply:** Keep OpenAI conversion recursive and lowercase-compatible. For Gemini, detect arrays made only of schema type names, remove `NULL`, and recursively preserve all other arrays.
 
+Provider tool schemas must be normalized per provider even when the request envelope is OpenAI-compatible; some providers reject JSON Schema nullable type arrays rather than interpreting them.
+
+**Why:** Cohere's tool endpoint rejected `type: ["string", "null"]` with a 400 response until nullable unions were collapsed only for Cohere.
+
+**How to apply:** Keep a provider-specific schema converter for each gateway. Collapse only arrays composed of schema type names for providers that do not support them, while preserving enum and other value arrays.
+
 The browser timeout for an agent turn must exceed the combined provider failover budget, not just one provider call.
 
 **Why:** A primary provider timeout followed by fallback can legitimately outlive a short client timeout while a write is still being finalized.

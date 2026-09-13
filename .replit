@@ -25,6 +25,8 @@ timeoutMs = 20000
 
 [userenv.shared]
 AI_PROVIDER = "groq"
+AI_FALLBACK_PROVIDER = "gemini"
+AI_SECONDARY_FALLBACK_PROVIDER = "cohere"
 
 [nix]
 channel = "stable-25_05"

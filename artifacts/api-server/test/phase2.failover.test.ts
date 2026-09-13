@@ -13,7 +13,9 @@ import {
   Phase2AgentRuntime,
   GroqModelGateway,
   MistralModelGateway,
+  CohereModelGateway,
   configuredProviderOrder,
+  toCohereSchema,
   toGeminiSchema,
   toOpenAiSchema,
   type ConversationMessage,
@@ -105,21 +107,23 @@ test("provider order is configurable and defaults to Gemini before Groq when bot
     "GEMINI_API_KEY",
     "GROQ_API_KEY",
     "MISTRAL_API_KEY",
+    "COHERE_API_KEY",
   ] as const;
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   try {
     process.env.GEMINI_API_KEY = "test-gemini-key";
     process.env.GROQ_API_KEY = "test-groq-key";
     process.env.MISTRAL_API_KEY = "test-mistral-key";
+    process.env.COHERE_API_KEY = "test-cohere-key";
     delete process.env.AI_PROVIDER;
     delete process.env.AI_PRIMARY_PROVIDER;
     delete process.env.AI_FALLBACK_PROVIDER;
     delete process.env.AI_SECONDARY_FALLBACK_PROVIDER;
-    assert.deepEqual(configuredProviderOrder(), ["gemini", "groq", "mistral"]);
+    assert.deepEqual(configuredProviderOrder(), ["gemini", "groq", "mistral", "cohere"]);
 
     process.env.AI_PRIMARY_PROVIDER = "groq";
     process.env.AI_FALLBACK_PROVIDER = "gemini";
-    assert.deepEqual(configuredProviderOrder(), ["groq", "gemini", "mistral"]);
+    assert.deepEqual(configuredProviderOrder(), ["groq", "gemini", "mistral", "cohere"]);
   } finally {
     for (const key of keys) {
       if (previous[key] === undefined) delete process.env[key];
@@ -128,15 +132,17 @@ test("provider order is configurable and defaults to Gemini before Groq when bot
   }
 });
 
-test("Gemini, Groq, and Mistral adapters independently normalize provider tool responses", async () => {
+test("Gemini, Groq, Mistral, and Cohere adapters independently normalize provider tool responses", async () => {
   const previousFetch = globalThis.fetch;
   const previousGeminiKey = process.env.GEMINI_API_KEY;
   const previousGroqKey = process.env.GROQ_API_KEY;
   const previousMistralKey = process.env.MISTRAL_API_KEY;
+  const previousCohereKey = process.env.COHERE_API_KEY;
   try {
     process.env.GEMINI_API_KEY = "test-gemini-key";
     process.env.GROQ_API_KEY = "test-groq-key";
     process.env.MISTRAL_API_KEY = "test-mistral-key";
+    process.env.COHERE_API_KEY = "test-cohere-key";
     globalThis.fetch = async (input) => {
       const url = String(input);
       if (url.includes("generativelanguage.googleapis.com")) {
@@ -151,6 +157,23 @@ test("Gemini, Groq, and Mistral adapters independently normalize provider tool r
               }],
             },
           }],
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      if (url.includes("api.cohere.com")) {
+        return new Response(JSON.stringify({
+          message: {
+            content: [{ type: "text", text: "رد Cohere" }],
+            tool_calls: [{
+              id: "cohere-call",
+              function: {
+                name: "final_response",
+                arguments: JSON.stringify({
+                  kind: "answer",
+                  message: "رد Cohere",
+                }),
+              },
+            }],
+          },
         }), { status: 200, headers: { "content-type": "application/json" } });
       }
       return new Response(JSON.stringify({
@@ -175,12 +198,16 @@ test("Gemini, Groq, and Mistral adapters independently normalize provider tool r
     const gemini = await new GeminiModelGateway().generate([], context);
     const groq = await new GroqModelGateway().generate([], context);
     const mistral = await new MistralModelGateway().generate([], context);
+    const cohere = await new CohereModelGateway().generate([], context);
     assert.equal(gemini.toolCalls[0]?.name, "final_response");
     assert.equal(groq.toolCalls[0]?.name, "final_response");
     assert.equal(mistral.toolCalls[0]?.name, "final_response");
+    assert.equal(cohere.toolCalls[0]?.name, "final_response");
     assert.equal(gemini.toolCalls[0]?.args.message, "رد Gemini");
     assert.equal(groq.toolCalls[0]?.args.message, "رد Groq");
     assert.equal(mistral.toolCalls[0]?.args.message, "رد Mistral");
+    assert.equal(cohere.toolCalls[0]?.args.message, "رد Cohere");
+    assert.equal(cohere.text, "رد Cohere");
   } finally {
     globalThis.fetch = previousFetch;
     if (previousGeminiKey === undefined) delete process.env.GEMINI_API_KEY;
@@ -189,6 +216,8 @@ test("Gemini, Groq, and Mistral adapters independently normalize provider tool r
     else process.env.GROQ_API_KEY = previousGroqKey;
     if (previousMistralKey === undefined) delete process.env.MISTRAL_API_KEY;
     else process.env.MISTRAL_API_KEY = previousMistralKey;
+    if (previousCohereKey === undefined) delete process.env.COHERE_API_KEY;
+    else process.env.COHERE_API_KEY = previousCohereKey;
   }
 });
 
@@ -305,6 +334,11 @@ test("Groq accepts nullable update_task and update_commitment schemas", async ()
   }
 });
 
+test("Cohere removes nullable JSON Schema type arrays", () => {
+  assert.equal(toCohereSchema(["STRING", "NULL"]), "string");
+  assert.deepEqual(toCohereSchema(["kind", "message"]), ["kind", "message"]);
+});
+
 test("429, timeout, and unavailable primary providers fail over without changing the request", async () => {
   const cases = [
     ["rate-limit", providerResponseError("gemini", 429, "rate limited")],
@@ -364,10 +398,10 @@ test("failover advances to a third provider after the selected fallback is rate 
     if (callNumber === 1) return toolCall("recall_context", {});
     throw providerResponseError("gemini", 429, "rate limited");
   });
-  const tertiary = new ScriptedProvider("mistral", () => finalResponse("اكتمل الرد من المزود الثالث."));
+  const tertiary = new ScriptedProvider("cohere", () => finalResponse("اكتمل الرد من المزود الثالث."));
   const gateway = new FailoverModelGateway(
-    { groq: primary, gemini: secondary, mistral: tertiary },
-    ["groq", "gemini", "mistral"],
+    { groq: primary, gemini: secondary, cohere: tertiary },
+    ["groq", "gemini", "cohere"],
   );
 
   const result = await new Phase2AgentRuntime(gateway).run(identity("three-provider-failover"), {
@@ -375,10 +409,10 @@ test("failover advances to a third provider after the selected fallback is rate 
     requestId: "three-provider-failover-request",
   }, { dryRun: true });
 
-  assert.equal(result.provider, "mistral");
+  assert.equal(result.provider, "cohere");
   assert.deepEqual(
     result.action?.providerTrace?.providersAttempted,
-    ["groq", "gemini", "gemini", "mistral"],
+    ["groq", "gemini", "gemini", "cohere"],
   );
   assert.equal(secondary.calls.length, 2);
   assert.equal(tertiary.calls.length, 1);
