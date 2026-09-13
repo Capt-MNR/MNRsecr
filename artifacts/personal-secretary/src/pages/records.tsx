@@ -254,6 +254,7 @@ export default function Records() {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>('expenses');
   const [editing, setEditing] = useState<{ kind: RecordType; record: RecordItem } | null>(null);
+  const [staleRecordMessage, setStaleRecordMessage] = useState<string | null>(null);
   const recordsQuery = useListRecords({ query: { queryKey: getListRecordsQueryKey(), staleTime: 20_000 } });
   const updateMutation = useUpdateRecord();
   const deleteMutation = useDeleteRecord();
@@ -270,6 +271,19 @@ export default function Records() {
   function deleteItem(record: RecordItem) {
     if (!window.confirm(`هل تريد حذف "${labelForRecord(record)}"؟ لا يمكن استرجاعه بعد الحذف.`)) return;
     deleteMutation.mutate({ recordType: kind, recordId: recordId(record) }, { onSuccess: refresh });
+  }
+
+  async function editItem(record: RecordItem) {
+    setStaleRecordMessage(null);
+    updateMutation.reset();
+    deleteMutation.reset();
+    const latest = await recordsQuery.refetch();
+    const current = latest.data?.[tab]?.find((candidate) => candidate.id === record.id);
+    if (!current) {
+      setStaleRecordMessage('تم تحديث القائمة لأن هذا السجل لم يعد متاحًا للتعديل.');
+      return;
+    }
+    setEditing({ kind, record: current as RecordItem });
   }
 
   return (
@@ -296,9 +310,10 @@ export default function Records() {
         </nav>
 
         {recordsQuery.isLoading && <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{[1, 2, 3, 4, 5, 6].map((item) => <div key={item} className="h-32 animate-pulse rounded-2xl bg-muted" />)}</div>}
+        {staleRecordMessage && <div className="mb-5 flex items-center gap-2 rounded-2xl border border-amber-500/25 bg-amber-500/5 p-4 text-sm text-amber-700 dark:text-amber-300" role="status"><CircleAlert className="size-4" /> {staleRecordMessage}</div>}
         {error && <div className="mb-5 flex items-center gap-2 rounded-2xl border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive" role="alert"><CircleAlert className="size-4" /> {error.message}</div>}
         {!recordsQuery.isLoading && !error && currentRecords.length === 0 && <div className="rounded-[24px] border border-dashed border-border bg-card/50 px-6 py-16 text-center"><Check className="mx-auto size-8 text-primary/60" /><h2 className="mt-4 font-serif text-xl">لا توجد سجلات هنا بعد</h2><p className="mt-2 text-sm text-muted-foreground">أضف أول سجل من خلال المحادثة الطبيعية.</p></div>}
-        {!recordsQuery.isLoading && currentRecords.length > 0 && <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{currentRecords.map((record) => <RecordCard key={record.id} kind={kind} record={record} onEdit={() => setEditing({ kind, record })} onDelete={() => deleteItem(record)} />)}</div>}
+        {!recordsQuery.isLoading && currentRecords.length > 0 && <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{currentRecords.map((record) => <RecordCard key={record.id} kind={kind} record={record} onEdit={() => void editItem(record)} onDelete={() => deleteItem(record)} />)}</div>}
       </main>
       {editing && <EditModal kind={editing.kind} record={editing.record} onClose={() => setEditing(null)} isSaving={updateMutation.isPending} onSave={(form) => updateMutation.mutate({ recordType: editing.kind, recordId: editing.record.id, data: form }, { onSuccess: () => { setEditing(null); refresh(); } })} />}
     </div>
