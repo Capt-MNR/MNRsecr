@@ -88,12 +88,16 @@ function EditModal({
   onClose,
   onSave,
   isSaving,
+  people,
+  projects,
 }: {
   kind: RecordType;
   record: RecordItem;
   onClose: () => void;
   onSave: (data: RecordUpdateInput) => void;
   isSaving: boolean;
+  people: PersonRecord[];
+  projects: ProjectRecord[];
 }) {
   const expense = kind === 'expense' ? record as ExpenseRecord : undefined;
   const person = kind === 'person' ? record as PersonRecord : undefined;
@@ -105,6 +109,8 @@ function EditModal({
     amountMinor: expense ? String(expense.amountMinor) : '',
     currency: expense?.currency ?? '',
     description: expense?.description ?? '',
+    personId: expense?.personId ?? '',
+    projectId: expense?.projectId ?? '',
     occurredAt: expense?.occurredAt?.slice(0, 16) ?? '',
     name: person?.name ?? project?.name ?? '',
     notes: person?.notes ?? '',
@@ -126,6 +132,8 @@ function EditModal({
       data.amountMinor = Number(form.amountMinor);
       data.currency = form.currency;
       data.description = form.description;
+      data.personId = form.personId || null;
+      data.projectId = form.projectId || null;
       data.occurredAt = new Date(form.occurredAt).toISOString();
     } else if (kind === 'person') {
       data.name = form.name;
@@ -183,6 +191,20 @@ function EditModal({
                 {textInput('currency', 'العملة')}
               </div>
               {textInput('description', 'الوصف')}
+              <label className="block">
+                <span className="mb-1.5 block text-xs text-muted-foreground">الشخص المستلم (اختياري)</span>
+                <select value={form.personId} onChange={(event) => update('personId', event.target.value)} className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary">
+                  <option value="">بدون شخص</option>
+                  {people.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs text-muted-foreground">المشروع (اختياري)</span>
+                <select value={form.projectId} onChange={(event) => update('projectId', event.target.value)} className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary">
+                  <option value="">بدون مشروع</option>
+                  {projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                </select>
+              </label>
               {textInput('occurredAt', 'تاريخ المصروف', 'datetime-local')}
             </>
           )}
@@ -404,7 +426,7 @@ export default function Records() {
           </div>
         </div>
       )}
-      {editing && <EditModal kind={editing.kind} record={editing.record} onClose={() => setEditing(null)} isSaving={updateMutation.isPending} onSave={(form) => updateMutation.mutate({ recordType: editing.kind, recordId: editing.record.id, data: form }, { onSuccess: (response) => handleMutationResult(response, editing.kind, editing.record.id) })} />}
+      {editing && <EditModal kind={editing.kind} record={editing.record} people={data?.people ?? []} projects={data?.projects ?? []} onClose={() => setEditing(null)} isSaving={updateMutation.isPending} onSave={(form) => updateMutation.mutate({ recordType: editing.kind, recordId: editing.record.id, data: form }, { onSuccess: (response) => handleMutationResult(response, editing.kind, editing.record.id) })} />}
     </div>
   );
 }

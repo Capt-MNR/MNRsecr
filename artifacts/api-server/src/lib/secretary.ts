@@ -118,7 +118,15 @@ export interface PersistencePort {
   ): Promise<void>;
   updateExpense(
     identity: Identity,
-    input: { expenseId: string; amountMinor?: number; projectId?: string },
+    input: {
+      expenseId: string;
+      amountMinor?: number;
+      currency?: string;
+      description?: string;
+      occurredAt?: Date;
+      personId?: string | null;
+      projectId?: string | null;
+    },
   ): Promise<PersistedExpense | null>;
   createReminder(
     identity: Identity,
@@ -319,7 +327,8 @@ class DrizzlePersistence implements PersistencePort {
       currency?: string;
       description?: string;
       occurredAt?: Date;
-      projectId?: string;
+      personId?: string | null;
+      projectId?: string | null;
     },
   ): Promise<PersistedExpense | null> {
     const updates = {
@@ -327,10 +336,19 @@ class DrizzlePersistence implements PersistencePort {
       ...(input.currency === undefined ? {} : { currency: input.currency }),
       ...(input.description === undefined ? {} : { description: input.description }),
       ...(input.occurredAt === undefined ? {} : { occurredAt: input.occurredAt }),
+      ...(input.personId === undefined ? {} : { personId: input.personId }),
       ...(input.projectId === undefined ? {} : { projectId: input.projectId }),
     };
     if (Object.keys(updates).length === 0) return null;
-    if (input.projectId !== undefined) {
+    if (input.personId !== undefined && input.personId !== null) {
+      const [person] = await db.select({ id: peopleTable.id }).from(peopleTable).where(and(
+        eq(peopleTable.id, input.personId),
+        eq(peopleTable.tenantId, identity.tenantId),
+        eq(peopleTable.ownerUserId, identity.userId),
+      )).limit(1);
+      if (!person) return null;
+    }
+    if (input.projectId !== undefined && input.projectId !== null) {
       const [project] = await db.select({ id: projectsTable.id }).from(projectsTable).where(and(
         eq(projectsTable.id, input.projectId),
         eq(projectsTable.tenantId, identity.tenantId),
@@ -691,6 +709,15 @@ function extractExpensePerson(message: string, amount: { raw: string; index: num
   return undefined;
 }
 
+type ExpenseInput = {
+  amountMinor: number;
+  currency: string;
+  description: string;
+  personName?: string;
+  projectName?: string;
+  projectOrPurpose?: boolean;
+};
+
 function parseExpense(message: string) {
   const normalized = normalizeArabic(message);
   if (!/(?:دفعت|اديت|اعطيت|خد|اخد|سجل|مصروف|صرفت|صرف)/i.test(normalized)) return null;
@@ -814,11 +841,132 @@ function parsePendingProjectSelection(
     : null;
 }
 
+function cairoDateAt(dayOffset: number, hour: number, minute: number): Date {
+  const nowParts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+    timeZone: "Africa/Cairo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date()).map((part) => [part.type, part.value]));
+  const utcGuess = Date.UTC(
+    Number(nowParts.year),
+    Number(nowParts.month) - 1,
+    Number(nowParts.day) + dayOffset,
+    hour,
+    minute,
+  );
+  const offsetParts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+    timeZone: "Africa/Cairo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(utcGuess)).map((part) => [part.type, part.value]));
+  const cairoAsUtc = Date.UTC(
+    Number(offsetParts.year),
+    Number(offsetParts.month) - 1,
+    Number(offsetParts.day),
+    Number(offsetParts.hour),
+    Number(offsetParts.minute),
+    Number(offsetParts.second),
+  );
+  return new Date(utcGuess - (cairoAsUtc - utcGuess));
+}
+
 function tomorrowAtNine(): Date {
-  const date = new Date();
-  date.setDate(date.getDate() + 1);
-  date.setHours(9, 0, 0, 0);
-  return date;
+  return cairoDateAt(1, 9, 0);
+}
+
+function arabicDigits(value: string): number {
+  return Number(value.replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit))));
+}
+
+function parseClock(message: string): { hour: number; minute: number } | null {
+  const match = message.match(
+    /(?:الساعة\s*)?([0-9٠-٩]{1,2})(?:\s*[:٫]\s*([0-9٠-٩]{1,2}))?\s*(صباح(?:ا|ًا)?|مساء(?:ا|ً)?|بالليل|ليل|ظهر)?/i,
+  );
+  if (!match) return null;
+  let hour = arabicDigits(match[1]);
+  const minute = match[2] ? arabicDigits(match[2]) : 0;
+  const period = match[3]?.toLocaleLowerCase("ar");
+  if (minute > 59 || hour > 23) return null;
+  if (period?.startsWith("مساء") || period === "بالليل" || period === "ليل") {
+    if (hour < 12) hour += 12;
+  } else if (period?.startsWith("صباح") && hour === 12) {
+    hour = 0;
+  } else if (period === "ظهر" && hour < 12) {
+    hour += 12;
+  }
+  return hour <= 23 ? { hour, minute } : null;
+}
+
+function reminderDueAt(message: string): Date | null {
+  const clock = parseClock(message);
+  return clock ? cairoDateAt(1, clock.hour, clock.minute) : null;
+}
+
+function isNoValueReply(message: string): boolean {
+  return /^(?:لا|لأ|لا\s+مش\s+مهم|مش\s+مهم|مش\s+لازم|بدون|من\s+غير|ولا\s+حاجه|ولا\s+شيء|مش\s+عايز|مش\s+عاوزه|أي\s+وقت|اي\s+وقت)$/i.test(
+    normalizeArabic(message),
+  );
+}
+
+function reminderTextAndDueAt(message: string): { text: string; dueAt: Date | null } {
+  const rest = message.replace(/^فكرني\s+(?:بكره|بكرة)\s*/i, "").trim();
+  const clock = parseClock(rest);
+  const text = rest
+    .replace(/(?:الساعة\s*)?[0-9٠-٩]{1,2}(?:\s*[:٫]\s*[0-9٠-٩]{1,2})?\s*(?:صباح(?:ا|ًا)?|مساء(?:ا|ً)?|بالليل|ليل|ظهر)?/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return { text: text || "راجع تذكيرك", dueAt: clock ? cairoDateAt(1, clock.hour, clock.minute) : null };
+}
+
+function parsePendingReminderReply(message: string, memory: ConversationMemorySnapshot) {
+  const previous = recentAction(memory);
+  const pending = previous?.pendingReminder;
+  if (!previous?.awaitingReminderTime || !pending || typeof pending !== "object") return null;
+  const pendingReminder = pending as Record<string, unknown>;
+  const clock = parseClock(message);
+  const dueAt = clock ? cairoDateAt(1, clock.hour, clock.minute) : isNoValueReply(message) ? tomorrowAtNine() : null;
+  if (!dueAt) return { needsTime: true as const };
+  return {
+    needsTime: false as const,
+    text: typeof pendingReminder.text === "string" ? pendingReminder.text : "راجع تذكيرك",
+    dueAt,
+  };
+}
+
+function parsePendingExpenseReply(message: string, memory: ConversationMemorySnapshot) {
+  const previous = recentAction(memory);
+  const pending = previous?.pendingExpense;
+  if (!pending || typeof pending !== "object") return null;
+  const pendingExpense = pending as Record<string, unknown>;
+  if (previous.awaitingPersonOptional) {
+    const personName = isNoValueReply(message) ? undefined : message.trim();
+    return {
+      stage: "person" as const,
+      expense: {
+        ...pendingExpense,
+        ...(personName ? { personName } : {}),
+      },
+    };
+  }
+  if (previous.awaitingProjectOrPurpose) {
+    const purpose = isNoValueReply(message) ? undefined : message.trim()
+      .replace(/^(?:مشروع|الغرض|على)\s+/i, "")
+      .trim();
+    return {
+      stage: "ready" as const,
+      expense: {
+        ...pendingExpense,
+        ...(purpose ? { projectName: purpose, projectOrPurpose: true } : {}),
+      },
+    };
+  }
+  return null;
 }
 
 async function saveDeterministicExpense(
@@ -941,12 +1089,38 @@ export class DeterministicAgentRuntime {
     const correction = parseConversationCorrection(message, conversationMemory);
     const projectCorrection = parseProjectCorrection(message, conversationMemory);
     const pendingProjectSelection = parsePendingProjectSelection(message, conversationMemory);
+    const pendingReminderReply = parsePendingReminderReply(message, conversationMemory);
+    const pendingExpenseReply = parsePendingExpenseReply(message, conversationMemory);
+    const pendingExpenseInput = pendingExpenseReply && "expense" in pendingExpenseReply
+      ? pendingExpenseReply.expense as ExpenseInput
+      : null;
+    const expenseInput = pendingExpenseInput
+      ?? (expense && !("needsAmount" in expense) ? expense as ExpenseInput : null);
     const projectMatch = message.match(
       /^بدأت\s+(?:مشروع(?:\s+جديد)?)\s+(?:اسمه\s+)?(.+)$/i,
     );
     const personRelationshipMatch = message.match(/^(.+?)\s+هو\s+(.+)$/i);
 
-    if (projectMatch) {
+    if (pendingReminderReply && !pendingReminderReply.needsTime) {
+      result = await pendingDeterministicAction(identity, conversationId, input.idempotencyKey, "create_reminder", {
+        text: pendingReminderReply.text,
+        dueAt: pendingReminderReply.dueAt.toISOString(),
+        timezone: "Africa/Cairo",
+      });
+    } else if (pendingReminderReply?.needsTime) {
+      result = {
+        conversationId,
+        assistantMessage: "تحب التذكير الساعة كام؟ اكتب الوقت، أو قل «أي وقت» لأضعه الساعة 9 صباحًا.",
+        action: {
+          type: "clarification_needed",
+          intent: "create_reminder",
+          awaitingReminderTime: true,
+          pendingReminder: recentAction(conversationMemory)?.pendingReminder,
+        },
+        provider: "development",
+        model: "deterministic-ar-v1",
+      };
+    } else if (projectMatch) {
       result = await pendingDeterministicAction(identity, conversationId, input.idempotencyKey, "create_project", {
         name: projectMatch[1].trim(),
       });
@@ -1022,29 +1196,55 @@ export class DeterministicAgentRuntime {
         provider: "development",
         model: "deterministic-ar-v1",
       };
-    } else if (expense) {
-      if (!expense.personName) {
+    } else if (expenseInput) {
+      if (pendingExpenseReply?.stage === "person" && !expenseInput.projectName) {
         result = {
           conversationId,
-          assistantMessage: "تمام، المصروف ده لمين؟",
-          action: { type: "clarification_needed", intent: "record_expense", awaitingPerson: true },
+          assistantMessage: "تمام. ما اسم المشروع أو الغرض؟ ولو المصروف غير مرتبط، اكتب «بدون مشروع».",
+          action: {
+            type: "clarification_needed",
+            intent: "record_expense",
+            awaitingProjectOrPurpose: true,
+            pendingExpense: expenseInput,
+          },
+          provider: "development",
+          model: "deterministic-ar-v1",
+        };
+      } else if (!expenseInput.personName) {
+        result = {
+          conversationId,
+          assistantMessage: "اسم المستلم اختياري. اكتب الاسم لو تحب أضيفه، أو اكتب «بدون اسم». وبعدها هأكد المشروع أو الغرض.",
+          action: {
+            type: "clarification_needed",
+            intent: "record_expense",
+            awaitingPersonOptional: true,
+            pendingExpense: expenseInput,
+          },
           provider: "development",
           model: "deterministic-ar-v1",
         };
       } else {
         const [people, projects] = await Promise.all([
-          this.persistence.findPeople(identity, expense.personName),
-          expense.projectName ? this.persistence.findProjects(identity, expense.projectName) : Promise.resolve([]),
+          expenseInput.personName ? this.persistence.findPeople(identity, expenseInput.personName) : Promise.resolve([]),
+          expenseInput.projectName ? this.persistence.findProjects(identity, expenseInput.projectName) : Promise.resolve([]),
         ]);
+        const resolvedExpense = expenseInput.projectOrPurpose && expenseInput.projectName && projects.length === 0
+          ? {
+              ...expenseInput,
+              description: `${expenseInput.description} — الغرض: ${expenseInput.projectName}`,
+              projectName: undefined,
+              projectOrPurpose: undefined,
+            }
+          : expenseInput;
         if (people.length > 1) {
           result = {
             conversationId,
-            assistantMessage: `عندك أكثر من شخص باسم ${expense.personName}، تقصد أي واحد؟`,
+            assistantMessage: `عندك أكثر من شخص باسم ${expenseInput.personName}، تقصد أي واحد؟`,
             action: {
               type: "clarification_needed",
               reason: "ambiguous_person",
               personCandidates: people.map((person) => ({ id: person.id, name: person.name })),
-              pendingExpense: expense,
+              pendingExpense: resolvedExpense,
             },
             provider: "development",
             model: "deterministic-ar-v1",
@@ -1052,19 +1252,19 @@ export class DeterministicAgentRuntime {
         } else if (projects.length > 1) {
           result = {
             conversationId,
-            assistantMessage: `عندك أكثر من مشروع باسم ${expense.projectName}، تقصد أي واحد؟`,
+            assistantMessage: `عندك أكثر من مشروع باسم ${expenseInput.projectName}، تقصد أي واحد؟`,
             action: {
               type: "clarification_needed",
               reason: "ambiguous_project",
               awaitingProject: true,
               projectCandidates: projects.map((project) => ({ id: project.id, name: project.name })),
-              pendingExpense: expense,
+              pendingExpense: resolvedExpense,
             },
             provider: "development",
             model: "deterministic-ar-v1",
           };
         } else {
-          result = await saveDeterministicExpense(this.persistence, identity, conversationId, input.idempotencyKey, expense);
+          result = await saveDeterministicExpense(this.persistence, identity, conversationId, input.idempotencyKey, resolvedExpense);
         }
       }
     } else {
@@ -1079,12 +1279,27 @@ export class DeterministicAgentRuntime {
       );
 
       if (reminderMatch) {
-        const text = message.replace(/^فكرني\s+بكر[هة]\s*/i, "").trim();
-        result = await pendingDeterministicAction(identity, conversationId, input.idempotencyKey, "create_reminder", {
-          text: text || "راجع تذكيرك",
-          dueAt: tomorrowAtNine().toISOString(),
-          timezone: "Africa/Cairo",
-        });
+        const { text, dueAt } = reminderTextAndDueAt(message);
+        if (dueAt) {
+          result = await pendingDeterministicAction(identity, conversationId, input.idempotencyKey, "create_reminder", {
+            text,
+            dueAt: dueAt.toISOString(),
+            timezone: "Africa/Cairo",
+          });
+        } else {
+          result = {
+            conversationId,
+            assistantMessage: "تحب التذكير الساعة كام؟ اكتب الوقت، أو قل «أي وقت» لأضعه الساعة 9 صباحًا.",
+            action: {
+              type: "clarification_needed",
+              intent: "create_reminder",
+              awaitingReminderTime: true,
+              pendingReminder: { text },
+            },
+            provider: "development",
+            model: "deterministic-ar-v1",
+          };
+        }
       } else if (totalMatch) {
         const personName = totalMatch[1].trim();
         const total = await this.persistence.totalPaidToPerson(
@@ -1251,9 +1466,16 @@ export async function executeApprovedOperation(
       ...(operationNumberArg(operation, "amountMinor") !== undefined
         ? { amountMinor: operationNumberArg(operation, "amountMinor") }
         : {}),
-      ...(operationStringArg(operation, "projectId")
-        ? { projectId: operationStringArg(operation, "projectId") }
-        : {}),
+      ...(operation.args.projectId === null
+        ? { projectId: null }
+        : operationStringArg(operation, "projectId")
+          ? { projectId: operationStringArg(operation, "projectId") }
+          : {}),
+      ...(operation.args.personId === null
+        ? { personId: null }
+        : operationStringArg(operation, "personId")
+          ? { personId: operationStringArg(operation, "personId") }
+          : {}),
       ...(operationStringArg(operation, "currency")
         ? { currency: operationStringArg(operation, "currency") }
         : {}),

@@ -262,6 +262,32 @@ test("broad expense reports use a bounded deterministic response", async () => {
   assert.match(response.assistantMessage, /تقرير المصروفات|لا توجد مصروفات/);
 });
 
+test("reminders ask for an optional exact time before approval", async () => {
+  const conversationId = `reminder-time-${Date.now()}`;
+  const first = await sendTurn("فكرني بكرة أراجع الفاتورة", conversationId, `${conversationId}-first`);
+  assert.equal(first.action.type, "clarification_needed");
+  assert.equal(first.action.awaitingReminderTime, true);
+
+  const second = await sendTurn("الساعة 5 مساء", conversationId, `${conversationId}-second`);
+  assert.equal(second.action.type, "approval_required");
+  assert.match(second.action.display.details.join(" "), /أراجع الفاتورة/);
+  assert.match(second.action.display.details.join(" "), /موعد|202|5/);
+});
+
+test("expenses allow an omitted recipient and collect the purpose", async () => {
+  const conversationId = `optional-expense-${Date.now()}`;
+  const first = await sendTurn("دفعت 250 جنيه", conversationId, `${conversationId}-first`);
+  assert.equal(first.action.type, "clarification_needed");
+  assert.equal(first.action.awaitingPersonOptional, true);
+
+  const second = await sendTurn("بدون اسم", conversationId, `${conversationId}-second`);
+  assert.equal(second.action.awaitingProjectOrPurpose, true);
+
+  const third = await sendTurn("مستلزمات المكتب", conversationId, `${conversationId}-third`);
+  assert.equal(third.action.type, "approval_required");
+  assert.match(third.action.display.details.join(" "), /مستلزمات المكتب/);
+});
+
 test("record edits return approval and apply only after approval", async () => {
   const created = await sendApprovedTurn(
     `دفعت تعديل السجل ${Date.now()} 155 جنيه`,

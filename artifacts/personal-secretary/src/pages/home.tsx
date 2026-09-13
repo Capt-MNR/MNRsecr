@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -118,6 +118,8 @@ function Home() {
   const [selectedConversationId, setSelectedConversationId] = useState<string | undefined>();
   const [messages, setMessages] = useState<LocalMessage[]>([starterMessage]);
   const [approvalError, setApprovalError] = useState<string | null>(null);
+  const [sendError, setSendError] = useState<ReturnType<typeof classifySecretaryError> | null>(null);
+  const sendingRef = useRef(false);
 
   const todayQuery = useGetTodayContext({
     query: {
@@ -142,7 +144,6 @@ function Home() {
     request: { timeoutMs: 90_000 },
   });
   const context = todayQuery.data?.context;
-  const sendError = createTurn.isError ? classifySecretaryError(createTurn.error) : null;
   const sendErrorMessage = sendError?.category === 'timeout'
     ? 'لم يصل الرد في الوقت المتوقع. قد يكون الطلب ما زال قيد التنفيذ؛ لا تعيد إرسال طلب حفظ الآن، وتحقق من السجلات أولًا.'
     : sendError?.message;
@@ -190,7 +191,9 @@ function Home() {
 
   function sendMessage(value = draft) {
     const message = value.trim();
-    if (!message || createTurn.isPending) return;
+    if (!message || createTurn.isPending || sendingRef.current) return;
+    sendingRef.current = true;
+    setSendError(null);
     const sentAt = new Date().toISOString();
     setDraft('');
     setMessages((current) => [
@@ -208,6 +211,8 @@ function Home() {
       },
       {
         onSuccess: (response) => {
+          sendingRef.current = false;
+          setSendError(null);
           const approval = approvalFromAction(response.action);
           setConversationId(response.conversationId);
           setSelectedConversationId(response.conversationId);
@@ -225,6 +230,10 @@ function Home() {
           ]);
           queryClient.invalidateQueries({ queryKey: getGetTodayContextQueryKey() });
           queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
+        },
+        onError: (error) => {
+          sendingRef.current = false;
+          setSendError(classifySecretaryError(error));
         },
       },
     );

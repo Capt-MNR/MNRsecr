@@ -142,7 +142,7 @@ export function classifySecretaryError(error: unknown): UserFacingError {
     if (payload.category === "agent_error") {
       return {
         category: "agent",
-        message: "تعذر تنفيذ الطلب داخل السكرتير. لم يتم إخفاء الخطأ؛ حاول مرة أخرى.",
+        message: "تعذر تنفيذ الطلب بالكامل، ولم يتم تغيير البيانات. جرّب صياغة أقصر أو حاول مرة أخرى.",
         retryable: false,
         requestId: payload.requestId,
       };

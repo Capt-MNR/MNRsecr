@@ -361,12 +361,12 @@ export const phase2Tools: ToolDefinition[] = [
     relationshipId: { type: "STRING" },
     relationship: { type: "STRING" },
   }, ["relationshipId", "relationship"]),
-  tool("record_expense", "Record an expense using integer minor units and resolved entity IDs.", {
+  tool("record_expense", "Record an expense using integer minor units. The recipient person and project are optional; use description for the purpose when no project is confirmed.", {
     amountMinor: { type: "INTEGER", description: "Money in minor units, e.g. 1150000 for 11500.00" },
     currency: { type: "STRING", description: "ISO currency code" },
     description: { type: "STRING" },
-    personId: { type: "STRING" },
-    projectId: { type: "STRING" },
+    personId: { type: ["STRING", "NULL"], description: "Optional recipient person ID after resolving a name" },
+    projectId: { type: ["STRING", "NULL"], description: "Optional confirmed project ID" },
     occurredAt: { type: "STRING", description: "ISO timestamp if explicitly known" },
   }, ["amountMinor", "description"]),
   tool("update_expense", "Correct an existing saved expense; never create a second expense for a correction.", {
@@ -869,6 +869,8 @@ async function executeTool(
         ));
         if (!person) return { ok: false, error: "Person is not accessible." };
         updates.personId = personId;
+      } else if (args.personId === null) {
+        updates.personId = null;
       }
       if (projectId) {
         const [project] = await db.select({ id: projectsTable.id }).from(projectsTable).where(and(
@@ -877,6 +879,8 @@ async function executeTool(
         ));
         if (!project) return { ok: false, error: "Project is not accessible." };
         updates.projectId = projectId;
+      } else if (args.projectId === null) {
+        updates.projectId = null;
       }
       const occurredAtValue = stringArg("occurredAt");
       if (occurredAtValue) {
@@ -1337,7 +1341,11 @@ const systemInstruction = `أنت سكرتير شخصي عربي يعمل داخ
 15. لا تحسب إجماليًا ماليًا بنفسك إذا أعادت الأداة total أو summary؛ استخدم القيم المحسوبة من قاعدة البيانات كما هي.
 16. اعتبر حالة المحادثة المنظمة سياقًا لفهم "ده" و"التاني" و"له" و"الفلوس دي" فقط؛ تحقق دائمًا من IDs عبر الأدوات.
 17. لا تذكر رقمًا ماليًا أو عددًا ماليًا من الذاكرة أو التخمين. بعد الأدوات استخدم final_response، وضع كل رقم مالي مؤكد في groundedFacts كما أعادته الأداة. الرسالة نفسها يجب أن تكون طبيعية وليست قالبًا.
-18. لا تستخدم final_response قبل إكمال الأدوات اللازمة. إذا كانت البيانات ناقصة أو الأسماء متكررة، اجعل kind = clarification بدل التخمين.`;
+18. لا تستخدم final_response قبل إكمال الأدوات اللازمة. إذا كانت البيانات ناقصة أو الأسماء متكررة، اجعل kind = clarification بدل التخمين.
+19. عند تسجيل مصروف، اسم الشخص المستلم اختياري. إذا لم يذكره المستخدم لا توقف التسجيل بسببه؛ اسأل مرة واحدة إن كان يريد إضافته، واقبل "بدون اسم" ثم أكمل.
+20. قبل اعتماد المصروف اسأل عن اسم المشروع أو الغرض إذا لم يذكره المستخدم. إذا ذكر غرضًا وليس مشروعًا، خزّنه في description ولا تنشئ مشروعًا جديدًا من تلقاء نفسك. لا تعتبر الغرض مشروعًا إلا بعد التحقق من وجوده أو تأكيد المستخدم.
+21. عند طلب تذكير أو موعد بيوم نسبي مثل "بكرة" دون ساعة دقيقة، اسأل عن الوقت بشكل اختياري. اقبل ساعة مثل "5 مساءً"، أو "أي وقت" واستخدم 09:00 بتوقيت Africa/Cairo. لا تنفذ التذكير قبل اكتمال dueAt.
+22. إذا فشل مزود، لا تعرض رسالة تقنية ولا تقل إن الكتابة تمت. استخدم final_response برسالة عربية قصيرة توضّح أن الطلب لم يكتمل وأن البيانات لم تتغير.`;
 
 const requestGuidance = `إرشادات تنفيذ إضافية:
 - إذا كانت الرسالة جملة دفع/إعطاء/استلام وبها شخص ومبلغ وعملة، نفّذ find_person ثم record_expense مباشرة. لا تستدع recall_context أولًا. إذا لم يذكر المستخدم وصفًا، استخدم وصفًا صادقًا مثل "دفعة إلى <الاسم>".

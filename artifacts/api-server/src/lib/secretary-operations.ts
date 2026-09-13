@@ -118,8 +118,23 @@ export function displayForOperation(
           ...(stringArg("projectName") ? [`المشروع: ${stringArg("projectName")}`] : []),
         ],
       };
-    case "create_reminder":
-      return { title: "إضافة تذكير", details: [description ?? "تذكير جديد"] };
+    case "create_reminder": {
+      const dueAt = stringArg("dueAt");
+      const dueLabel = dueAt && !Number.isNaN(new Date(dueAt).getTime())
+        ? new Intl.DateTimeFormat("ar-EG", {
+            timeZone: stringArg("timezone") ?? "Africa/Cairo",
+            dateStyle: "medium",
+            timeStyle: "short",
+          }).format(new Date(dueAt))
+        : undefined;
+      return {
+        title: "إضافة تذكير",
+        details: [
+          description ?? "تذكير جديد",
+          ...(dueLabel ? [`الموعد: ${dueLabel}`] : []),
+        ],
+      };
+    }
     case "create_task":
       return { title: "إضافة مهمة", details: [description ?? "مهمة جديدة"] };
     case "create_commitment":

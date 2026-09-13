@@ -7,4 +7,4 @@ The approval request and the committed result are separate conversation events. 
 
 **Why:** A pending approval is not evidence that a write occurred; treating it as the latest state breaks multi-turn corrections after approval.
 
-**How to apply:** Any new approval execution path must append its completed or rejected outcome to the scoped conversation memory without accepting tool arguments from the client.
+**How to apply:** Any new approval execution path must append its completed or rejected outcome to the scoped conversation memory without accepting tool arguments from the client. Optional clarification turns must remain pending and must not create a write until the user has supplied enough context and approved it.
