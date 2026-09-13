@@ -119,10 +119,17 @@ export type FinalResponse = {
 
 export type ProviderName = "gemini" | "groq" | "mistral" | "cohere";
 
+export type ToolScope = {
+  name: "full" | "read_only" | "expense" | "reminder" | "person" | "project" | "task" | "commitment";
+  allowedToolNames: ReadonlySet<string>;
+  isFull: boolean;
+};
+
 export type GatewayCallContext = {
   requestId: string;
   callNumber: number;
   toolCallsExecuted: number;
+  toolScope?: ToolScope;
   metrics?: GatewayRequestMetrics;
 };
 
@@ -1442,7 +1449,7 @@ function createGatewayMetrics(): GatewayRequestMetrics {
     maxRequestBytes: 0,
     systemPromptChars: 0,
     toolDefinitionsChars: 0,
-    toolDefinitionsCount: phase2Tools.length,
+    toolDefinitionsCount: 0,
     maxConversationChars: 0,
   };
 }
