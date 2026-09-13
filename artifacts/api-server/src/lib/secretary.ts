@@ -41,6 +41,7 @@ import {
   saveConversationTurn,
   type ConversationMemorySnapshot,
 } from "./conversation-memory";
+import { isBroadExpenseReportRequest } from "./expense-report";
 
 export type Identity = {
   tenantId: string;
@@ -90,6 +91,12 @@ type PersistedExpense = Expense & {
 
 export interface PersistencePort {
   getTodayContext(identity: Identity): Promise<TodayContext>;
+  getExpenseReport(identity: Identity): Promise<{
+    count: number;
+    totalMinor: number;
+    currency: string;
+    projectCount: number;
+  }>;
   createExpense(
     identity: Identity,
     input: {
@@ -306,10 +313,20 @@ class DrizzlePersistence implements PersistencePort {
 
   async updateExpense(
     identity: Identity,
-    input: { expenseId: string; amountMinor?: number; projectId?: string },
+    input: {
+      expenseId: string;
+      amountMinor?: number;
+      currency?: string;
+      description?: string;
+      occurredAt?: Date;
+      projectId?: string;
+    },
   ): Promise<PersistedExpense | null> {
     const updates = {
       ...(input.amountMinor === undefined ? {} : { amountMinor: input.amountMinor }),
+      ...(input.currency === undefined ? {} : { currency: input.currency }),
+      ...(input.description === undefined ? {} : { description: input.description }),
+      ...(input.occurredAt === undefined ? {} : { occurredAt: input.occurredAt }),
       ...(input.projectId === undefined ? {} : { projectId: input.projectId }),
     };
     if (Object.keys(updates).length === 0) return null;
@@ -528,6 +545,37 @@ class DrizzlePersistence implements PersistencePort {
         status: task.status,
       })),
       asOf: now.toISOString(),
+    };
+  }
+
+  async getExpenseReport(identity: Identity) {
+    const rows = await db
+      .select({
+        amountMinor: expensesTable.amountMinor,
+        currency: expensesTable.currency,
+        projectId: expensesTable.projectId,
+        projectName: projectsTable.name,
+      })
+      .from(expensesTable)
+      .leftJoin(projectsTable, eq(expensesTable.projectId, projectsTable.id))
+      .where(and(
+        eq(expensesTable.tenantId, identity.tenantId),
+        eq(expensesTable.ownerUserId, identity.userId),
+      ))
+      .orderBy(desc(expensesTable.occurredAt))
+      .limit(50);
+    const [currency, totalMinor] = rows.reduce<[string, number]>(
+      ([currentCurrency, total], row) => [
+        currentCurrency || row.currency,
+        total + row.amountMinor,
+      ],
+      ["", 0],
+    );
+    return {
+      count: rows.length,
+      totalMinor,
+      currency: currency || "EGP",
+      projectCount: new Set(rows.map((row) => row.projectId).filter(Boolean)).size,
     };
   }
 
@@ -863,6 +911,31 @@ export class DeterministicAgentRuntime {
     const conversationMemory = await loadConversationMemory(identity, conversationId);
     const message = input.message.trim();
     let result: TurnResult;
+    if (isBroadExpenseReportRequest(message)) {
+      const report = await this.persistence.getExpenseReport(identity);
+      const amount = new Intl.NumberFormat("ar-EG", {
+        style: "currency",
+        currency: report.currency,
+      }).format(report.totalMinor / 100);
+      result = {
+        conversationId,
+        assistantMessage: report.count === 0
+          ? "لا توجد مصروفات محفوظة حتى الآن."
+          : `تقرير المصروفات: ${amount} عبر ${report.count} مصروف${report.projectCount > 0 ? ` موزعة على ${report.projectCount} مشروع` : ""}.`,
+        action: { type: "expense_report", summary: report },
+        provider: "development",
+        model: "deterministic-ar-v1",
+      };
+      if (input.idempotencyKey) {
+        await this.persistence.saveIdempotentResponse(identity, input.idempotencyKey, result);
+      }
+      await saveConversationTurn(identity, conversationMemory, {
+        userMessage: message,
+        assistantMessage: result.assistantMessage,
+        action: result.action,
+      });
+      return result;
+    }
     const expense = parseExpense(message);
     const contextualExpense = parseConversationExpense(message, conversationMemory);
     const correction = parseConversationCorrection(message, conversationMemory);
@@ -1181,6 +1254,15 @@ export async function executeApprovedOperation(
       ...(operationStringArg(operation, "projectId")
         ? { projectId: operationStringArg(operation, "projectId") }
         : {}),
+      ...(operationStringArg(operation, "currency")
+        ? { currency: operationStringArg(operation, "currency") }
+        : {}),
+      ...(operationStringArg(operation, "description")
+        ? { description: operationStringArg(operation, "description") }
+        : {}),
+      ...(operationStringArg(operation, "occurredAt")
+        ? { occurredAt: new Date(operationStringArg(operation, "occurredAt")!) }
+        : {}),
     });
     if (!updated) throw new Error("لم أجد المصروف المطلوب.");
     assistantMessage = projectCorrection
@@ -1196,6 +1278,7 @@ export async function executeApprovedOperation(
       projectId: updated.projectId,
       personName: updated.personName,
       projectName: updated.projectName,
+      description: updated.description,
     };
   } else if (operation.toolName === "create_reminder") {
     const text = operationStringArg(operation, "text");

@@ -34,6 +34,7 @@ import {
 import {
   createPendingOperation,
 } from "./secretary-operations";
+import { isBroadExpenseReportRequest } from "./expense-report";
 
 export type Phase2TurnInput = {
   message: string;
@@ -259,6 +260,31 @@ function expenseRowsSummary(rows: unknown[]): {
   }
   const [currency, totalMinor] = [...totals.entries()][0] ?? ["EGP", 0];
   return { count: rows.length, totalMinor, currency, projectCount: projects.size };
+}
+
+function broadExpenseReportResponse(result: ToolResult): FinalResponse {
+  const summary = result.summary && typeof result.summary === "object"
+    ? result.summary as { count?: unknown; totalMinor?: unknown; currency?: unknown; projectCount?: unknown }
+    : {};
+  const count = typeof summary.count === "number" ? summary.count : 0;
+  const totalMinor = typeof summary.totalMinor === "number" ? summary.totalMinor : 0;
+  const currency = typeof summary.currency === "string" ? summary.currency : "EGP";
+  const amount = new Intl.NumberFormat("ar-EG", {
+    style: "currency",
+    currency,
+  }).format(totalMinor / 100);
+  const projectCount = typeof summary.projectCount === "number" ? summary.projectCount : 0;
+  const message = count === 0
+    ? "لا توجد مصروفات محفوظة حتى الآن."
+    : `تقرير المصروفات: ${amount} عبر ${count} مصروف${projectCount > 0 ? ` موزعة على ${projectCount} مشروع` : ""}.`;
+  return {
+    kind: "answer",
+    message,
+    groundedFacts: [
+      { type: "money", value: totalMinor, currency, label: "إجمالي المصروفات" },
+      { type: "count", value: count, label: "عدد المصروفات" },
+    ],
+  };
 }
 
 type ToolHistoryEntry = { name: string; result: ToolResult };
@@ -1340,6 +1366,15 @@ function toGeminiContents(messages: ConversationMessage[]): Array<{ role: string
       return { role: "user", parts: [{ text: `[سياق موثوق من التطبيق]\n${message.text ?? ""}` }] };
     }
     if (message.role === "assistant") {
+      const hasUnsignedToolCall = (message.toolCalls ?? []).some((call) => !call.thoughtSignature);
+      if (hasUnsignedToolCall) {
+        return {
+          role: "user",
+          parts: [{
+            text: `[سياق من مزود آخر]\n${message.text ?? ""}\nتم طلب أدوات في الرسالة السابقة، وستجد نتائجها في الرسائل التالية.`,
+          }],
+        };
+      }
       return {
         role: "model",
         parts: [
@@ -1352,6 +1387,17 @@ function toGeminiContents(messages: ConversationMessage[]): Array<{ role: string
       };
     }
     if (message.role === "tool") {
+      const matchingCall = messages
+        .flatMap((item) => item.toolCalls ?? [])
+        .find((call) => call.id === message.toolCallId);
+      if (!matchingCall?.thoughtSignature) {
+        return {
+          role: "user",
+          parts: [{
+            text: `[نتيجة أداة من مزود آخر: ${message.toolName ?? "أداة"}]\n${message.text ?? "{}"}`,
+          }],
+        };
+      }
       return {
         role: "user",
         parts: [{
@@ -1565,7 +1611,7 @@ export class GroqModelGateway implements ModelGateway {
             reasoning_effort: "low",
             include_reasoning: false,
             temperature: 0.15,
-            max_tokens: 4096,
+            max_tokens: 2048,
           }),
           signal: controller.signal,
         });
@@ -2028,6 +2074,26 @@ export class Phase2AgentRuntime {
       }, "agent final response");
       return result;
     };
+
+    if (isBroadExpenseReportRequest(input.message)) {
+      const report = await executeStructuredTool(identity, "query_expenses", { limit: 50 }, {
+        requestId,
+        conversationId,
+      });
+      if (!report.ok) {
+        throw new SecretaryError("تعذر تحميل تقرير المصروفات.", {
+          status: 500,
+          category: "agent_error",
+          code: "EXPENSE_REPORT_FAILED",
+          retryable: true,
+        });
+      }
+      action = {
+        type: "expense_report",
+        summary: report.summary,
+      };
+      return persistResult(broadExpenseReportResponse(report));
+    }
 
     try {
       while (toolCalls < MAX_TOOL_CALLS) {

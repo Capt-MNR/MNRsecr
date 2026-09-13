@@ -7,6 +7,9 @@
  */
 
 export * from './actionResult';
+export * from './approvalRequest';
+export * from './approvalRequestDisplay';
+export * from './approvalRequestStatus';
 export * from './approvalResponse';
 export * from './approvalResponseStatus';
 export * from './commitmentRecord';

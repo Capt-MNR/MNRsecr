@@ -256,6 +256,48 @@ test("read-only turns do not create approval operations", async () => {
   assert.equal(response.provider, "development");
 });
 
+test("broad expense reports use a bounded deterministic response", async () => {
+  const response = await sendTurn("تقرير بالمصروفات", `report-${Date.now()}`, `report-${Date.now()}`);
+  assert.equal(response.action.type, "expense_report");
+  assert.match(response.assistantMessage, /تقرير المصروفات|لا توجد مصروفات/);
+});
+
+test("record edits return approval and apply only after approval", async () => {
+  const created = await sendApprovedTurn(
+    `دفعت تعديل السجل ${Date.now()} 155 جنيه`,
+    `record-edit-${Date.now()}`,
+    `record-edit-create-${Date.now()}`,
+  );
+  assert.equal(created.action.type, "expense_recorded");
+
+  const edit = await fetch(`${baseUrl}/records/expense/${created.action.expenseId}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ amountMinor: created.action.amountMinor, description: "وصف بعد الموافقة" }),
+  });
+  assert.equal(edit.status, 202);
+  const pending = await edit.json();
+  assert.equal(pending.pendingApproval, true);
+  assert.equal(pending.approval.toolName, "update_expense");
+
+  const before = await fetch(`${baseUrl}/records`, { headers });
+  const beforePayload = await before.json();
+  assert.notEqual(
+    beforePayload.expenses.find((expense) => expense.id === created.action.expenseId).description,
+    "وصف بعد الموافقة",
+  );
+
+  const approved = await approveOperation(pending.approval.operationId);
+  assert.equal(approved.status, "completed");
+
+  const after = await fetch(`${baseUrl}/records`, { headers });
+  const afterPayload = await after.json();
+  assert.equal(
+    afterPayload.expenses.find((expense) => expense.id === created.action.expenseId).description,
+    "وصف بعد الموافقة",
+  );
+});
+
 test("rejected approval never writes and cannot be replayed", async () => {
   const description = `رفض approval ${Date.now()}`;
   const pending = await sendTurn(`دفعت ${description} 125 جنيه`, `reject-${Date.now()}`, `reject-${Date.now()}`);

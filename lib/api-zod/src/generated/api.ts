@@ -271,7 +271,17 @@ export const UpdateRecordResponse = zod.object({
   "recordType": zod.enum(['expense', 'person', 'project', 'task', 'reminder', 'commitment']),
   "recordId": zod.string(),
   "record": zod.record(zod.string(), zod.unknown()).optional(),
-  "deleted": zod.boolean().optional()
+  "deleted": zod.boolean().optional(),
+  "pendingApproval": zod.boolean().optional(),
+  "approval": zod.object({
+  "operationId": zod.string().uuid(),
+  "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
+  "toolName": zod.string(),
+  "display": zod.object({
+  "title": zod.string(),
+  "details": zod.array(zod.string())
+})
+}).optional()
 })
 
 
@@ -288,7 +298,17 @@ export const DeleteRecordResponse = zod.object({
   "recordType": zod.enum(['expense', 'person', 'project', 'task', 'reminder', 'commitment']),
   "recordId": zod.string(),
   "record": zod.record(zod.string(), zod.unknown()).optional(),
-  "deleted": zod.boolean().optional()
+  "deleted": zod.boolean().optional(),
+  "pendingApproval": zod.boolean().optional(),
+  "approval": zod.object({
+  "operationId": zod.string().uuid(),
+  "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
+  "toolName": zod.string(),
+  "display": zod.object({
+  "title": zod.string(),
+  "details": zod.array(zod.string())
+})
+}).optional()
 })
 
 
@@ -306,7 +326,17 @@ export const UndoCreatedRecordResponse = zod.object({
   "recordType": zod.enum(['expense', 'person', 'project', 'task', 'reminder', 'commitment']),
   "recordId": zod.string(),
   "record": zod.record(zod.string(), zod.unknown()).optional(),
-  "deleted": zod.boolean().optional()
+  "deleted": zod.boolean().optional(),
+  "pendingApproval": zod.boolean().optional(),
+  "approval": zod.object({
+  "operationId": zod.string().uuid(),
+  "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
+  "toolName": zod.string(),
+  "display": zod.object({
+  "title": zod.string(),
+  "details": zod.array(zod.string())
+})
+}).optional()
 })
 
 

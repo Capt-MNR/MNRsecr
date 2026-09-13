@@ -18,16 +18,21 @@ import {
 import {
   getGetTodayContextQueryKey,
   getListRecordsQueryKey,
+  useApproveSecretaryOperation,
   useDeleteRecord,
   useListRecords,
+  useRejectSecretaryOperation,
   useUpdateRecord,
 } from '@workspace/api-client-react';
 import type {
+  ApprovalRequest,
+  ApprovalResponse,
   CommitmentRecord,
   ExpenseRecord,
   PersonRecord,
   ProjectRecord,
   RecordUpdateInput,
+  RecordMutationResponse,
   RecordType,
   ReminderRecord,
   TaskRecord,
@@ -254,10 +259,14 @@ export default function Records() {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>('expenses');
   const [editing, setEditing] = useState<{ kind: RecordType; record: RecordItem } | null>(null);
+  const [pendingApproval, setPendingApproval] = useState<{ kind: RecordType; recordId: string; approval: ApprovalRequest } | null>(null);
+  const [approvalError, setApprovalError] = useState<string | null>(null);
   const [staleRecordMessage, setStaleRecordMessage] = useState<string | null>(null);
   const recordsQuery = useListRecords({ query: { queryKey: getListRecordsQueryKey(), staleTime: 20_000 } });
   const updateMutation = useUpdateRecord();
   const deleteMutation = useDeleteRecord();
+  const approveMutation = useApproveSecretaryOperation();
+  const rejectMutation = useRejectSecretaryOperation();
   const error = recordsQuery.isError ? classifySecretaryError(recordsQuery.error) : updateMutation.isError ? classifySecretaryError(updateMutation.error) : deleteMutation.isError ? classifySecretaryError(deleteMutation.error) : null;
   const data = recordsQuery.data;
   const currentRecords = useMemo(() => data?.[tab] ?? [], [data, tab]) as RecordItem[];
@@ -268,9 +277,55 @@ export default function Records() {
     queryClient.invalidateQueries({ queryKey: getGetTodayContextQueryKey() });
   }
 
+  function handleMutationResult(response: RecordMutationResponse, kind: RecordType, recordId: string) {
+    if (response.pendingApproval && response.approval) {
+      setApprovalError(null);
+      setPendingApproval({ kind, recordId, approval: response.approval });
+      setEditing(null);
+      return;
+    }
+    setEditing(null);
+    refresh();
+  }
+
+  function applyApprovalResponse(response: ApprovalResponse) {
+    setPendingApproval((current) => current
+      ? { ...current, approval: { ...current.approval, status: response.status } }
+      : current);
+    setApprovalError(null);
+    if (response.status === 'completed') refresh();
+  }
+
+  function approvePending() {
+    if (!pendingApproval || approveMutation.isPending || rejectMutation.isPending) return;
+    setApprovalError(null);
+    approveMutation.mutate(
+      { operationId: pendingApproval.approval.operationId },
+      {
+        onSuccess: applyApprovalResponse,
+        onError: (error) => setApprovalError(classifySecretaryError(error)?.message ?? 'تعذر تنفيذ الموافقة.'),
+      },
+    );
+  }
+
+  function rejectPending() {
+    if (!pendingApproval || approveMutation.isPending || rejectMutation.isPending) return;
+    setApprovalError(null);
+    rejectMutation.mutate(
+      { operationId: pendingApproval.approval.operationId },
+      {
+        onSuccess: applyApprovalResponse,
+        onError: (error) => setApprovalError(classifySecretaryError(error)?.message ?? 'تعذر إلغاء العملية.'),
+      },
+    );
+  }
+
   function deleteItem(record: RecordItem) {
     if (!window.confirm(`هل تريد حذف "${labelForRecord(record)}"؟ لا يمكن استرجاعه بعد الحذف.`)) return;
-    deleteMutation.mutate({ recordType: kind, recordId: recordId(record) }, { onSuccess: refresh });
+    deleteMutation.mutate(
+      { recordType: kind, recordId: recordId(record) },
+      { onSuccess: (response) => handleMutationResult(response, kind, recordId(record)) },
+    );
   }
 
   async function editItem(record: RecordItem) {
@@ -315,7 +370,41 @@ export default function Records() {
         {!recordsQuery.isLoading && !error && currentRecords.length === 0 && <div className="rounded-[24px] border border-dashed border-border bg-card/50 px-6 py-16 text-center"><Check className="mx-auto size-8 text-primary/60" /><h2 className="mt-4 font-serif text-xl">لا توجد سجلات هنا بعد</h2><p className="mt-2 text-sm text-muted-foreground">أضف أول سجل من خلال المحادثة الطبيعية.</p></div>}
         {!recordsQuery.isLoading && currentRecords.length > 0 && <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{currentRecords.map((record) => <RecordCard key={record.id} kind={kind} record={record} onEdit={() => void editItem(record)} onDelete={() => deleteItem(record)} />)}</div>}
       </main>
-      {editing && <EditModal kind={editing.kind} record={editing.record} onClose={() => setEditing(null)} isSaving={updateMutation.isPending} onSave={(form) => updateMutation.mutate({ recordType: editing.kind, recordId: editing.record.id, data: form }, { onSuccess: () => { setEditing(null); refresh(); } })} />}
+      {pendingApproval && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/35 p-4 backdrop-blur-[2px]" role="dialog" aria-modal="true">
+          <div className="w-full max-w-md rounded-[24px] border border-border bg-card p-5 shadow-2xl sm:p-7" dir="rtl">
+            <div className="flex items-start gap-3">
+              <CircleAlert className="mt-0.5 size-5 shrink-0 text-primary" />
+              <div>
+                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">مراجعة قبل الحفظ</p>
+                <h2 className="mt-1 font-serif text-2xl">{pendingApproval.approval.display.title}</h2>
+                <ul className="mt-3 space-y-1 text-sm text-muted-foreground">
+                  {pendingApproval.approval.display.details.map((detail) => <li key={detail}>{detail}</li>)}
+                </ul>
+              </div>
+            </div>
+            {pendingApproval.approval.status === 'pending' ? (
+              <div className="mt-7 flex gap-2">
+                <button type="button" onClick={approvePending} disabled={approveMutation.isPending || rejectMutation.isPending} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50">
+                  {approveMutation.isPending && <LoaderCircle className="size-4 animate-spin" />} موافق، احفظ
+                </button>
+                <button type="button" onClick={rejectPending} disabled={approveMutation.isPending || rejectMutation.isPending} className="flex-1 rounded-xl border border-border px-4 py-3 text-sm text-muted-foreground hover:bg-muted disabled:opacity-50">
+                  {rejectMutation.isPending ? <LoaderCircle className="mx-auto size-4 animate-spin" /> : 'إلغاء'}
+                </button>
+              </div>
+            ) : (
+              <p className="mt-6 text-sm font-medium text-muted-foreground">
+                {pendingApproval.approval.status === 'completed' ? 'تم حفظ التعديل.' : pendingApproval.approval.status === 'rejected' ? 'تم إلغاء التعديل.' : 'هذه العملية لم تعد قابلة للتنفيذ.'}
+              </p>
+            )}
+            {approvalError && <p className="mt-3 text-sm text-destructive" role="alert">{approvalError}</p>}
+            <button type="button" onClick={() => setPendingApproval(null)} className="mt-5 w-full rounded-xl border border-border px-4 py-2.5 text-sm text-muted-foreground hover:bg-muted">
+              إغلاق
+            </button>
+          </div>
+        </div>
+      )}
+      {editing && <EditModal kind={editing.kind} record={editing.record} onClose={() => setEditing(null)} isSaving={updateMutation.isPending} onSave={(form) => updateMutation.mutate({ recordType: editing.kind, recordId: editing.record.id, data: form }, { onSuccess: (response) => handleMutationResult(response, editing.kind, editing.record.id) })} />}
     </div>
   );
 }

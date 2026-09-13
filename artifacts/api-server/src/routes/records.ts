@@ -140,6 +140,23 @@ function resultDeletedRecord(result: Record<string, unknown>, kind: RecordKind):
   return result[`deleted${kind[0].toUpperCase()}${kind.slice(1)}`] as Record<string, unknown> | undefined;
 }
 
+function sendPendingApproval(
+  res: any,
+  result: Record<string, unknown>,
+  kind: RecordKind,
+  recordId: string,
+): boolean {
+  if (!result.pendingApproval || !result.approval || typeof result.approval !== "object") return false;
+  res.status(202).json({
+    ok: false,
+    recordType: kind,
+    recordId,
+    pendingApproval: true,
+    approval: result.approval,
+  });
+  return true;
+}
+
 router.patch("/records/:recordType/:recordId", async (req, res): Promise<void> => {
   const identity = requireIdentity(req, res);
   if (!identity) return;
@@ -155,6 +172,7 @@ router.patch("/records/:recordType/:recordId", async (req, res): Promise<void> =
   }
   try {
     const result = await executeStructuredTool(identity, toolForUpdate(kind), updateArgs(kind, req.params.recordId, parsed.data), { requestId: requestId(req) });
+    if (sendPendingApproval(res, result, kind, req.params.recordId)) return;
     if (!result.ok) {
       sendRouteError(req, res, 404, String(result.error ?? "السجل غير موجود."), "RECORD_UPDATE_FAILED");
       return;
@@ -179,6 +197,7 @@ router.delete("/records/:recordType/:recordId", async (req, res): Promise<void> 
     const result = await executeStructuredTool(identity, toolForDelete(kind), {
       [`${kind}Id`]: req.params.recordId,
     }, { requestId: requestId(req) });
+    if (sendPendingApproval(res, result, kind, req.params.recordId)) return;
     if (!result.ok) {
       const message = String(result.error ?? "السجل غير موجود.");
       const isDependencyConflict = message.includes("has saved records");
@@ -220,6 +239,7 @@ router.post("/records/undo", async (req, res): Promise<void> => {
       [`${recordType}Id`]: recordId,
       expectedCreatedAt: createdAt,
     }, { requestId: requestId(req) });
+    if (sendPendingApproval(res, result, recordType, recordId)) return;
     if (!result.ok) {
       sendRouteError(req, res, 404, String(result.error ?? "لا يمكن التراجع عن هذا السجل."), "UNDO_NOT_APPLIED");
       return;

@@ -5,6 +5,7 @@
  * Personal Secretary API
  * OpenAPI spec version: 0.1.0
  */
+import type { ApprovalRequest } from './approvalRequest';
 import type { RecordMutationResponseRecord } from './recordMutationResponseRecord';
 import type { RecordType } from './recordType';
 
@@ -14,4 +15,6 @@ export interface RecordMutationResponse {
   recordId: string;
   record?: RecordMutationResponseRecord;
   deleted?: boolean;
+  pendingApproval?: boolean;
+  approval?: ApprovalRequest;
 }

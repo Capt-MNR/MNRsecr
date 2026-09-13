@@ -680,7 +680,33 @@ components:
           additionalProperties: true
         deleted:
           type: boolean
+        pendingApproval:
+          type: boolean
+        approval:
+          $ref: "#/components/schemas/ApprovalRequest"
       required: [ok, recordType, recordId]
+    ApprovalRequest:
+      type: object
+      properties:
+        operationId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, executing, completed, rejected, expired, failed]
+        toolName:
+          type: string
+        display:
+          type: object
+          properties:
+            title:
+              type: string
+            details:
+              type: array
+              items:
+                type: string
+          required: [title, details]
+      required: [operationId, status, toolName, display]
     UndoRecordInput:
       type: object
       properties:

@@ -227,12 +227,38 @@ export interface RecordUpdateInput {
 
 export type RecordMutationResponseRecord = { [key: string]: unknown };
 
+export type ApprovalRequestStatus = typeof ApprovalRequestStatus[keyof typeof ApprovalRequestStatus];
+
+
+export const ApprovalRequestStatus = {
+  pending: 'pending',
+  executing: 'executing',
+  completed: 'completed',
+  rejected: 'rejected',
+  expired: 'expired',
+  failed: 'failed',
+} as const;
+
+export type ApprovalRequestDisplay = {
+  title: string;
+  details: string[];
+};
+
+export interface ApprovalRequest {
+  operationId: string;
+  status: ApprovalRequestStatus;
+  toolName: string;
+  display: ApprovalRequestDisplay;
+}
+
 export interface RecordMutationResponse {
   ok: boolean;
   recordType: RecordType;
   recordId: string;
   record?: RecordMutationResponseRecord;
   deleted?: boolean;
+  pendingApproval?: boolean;
+  approval?: ApprovalRequest;
 }
 
 export interface UndoRecordInput {

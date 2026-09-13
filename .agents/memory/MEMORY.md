@@ -5,3 +5,4 @@
 - [Groq GPT-OSS limits](groq-gpt-oss-limits.md) — low hidden reasoning keeps tool calls usable under the provider's token-per-minute budget.
 - [Workspace test runner](workspace-test-runner.md) — direct Node 24 TypeScript tests can fail on workspace directory imports even when builds and workflows are healthy.
 - [Approval lifecycle memory](approval-lifecycle.md) — persist the post-approval result as a separate conversation event so later corrections use committed state.
+- [Record approval executor](record-approval-executor.md) — record-page approvals reuse the deterministic executor, so every editable field must be forwarded into its stored operation.
