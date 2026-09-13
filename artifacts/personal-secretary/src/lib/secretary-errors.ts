@@ -88,9 +88,12 @@ export function classifySecretaryError(error: unknown): UserFacingError {
       };
     }
     if (status === 404 || payload.category === "not_found") {
+      const isMissingRoute = payload.code === "ROUTE_NOT_FOUND";
       return {
         category: "not_found",
-        message: "خدمة السكرتير غير متاحة بهذا المسار حاليًا. حاول تحديث الصفحة.",
+        message: isMissingRoute
+          ? "خدمة السكرتير غير متاحة بهذا المسار حاليًا. حاول تحديث الصفحة."
+          : "السجل المطلوب غير موجود أو لم يعد متاحًا. حدّث السجلات وحاول مرة أخرى.",
         retryable: false,
         requestId: payload.requestId,
       };

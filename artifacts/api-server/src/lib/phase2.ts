@@ -1324,10 +1324,10 @@ function toGeminiContents(messages: ConversationMessage[]): Array<{ role: string
   });
 }
 
-function toOpenAiSchema(value: unknown): unknown {
+export function toOpenAiSchema(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(toOpenAiSchema);
   if (!value || typeof value !== "object") {
-    return typeof value === "string" && ["OBJECT", "STRING", "INTEGER", "NUMBER", "BOOLEAN", "ARRAY"].includes(value)
+    return typeof value === "string" && ["OBJECT", "STRING", "INTEGER", "NUMBER", "BOOLEAN", "ARRAY", "NULL"].includes(value)
       ? value.toLowerCase()
       : value;
   }

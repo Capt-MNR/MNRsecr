@@ -13,6 +13,7 @@ import {
   Phase2AgentRuntime,
   GroqModelGateway,
   configuredProviderOrder,
+  toOpenAiSchema,
   type ConversationMessage,
   type GatewayCallContext,
   type GatewayResponse,
@@ -169,6 +170,68 @@ test("Gemini and Groq adapters independently normalize provider tool responses",
     globalThis.fetch = previousFetch;
     if (previousGeminiKey === undefined) delete process.env.GEMINI_API_KEY;
     else process.env.GEMINI_API_KEY = previousGeminiKey;
+    if (previousGroqKey === undefined) delete process.env.GROQ_API_KEY;
+    else process.env.GROQ_API_KEY = previousGroqKey;
+  }
+});
+
+test("Groq accepts nullable update_task and update_commitment schemas", async () => {
+  const previousFetch = globalThis.fetch;
+  const previousGroqKey = process.env.GROQ_API_KEY;
+  const capturedBodies: Array<Record<string, unknown>> = [];
+  try {
+    process.env.GROQ_API_KEY = "test-groq-key";
+    globalThis.fetch = async (_input, init) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      capturedBodies.push(body);
+      return new Response(JSON.stringify({
+        choices: [{
+          message: {
+            tool_calls: [{
+              id: "nullable-schema-call",
+              function: {
+                name: "final_response",
+                arguments: JSON.stringify({ kind: "answer", message: "تم" }),
+              },
+            }],
+          },
+        }],
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    };
+
+    const nullableToolArguments = [
+      { taskId: "task-1", dueAt: null },
+      { commitmentId: "commitment-1", personId: null, dueAt: null },
+    ];
+    for (const args of nullableToolArguments) {
+      await new GroqModelGateway().generate([{
+        role: "assistant",
+        text: "",
+        toolCalls: [{
+          id: "previous-call",
+          name: Object.hasOwn(args, "taskId") ? "update_task" : "update_commitment",
+          args,
+        }],
+      }, {
+        role: "tool",
+        toolCallId: "previous-call",
+        toolName: Object.hasOwn(args, "taskId") ? "update_task" : "update_commitment",
+        text: JSON.stringify({ ok: true }),
+      }], { requestId: "nullable-schema-request", callNumber: 1, toolCallsExecuted: 1 });
+    }
+
+    assert.equal(capturedBodies.length, 2);
+    for (const body of capturedBodies) {
+      const tools = body.tools as Array<{ function: { name: string; parameters: Record<string, unknown> } }>;
+      const taskSchema = tools.find((tool) => tool.function.name === "update_task")?.function.parameters;
+      const commitmentSchema = tools.find((tool) => tool.function.name === "update_commitment")?.function.parameters;
+      assert.deepEqual(toOpenAiSchema(["STRING", "NULL"]), ["string", "null"]);
+      assert.deepEqual((taskSchema?.properties as Record<string, { type?: unknown }>).dueAt.type, ["string", "null"]);
+      assert.deepEqual((commitmentSchema?.properties as Record<string, { type?: unknown }>).personId.type, ["string", "null"]);
+      assert.deepEqual((commitmentSchema?.properties as Record<string, { type?: unknown }>).dueAt.type, ["string", "null"]);
+    }
+  } finally {
+    globalThis.fetch = previousFetch;
     if (previousGroqKey === undefined) delete process.env.GROQ_API_KEY;
     else process.env.GROQ_API_KEY = previousGroqKey;
   }
