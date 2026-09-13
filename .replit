@@ -27,6 +27,7 @@ timeoutMs = 20000
 AI_PROVIDER = "groq"
 AI_FALLBACK_PROVIDER = "gemini"
 AI_SECONDARY_FALLBACK_PROVIDER = "cohere"
+GEMINI_MODEL = "gemini-3.1-flash-lite"
 
 [nix]
 channel = "stable-25_05"
