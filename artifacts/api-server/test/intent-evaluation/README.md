@@ -81,7 +81,7 @@ Each case records:
 - actual HTTP attempts and attempts by provider;
 - provider and model;
 - fallback and fallback reason;
-- latency;
+- latency, including p50 and p95;
 - raw provider usage metadata when returned;
 - normalized input/output/total/cached token counts;
 - request bytes, prompt/tool/conversation sizes;
@@ -98,7 +98,7 @@ The summary reports:
 - cases excluded because context was not provided;
 - total logical calls and HTTP attempts;
 - total tokens and request bytes;
-- average latency and conversation size;
+- average/p50/p95 latency and conversation size;
 - cache hit/miss cases and cached tokens;
 - no-write violations.
 

@@ -55,6 +55,8 @@ type WorkerRecord = {
     providerTrace?: Record<string, unknown>;
   };
   tokenUsage?: unknown[];
+  rowCountsBefore?: Record<string, number>;
+  rowCountsAfter?: Record<string, number>;
   error?: Record<string, unknown>;
 };
 
@@ -97,9 +99,12 @@ type CaseResult = {
   toolDefinitionsChars: number;
   toolDefinitionsCount: number;
   maxConversationChars: number;
+  rowCountsBefore: Record<string, number>;
+  rowCountsAfter: Record<string, number>;
+  rowCountChanged: boolean;
   approvalReached: boolean;
   wouldSelectWriteTool: boolean;
-  writeOccurred: false;
+  writeOccurred: boolean;
   noWriteViolation: boolean;
   intentMatch: boolean | null;
   toolSelectionMatch: boolean | null;
@@ -284,7 +289,7 @@ async function runWorker(
     child.on("close", (exitCode) => {
       clearTimeout(timeout);
       const parsed = parseJsonLines(stdout);
-      resolvePromise({ ...parsed, exitCode, stderr });
+        resolvePromise({ logs: parsed.records, worker: parsed.worker, exitCode, stderr });
     });
   });
 }
@@ -310,8 +315,19 @@ function makeCaseResult(
   }
   const approvalReached = run.logs.some((record) => record.msg === "agent write awaiting approval");
   const wouldSelectWriteTool = tools.some((tool) => WRITE_TOOLS.has(tool.name));
-  const noWriteViolation = approvalReached
-    || run.logs.some((record) => record.msg === "agent tool result" && record.dryRun !== true && wouldSelectWriteTool);
+  const rowCountsBefore = worker?.rowCountsBefore ?? {};
+  const rowCountsAfter = worker?.rowCountsAfter ?? {};
+  const rowCountChanged = Object.keys({ ...rowCountsBefore, ...rowCountsAfter }).some(
+    (key) => Number(rowCountsBefore[key] ?? 0) !== Number(rowCountsAfter[key] ?? 0),
+  );
+  const writeResultWithoutDryRun = run.logs.some((record) =>
+    record.msg === "agent tool result"
+    && typeof record.tool === "string"
+    && WRITE_TOOLS.has(record.tool)
+    && record.dryRun !== true,
+  );
+  const writeOccurred = rowCountChanged || writeResultWithoutDryRun;
+  const noWriteViolation = writeOccurred;
   const providerError = !worker;
   const contextLimited = evaluationCase.contextMode === "context_required"
     && !process.env.INTENT_EVAL_CONVERSATION_ID;
@@ -375,9 +391,12 @@ function makeCaseResult(
     toolDefinitionsChars: Number(trace.toolDefinitionsChars ?? 0),
     toolDefinitionsCount: Number(trace.toolDefinitionsCount ?? 0),
     maxConversationChars: Number(trace.maxConversationChars ?? 0),
+    rowCountsBefore,
+    rowCountsAfter,
+    rowCountChanged,
     approvalReached,
     wouldSelectWriteTool,
-    writeOccurred: false,
+    writeOccurred,
     noWriteViolation,
     intentMatch,
     toolSelectionMatch,
@@ -396,6 +415,15 @@ function percentage(value: number | null): number | null {
 
 function summarize(results: CaseResult[]) {
   const evaluated = results.filter((result) => result.status === "evaluated");
+  const latencies = evaluated
+    .map((result) => result.latencyMs)
+    .filter((value) => Number.isFinite(value))
+    .sort((left, right) => left - right);
+  const percentile = (p: number): number => {
+    if (latencies.length === 0) return 0;
+    const index = Math.min(latencies.length - 1, Math.ceil(latencies.length * p) - 1);
+    return latencies[index] ?? 0;
+  };
   const ratio = (key: "intentMatch" | "toolSelectionMatch" | "clarificationMatch") =>
     evaluated.length === 0
       ? null
@@ -412,6 +440,7 @@ function summarize(results: CaseResult[]) {
     noWriteViolations: results.filter((result) => result.noWriteViolation || result.writeOccurred).length,
     totalLogicalLlmCalls: results.reduce((sum, result) => sum + result.logicalLlmCalls, 0),
     totalHttpAttempts: results.reduce((sum, result) => sum + result.actualHttpAttempts, 0),
+    fallbackCases: results.filter((result) => result.fallback).length,
     totalInputTokens: results.reduce((sum, result) => sum + result.inputTokens, 0),
     totalOutputTokens: results.reduce((sum, result) => sum + result.outputTokens, 0),
     totalTokens: results.reduce((sum, result) => sum + result.totalTokens, 0),
@@ -425,9 +454,12 @@ function summarize(results: CaseResult[]) {
     averageLatencyMs: results.length === 0
       ? 0
       : Math.round(results.reduce((sum, result) => sum + result.latencyMs, 0) / results.length),
+    latencyP50Ms: percentile(0.5),
+    latencyP95Ms: percentile(0.95),
     averageConversationChars: results.length === 0
       ? 0
       : Math.round(results.reduce((sum, result) => sum + result.maxConversationChars, 0) / results.length),
+    rowCountChanges: results.filter((result) => result.rowCountChanged).length,
   };
 }
 
@@ -467,6 +499,8 @@ function printComparison(
       totalCachedTokens: numericDelta(current.totalCachedTokens, baseline.totalCachedTokens),
       totalRequestBytes: numericDelta(current.totalRequestBytes, baseline.totalRequestBytes),
       averageLatencyMs: numericDelta(current.averageLatencyMs, baseline.averageLatencyMs),
+      latencyP50Ms: numericDelta(current.latencyP50Ms, baseline.latencyP50Ms),
+      latencyP95Ms: numericDelta(current.latencyP95Ms, baseline.latencyP95Ms),
       averageConversationChars: numericDelta(
         current.averageConversationChars,
         baseline.averageConversationChars,

@@ -1,0 +1,2635 @@
+{
+  "datasetVersion": 1,
+  "providerMode": "groq",
+  "label": "before",
+  "dryRun": true,
+  "generatedAt": "2026-09-14T11:19:16.375Z",
+  "summary": {
+    "totalCases": 36,
+    "evaluatedCases": 9,
+    "providerErrors": 25,
+    "contextNotProvided": 2,
+    "runnerErrors": 0,
+    "intentAccuracyPercent": 100,
+    "toolSelectionAccuracyPercent": 44.44,
+    "clarificationAccuracyPercent": 100,
+    "noWriteViolations": 1,
+    "totalLogicalLlmCalls": 51,
+    "totalHttpAttempts": 51,
+    "totalInputTokens": 62728,
+    "totalOutputTokens": 1219,
+    "totalTokens": 63947,
+    "totalCachedTokens": 14336,
+    "cacheHitCases": 0,
+    "cacheMissCases": 0,
+    "totalRequestBytes": 260683,
+    "averageLatencyMs": 534,
+    "averageConversationChars": 71
+  },
+  "cases": [
+    {
+      "id": "A01",
+      "category": "expense_intent",
+      "message": "دفعت لمحمد 7500",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": [
+          "find_person",
+          "record_expense"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "provider_error",
+      "actualIntent": null,
+      "actualTool": null,
+      "actualTools": [],
+      "toolArguments": [],
+      "clarificationAsked": null,
+      "logicalLlmCalls": 1,
+      "actualHttpAttempts": 1,
+      "httpAttemptsByProvider": {
+        "groq": 1
+      },
+      "provider": null,
+      "model": null,
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 212,
+      "tokenUsage": null,
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "totalTokens": 0,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {},
+      "maxRequestBytes": 0,
+      "systemPromptChars": 0,
+      "toolDefinitionsChars": 0,
+      "toolDefinitionsCount": 0,
+      "maxConversationChars": 0,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": null,
+      "toolSelectionMatch": null,
+      "clarificationMatch": null,
+      "error": {
+        "message": "The configured provider rate limit was reached.",
+        "status": 429,
+        "category": "provider_rate_limit",
+        "code": "PROVIDER_RATE_LIMIT",
+        "provider": "groq",
+        "retryable": true,
+        "retryAfterSeconds": 5
+      }
+    },
+    {
+      "id": "A02",
+      "category": "expense_intent",
+      "message": "محمد خد مني 7500",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": [
+          "find_person",
+          "record_expense"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "provider_error",
+      "actualIntent": null,
+      "actualTool": "find_person",
+      "actualTools": [
+        "find_person"
+      ],
+      "toolArguments": [
+        {
+          "name": "find_person",
+          "arguments": {
+            "name": "محمد"
+          },
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": null,
+      "logicalLlmCalls": 2,
+      "actualHttpAttempts": 2,
+      "httpAttemptsByProvider": {
+        "groq": 2
+      },
+      "provider": null,
+      "model": null,
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 616,
+      "tokenUsage": [
+        {
+          "queue_time": 0.069122669,
+          "prompt_tokens": 3161,
+          "prompt_time": 0.174689494,
+          "completion_tokens": 63,
+          "completion_time": 0.066439798,
+          "total_tokens": 3224,
+          "total_time": 0.241129292,
+          "prompt_tokens_details": {
+            "cached_tokens": 1536
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 40
+          }
+        }
+      ],
+      "inputTokens": 3161,
+      "outputTokens": 63,
+      "totalTokens": 3224,
+      "cachedTokens": 1536,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {},
+      "maxRequestBytes": 0,
+      "systemPromptChars": 0,
+      "toolDefinitionsChars": 0,
+      "toolDefinitionsCount": 0,
+      "maxConversationChars": 0,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": null,
+      "toolSelectionMatch": null,
+      "clarificationMatch": null,
+      "error": {
+        "message": "The configured provider rate limit was reached.",
+        "status": 429,
+        "category": "provider_rate_limit",
+        "code": "PROVIDER_RATE_LIMIT",
+        "provider": "groq",
+        "retryable": true,
+        "retryAfterSeconds": 12
+      }
+    },
+    {
+      "id": "A03",
+      "category": "expense_intent",
+      "message": "اديت محمد 7500",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": [
+          "find_person",
+          "record_expense"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "provider_error",
+      "actualIntent": null,
+      "actualTool": "find_person",
+      "actualTools": [
+        "find_person"
+      ],
+      "toolArguments": [
+        {
+          "name": "find_person",
+          "arguments": {
+            "name": "محمد"
+          },
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": null,
+      "logicalLlmCalls": 2,
+      "actualHttpAttempts": 2,
+      "httpAttemptsByProvider": {
+        "groq": 2
+      },
+      "provider": null,
+      "model": null,
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 505,
+      "tokenUsage": [
+        {
+          "queue_time": 0.069085881,
+          "prompt_tokens": 2428,
+          "prompt_time": 0.129171777,
+          "completion_tokens": 29,
+          "completion_time": 0.029544419,
+          "total_tokens": 2457,
+          "total_time": 0.158716196,
+          "completion_tokens_details": {
+            "reasoning_tokens": 6
+          }
+        }
+      ],
+      "inputTokens": 2428,
+      "outputTokens": 29,
+      "totalTokens": 2457,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {},
+      "maxRequestBytes": 0,
+      "systemPromptChars": 0,
+      "toolDefinitionsChars": 0,
+      "toolDefinitionsCount": 0,
+      "maxConversationChars": 0,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": null,
+      "toolSelectionMatch": null,
+      "clarificationMatch": null,
+      "error": {
+        "message": "The configured provider rate limit was reached.",
+        "status": 429,
+        "category": "provider_rate_limit",
+        "code": "PROVIDER_RATE_LIMIT",
+        "provider": "groq",
+        "retryable": true,
+        "retryAfterSeconds": 14
+      }
+    },
+    {
+      "id": "A04",
+      "category": "expense_intent",
+      "message": "أنا دفعت لمحمد سبعة آلاف ونص",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": [
+          "find_person",
+          "record_expense"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "provider_error",
+      "actualIntent": null,
+      "actualTool": null,
+      "actualTools": [],
+      "toolArguments": [],
+      "clarificationAsked": null,
+      "logicalLlmCalls": 1,
+      "actualHttpAttempts": 1,
+      "httpAttemptsByProvider": {
+        "groq": 1
+      },
+      "provider": null,
+      "model": null,
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 545,
+      "tokenUsage": null,
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "totalTokens": 0,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {},
+      "maxRequestBytes": 0,
+      "systemPromptChars": 0,
+      "toolDefinitionsChars": 0,
+      "toolDefinitionsCount": 0,
+      "maxConversationChars": 0,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": null,
+      "toolSelectionMatch": null,
+      "clarificationMatch": null,
+      "error": {
+        "message": "The configured provider rate limit was reached.",
+        "status": 429,
+        "category": "provider_rate_limit",
+        "code": "PROVIDER_RATE_LIMIT",
+        "provider": "groq",
+        "retryable": true,
+        "retryAfterSeconds": 1
+      }
+    },
+    {
+      "id": "A05",
+      "category": "expense_intent",
+      "message": "النهارده دفعت لمحمد 7500 جنيه",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": [
+          "find_person",
+          "record_expense"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "provider_error",
+      "actualIntent": null,
+      "actualTool": "find_person",
+      "actualTools": [
+        "find_person"
+      ],
+      "toolArguments": [
+        {
+          "name": "find_person",
+          "arguments": {
+            "name": "محمد"
+          },
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": null,
+      "logicalLlmCalls": 2,
+      "actualHttpAttempts": 2,
+      "httpAttemptsByProvider": {
+        "groq": 2
+      },
+      "provider": null,
+      "model": null,
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 597,
+      "tokenUsage": [
+        {
+          "queue_time": 0.110149061,
+          "prompt_tokens": 2434,
+          "prompt_time": 0.140941087,
+          "completion_tokens": 29,
+          "completion_time": 0.033072074,
+          "total_tokens": 2463,
+          "total_time": 0.174013161,
+          "completion_tokens_details": {
+            "reasoning_tokens": 6
+          }
+        }
+      ],
+      "inputTokens": 2434,
+      "outputTokens": 29,
+      "totalTokens": 2463,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {},
+      "maxRequestBytes": 0,
+      "systemPromptChars": 0,
+      "toolDefinitionsChars": 0,
+      "toolDefinitionsCount": 0,
+      "maxConversationChars": 0,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": null,
+      "toolSelectionMatch": null,
+      "clarificationMatch": null,
+      "error": {
+        "message": "The configured provider rate limit was reached.",
+        "status": 429,
+        "category": "provider_rate_limit",
+        "code": "PROVIDER_RATE_LIMIT",
+        "provider": "groq",
+        "retryable": true,
+        "retryAfterSeconds": 8
+      }
+    },
+    {
+      "id": "A06",
+      "category": "expense_intent",
+      "message": "الـ7500 اللي دفعتها لمحمد سجلها",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": [
+          "find_person",
+          "record_expense"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "provider_error",
+      "actualIntent": null,
+      "actualTool": "find_person",
+      "actualTools": [
+        "find_person"
+      ],
+      "toolArguments": [
+        {
+          "name": "find_person",
+          "arguments": {
+            "name": "محمد"
+          },
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": null,
+      "logicalLlmCalls": 2,
+      "actualHttpAttempts": 2,
+      "httpAttemptsByProvider": {
+        "groq": 2
+      },
+      "provider": null,
+      "model": null,
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 557,
+      "tokenUsage": [
+        {
+          "queue_time": 0.063697228,
+          "prompt_tokens": 2433,
+          "prompt_time": 0.150050763,
+          "completion_tokens": 46,
+          "completion_time": 0.050711861,
+          "total_tokens": 2479,
+          "total_time": 0.200762624,
+          "completion_tokens_details": {
+            "reasoning_tokens": 23
+          }
+        }
+      ],
+      "inputTokens": 2433,
+      "outputTokens": 46,
+      "totalTokens": 2479,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {},
+      "maxRequestBytes": 0,
+      "systemPromptChars": 0,
+      "toolDefinitionsChars": 0,
+      "toolDefinitionsCount": 0,
+      "maxConversationChars": 0,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": null,
+      "toolSelectionMatch": null,
+      "clarificationMatch": null,
+      "error": {
+        "message": "The configured provider rate limit was reached.",
+        "status": 429,
+        "category": "provider_rate_limit",
+        "code": "PROVIDER_RATE_LIMIT",
+        "provider": "groq",
+        "retryable": true,
+        "retryAfterSeconds": 15
+      }
+    },
+    {
+      "id": "A07",
+      "category": "expense_intent",
+      "message": "سجلها على محمد",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": [
+          "find_person",
+          "record_expense",
+          "final_response"
+        ],
+        "clarification": true,
+        "write": false
+      },
+      "contextMode": "context_required",
+      "status": "provider_error",
+      "actualIntent": null,
+      "actualTool": null,
+      "actualTools": [],
+      "toolArguments": [],
+      "clarificationAsked": null,
+      "logicalLlmCalls": 1,
+      "actualHttpAttempts": 1,
+      "httpAttemptsByProvider": {
+        "groq": 1
+      },
+      "provider": null,
+      "model": null,
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 222,
+      "tokenUsage": null,
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "totalTokens": 0,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {},
+      "maxRequestBytes": 0,
+      "systemPromptChars": 0,
+      "toolDefinitionsChars": 0,
+      "toolDefinitionsCount": 0,
+      "maxConversationChars": 0,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": null,
+      "toolSelectionMatch": null,
+      "clarificationMatch": null,
+      "error": {
+        "message": "The configured provider rate limit was reached.",
+        "status": 429,
+        "category": "provider_rate_limit",
+        "code": "PROVIDER_RATE_LIMIT",
+        "provider": "groq",
+        "retryable": true,
+        "retryAfterSeconds": 9
+      }
+    },
+    {
+      "id": "A08",
+      "category": "expense_intent",
+      "message": "حولت لمحمد ألفين جنيه امبارح",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": [
+          "find_person",
+          "record_expense"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "provider_error",
+      "actualIntent": null,
+      "actualTool": "find_person",
+      "actualTools": [
+        "find_person"
+      ],
+      "toolArguments": [
+        {
+          "name": "find_person",
+          "arguments": {
+            "name": "محمد"
+          },
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": null,
+      "logicalLlmCalls": 2,
+      "actualHttpAttempts": 2,
+      "httpAttemptsByProvider": {
+        "groq": 2
+      },
+      "provider": null,
+      "model": null,
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 1641,
+      "tokenUsage": [
+        {
+          "queue_time": 0.120941901,
+          "prompt_tokens": 2432,
+          "prompt_time": 1.078246027,
+          "completion_tokens": 54,
+          "completion_time": 0.06089287,
+          "total_tokens": 2486,
+          "total_time": 1.139138897,
+          "prompt_tokens_details": {
+            "cached_tokens": 1536
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 31
+          }
+        }
+      ],
+      "inputTokens": 2432,
+      "outputTokens": 54,
+      "totalTokens": 2486,
+      "cachedTokens": 1536,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {},
+      "maxRequestBytes": 0,
+      "systemPromptChars": 0,
+      "toolDefinitionsChars": 0,
+      "toolDefinitionsCount": 0,
+      "maxConversationChars": 0,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": null,
+      "toolSelectionMatch": null,
+      "clarificationMatch": null,
+      "error": {
+        "message": "The configured provider rate limit was reached.",
+        "status": 429,
+        "category": "provider_rate_limit",
+        "code": "PROVIDER_RATE_LIMIT",
+        "provider": "groq",
+        "retryable": true,
+        "retryAfterSeconds": 2
+      }
+    },
+    {
+      "id": "B01",
+      "category": "create_person",
+      "message": "أضف محمد كشخص",
+      "expected": {
+        "intent": "create_person",
+        "primaryTool": "create_person",
+        "acceptableTools": [
+          "create_person"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": "create_person",
+      "actualTool": "create_person",
+      "actualTools": [
+        "create_person",
+        "functions.final_response"
+      ],
+      "toolArguments": [
+        {
+          "name": "create_person",
+          "arguments": {
+            "name": "محمد"
+          },
+          "dryRun": true
+        },
+        {
+          "name": "functions.final_response",
+          "arguments": {
+            "groundedFacts": [],
+            "kind": "answer",
+            "message": "تم إضافة محمد كـشخص بنجاح."
+          },
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": false,
+      "logicalLlmCalls": 3,
+      "actualHttpAttempts": 3,
+      "httpAttemptsByProvider": {
+        "groq": 3
+      },
+      "provider": "groq",
+      "model": "openai/gpt-oss-20b",
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 1512,
+      "tokenUsage": [
+        {
+          "queue_time": 0.180395586,
+          "prompt_tokens": 1938,
+          "prompt_time": 0.062236085,
+          "completion_tokens": 33,
+          "completion_time": 0.037966131,
+          "total_tokens": 1971,
+          "total_time": 0.100202216,
+          "prompt_tokens_details": {
+            "cached_tokens": 1536
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 10
+          }
+        },
+        {
+          "queue_time": 0.098142151,
+          "prompt_tokens": 1967,
+          "prompt_time": 0.037865762,
+          "completion_tokens": 42,
+          "completion_time": 0.045043257,
+          "total_tokens": 2009,
+          "total_time": 0.082909019,
+          "prompt_tokens_details": {
+            "cached_tokens": 1536
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 5
+          }
+        },
+        {
+          "queue_time": 0.172835757,
+          "prompt_tokens": 3252,
+          "prompt_time": 0.379961402,
+          "completion_tokens": 53,
+          "completion_time": 0.055075919,
+          "total_tokens": 3305,
+          "total_time": 0.435037321,
+          "prompt_tokens_details": {
+            "cached_tokens": 1536
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 14
+          }
+        }
+      ],
+      "inputTokens": 7157,
+      "outputTokens": 128,
+      "totalTokens": 7285,
+      "cachedTokens": 4608,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {
+        "groq": 42861
+      },
+      "maxRequestBytes": 20593,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 11062,
+      "toolDefinitionsCount": 29,
+      "maxConversationChars": 814,
+      "approvalReached": false,
+      "wouldSelectWriteTool": true,
+      "writeOccurred": false,
+      "noWriteViolation": true,
+      "intentMatch": true,
+      "toolSelectionMatch": true,
+      "clarificationMatch": true
+    },
+    {
+      "id": "B02",
+      "category": "create_person",
+      "message": "عايز أضيف شخص اسمه محمد",
+      "expected": {
+        "intent": "create_person",
+        "primaryTool": "create_person",
+        "acceptableTools": [
+          "create_person"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": "create_person",
+      "actualTool": "create_person",
+      "actualTools": [
+        "create_person"
+      ],
+      "toolArguments": [
+        {
+          "name": "create_person",
+          "arguments": {
+            "name": "محمد"
+          },
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": false,
+      "logicalLlmCalls": 2,
+      "actualHttpAttempts": 2,
+      "httpAttemptsByProvider": {
+        "groq": 2
+      },
+      "provider": "groq",
+      "model": "openai/gpt-oss-20b",
+      "fallback": false,
+      "fallbackReason": "PROVIDER_RATE_LIMIT",
+      "latencyMs": 464,
+      "tokenUsage": [
+        {
+          "queue_time": 0.068896549,
+          "prompt_tokens": 1940,
+          "prompt_time": 0.122926623,
+          "completion_tokens": 33,
+          "completion_time": 0.037003422,
+          "total_tokens": 1973,
+          "total_time": 0.159930045,
+          "completion_tokens_details": {
+            "reasoning_tokens": 10
+          }
+        }
+      ],
+      "inputTokens": 1940,
+      "outputTokens": 33,
+      "totalTokens": 1973,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {
+        "groq": 22304
+      },
+      "maxRequestBytes": 11309,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 2242,
+      "toolDefinitionsCount": 6,
+      "maxConversationChars": 363,
+      "approvalReached": false,
+      "wouldSelectWriteTool": true,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": true,
+      "toolSelectionMatch": true,
+      "clarificationMatch": true
+    },
+    {
+      "id": "B03",
+      "category": "create_person",
+      "message": "سجل محمد عندي كشخص",
+      "expected": {
+        "intent": "create_person",
+        "primaryTool": "create_person",
+        "acceptableTools": [
+          "create_person"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": "create_person",
+      "actualTool": "create_person",
+      "actualTools": [
+        "create_person"
+      ],
+      "toolArguments": [
+        {
+          "name": "create_person",
+          "arguments": {
+            "name": "محمد"
+          },
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": false,
+      "logicalLlmCalls": 2,
+      "actualHttpAttempts": 2,
+      "httpAttemptsByProvider": {
+        "groq": 2
+      },
+      "provider": "groq",
+      "model": "openai/gpt-oss-20b",
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 628,
+      "tokenUsage": [
+        {
+          "queue_time": 0.091664466,
+          "prompt_tokens": 1939,
+          "prompt_time": 0.014389817,
+          "completion_tokens": 33,
+          "completion_time": 0.034572309,
+          "total_tokens": 1972,
+          "total_time": 0.048962126,
+          "prompt_tokens_details": {
+            "cached_tokens": 1792
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 10
+          }
+        },
+        {
+          "queue_time": 0.003161233,
+          "prompt_tokens": 1968,
+          "prompt_time": 0.09969007,
+          "completion_tokens": 47,
+          "completion_time": 0.088784401,
+          "total_tokens": 2015,
+          "total_time": 0.188474471,
+          "completion_tokens_details": {
+            "reasoning_tokens": 6
+          }
+        }
+      ],
+      "inputTokens": 3907,
+      "outputTokens": 80,
+      "totalTokens": 3987,
+      "cachedTokens": 1792,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {
+        "groq": 22286
+      },
+      "maxRequestBytes": 11300,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 2242,
+      "toolDefinitionsCount": 6,
+      "maxConversationChars": 358,
+      "approvalReached": false,
+      "wouldSelectWriteTool": true,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": true,
+      "toolSelectionMatch": true,
+      "clarificationMatch": true
+    },
+    {
+      "id": "B04",
+      "category": "create_person",
+      "message": "اعمل شخص جديد اسمه محمد",
+      "expected": {
+        "intent": "create_person",
+        "primaryTool": "create_person",
+        "acceptableTools": [
+          "create_person"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "provider_error",
+      "actualIntent": null,
+      "actualTool": null,
+      "actualTools": [],
+      "toolArguments": [],
+      "clarificationAsked": null,
+      "logicalLlmCalls": 1,
+      "actualHttpAttempts": 1,
+      "httpAttemptsByProvider": {
+        "groq": 1
+      },
+      "provider": null,
+      "model": null,
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 254,
+      "tokenUsage": null,
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "totalTokens": 0,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {},
+      "maxRequestBytes": 0,
+      "systemPromptChars": 0,
+      "toolDefinitionsChars": 0,
+      "toolDefinitionsCount": 0,
+      "maxConversationChars": 0,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": null,
+      "toolSelectionMatch": null,
+      "clarificationMatch": null,
+      "error": {
+        "message": "The configured provider rate limit was reached.",
+        "status": 429,
+        "category": "provider_rate_limit",
+        "code": "PROVIDER_RATE_LIMIT",
+        "provider": "groq",
+        "retryable": true,
+        "retryAfterSeconds": 2
+      }
+    },
+    {
+      "id": "C01",
+      "category": "ambiguous",
+      "message": "محمد",
+      "expected": {
+        "intent": "clarification",
+        "primaryTool": "final_response",
+        "acceptableTools": [
+          "final_response",
+          "find_person"
+        ],
+        "clarification": true,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "provider_error",
+      "actualIntent": null,
+      "actualTool": null,
+      "actualTools": [],
+      "toolArguments": [],
+      "clarificationAsked": null,
+      "logicalLlmCalls": 1,
+      "actualHttpAttempts": 1,
+      "httpAttemptsByProvider": {
+        "groq": 1
+      },
+      "provider": null,
+      "model": null,
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 205,
+      "tokenUsage": null,
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "totalTokens": 0,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {},
+      "maxRequestBytes": 0,
+      "systemPromptChars": 0,
+      "toolDefinitionsChars": 0,
+      "toolDefinitionsCount": 0,
+      "maxConversationChars": 0,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": null,
+      "toolSelectionMatch": null,
+      "clarificationMatch": null,
+      "error": {
+        "message": "The configured provider rate limit was reached.",
+        "status": 429,
+        "category": "provider_rate_limit",
+        "code": "PROVIDER_RATE_LIMIT",
+        "provider": "groq",
+        "retryable": true,
+        "retryAfterSeconds": 1
+      }
+    },
+    {
+      "id": "C02",
+      "category": "ambiguous",
+      "message": "سجل محمد",
+      "expected": {
+        "intent": "clarification",
+        "primaryTool": "final_response",
+        "acceptableTools": [
+          "final_response",
+          "find_person"
+        ],
+        "clarification": true,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": "clarification",
+      "actualTool": "text_response",
+      "actualTools": [],
+      "toolArguments": [],
+      "clarificationAsked": true,
+      "logicalLlmCalls": 1,
+      "actualHttpAttempts": 1,
+      "httpAttemptsByProvider": {
+        "groq": 1
+      },
+      "provider": "groq",
+      "model": "openai/gpt-oss-20b",
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 552,
+      "tokenUsage": [
+        {
+          "queue_time": 0.069157025,
+          "prompt_tokens": 3158,
+          "prompt_time": 0.19632659,
+          "completion_tokens": 67,
+          "completion_time": 0.074232115,
+          "total_tokens": 3225,
+          "total_time": 0.270558705,
+          "completion_tokens_details": {
+            "reasoning_tokens": 24
+          }
+        }
+      ],
+      "inputTokens": 3158,
+      "outputTokens": 67,
+      "totalTokens": 3225,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {
+        "groq": 19788
+      },
+      "maxRequestBytes": 19788,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 11062,
+      "toolDefinitionsCount": 29,
+      "maxConversationChars": 38,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": true,
+      "toolSelectionMatch": false,
+      "clarificationMatch": true
+    },
+    {
+      "id": "C03",
+      "category": "ambiguous",
+      "message": "محمد خدها",
+      "expected": {
+        "intent": "clarification",
+        "primaryTool": "final_response",
+        "acceptableTools": [
+          "final_response",
+          "find_person"
+        ],
+        "clarification": true,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "provider_error",
+      "actualIntent": null,
+      "actualTool": null,
+      "actualTools": [],
+      "toolArguments": [],
+      "clarificationAsked": null,
+      "logicalLlmCalls": 1,
+      "actualHttpAttempts": 1,
+      "httpAttemptsByProvider": {
+        "groq": 1
+      },
+      "provider": null,
+      "model": null,
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 186,
+      "tokenUsage": null,
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "totalTokens": 0,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {},
+      "maxRequestBytes": 0,
+      "systemPromptChars": 0,
+      "toolDefinitionsChars": 0,
+      "toolDefinitionsCount": 0,
+      "maxConversationChars": 0,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": null,
+      "toolSelectionMatch": null,
+      "clarificationMatch": null,
+      "error": {
+        "message": "The configured provider rate limit was reached.",
+        "status": 429,
+        "category": "provider_rate_limit",
+        "code": "PROVIDER_RATE_LIMIT",
+        "provider": "groq",
+        "retryable": true,
+        "retryAfterSeconds": 3
+      }
+    },
+    {
+      "id": "C04",
+      "category": "ambiguous",
+      "message": "سجلها",
+      "expected": {
+        "intent": "clarification",
+        "primaryTool": "final_response",
+        "acceptableTools": [
+          "final_response"
+        ],
+        "clarification": true,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": "clarification",
+      "actualTool": "text_response",
+      "actualTools": [],
+      "toolArguments": [],
+      "clarificationAsked": true,
+      "logicalLlmCalls": 1,
+      "actualHttpAttempts": 1,
+      "httpAttemptsByProvider": {
+        "groq": 1
+      },
+      "provider": "groq",
+      "model": "openai/gpt-oss-20b",
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 604,
+      "tokenUsage": [
+        {
+          "queue_time": 0.117782942,
+          "prompt_tokens": 3158,
+          "prompt_time": 0.172693138,
+          "completion_tokens": 80,
+          "completion_time": 0.082046171,
+          "total_tokens": 3238,
+          "total_time": 0.254739309,
+          "completion_tokens_details": {
+            "reasoning_tokens": 36
+          }
+        }
+      ],
+      "inputTokens": 3158,
+      "outputTokens": 80,
+      "totalTokens": 3238,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {
+        "groq": 19783
+      },
+      "maxRequestBytes": 19783,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 11062,
+      "toolDefinitionsCount": 29,
+      "maxConversationChars": 35,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": true,
+      "toolSelectionMatch": false,
+      "clarificationMatch": true
+    },
+    {
+      "id": "C05",
+      "category": "ambiguous",
+      "message": "الفلوس دي",
+      "expected": {
+        "intent": "clarification",
+        "primaryTool": "final_response",
+        "acceptableTools": [
+          "final_response"
+        ],
+        "clarification": true,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "provider_error",
+      "actualIntent": null,
+      "actualTool": null,
+      "actualTools": [],
+      "toolArguments": [],
+      "clarificationAsked": null,
+      "logicalLlmCalls": 1,
+      "actualHttpAttempts": 1,
+      "httpAttemptsByProvider": {
+        "groq": 1
+      },
+      "provider": null,
+      "model": null,
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 581,
+      "tokenUsage": null,
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "totalTokens": 0,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {},
+      "maxRequestBytes": 0,
+      "systemPromptChars": 0,
+      "toolDefinitionsChars": 0,
+      "toolDefinitionsCount": 0,
+      "maxConversationChars": 0,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": null,
+      "toolSelectionMatch": null,
+      "clarificationMatch": null,
+      "error": {
+        "message": "The configured provider rate limit was reached.",
+        "status": 429,
+        "category": "provider_rate_limit",
+        "code": "PROVIDER_RATE_LIMIT",
+        "provider": "groq",
+        "retryable": true,
+        "retryAfterSeconds": 8
+      }
+    },
+    {
+      "id": "C06",
+      "category": "ambiguous",
+      "message": "التاني",
+      "expected": {
+        "intent": "clarification",
+        "primaryTool": "final_response",
+        "acceptableTools": [
+          "final_response"
+        ],
+        "clarification": true,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": "clarification",
+      "actualTool": "text_response",
+      "actualTools": [],
+      "toolArguments": [],
+      "clarificationAsked": true,
+      "logicalLlmCalls": 1,
+      "actualHttpAttempts": 1,
+      "httpAttemptsByProvider": {
+        "groq": 1
+      },
+      "provider": "groq",
+      "model": "openai/gpt-oss-20b",
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 748,
+      "tokenUsage": [
+        {
+          "queue_time": 0.171336182,
+          "prompt_tokens": 3157,
+          "prompt_time": 0.205024332,
+          "completion_tokens": 59,
+          "completion_time": 0.093163126,
+          "total_tokens": 3216,
+          "total_time": 0.298187458,
+          "completion_tokens_details": {
+            "reasoning_tokens": 15
+          }
+        }
+      ],
+      "inputTokens": 3157,
+      "outputTokens": 59,
+      "totalTokens": 3216,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {
+        "groq": 19785
+      },
+      "maxRequestBytes": 19785,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 11062,
+      "toolDefinitionsCount": 29,
+      "maxConversationChars": 36,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": true,
+      "toolSelectionMatch": false,
+      "clarificationMatch": true
+    },
+    {
+      "id": "C07",
+      "category": "ambiguous",
+      "message": "ماشي",
+      "expected": {
+        "intent": "clarification",
+        "primaryTool": "final_response",
+        "acceptableTools": [
+          "final_response"
+        ],
+        "clarification": true,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "provider_error",
+      "actualIntent": null,
+      "actualTool": null,
+      "actualTools": [],
+      "toolArguments": [],
+      "clarificationAsked": null,
+      "logicalLlmCalls": 1,
+      "actualHttpAttempts": 1,
+      "httpAttemptsByProvider": {
+        "groq": 1
+      },
+      "provider": null,
+      "model": null,
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 194,
+      "tokenUsage": null,
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "totalTokens": 0,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {},
+      "maxRequestBytes": 0,
+      "systemPromptChars": 0,
+      "toolDefinitionsChars": 0,
+      "toolDefinitionsCount": 0,
+      "maxConversationChars": 0,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": null,
+      "toolSelectionMatch": null,
+      "clarificationMatch": null,
+      "error": {
+        "message": "The configured provider rate limit was reached.",
+        "status": 429,
+        "category": "provider_rate_limit",
+        "code": "PROVIDER_RATE_LIMIT",
+        "provider": "groq",
+        "retryable": true,
+        "retryAfterSeconds": 1
+      }
+    },
+    {
+      "id": "D01",
+      "category": "expense_with_project",
+      "message": "دفعت لمحمد 7500 على مشروع التشطيبات",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": [
+          "find_person",
+          "find_project",
+          "record_expense"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "provider_error",
+      "actualIntent": null,
+      "actualTool": null,
+      "actualTools": [],
+      "toolArguments": [],
+      "clarificationAsked": null,
+      "logicalLlmCalls": 1,
+      "actualHttpAttempts": 1,
+      "httpAttemptsByProvider": {
+        "groq": 1
+      },
+      "provider": null,
+      "model": null,
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 236,
+      "tokenUsage": null,
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "totalTokens": 0,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {},
+      "maxRequestBytes": 0,
+      "systemPromptChars": 0,
+      "toolDefinitionsChars": 0,
+      "toolDefinitionsCount": 0,
+      "maxConversationChars": 0,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": null,
+      "toolSelectionMatch": null,
+      "clarificationMatch": null,
+      "error": {
+        "message": "The configured provider rate limit was reached.",
+        "status": 429,
+        "category": "provider_rate_limit",
+        "code": "PROVIDER_RATE_LIMIT",
+        "provider": "groq",
+        "retryable": true,
+        "retryAfterSeconds": 2
+      }
+    },
+    {
+      "id": "D02",
+      "category": "expense_with_project",
+      "message": "سجلت 12000 جنيه لأحمد على مشروع الشقة الجديدة",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": [
+          "find_person",
+          "find_project",
+          "record_expense"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "provider_error",
+      "actualIntent": null,
+      "actualTool": "find_person",
+      "actualTools": [
+        "find_person"
+      ],
+      "toolArguments": [
+        {
+          "name": "find_person",
+          "arguments": {
+            "name": "أحمد"
+          },
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": null,
+      "logicalLlmCalls": 2,
+      "actualHttpAttempts": 2,
+      "httpAttemptsByProvider": {
+        "groq": 2
+      },
+      "provider": null,
+      "model": null,
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 567,
+      "tokenUsage": [
+        {
+          "queue_time": 0.049069835,
+          "prompt_tokens": 3170,
+          "prompt_time": 0.191198653,
+          "completion_tokens": 42,
+          "completion_time": 0.045264634,
+          "total_tokens": 3212,
+          "total_time": 0.236463287,
+          "completion_tokens_details": {
+            "reasoning_tokens": 17
+          }
+        }
+      ],
+      "inputTokens": 3170,
+      "outputTokens": 42,
+      "totalTokens": 3212,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {},
+      "maxRequestBytes": 0,
+      "systemPromptChars": 0,
+      "toolDefinitionsChars": 0,
+      "toolDefinitionsCount": 0,
+      "maxConversationChars": 0,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": null,
+      "toolSelectionMatch": null,
+      "clarificationMatch": null,
+      "error": {
+        "message": "The configured provider rate limit was reached.",
+        "status": 429,
+        "category": "provider_rate_limit",
+        "code": "PROVIDER_RATE_LIMIT",
+        "provider": "groq",
+        "retryable": true,
+        "retryAfterSeconds": 11
+      }
+    },
+    {
+      "id": "D03",
+      "category": "expense_with_project",
+      "message": "اديت سارة 3000 في مشروع المكتب",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": [
+          "find_person",
+          "find_project",
+          "record_expense"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "provider_error",
+      "actualIntent": null,
+      "actualTool": "find_person",
+      "actualTools": [
+        "find_person"
+      ],
+      "toolArguments": [
+        {
+          "name": "find_person",
+          "arguments": {
+            "name": "سارة"
+          },
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": null,
+      "logicalLlmCalls": 2,
+      "actualHttpAttempts": 2,
+      "httpAttemptsByProvider": {
+        "groq": 2
+      },
+      "provider": null,
+      "model": null,
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 899,
+      "tokenUsage": [
+        {
+          "queue_time": 0.110176202,
+          "prompt_tokens": 3165,
+          "prompt_time": 0.27302015,
+          "completion_tokens": 43,
+          "completion_time": 0.045120309,
+          "total_tokens": 3208,
+          "total_time": 0.318140459,
+          "prompt_tokens_details": {
+            "cached_tokens": 1536
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 19
+          }
+        }
+      ],
+      "inputTokens": 3165,
+      "outputTokens": 43,
+      "totalTokens": 3208,
+      "cachedTokens": 1536,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {},
+      "maxRequestBytes": 0,
+      "systemPromptChars": 0,
+      "toolDefinitionsChars": 0,
+      "toolDefinitionsCount": 0,
+      "maxConversationChars": 0,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": null,
+      "toolSelectionMatch": null,
+      "clarificationMatch": null,
+      "error": {
+        "message": "The configured provider rate limit was reached.",
+        "status": 429,
+        "category": "provider_rate_limit",
+        "code": "PROVIDER_RATE_LIMIT",
+        "provider": "groq",
+        "retryable": true,
+        "retryAfterSeconds": 11
+      }
+    },
+    {
+      "id": "D04",
+      "category": "expense_with_project",
+      "message": "محمد خد مني 8500 بتوع مشروع السفر",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": [
+          "find_person",
+          "find_project",
+          "record_expense"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "provider_error",
+      "actualIntent": null,
+      "actualTool": "find_person",
+      "actualTools": [
+        "find_person"
+      ],
+      "toolArguments": [
+        {
+          "name": "find_person",
+          "arguments": {
+            "name": "محمد"
+          },
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": null,
+      "logicalLlmCalls": 2,
+      "actualHttpAttempts": 2,
+      "httpAttemptsByProvider": {
+        "groq": 2
+      },
+      "provider": null,
+      "model": null,
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 614,
+      "tokenUsage": [
+        {
+          "queue_time": 0.049474683,
+          "prompt_tokens": 3165,
+          "prompt_time": 0.189306991,
+          "completion_tokens": 63,
+          "completion_time": 0.083078908,
+          "total_tokens": 3228,
+          "total_time": 0.272385899,
+          "completion_tokens_details": {
+            "reasoning_tokens": 40
+          }
+        }
+      ],
+      "inputTokens": 3165,
+      "outputTokens": 63,
+      "totalTokens": 3228,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {},
+      "maxRequestBytes": 0,
+      "systemPromptChars": 0,
+      "toolDefinitionsChars": 0,
+      "toolDefinitionsCount": 0,
+      "maxConversationChars": 0,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": null,
+      "toolSelectionMatch": null,
+      "clarificationMatch": null,
+      "error": {
+        "message": "The configured provider rate limit was reached.",
+        "status": 429,
+        "category": "provider_rate_limit",
+        "code": "PROVIDER_RATE_LIMIT",
+        "provider": "groq",
+        "retryable": true,
+        "retryAfterSeconds": 24
+      }
+    },
+    {
+      "id": "D05",
+      "category": "expense_with_project",
+      "message": "سجل مصروف 4200 لمحمد على المشروع التاني",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": [
+          "find_person",
+          "find_project",
+          "record_expense",
+          "final_response"
+        ],
+        "clarification": true,
+        "write": false
+      },
+      "contextMode": "context_required",
+      "status": "provider_error",
+      "actualIntent": null,
+      "actualTool": null,
+      "actualTools": [],
+      "toolArguments": [],
+      "clarificationAsked": null,
+      "logicalLlmCalls": 1,
+      "actualHttpAttempts": 1,
+      "httpAttemptsByProvider": {
+        "groq": 1
+      },
+      "provider": null,
+      "model": null,
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 232,
+      "tokenUsage": null,
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "totalTokens": 0,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {},
+      "maxRequestBytes": 0,
+      "systemPromptChars": 0,
+      "toolDefinitionsChars": 0,
+      "toolDefinitionsCount": 0,
+      "maxConversationChars": 0,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": null,
+      "toolSelectionMatch": null,
+      "clarificationMatch": null,
+      "error": {
+        "message": "The configured provider rate limit was reached.",
+        "status": 429,
+        "category": "provider_rate_limit",
+        "code": "PROVIDER_RATE_LIMIT",
+        "provider": "groq",
+        "retryable": true,
+        "retryAfterSeconds": 16
+      }
+    },
+    {
+      "id": "E01",
+      "category": "correction",
+      "message": "لا مش محمد، أحمد",
+      "expected": {
+        "intent": "correction",
+        "primaryTool": "update_expense",
+        "acceptableTools": [
+          "update_expense",
+          "find_person",
+          "final_response"
+        ],
+        "clarification": true,
+        "write": false
+      },
+      "contextMode": "context_required",
+      "status": "provider_error",
+      "actualIntent": null,
+      "actualTool": null,
+      "actualTools": [],
+      "toolArguments": [],
+      "clarificationAsked": null,
+      "logicalLlmCalls": 1,
+      "actualHttpAttempts": 1,
+      "httpAttemptsByProvider": {
+        "groq": 1
+      },
+      "provider": null,
+      "model": null,
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 214,
+      "tokenUsage": null,
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "totalTokens": 0,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {},
+      "maxRequestBytes": 0,
+      "systemPromptChars": 0,
+      "toolDefinitionsChars": 0,
+      "toolDefinitionsCount": 0,
+      "maxConversationChars": 0,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": null,
+      "toolSelectionMatch": null,
+      "clarificationMatch": null,
+      "error": {
+        "message": "The configured provider rate limit was reached.",
+        "status": 429,
+        "category": "provider_rate_limit",
+        "code": "PROVIDER_RATE_LIMIT",
+        "provider": "groq",
+        "retryable": true,
+        "retryAfterSeconds": 2
+      }
+    },
+    {
+      "id": "E02",
+      "category": "correction",
+      "message": "المبلغ 8500 مش 7500",
+      "expected": {
+        "intent": "correction",
+        "primaryTool": "update_expense",
+        "acceptableTools": [
+          "update_expense",
+          "final_response"
+        ],
+        "clarification": true,
+        "write": false
+      },
+      "contextMode": "context_required",
+      "status": "provider_error",
+      "actualIntent": null,
+      "actualTool": null,
+      "actualTools": [],
+      "toolArguments": [],
+      "clarificationAsked": null,
+      "logicalLlmCalls": 1,
+      "actualHttpAttempts": 1,
+      "httpAttemptsByProvider": {
+        "groq": 1
+      },
+      "provider": null,
+      "model": null,
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 447,
+      "tokenUsage": null,
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "totalTokens": 0,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {},
+      "maxRequestBytes": 0,
+      "systemPromptChars": 0,
+      "toolDefinitionsChars": 0,
+      "toolDefinitionsCount": 0,
+      "maxConversationChars": 0,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": null,
+      "toolSelectionMatch": null,
+      "clarificationMatch": null,
+      "error": {
+        "message": "The groq provider returned an error.",
+        "status": 502,
+        "category": "provider_error",
+        "code": "PROVIDER_API_ERROR",
+        "provider": "groq",
+        "retryable": false
+      }
+    },
+    {
+      "id": "E03",
+      "category": "correction",
+      "message": "على المشروع التاني",
+      "expected": {
+        "intent": "correction",
+        "primaryTool": "update_expense",
+        "acceptableTools": [
+          "update_expense",
+          "find_project",
+          "final_response"
+        ],
+        "clarification": true,
+        "write": false
+      },
+      "contextMode": "context_required",
+      "status": "context_not_provided",
+      "actualIntent": "clarification",
+      "actualTool": "text_response",
+      "actualTools": [],
+      "toolArguments": [],
+      "clarificationAsked": true,
+      "logicalLlmCalls": 1,
+      "actualHttpAttempts": 1,
+      "httpAttemptsByProvider": {
+        "groq": 1
+      },
+      "provider": "groq",
+      "model": "openai/gpt-oss-20b",
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 791,
+      "tokenUsage": [
+        {
+          "queue_time": 0.068884257,
+          "prompt_tokens": 3159,
+          "prompt_time": 0.434351791,
+          "completion_tokens": 91,
+          "completion_time": 0.093652534,
+          "total_tokens": 3250,
+          "total_time": 0.528004325,
+          "prompt_tokens_details": {
+            "cached_tokens": 1792
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 47
+          }
+        }
+      ],
+      "inputTokens": 3159,
+      "outputTokens": 91,
+      "totalTokens": 3250,
+      "cachedTokens": 1792,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {
+        "groq": 19807
+      },
+      "maxRequestBytes": 19807,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 11062,
+      "toolDefinitionsCount": 29,
+      "maxConversationChars": 48,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": null,
+      "toolSelectionMatch": null,
+      "clarificationMatch": null
+    },
+    {
+      "id": "E04",
+      "category": "correction",
+      "message": "قصدي المصروف اللي فات",
+      "expected": {
+        "intent": "correction",
+        "primaryTool": "update_expense",
+        "acceptableTools": [
+          "update_expense",
+          "query_expenses",
+          "final_response"
+        ],
+        "clarification": true,
+        "write": false
+      },
+      "contextMode": "context_required",
+      "status": "provider_error",
+      "actualIntent": null,
+      "actualTool": null,
+      "actualTools": [],
+      "toolArguments": [],
+      "clarificationAsked": null,
+      "logicalLlmCalls": 1,
+      "actualHttpAttempts": 1,
+      "httpAttemptsByProvider": {
+        "groq": 1
+      },
+      "provider": null,
+      "model": null,
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 207,
+      "tokenUsage": null,
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "totalTokens": 0,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {},
+      "maxRequestBytes": 0,
+      "systemPromptChars": 0,
+      "toolDefinitionsChars": 0,
+      "toolDefinitionsCount": 0,
+      "maxConversationChars": 0,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": null,
+      "toolSelectionMatch": null,
+      "clarificationMatch": null,
+      "error": {
+        "message": "The configured provider rate limit was reached.",
+        "status": 429,
+        "category": "provider_rate_limit",
+        "code": "PROVIDER_RATE_LIMIT",
+        "provider": "groq",
+        "retryable": true,
+        "retryAfterSeconds": 1
+      }
+    },
+    {
+      "id": "E05",
+      "category": "correction",
+      "message": "لا، سجلها على مشروع التشطيبات",
+      "expected": {
+        "intent": "correction",
+        "primaryTool": "update_expense",
+        "acceptableTools": [
+          "update_expense",
+          "find_project",
+          "final_response"
+        ],
+        "clarification": true,
+        "write": false
+      },
+      "contextMode": "context_required",
+      "status": "context_not_provided",
+      "actualIntent": "clarification",
+      "actualTool": "find_project",
+      "actualTools": [
+        "find_project"
+      ],
+      "toolArguments": [
+        {
+          "name": "find_project",
+          "arguments": {
+            "name": "التشطيبات"
+          },
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": true,
+      "logicalLlmCalls": 2,
+      "actualHttpAttempts": 2,
+      "httpAttemptsByProvider": {
+        "groq": 2
+      },
+      "provider": "groq",
+      "model": "openai/gpt-oss-20b",
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 928,
+      "tokenUsage": [
+        {
+          "queue_time": 0.167404325,
+          "prompt_tokens": 1882,
+          "prompt_time": 0.022530404,
+          "completion_tokens": 44,
+          "completion_time": 0.044794171,
+          "total_tokens": 1926,
+          "total_time": 0.067324575,
+          "prompt_tokens_details": {
+            "cached_tokens": 1536
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 18
+          }
+        },
+        {
+          "queue_time": 0.045379451,
+          "prompt_tokens": 1923,
+          "prompt_time": 0.12795374,
+          "completion_tokens": 55,
+          "completion_time": 0.060670788,
+          "total_tokens": 1978,
+          "total_time": 0.188624528,
+          "completion_tokens_details": {
+            "reasoning_tokens": 7
+          }
+        }
+      ],
+      "inputTokens": 3805,
+      "outputTokens": 99,
+      "totalTokens": 3904,
+      "cachedTokens": 1536,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {
+        "groq": 21846
+      },
+      "maxRequestBytes": 11106,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 1984,
+      "toolDefinitionsCount": 6,
+      "maxConversationChars": 416,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": null,
+      "toolSelectionMatch": null,
+      "clarificationMatch": null
+    },
+    {
+      "id": "F01",
+      "category": "negative_guard",
+      "message": "أضف محمد كشخص من غير ما تسجل أي مصروف",
+      "expected": {
+        "intent": "create_person",
+        "primaryTool": "create_person",
+        "acceptableTools": [
+          "create_person"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": "create_person",
+      "actualTool": "create_person",
+      "actualTools": [
+        "create_person"
+      ],
+      "toolArguments": [
+        {
+          "name": "create_person",
+          "arguments": {
+            "name": "محمد"
+          },
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": false,
+      "logicalLlmCalls": 2,
+      "actualHttpAttempts": 2,
+      "httpAttemptsByProvider": {
+        "groq": 2
+      },
+      "provider": "groq",
+      "model": "openai/gpt-oss-20b",
+      "fallback": false,
+      "fallbackReason": "PROVIDER_RATE_LIMIT",
+      "latencyMs": 553,
+      "tokenUsage": [
+        {
+          "queue_time": 0.031731194,
+          "prompt_tokens": 3169,
+          "prompt_time": 0.163862578,
+          "completion_tokens": 33,
+          "completion_time": 0.034811321,
+          "total_tokens": 3202,
+          "total_time": 0.198673899,
+          "completion_tokens_details": {
+            "reasoning_tokens": 10
+          }
+        }
+      ],
+      "inputTokens": 3169,
+      "outputTokens": 33,
+      "totalTokens": 3202,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {
+        "groq": 39992
+      },
+      "maxRequestBytes": 20153,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 11062,
+      "toolDefinitionsCount": 29,
+      "maxConversationChars": 377,
+      "approvalReached": false,
+      "wouldSelectWriteTool": true,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": true,
+      "toolSelectionMatch": true,
+      "clarificationMatch": true
+    },
+    {
+      "id": "F02",
+      "category": "negative_guard",
+      "message": "دفعت لمحمد 100 جنيه، وما تضيفوش كشخص",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": [
+          "find_person",
+          "record_expense"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "provider_error",
+      "actualIntent": null,
+      "actualTool": null,
+      "actualTools": [],
+      "toolArguments": [],
+      "clarificationAsked": null,
+      "logicalLlmCalls": 1,
+      "actualHttpAttempts": 1,
+      "httpAttemptsByProvider": {
+        "groq": 1
+      },
+      "provider": null,
+      "model": null,
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 200,
+      "tokenUsage": null,
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "totalTokens": 0,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {},
+      "maxRequestBytes": 0,
+      "systemPromptChars": 0,
+      "toolDefinitionsChars": 0,
+      "toolDefinitionsCount": 0,
+      "maxConversationChars": 0,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": null,
+      "toolSelectionMatch": null,
+      "clarificationMatch": null,
+      "error": {
+        "message": "The configured provider rate limit was reached.",
+        "status": 429,
+        "category": "provider_rate_limit",
+        "code": "PROVIDER_RATE_LIMIT",
+        "provider": "groq",
+        "retryable": true,
+        "retryAfterSeconds": 8
+      }
+    },
+    {
+      "id": "F03",
+      "category": "negative_guard",
+      "message": "محمد",
+      "expected": {
+        "intent": "clarification",
+        "primaryTool": "final_response",
+        "acceptableTools": [
+          "final_response",
+          "find_person"
+        ],
+        "clarification": true,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": "clarification",
+      "actualTool": "text_response",
+      "actualTools": [],
+      "toolArguments": [],
+      "clarificationAsked": true,
+      "logicalLlmCalls": 1,
+      "actualHttpAttempts": 1,
+      "httpAttemptsByProvider": {
+        "groq": 1
+      },
+      "provider": "groq",
+      "model": "openai/gpt-oss-20b",
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 604,
+      "tokenUsage": [
+        {
+          "queue_time": 0.146925996,
+          "prompt_tokens": 3156,
+          "prompt_time": 0.188866958,
+          "completion_tokens": 74,
+          "completion_time": 0.083797769,
+          "total_tokens": 3230,
+          "total_time": 0.272664727,
+          "completion_tokens_details": {
+            "reasoning_tokens": 24
+          }
+        }
+      ],
+      "inputTokens": 3156,
+      "outputTokens": 74,
+      "totalTokens": 3230,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {
+        "groq": 19781
+      },
+      "maxRequestBytes": 19781,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 11062,
+      "toolDefinitionsCount": 29,
+      "maxConversationChars": 34,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": true,
+      "toolSelectionMatch": false,
+      "clarificationMatch": true
+    },
+    {
+      "id": "F04",
+      "category": "negative_guard",
+      "message": "عايز أضيف شخص اسمه أحمد، مش أسجل له فلوس",
+      "expected": {
+        "intent": "create_person",
+        "primaryTool": "create_person",
+        "acceptableTools": [
+          "create_person"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "provider_error",
+      "actualIntent": null,
+      "actualTool": null,
+      "actualTools": [],
+      "toolArguments": [],
+      "clarificationAsked": null,
+      "logicalLlmCalls": 1,
+      "actualHttpAttempts": 1,
+      "httpAttemptsByProvider": {
+        "groq": 1
+      },
+      "provider": null,
+      "model": null,
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 213,
+      "tokenUsage": null,
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "totalTokens": 0,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {},
+      "maxRequestBytes": 0,
+      "systemPromptChars": 0,
+      "toolDefinitionsChars": 0,
+      "toolDefinitionsCount": 0,
+      "maxConversationChars": 0,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": null,
+      "toolSelectionMatch": null,
+      "clarificationMatch": null,
+      "error": {
+        "message": "The configured provider rate limit was reached.",
+        "status": 429,
+        "category": "provider_rate_limit",
+        "code": "PROVIDER_RATE_LIMIT",
+        "provider": "groq",
+        "retryable": true,
+        "retryAfterSeconds": 11
+      }
+    },
+    {
+      "id": "F05",
+      "category": "negative_guard",
+      "message": "سجل مصروف لمحمد بمبلغ 600 جنيه",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": [
+          "find_person",
+          "record_expense"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "provider_error",
+      "actualIntent": null,
+      "actualTool": "find_person",
+      "actualTools": [
+        "find_person"
+      ],
+      "toolArguments": [
+        {
+          "name": "find_person",
+          "arguments": {
+            "name": "محمد"
+          },
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": null,
+      "logicalLlmCalls": 2,
+      "actualHttpAttempts": 2,
+      "httpAttemptsByProvider": {
+        "groq": 2
+      },
+      "provider": null,
+      "model": null,
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 720,
+      "tokenUsage": [
+        {
+          "queue_time": 0.170899218,
+          "prompt_tokens": 2433,
+          "prompt_time": 0.142167219,
+          "completion_tokens": 29,
+          "completion_time": 0.033542755,
+          "total_tokens": 2462,
+          "total_time": 0.175709974,
+          "completion_tokens_details": {
+            "reasoning_tokens": 6
+          }
+        }
+      ],
+      "inputTokens": 2433,
+      "outputTokens": 29,
+      "totalTokens": 2462,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {},
+      "maxRequestBytes": 0,
+      "systemPromptChars": 0,
+      "toolDefinitionsChars": 0,
+      "toolDefinitionsCount": 0,
+      "maxConversationChars": 0,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": null,
+      "toolSelectionMatch": null,
+      "clarificationMatch": null,
+      "error": {
+        "message": "The configured provider rate limit was reached.",
+        "status": 429,
+        "category": "provider_rate_limit",
+        "code": "PROVIDER_RATE_LIMIT",
+        "provider": "groq",
+        "retryable": true,
+        "retryAfterSeconds": 13
+      }
+    },
+    {
+      "id": "F06",
+      "category": "negative_guard",
+      "message": "محمد موجود عندي بالفعل",
+      "expected": {
+        "intent": "clarification",
+        "primaryTool": "final_response",
+        "acceptableTools": [
+          "final_response",
+          "find_person"
+        ],
+        "clarification": true,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": "clarification",
+      "actualTool": "text_response",
+      "actualTools": [],
+      "toolArguments": [],
+      "clarificationAsked": true,
+      "logicalLlmCalls": 1,
+      "actualHttpAttempts": 1,
+      "httpAttemptsByProvider": {
+        "groq": 1
+      },
+      "provider": "groq",
+      "model": "openai/gpt-oss-20b",
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 662,
+      "tokenUsage": [
+        {
+          "queue_time": 0.221876234,
+          "prompt_tokens": 2141,
+          "prompt_time": 0.125901979,
+          "completion_tokens": 77,
+          "completion_time": 0.135266626,
+          "total_tokens": 2218,
+          "total_time": 0.261168605,
+          "completion_tokens_details": {
+            "reasoning_tokens": 32
+          }
+        }
+      ],
+      "inputTokens": 2141,
+      "outputTokens": 77,
+      "totalTokens": 2218,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {
+        "groq": 12450
+      },
+      "maxRequestBytes": 12450,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 3707,
+      "toolDefinitionsCount": 9,
+      "maxConversationChars": 52,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": true,
+      "toolSelectionMatch": false,
+      "clarificationMatch": true
+    },
+    {
+      "id": "F07",
+      "category": "negative_guard",
+      "message": "اديت أحمد 1250 ومش عايز أعمله كشخص جديد",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": [
+          "find_person",
+          "record_expense"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "provider_error",
+      "actualIntent": null,
+      "actualTool": null,
+      "actualTools": [],
+      "toolArguments": [],
+      "clarificationAsked": null,
+      "logicalLlmCalls": 1,
+      "actualHttpAttempts": 1,
+      "httpAttemptsByProvider": {
+        "groq": 1
+      },
+      "provider": null,
+      "model": null,
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 319,
+      "tokenUsage": null,
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "totalTokens": 0,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {},
+      "maxRequestBytes": 0,
+      "systemPromptChars": 0,
+      "toolDefinitionsChars": 0,
+      "toolDefinitionsCount": 0,
+      "maxConversationChars": 0,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": null,
+      "toolSelectionMatch": null,
+      "clarificationMatch": null,
+      "error": {
+        "message": "The configured provider rate limit was reached.",
+        "status": 429,
+        "category": "provider_rate_limit",
+        "code": "PROVIDER_RATE_LIMIT",
+        "provider": "groq",
+        "retryable": true,
+        "retryAfterSeconds": 16
+      }
+    }
+  ]
+}

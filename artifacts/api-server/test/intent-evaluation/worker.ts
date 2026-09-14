@@ -1,5 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { and, count, eq } from "drizzle-orm";
+import {
+  commitmentsTable,
+  db,
+  expensesTable,
+  peopleTable,
+  projectPeopleTable,
+  projectsTable,
+  remindersTable,
+  tasksTable,
+} from "@workspace/db";
 import {
   classifySecretaryError,
   type SecretaryError,
@@ -33,6 +44,16 @@ type EvaluationCase = {
 type Dataset = {
   version: number;
   cases: EvaluationCase[];
+};
+
+type RowCounts = {
+  people: number;
+  projects: number;
+  expenses: number;
+  tasks: number;
+  reminders: number;
+  commitments: number;
+  projectPeople: number;
 };
 
 class RecordingGateway implements ModelGateway {
@@ -106,6 +127,37 @@ function errorPayload(error: unknown): Record<string, unknown> {
   };
 }
 
+async function rowCounts(identity: { tenantId: string; userId: string }): Promise<RowCounts> {
+  const ownership = <T extends { tenantId: unknown; ownerUserId: unknown }>(table: T) =>
+    and(eq(table.tenantId, identity.tenantId), eq(table.ownerUserId, identity.userId));
+  const [
+    people,
+    projects,
+    expenses,
+    tasks,
+    reminders,
+    commitments,
+    projectPeople,
+  ] = await Promise.all([
+    db.select({ count: count() }).from(peopleTable).where(ownership(peopleTable)),
+    db.select({ count: count() }).from(projectsTable).where(ownership(projectsTable)),
+    db.select({ count: count() }).from(expensesTable).where(ownership(expensesTable)),
+    db.select({ count: count() }).from(tasksTable).where(ownership(tasksTable)),
+    db.select({ count: count() }).from(remindersTable).where(ownership(remindersTable)),
+    db.select({ count: count() }).from(commitmentsTable).where(ownership(commitmentsTable)),
+    db.select({ count: count() }).from(projectPeopleTable).where(ownership(projectPeopleTable)),
+  ]);
+  return {
+    people: Number(people[0]?.count ?? 0),
+    projects: Number(projects[0]?.count ?? 0),
+    expenses: Number(expenses[0]?.count ?? 0),
+    tasks: Number(tasks[0]?.count ?? 0),
+    reminders: Number(reminders[0]?.count ?? 0),
+    commitments: Number(commitments[0]?.count ?? 0),
+    projectPeople: Number(projectPeople[0]?.count ?? 0),
+  };
+}
+
 async function main(): Promise<void> {
   const caseId = readArg("--case");
   const mode = readArg("--mode") ?? "groq";
@@ -128,6 +180,7 @@ async function main(): Promise<void> {
   const conversationId = process.env.INTENT_EVAL_CONVERSATION_ID
     ?? `intent-eval-${mode}-${evaluationCase.id}`;
   const startedAt = Date.now();
+  const rowCountsBefore = await rowCounts(identity);
 
   try {
     const result = await runtime.run(identity, {
@@ -154,6 +207,8 @@ async function main(): Promise<void> {
         providerTrace: action.providerTrace,
       },
       tokenUsage: gateway.usage,
+      rowCountsBefore,
+      rowCountsAfter: await rowCounts(identity),
     })}\n`);
   } catch (error) {
     process.stdout.write(`EVAL_RESULT ${JSON.stringify({
@@ -164,6 +219,8 @@ async function main(): Promise<void> {
       elapsedMs: Date.now() - startedAt,
       error: errorPayload(error),
       tokenUsage: gateway.usage,
+      rowCountsBefore,
+      rowCountsAfter: await rowCounts(identity),
     })}\n`);
   }
 }
