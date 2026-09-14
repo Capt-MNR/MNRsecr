@@ -40,7 +40,7 @@ import {
   isGlobalExpenseTotalRequest,
 } from "./expense-report";
 import { budgetContext } from "./context-budgeter";
-import { featureFlags } from "./feature-flags";
+import { envFlag, featureFlags } from "./feature-flags";
 import { providerOrder } from "./provider-router";
 
 export type Phase2TurnInput = {
@@ -779,6 +779,11 @@ export function classifyToolScope(message: string): ToolScope {
   const matchedDomains = (Object.keys(TOOL_SCOPE_PATTERNS) as Array<Exclude<ToolScope["name"], "full" | "read_only">>)
     .filter((domain) => TOOL_SCOPE_PATTERNS[domain].test(message));
   const isReadIntent = READ_INTENT_PATTERN.test(message) && !WRITE_INTENT_PATTERN.test(message);
+  const isHistoricalRead = envFlag("BENCHMARK_NARROW_TOOL_SCOPE", false)
+    && /(?:آخر|اخر|سجلنا|سجلت|المحفوظ|المحفوظة)/i.test(message)
+    && /(?:سجلنا|سجلت|المحفوظ|المحفوظة)/i.test(message)
+    && !/(?:سجل|سجّل)\s+(?:إني|اني|ان|لي|لنا)/i.test(message);
+  if (isHistoricalRead) return namedToolScope("read_only");
   if (isReadIntent) return namedToolScope("read_only");
 
   const isLikelyWrite = WRITE_INTENT_PATTERN.test(message)

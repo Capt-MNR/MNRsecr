@@ -1,0 +1,1887 @@
+{
+  "datasetVersion": 1,
+  "providerMode": "gemini",
+  "label": "after",
+  "dryRun": true,
+  "generatedAt": "2026-09-14T16:57:15.254Z",
+  "summary": {
+    "totalCases": 5,
+    "evaluatedCases": 3,
+    "providerErrors": 2,
+    "contextNotProvided": 0,
+    "runnerErrors": 0,
+    "intentAccuracyPercent": 0,
+    "toolSelectionAccuracyPercent": 100,
+    "clarificationAccuracyPercent": 100,
+    "noWriteViolations": 0,
+    "totalLogicalLlmCalls": 10,
+    "totalHttpAttempts": 13,
+    "fallbackCases": 0,
+    "totalInputTokens": 20487,
+    "totalOutputTokens": 247,
+    "totalTokens": 20734,
+    "totalCachedTokens": null,
+    "cacheHitCases": 0,
+    "cacheMissCases": 5,
+    "totalRequestBytes": 180685,
+    "averageLatencyMs": 9498,
+    "latencyP50Ms": 10829,
+    "latencyP95Ms": 19088,
+    "averageConversationChars": 219,
+    "rowCountChanges": 0
+  },
+  "comparison": {
+    "before": {
+      "totalCases": 5,
+      "evaluatedCases": 4,
+      "providerErrors": 0,
+      "contextNotProvided": 1,
+      "runnerErrors": 0,
+      "intentAccuracyPercent": 0,
+      "toolSelectionAccuracyPercent": 100,
+      "clarificationAccuracyPercent": 75,
+      "noWriteViolations": 0,
+      "totalLogicalLlmCalls": 14,
+      "totalHttpAttempts": 18,
+      "fallbackCases": 0,
+      "totalInputTokens": 44809,
+      "totalOutputTokens": 393,
+      "totalTokens": 45202,
+      "totalCachedTokens": 1973,
+      "cacheHitCases": 0,
+      "cacheMissCases": 5,
+      "totalRequestBytes": 294048,
+      "averageLatencyMs": 14158,
+      "latencyP50Ms": 7957,
+      "latencyP95Ms": 33744,
+      "averageConversationChars": 427,
+      "rowCountChanges": 0
+    },
+    "after": {
+      "totalCases": 5,
+      "evaluatedCases": 3,
+      "providerErrors": 2,
+      "contextNotProvided": 0,
+      "runnerErrors": 0,
+      "intentAccuracyPercent": 0,
+      "toolSelectionAccuracyPercent": 100,
+      "clarificationAccuracyPercent": 100,
+      "noWriteViolations": 0,
+      "totalLogicalLlmCalls": 10,
+      "totalHttpAttempts": 13,
+      "fallbackCases": 0,
+      "totalInputTokens": 20487,
+      "totalOutputTokens": 247,
+      "totalTokens": 20734,
+      "totalCachedTokens": null,
+      "cacheHitCases": 0,
+      "cacheMissCases": 5,
+      "totalRequestBytes": 180685,
+      "averageLatencyMs": 9498,
+      "latencyP50Ms": 10829,
+      "latencyP95Ms": 19088,
+      "averageConversationChars": 219,
+      "rowCountChanges": 0
+    }
+  },
+  "cases": [
+    {
+      "id": "A",
+      "category": "simple_write_intent",
+      "message": "فكرني بكرة الساعة 5",
+      "expected": {
+        "intent": "create_reminder",
+        "primaryTool": "create_reminder",
+        "acceptableTools": [
+          "create_reminder",
+          "final_response"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": null,
+      "actualTool": "create_reminder",
+      "actualTools": [
+        "create_reminder"
+      ],
+      "toolArguments": [
+        {
+          "name": "create_reminder",
+          "arguments": {
+            "text": "تذكير ليوم غد الساعة 5 مساءً",
+            "dueAt": "2025-08-07T17:00:00Z"
+          },
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": false,
+      "logicalLlmCalls": 2,
+      "actualHttpAttempts": 2,
+      "httpAttemptsByProvider": {
+        "gemini": 2
+      },
+      "provider": "gemini",
+      "model": "gemini-3.1-flash-lite",
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 8548,
+      "tokenUsage": [
+        {
+          "promptTokenCount": 2129,
+          "candidatesTokenCount": 53,
+          "totalTokenCount": 2182,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 2129
+            }
+          ],
+          "serviceTier": "standard"
+        },
+        {
+          "promptTokenCount": 2194,
+          "candidatesTokenCount": 36,
+          "totalTokenCount": 2230,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 2194
+            }
+          ],
+          "serviceTier": "standard"
+        }
+      ],
+      "inputTokens": 4323,
+      "outputTokens": 89,
+      "totalTokens": 4412,
+      "cachedTokens": null,
+      "cacheHit": false,
+      "cacheMiss": true,
+      "requestBytesByProvider": {
+        "gemini": 21680
+      },
+      "maxRequestBytes": 11063,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 1852,
+      "toolDefinitionsCount": 6,
+      "maxConversationChars": 482,
+      "contextBreakdown": {
+        "systemPromptChars": 6500,
+        "requestGuidanceChars": 3384,
+        "userMessageChars": 38,
+        "recentConversationChars": 0,
+        "summaryChars": 0,
+        "structuredStateChars": 0,
+        "toolResultChars": 11,
+        "otherConversationChars": 0,
+        "conversationChars": 49,
+        "toolDefinitionsChars": 3704,
+        "requestBytes": 21680
+      },
+      "diagnosticTrace": {
+        "version": 1,
+        "calls": [
+          {
+            "logicalCallNumber": 1,
+            "phase": "tool_round",
+            "scope": "reminder",
+            "requestedTools": [
+              "final_response",
+              "query_reminders",
+              "recall_context",
+              "create_reminder",
+              "update_reminder",
+              "delete_reminder"
+            ],
+            "finalResponseOnly": false,
+            "attempts": [
+              {
+                "requestId": "intent-eval-gemini-A-b97f628a-455d-40a2-98a1-8794ba653a92",
+                "conversationId": "intent-eval-gemini-A",
+                "provider": "gemini",
+                "model": "gemini-3.1-flash-lite",
+                "logicalCallNumber": 1,
+                "attemptNumber": 1,
+                "scope": "reminder",
+                "toolsAvailable": [
+                  "final_response",
+                  "create_reminder",
+                  "update_reminder",
+                  "delete_reminder",
+                  "query_reminders",
+                  "recall_context"
+                ],
+                "inputTokens": 2129,
+                "outputTokens": 53,
+                "totalTokens": 2182,
+                "cachedTokens": null,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null,
+                "cacheHit": false,
+                "cacheRetry": false,
+                "fallback": false,
+                "retry": false,
+                "httpRequestSent": true,
+                "latencyMs": 4027,
+                "success": true,
+                "failureReason": null,
+                "outputChars": 305,
+                "context": {
+                  "systemPromptChars": 3250,
+                  "requestGuidanceChars": 1692,
+                  "userMessageChars": 19,
+                  "recentConversationChars": 0,
+                  "summaryChars": 0,
+                  "structuredStateChars": 0,
+                  "toolResultChars": 0,
+                  "otherConversationChars": 0,
+                  "conversationChars": 19,
+                  "toolDefinitionsChars": 1852,
+                  "requestBytes": 10617,
+                  "systemPromptTokens": null,
+                  "conversationTokens": null,
+                  "toolDefinitionsTokens": null,
+                  "toolResultTokens": null
+                }
+              }
+            ],
+            "selectedTools": [
+              {
+                "callId": "gemini-call-0",
+                "name": "create_reminder",
+                "arguments": {
+                  "text": "تذكير ليوم غد الساعة 5 مساءً",
+                  "dueAt": "2025-08-07T17:00:00Z"
+                },
+                "argumentChars": 70,
+                "argumentBytes": 92,
+                "result": {
+                  "ok": true,
+                  "keys": [
+                    "arguments",
+                    "dryRun",
+                    "ok",
+                    "wouldExecute"
+                  ],
+                  "resultChars": 141,
+                  "resultBytes": 163,
+                  "promptChars": 11,
+                  "pendingApproval": false,
+                  "errorCode": null
+                }
+              }
+            ],
+            "nextDecision": {
+              "kind": "continue_after_tool_results",
+              "reason": "Tool results were appended to the conversation; the next call continues orchestration.",
+              "nextLogicalCallNumber": 2,
+              "nextCallKind": "tool_round",
+              "nextScope": "reminder"
+            }
+          },
+          {
+            "logicalCallNumber": 2,
+            "phase": "tool_round",
+            "scope": "reminder",
+            "requestedTools": [
+              "final_response",
+              "query_reminders",
+              "recall_context",
+              "create_reminder",
+              "update_reminder",
+              "delete_reminder"
+            ],
+            "finalResponseOnly": false,
+            "attempts": [
+              {
+                "requestId": "intent-eval-gemini-A-b97f628a-455d-40a2-98a1-8794ba653a92",
+                "conversationId": "intent-eval-gemini-A",
+                "provider": "gemini",
+                "model": "gemini-3.1-flash-lite",
+                "logicalCallNumber": 2,
+                "attemptNumber": 2,
+                "scope": "reminder",
+                "toolsAvailable": [
+                  "final_response",
+                  "create_reminder",
+                  "update_reminder",
+                  "delete_reminder",
+                  "query_reminders",
+                  "recall_context"
+                ],
+                "inputTokens": 2194,
+                "outputTokens": 36,
+                "totalTokens": 2230,
+                "cachedTokens": null,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null,
+                "cacheHit": false,
+                "cacheRetry": false,
+                "fallback": false,
+                "retry": false,
+                "httpRequestSent": true,
+                "latencyMs": 3984,
+                "success": true,
+                "failureReason": null,
+                "outputChars": 302,
+                "context": {
+                  "systemPromptChars": 3250,
+                  "requestGuidanceChars": 1692,
+                  "userMessageChars": 19,
+                  "recentConversationChars": 0,
+                  "summaryChars": 0,
+                  "structuredStateChars": 0,
+                  "toolResultChars": 11,
+                  "otherConversationChars": 0,
+                  "conversationChars": 30,
+                  "toolDefinitionsChars": 1852,
+                  "requestBytes": 11063,
+                  "systemPromptTokens": null,
+                  "conversationTokens": null,
+                  "toolDefinitionsTokens": null,
+                  "toolResultTokens": null
+                }
+              }
+            ],
+            "selectedTools": [
+              {
+                "callId": "gemini-call-0",
+                "name": "final_response",
+                "arguments": {
+                  "message": "تم ضبط التذكير ليوم غد الساعة 5 مساءً.",
+                  "kind": "answer"
+                },
+                "argumentChars": 68,
+                "argumentBytes": 97,
+                "result": null
+              }
+            ],
+            "nextDecision": {
+              "kind": "return_final_response",
+              "reason": "Provider returned only the final_response tool.",
+              "nextLogicalCallNumber": null,
+              "nextCallKind": null,
+              "nextScope": "reminder"
+            }
+          }
+        ]
+      },
+      "rowCountsBefore": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountsAfter": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountChanged": false,
+      "approvalReached": false,
+      "wouldSelectWriteTool": true,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": false,
+      "toolSelectionMatch": true,
+      "clarificationMatch": true
+    },
+    {
+      "id": "B",
+      "category": "simple_read",
+      "message": "أنا صرفت كام الأسبوع ده؟",
+      "expected": {
+        "intent": "expense_report",
+        "primaryTool": "query_expenses",
+        "acceptableTools": [
+          "query_expenses",
+          "final_response"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": null,
+      "actualTool": "query_expenses",
+      "actualTools": [
+        "query_expenses"
+      ],
+      "toolArguments": [
+        {
+          "name": "query_expenses",
+          "arguments": {
+            "period": "this_week"
+          },
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": false,
+      "logicalLlmCalls": 2,
+      "actualHttpAttempts": 2,
+      "httpAttemptsByProvider": {
+        "gemini": 2
+      },
+      "provider": "gemini",
+      "model": "gemini-3.1-flash-lite",
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 10829,
+      "tokenUsage": [
+        {
+          "promptTokenCount": 2934,
+          "candidatesTokenCount": 18,
+          "totalTokenCount": 2952,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 2934
+            }
+          ],
+          "serviceTier": "standard"
+        },
+        {
+          "promptTokenCount": 2990,
+          "candidatesTokenCount": 35,
+          "totalTokenCount": 3025,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 2990
+            }
+          ],
+          "serviceTier": "standard"
+        }
+      ],
+      "inputTokens": 5924,
+      "outputTokens": 53,
+      "totalTokens": 5977,
+      "cachedTokens": null,
+      "cacheHit": false,
+      "cacheMiss": true,
+      "requestBytesByProvider": {
+        "gemini": 28481
+      },
+      "maxRequestBytes": 14477,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 5229,
+      "toolDefinitionsCount": 12,
+      "maxConversationChars": 536,
+      "contextBreakdown": {
+        "systemPromptChars": 6500,
+        "requestGuidanceChars": 3384,
+        "userMessageChars": 48,
+        "recentConversationChars": 0,
+        "summaryChars": 0,
+        "structuredStateChars": 0,
+        "toolResultChars": 110,
+        "otherConversationChars": 0,
+        "conversationChars": 158,
+        "toolDefinitionsChars": 10458,
+        "requestBytes": 28481
+      },
+      "diagnosticTrace": {
+        "version": 1,
+        "calls": [
+          {
+            "logicalCallNumber": 1,
+            "phase": "tool_round",
+            "scope": "expense",
+            "requestedTools": [
+              "final_response",
+              "find_person",
+              "find_project",
+              "query_expenses",
+              "rank_expense_projects",
+              "get_person_expense_total",
+              "get_project_expense_total",
+              "query_reminders",
+              "recall_context",
+              "record_expense",
+              "update_expense",
+              "delete_expense"
+            ],
+            "finalResponseOnly": false,
+            "attempts": [
+              {
+                "requestId": "intent-eval-gemini-B-940b57b4-48f7-4544-a37f-20f390a7fba5",
+                "conversationId": "intent-eval-gemini-B",
+                "provider": "gemini",
+                "model": "gemini-3.1-flash-lite",
+                "logicalCallNumber": 1,
+                "attemptNumber": 1,
+                "scope": "expense",
+                "toolsAvailable": [
+                  "final_response",
+                  "find_person",
+                  "find_project",
+                  "record_expense",
+                  "update_expense",
+                  "query_expenses",
+                  "rank_expense_projects",
+                  "get_person_expense_total",
+                  "get_project_expense_total",
+                  "delete_expense",
+                  "query_reminders",
+                  "recall_context"
+                ],
+                "inputTokens": 2934,
+                "outputTokens": 18,
+                "totalTokens": 2952,
+                "cachedTokens": null,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null,
+                "cacheHit": false,
+                "cacheRetry": false,
+                "fallback": false,
+                "retry": false,
+                "httpRequestSent": true,
+                "latencyMs": 7042,
+                "success": true,
+                "failureReason": null,
+                "outputChars": 256,
+                "context": {
+                  "systemPromptChars": 3250,
+                  "requestGuidanceChars": 1692,
+                  "userMessageChars": 24,
+                  "recentConversationChars": 0,
+                  "summaryChars": 0,
+                  "structuredStateChars": 0,
+                  "toolResultChars": 0,
+                  "otherConversationChars": 0,
+                  "conversationChars": 24,
+                  "toolDefinitionsChars": 5229,
+                  "requestBytes": 14004,
+                  "systemPromptTokens": null,
+                  "conversationTokens": null,
+                  "toolDefinitionsTokens": null,
+                  "toolResultTokens": null
+                }
+              }
+            ],
+            "selectedTools": [
+              {
+                "callId": "gemini-call-0",
+                "name": "query_expenses",
+                "arguments": {
+                  "period": "this_week"
+                },
+                "argumentChars": 22,
+                "argumentBytes": 22,
+                "result": {
+                  "ok": true,
+                  "keys": [
+                    "expenses",
+                    "ok",
+                    "summary"
+                  ],
+                  "resultChars": 96,
+                  "resultBytes": 96,
+                  "promptChars": 110,
+                  "pendingApproval": false,
+                  "errorCode": null
+                }
+              }
+            ],
+            "nextDecision": {
+              "kind": "continue_after_tool_results",
+              "reason": "Tool results were appended to the conversation; the next call continues orchestration.",
+              "nextLogicalCallNumber": 2,
+              "nextCallKind": "tool_round",
+              "nextScope": "expense"
+            }
+          },
+          {
+            "logicalCallNumber": 2,
+            "phase": "tool_round",
+            "scope": "expense",
+            "requestedTools": [
+              "final_response",
+              "find_person",
+              "find_project",
+              "query_expenses",
+              "rank_expense_projects",
+              "get_person_expense_total",
+              "get_project_expense_total",
+              "query_reminders",
+              "recall_context",
+              "record_expense",
+              "update_expense",
+              "delete_expense"
+            ],
+            "finalResponseOnly": false,
+            "attempts": [
+              {
+                "requestId": "intent-eval-gemini-B-940b57b4-48f7-4544-a37f-20f390a7fba5",
+                "conversationId": "intent-eval-gemini-B",
+                "provider": "gemini",
+                "model": "gemini-3.1-flash-lite",
+                "logicalCallNumber": 2,
+                "attemptNumber": 2,
+                "scope": "expense",
+                "toolsAvailable": [
+                  "final_response",
+                  "find_person",
+                  "find_project",
+                  "record_expense",
+                  "update_expense",
+                  "query_expenses",
+                  "rank_expense_projects",
+                  "get_person_expense_total",
+                  "get_project_expense_total",
+                  "delete_expense",
+                  "query_reminders",
+                  "recall_context"
+                ],
+                "inputTokens": 2990,
+                "outputTokens": 35,
+                "totalTokens": 3025,
+                "cachedTokens": null,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null,
+                "cacheHit": false,
+                "cacheRetry": false,
+                "fallback": false,
+                "retry": false,
+                "httpRequestSent": true,
+                "latencyMs": 3143,
+                "success": true,
+                "failureReason": null,
+                "outputChars": 306,
+                "context": {
+                  "systemPromptChars": 3250,
+                  "requestGuidanceChars": 1692,
+                  "userMessageChars": 24,
+                  "recentConversationChars": 0,
+                  "summaryChars": 0,
+                  "structuredStateChars": 0,
+                  "toolResultChars": 110,
+                  "otherConversationChars": 0,
+                  "conversationChars": 134,
+                  "toolDefinitionsChars": 5229,
+                  "requestBytes": 14477,
+                  "systemPromptTokens": null,
+                  "conversationTokens": null,
+                  "toolDefinitionsTokens": null,
+                  "toolResultTokens": null
+                }
+              }
+            ],
+            "selectedTools": [
+              {
+                "callId": "gemini-call-0",
+                "name": "final_response",
+                "arguments": {
+                  "message": "لم تقم بتسجيل أي مصروفات خلال هذا الأسبوع.",
+                  "kind": "answer"
+                },
+                "argumentChars": 72,
+                "argumentBytes": 106,
+                "result": null
+              }
+            ],
+            "nextDecision": {
+              "kind": "return_final_response",
+              "reason": "Provider returned only the final_response tool.",
+              "nextLogicalCallNumber": null,
+              "nextCallKind": null,
+              "nextScope": "expense"
+            }
+          }
+        ]
+      },
+      "rowCountsBefore": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountsAfter": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountChanged": false,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": false,
+      "toolSelectionMatch": true,
+      "clarificationMatch": true
+    },
+    {
+      "id": "C",
+      "category": "context_read",
+      "message": "آخر حاجة سجلناها عن شركة المحجر؟",
+      "expected": {
+        "intent": "context_read",
+        "primaryTool": "final_response",
+        "acceptableTools": [
+          "find_person",
+          "query_expenses",
+          "final_response"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": null,
+      "actualTool": "find_project",
+      "actualTools": [
+        "find_project",
+        "query_expenses",
+        "find_person"
+      ],
+      "toolArguments": [
+        {
+          "name": "find_project",
+          "arguments": {
+            "name": "شركة المحجر"
+          },
+          "dryRun": true
+        },
+        {
+          "name": "query_expenses",
+          "arguments": {
+            "description": "شركة المحجر"
+          },
+          "dryRun": true
+        },
+        {
+          "name": "find_person",
+          "arguments": {
+            "name": "شركة المحجر"
+          },
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": false,
+      "logicalLlmCalls": 4,
+      "actualHttpAttempts": 5,
+      "httpAttemptsByProvider": {
+        "gemini": 5
+      },
+      "provider": "gemini",
+      "model": "gemini-3.1-flash-lite",
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 19088,
+      "tokenUsage": [
+        {
+          "promptTokenCount": 2493,
+          "candidatesTokenCount": 18,
+          "totalTokenCount": 2511,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 2493
+            }
+          ],
+          "serviceTier": "standard"
+        },
+        {
+          "promptTokenCount": 2532,
+          "candidatesTokenCount": 18,
+          "totalTokenCount": 2550,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 2532
+            }
+          ],
+          "serviceTier": "standard"
+        },
+        {
+          "promptTokenCount": 2588,
+          "candidatesTokenCount": 18,
+          "totalTokenCount": 2606,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 2588
+            }
+          ],
+          "serviceTier": "standard"
+        },
+        {
+          "promptTokenCount": 2627,
+          "candidatesTokenCount": 51,
+          "totalTokenCount": 2678,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 2627
+            }
+          ],
+          "serviceTier": "standard"
+        }
+      ],
+      "inputTokens": 10240,
+      "outputTokens": 105,
+      "totalTokens": 10345,
+      "cachedTokens": null,
+      "cacheHit": false,
+      "cacheMiss": true,
+      "requestBytesByProvider": {
+        "gemini": 64642
+      },
+      "maxRequestBytes": 13530,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 3428,
+      "toolDefinitionsCount": 9,
+      "maxConversationChars": 1353,
+      "contextBreakdown": {
+        "systemPromptChars": 16250,
+        "requestGuidanceChars": 8460,
+        "userMessageChars": 160,
+        "recentConversationChars": 0,
+        "summaryChars": 0,
+        "structuredStateChars": 0,
+        "toolResultChars": 585,
+        "otherConversationChars": 0,
+        "conversationChars": 745,
+        "toolDefinitionsChars": 17140,
+        "requestBytes": 64642
+      },
+      "diagnosticTrace": {
+        "version": 1,
+        "calls": [
+          {
+            "logicalCallNumber": 1,
+            "phase": "tool_round",
+            "scope": "read_only",
+            "requestedTools": [
+              "final_response",
+              "find_person",
+              "find_project",
+              "query_expenses",
+              "rank_expense_projects",
+              "get_person_expense_total",
+              "get_project_expense_total",
+              "query_reminders",
+              "recall_context"
+            ],
+            "finalResponseOnly": false,
+            "attempts": [
+              {
+                "requestId": "intent-eval-gemini-C-f4f3b2bb-d296-41a0-be10-6e9f30d4373a",
+                "conversationId": "intent-eval-gemini-C",
+                "provider": "gemini",
+                "model": "gemini-3.1-flash-lite",
+                "logicalCallNumber": 1,
+                "attemptNumber": 1,
+                "scope": "read_only",
+                "toolsAvailable": [
+                  "final_response",
+                  "find_person",
+                  "find_project",
+                  "query_expenses",
+                  "rank_expense_projects",
+                  "get_person_expense_total",
+                  "get_project_expense_total",
+                  "query_reminders",
+                  "recall_context"
+                ],
+                "inputTokens": 2493,
+                "outputTokens": 18,
+                "totalTokens": 2511,
+                "cachedTokens": null,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null,
+                "cacheHit": false,
+                "cacheRetry": false,
+                "fallback": false,
+                "retry": false,
+                "httpRequestSent": true,
+                "latencyMs": 4447,
+                "success": true,
+                "failureReason": null,
+                "outputChars": 254,
+                "context": {
+                  "systemPromptChars": 3250,
+                  "requestGuidanceChars": 1692,
+                  "userMessageChars": 32,
+                  "recentConversationChars": 0,
+                  "summaryChars": 0,
+                  "structuredStateChars": 0,
+                  "toolResultChars": 0,
+                  "otherConversationChars": 0,
+                  "conversationChars": 32,
+                  "toolDefinitionsChars": 3428,
+                  "requestBytes": 12218,
+                  "systemPromptTokens": null,
+                  "conversationTokens": null,
+                  "toolDefinitionsTokens": null,
+                  "toolResultTokens": null
+                }
+              }
+            ],
+            "selectedTools": [
+              {
+                "callId": "gemini-call-0",
+                "name": "find_project",
+                "arguments": {
+                  "name": "شركة المحجر"
+                },
+                "argumentChars": 22,
+                "argumentBytes": 32,
+                "result": {
+                  "ok": true,
+                  "keys": [
+                    "matches",
+                    "needsClarification",
+                    "ok"
+                  ],
+                  "resultChars": 51,
+                  "resultBytes": 51,
+                  "promptChars": 51,
+                  "pendingApproval": false,
+                  "errorCode": null
+                }
+              }
+            ],
+            "nextDecision": {
+              "kind": "continue_after_tool_results",
+              "reason": "Tool results were appended to the conversation; the next call continues orchestration.",
+              "nextLogicalCallNumber": 2,
+              "nextCallKind": "tool_round",
+              "nextScope": "read_only"
+            }
+          },
+          {
+            "logicalCallNumber": 2,
+            "phase": "tool_round",
+            "scope": "read_only",
+            "requestedTools": [
+              "final_response",
+              "find_person",
+              "find_project",
+              "query_expenses",
+              "rank_expense_projects",
+              "get_person_expense_total",
+              "get_project_expense_total",
+              "query_reminders",
+              "recall_context"
+            ],
+            "finalResponseOnly": false,
+            "attempts": [
+              {
+                "requestId": "intent-eval-gemini-C-f4f3b2bb-d296-41a0-be10-6e9f30d4373a",
+                "conversationId": "intent-eval-gemini-C",
+                "provider": "gemini",
+                "model": "gemini-3.1-flash-lite",
+                "logicalCallNumber": 2,
+                "attemptNumber": 2,
+                "scope": "read_only",
+                "toolsAvailable": [
+                  "final_response",
+                  "find_person",
+                  "find_project",
+                  "query_expenses",
+                  "rank_expense_projects",
+                  "get_person_expense_total",
+                  "get_project_expense_total",
+                  "query_reminders",
+                  "recall_context"
+                ],
+                "inputTokens": 2532,
+                "outputTokens": 18,
+                "totalTokens": 2550,
+                "cachedTokens": null,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null,
+                "cacheHit": false,
+                "cacheRetry": false,
+                "fallback": false,
+                "retry": false,
+                "httpRequestSent": true,
+                "latencyMs": 3895,
+                "success": true,
+                "failureReason": null,
+                "outputChars": 263,
+                "context": {
+                  "systemPromptChars": 3250,
+                  "requestGuidanceChars": 1692,
+                  "userMessageChars": 32,
+                  "recentConversationChars": 0,
+                  "summaryChars": 0,
+                  "structuredStateChars": 0,
+                  "toolResultChars": 51,
+                  "otherConversationChars": 0,
+                  "conversationChars": 83,
+                  "toolDefinitionsChars": 3428,
+                  "requestBytes": 12638,
+                  "systemPromptTokens": null,
+                  "conversationTokens": null,
+                  "toolDefinitionsTokens": null,
+                  "toolResultTokens": null
+                }
+              }
+            ],
+            "selectedTools": [
+              {
+                "callId": "gemini-call-0",
+                "name": "query_expenses",
+                "arguments": {
+                  "description": "شركة المحجر"
+                },
+                "argumentChars": 29,
+                "argumentBytes": 39,
+                "result": {
+                  "ok": true,
+                  "keys": [
+                    "expenses",
+                    "ok",
+                    "summary"
+                  ],
+                  "resultChars": 96,
+                  "resultBytes": 96,
+                  "promptChars": 110,
+                  "pendingApproval": false,
+                  "errorCode": null
+                }
+              }
+            ],
+            "nextDecision": {
+              "kind": "continue_after_tool_results",
+              "reason": "Tool results were appended to the conversation; the next call continues orchestration.",
+              "nextLogicalCallNumber": 3,
+              "nextCallKind": "tool_round",
+              "nextScope": "read_only"
+            }
+          },
+          {
+            "logicalCallNumber": 3,
+            "phase": "tool_round",
+            "scope": "read_only",
+            "requestedTools": [
+              "final_response",
+              "find_person",
+              "find_project",
+              "query_expenses",
+              "rank_expense_projects",
+              "get_person_expense_total",
+              "get_project_expense_total",
+              "query_reminders",
+              "recall_context"
+            ],
+            "finalResponseOnly": false,
+            "attempts": [
+              {
+                "requestId": "intent-eval-gemini-C-f4f3b2bb-d296-41a0-be10-6e9f30d4373a",
+                "conversationId": "intent-eval-gemini-C",
+                "provider": "gemini",
+                "model": "gemini-3.1-flash-lite",
+                "logicalCallNumber": 3,
+                "attemptNumber": 3,
+                "scope": "read_only",
+                "toolsAvailable": [
+                  "final_response",
+                  "find_person",
+                  "find_project",
+                  "query_expenses",
+                  "rank_expense_projects",
+                  "get_person_expense_total",
+                  "get_project_expense_total",
+                  "query_reminders",
+                  "recall_context"
+                ],
+                "inputTokens": null,
+                "outputTokens": null,
+                "totalTokens": null,
+                "cachedTokens": null,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null,
+                "cacheHit": false,
+                "cacheRetry": false,
+                "fallback": false,
+                "retry": false,
+                "httpRequestSent": true,
+                "latencyMs": 2911,
+                "success": false,
+                "failureReason": "PROVIDER_UNAVAILABLE",
+                "outputChars": 0,
+                "context": {
+                  "systemPromptChars": 3250,
+                  "requestGuidanceChars": 1692,
+                  "userMessageChars": 32,
+                  "recentConversationChars": 0,
+                  "summaryChars": 0,
+                  "structuredStateChars": 0,
+                  "toolResultChars": 161,
+                  "otherConversationChars": 0,
+                  "conversationChars": 193,
+                  "toolDefinitionsChars": 3428,
+                  "requestBytes": 13128,
+                  "systemPromptTokens": null,
+                  "conversationTokens": null,
+                  "toolDefinitionsTokens": null,
+                  "toolResultTokens": null
+                }
+              },
+              {
+                "requestId": "intent-eval-gemini-C-f4f3b2bb-d296-41a0-be10-6e9f30d4373a",
+                "conversationId": "intent-eval-gemini-C",
+                "provider": "gemini",
+                "model": "gemini-3-flash-preview",
+                "logicalCallNumber": 3,
+                "attemptNumber": 4,
+                "scope": "read_only",
+                "toolsAvailable": [
+                  "final_response",
+                  "find_person",
+                  "find_project",
+                  "query_expenses",
+                  "rank_expense_projects",
+                  "get_person_expense_total",
+                  "get_project_expense_total",
+                  "query_reminders",
+                  "recall_context"
+                ],
+                "inputTokens": 2588,
+                "outputTokens": 18,
+                "totalTokens": 2606,
+                "cachedTokens": null,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null,
+                "cacheHit": false,
+                "cacheRetry": false,
+                "fallback": true,
+                "retry": false,
+                "httpRequestSent": true,
+                "latencyMs": 1147,
+                "success": true,
+                "failureReason": null,
+                "outputChars": 237,
+                "context": {
+                  "systemPromptChars": 3250,
+                  "requestGuidanceChars": 1692,
+                  "userMessageChars": 32,
+                  "recentConversationChars": 0,
+                  "summaryChars": 0,
+                  "structuredStateChars": 0,
+                  "toolResultChars": 161,
+                  "otherConversationChars": 0,
+                  "conversationChars": 193,
+                  "toolDefinitionsChars": 3428,
+                  "requestBytes": 13128,
+                  "systemPromptTokens": null,
+                  "conversationTokens": null,
+                  "toolDefinitionsTokens": null,
+                  "toolResultTokens": null
+                }
+              }
+            ],
+            "selectedTools": [
+              {
+                "callId": "gemini-call-0",
+                "name": "find_person",
+                "arguments": {
+                  "name": "شركة المحجر"
+                },
+                "argumentChars": 22,
+                "argumentBytes": 32,
+                "result": {
+                  "ok": true,
+                  "keys": [
+                    "matches",
+                    "needsClarification",
+                    "ok"
+                  ],
+                  "resultChars": 51,
+                  "resultBytes": 51,
+                  "promptChars": 51,
+                  "pendingApproval": false,
+                  "errorCode": null
+                }
+              }
+            ],
+            "nextDecision": {
+              "kind": "continue_after_tool_results",
+              "reason": "Tool results were appended to the conversation; the next call continues orchestration.",
+              "nextLogicalCallNumber": 4,
+              "nextCallKind": "tool_round",
+              "nextScope": "read_only"
+            }
+          },
+          {
+            "logicalCallNumber": 4,
+            "phase": "tool_round",
+            "scope": "read_only",
+            "requestedTools": [
+              "final_response",
+              "find_person",
+              "find_project",
+              "query_expenses",
+              "rank_expense_projects",
+              "get_person_expense_total",
+              "get_project_expense_total",
+              "query_reminders",
+              "recall_context"
+            ],
+            "finalResponseOnly": false,
+            "attempts": [
+              {
+                "requestId": "intent-eval-gemini-C-f4f3b2bb-d296-41a0-be10-6e9f30d4373a",
+                "conversationId": "intent-eval-gemini-C",
+                "provider": "gemini",
+                "model": "gemini-3.1-flash-lite",
+                "logicalCallNumber": 4,
+                "attemptNumber": 5,
+                "scope": "read_only",
+                "toolsAvailable": [
+                  "final_response",
+                  "find_person",
+                  "find_project",
+                  "query_expenses",
+                  "rank_expense_projects",
+                  "get_person_expense_total",
+                  "get_project_expense_total",
+                  "query_reminders",
+                  "recall_context"
+                ],
+                "inputTokens": 2627,
+                "outputTokens": 51,
+                "totalTokens": 2678,
+                "cachedTokens": null,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null,
+                "cacheHit": false,
+                "cacheRetry": false,
+                "fallback": false,
+                "retry": false,
+                "httpRequestSent": true,
+                "latencyMs": 5754,
+                "success": true,
+                "failureReason": null,
+                "outputChars": 151,
+                "context": {
+                  "systemPromptChars": 3250,
+                  "requestGuidanceChars": 1692,
+                  "userMessageChars": 32,
+                  "recentConversationChars": 0,
+                  "summaryChars": 0,
+                  "structuredStateChars": 0,
+                  "toolResultChars": 212,
+                  "otherConversationChars": 0,
+                  "conversationChars": 244,
+                  "toolDefinitionsChars": 3428,
+                  "requestBytes": 13530,
+                  "systemPromptTokens": null,
+                  "conversationTokens": null,
+                  "toolDefinitionsTokens": null,
+                  "toolResultTokens": null
+                }
+              }
+            ],
+            "selectedTools": [],
+            "nextDecision": {
+              "kind": "return_text",
+              "reason": "Provider returned no tool calls, so the text response ended the turn.",
+              "nextLogicalCallNumber": null,
+              "nextCallKind": null,
+              "nextScope": "read_only"
+            }
+          }
+        ]
+      },
+      "rowCountsBefore": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountsAfter": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountChanged": false,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": false,
+      "toolSelectionMatch": true,
+      "clarificationMatch": true
+    },
+    {
+      "id": "D",
+      "category": "expense_intent",
+      "message": "سجل إني دفعت 11,500 جنيه تشطيبات لشركة المحجر.",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": [
+          "find_person",
+          "record_expense",
+          "final_response"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "provider_error",
+      "actualIntent": null,
+      "actualTool": null,
+      "actualTools": [],
+      "toolArguments": [],
+      "clarificationAsked": null,
+      "logicalLlmCalls": 1,
+      "actualHttpAttempts": 2,
+      "httpAttemptsByProvider": {
+        "gemini": 2
+      },
+      "provider": null,
+      "model": null,
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 7200,
+      "tokenUsage": null,
+      "inputTokens": null,
+      "outputTokens": null,
+      "totalTokens": null,
+      "cachedTokens": null,
+      "cacheHit": false,
+      "cacheMiss": true,
+      "requestBytesByProvider": {},
+      "maxRequestBytes": 0,
+      "systemPromptChars": 0,
+      "toolDefinitionsChars": 0,
+      "toolDefinitionsCount": 0,
+      "maxConversationChars": 0,
+      "contextBreakdown": {
+        "systemPromptChars": 6500,
+        "requestGuidanceChars": 3384,
+        "userMessageChars": 92,
+        "recentConversationChars": 0,
+        "summaryChars": 0,
+        "structuredStateChars": 0,
+        "toolResultChars": 0,
+        "otherConversationChars": 0,
+        "conversationChars": 92,
+        "toolDefinitionsChars": 10458,
+        "requestBytes": 28076
+      },
+      "diagnosticTrace": {
+        "version": 1,
+        "calls": [
+          {
+            "logicalCallNumber": 1,
+            "phase": "tool_round",
+            "scope": "expense",
+            "requestedTools": [
+              "final_response",
+              "find_person",
+              "find_project",
+              "query_expenses",
+              "rank_expense_projects",
+              "get_person_expense_total",
+              "get_project_expense_total",
+              "query_reminders",
+              "recall_context",
+              "record_expense",
+              "update_expense",
+              "delete_expense"
+            ],
+            "finalResponseOnly": false,
+            "attempts": [
+              {
+                "requestId": "intent-eval-gemini-D-19c4607c-01b4-4d2a-b11c-09e21a24383d",
+                "conversationId": "intent-eval-gemini-D",
+                "provider": "gemini",
+                "model": "gemini-3.1-flash-lite",
+                "logicalCallNumber": 1,
+                "attemptNumber": 1,
+                "scope": "expense",
+                "toolsAvailable": [
+                  "final_response",
+                  "find_person",
+                  "find_project",
+                  "record_expense",
+                  "update_expense",
+                  "query_expenses",
+                  "rank_expense_projects",
+                  "get_person_expense_total",
+                  "get_project_expense_total",
+                  "delete_expense",
+                  "query_reminders",
+                  "recall_context"
+                ],
+                "inputTokens": null,
+                "outputTokens": null,
+                "totalTokens": null,
+                "cachedTokens": null,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null,
+                "cacheHit": false,
+                "cacheRetry": false,
+                "fallback": false,
+                "retry": false,
+                "httpRequestSent": true,
+                "latencyMs": 5983,
+                "success": false,
+                "failureReason": "PROVIDER_UNAVAILABLE",
+                "outputChars": 0,
+                "context": {
+                  "systemPromptChars": 3250,
+                  "requestGuidanceChars": 1692,
+                  "userMessageChars": 46,
+                  "recentConversationChars": 0,
+                  "summaryChars": 0,
+                  "structuredStateChars": 0,
+                  "toolResultChars": 0,
+                  "otherConversationChars": 0,
+                  "conversationChars": 46,
+                  "toolDefinitionsChars": 5229,
+                  "requestBytes": 14038,
+                  "systemPromptTokens": null,
+                  "conversationTokens": null,
+                  "toolDefinitionsTokens": null,
+                  "toolResultTokens": null
+                }
+              },
+              {
+                "requestId": "intent-eval-gemini-D-19c4607c-01b4-4d2a-b11c-09e21a24383d",
+                "conversationId": "intent-eval-gemini-D",
+                "provider": "gemini",
+                "model": "gemini-3-flash-preview",
+                "logicalCallNumber": 1,
+                "attemptNumber": 2,
+                "scope": "expense",
+                "toolsAvailable": [
+                  "final_response",
+                  "find_person",
+                  "find_project",
+                  "record_expense",
+                  "update_expense",
+                  "query_expenses",
+                  "rank_expense_projects",
+                  "get_person_expense_total",
+                  "get_project_expense_total",
+                  "delete_expense",
+                  "query_reminders",
+                  "recall_context"
+                ],
+                "inputTokens": null,
+                "outputTokens": null,
+                "totalTokens": null,
+                "cachedTokens": null,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null,
+                "cacheHit": false,
+                "cacheRetry": false,
+                "fallback": true,
+                "retry": false,
+                "httpRequestSent": true,
+                "latencyMs": 87,
+                "success": false,
+                "failureReason": "PROVIDER_RATE_LIMIT",
+                "outputChars": 0,
+                "context": {
+                  "systemPromptChars": 3250,
+                  "requestGuidanceChars": 1692,
+                  "userMessageChars": 46,
+                  "recentConversationChars": 0,
+                  "summaryChars": 0,
+                  "structuredStateChars": 0,
+                  "toolResultChars": 0,
+                  "otherConversationChars": 0,
+                  "conversationChars": 46,
+                  "toolDefinitionsChars": 5229,
+                  "requestBytes": 14038,
+                  "systemPromptTokens": null,
+                  "conversationTokens": null,
+                  "toolDefinitionsTokens": null,
+                  "toolResultTokens": null
+                }
+              }
+            ],
+            "selectedTools": [],
+            "nextDecision": {
+              "kind": "error",
+              "reason": "PROVIDER_RATE_LIMIT",
+              "nextLogicalCallNumber": null,
+              "nextCallKind": null,
+              "nextScope": "expense"
+            }
+          }
+        ]
+      },
+      "rowCountsBefore": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountsAfter": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountChanged": false,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": null,
+      "toolSelectionMatch": null,
+      "clarificationMatch": null,
+      "error": {
+        "message": "The configured provider rate limit was reached.",
+        "status": 429,
+        "category": "provider_rate_limit",
+        "code": "PROVIDER_RATE_LIMIT",
+        "provider": "gemini",
+        "retryable": true
+      }
+    },
+    {
+      "id": "E",
+      "category": "follow_up",
+      "message": "وكان ده الأسبوع اللي فات.",
+      "expected": {
+        "intent": "correction",
+        "primaryTool": "update_expense",
+        "acceptableTools": [
+          "update_expense",
+          "record_expense",
+          "final_response"
+        ],
+        "clarification": true,
+        "write": false
+      },
+      "contextMode": "context_required",
+      "status": "provider_error",
+      "actualIntent": null,
+      "actualTool": null,
+      "actualTools": [],
+      "toolArguments": [],
+      "clarificationAsked": null,
+      "logicalLlmCalls": 1,
+      "actualHttpAttempts": 2,
+      "httpAttemptsByProvider": {
+        "gemini": 2
+      },
+      "provider": null,
+      "model": null,
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 1826,
+      "tokenUsage": null,
+      "inputTokens": null,
+      "outputTokens": null,
+      "totalTokens": null,
+      "cachedTokens": null,
+      "cacheHit": false,
+      "cacheMiss": true,
+      "requestBytesByProvider": {},
+      "maxRequestBytes": 0,
+      "systemPromptChars": 0,
+      "toolDefinitionsChars": 0,
+      "toolDefinitionsCount": 0,
+      "maxConversationChars": 0,
+      "contextBreakdown": {
+        "systemPromptChars": 6500,
+        "requestGuidanceChars": 3384,
+        "userMessageChars": 50,
+        "recentConversationChars": 0,
+        "summaryChars": 0,
+        "structuredStateChars": 0,
+        "toolResultChars": 0,
+        "otherConversationChars": 0,
+        "conversationChars": 50,
+        "toolDefinitionsChars": 20236,
+        "requestBytes": 37806
+      },
+      "diagnosticTrace": {
+        "version": 1,
+        "calls": [
+          {
+            "logicalCallNumber": 1,
+            "phase": "tool_round",
+            "scope": "full",
+            "requestedTools": [
+              "final_response",
+              "find_person",
+              "create_person",
+              "update_person",
+              "find_project",
+              "create_project",
+              "update_project",
+              "link_person_to_project",
+              "update_person_project_relationship",
+              "record_expense",
+              "update_expense",
+              "query_expenses",
+              "rank_expense_projects",
+              "get_person_expense_total",
+              "get_project_expense_total",
+              "create_task",
+              "create_commitment",
+              "create_reminder",
+              "update_task",
+              "update_commitment",
+              "update_reminder",
+              "delete_expense",
+              "delete_person",
+              "delete_project",
+              "delete_task",
+              "delete_commitment",
+              "delete_reminder",
+              "query_reminders",
+              "recall_context"
+            ],
+            "finalResponseOnly": false,
+            "attempts": [
+              {
+                "requestId": "intent-eval-gemini-E-6993d4c5-3cd9-4750-a6e9-7eb50eabaa95",
+                "conversationId": "intent-eval-gemini-E",
+                "provider": "gemini",
+                "model": "gemini-3.1-flash-lite",
+                "logicalCallNumber": 1,
+                "attemptNumber": 1,
+                "scope": "full",
+                "toolsAvailable": [
+                  "final_response",
+                  "find_person",
+                  "create_person",
+                  "update_person",
+                  "find_project",
+                  "create_project",
+                  "update_project",
+                  "link_person_to_project",
+                  "update_person_project_relationship",
+                  "record_expense",
+                  "update_expense",
+                  "query_expenses",
+                  "rank_expense_projects",
+                  "get_person_expense_total",
+                  "get_project_expense_total",
+                  "create_task",
+                  "create_commitment",
+                  "create_reminder",
+                  "update_task",
+                  "update_commitment",
+                  "update_reminder",
+                  "delete_expense",
+                  "delete_person",
+                  "delete_project",
+                  "delete_task",
+                  "delete_commitment",
+                  "delete_reminder",
+                  "query_reminders",
+                  "recall_context"
+                ],
+                "inputTokens": null,
+                "outputTokens": null,
+                "totalTokens": null,
+                "cachedTokens": null,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null,
+                "cacheHit": false,
+                "cacheRetry": false,
+                "fallback": false,
+                "retry": false,
+                "httpRequestSent": true,
+                "latencyMs": 753,
+                "success": false,
+                "failureReason": "PROVIDER_UNAVAILABLE",
+                "outputChars": 0,
+                "context": {
+                  "systemPromptChars": 3250,
+                  "requestGuidanceChars": 1692,
+                  "userMessageChars": 25,
+                  "recentConversationChars": 0,
+                  "summaryChars": 0,
+                  "structuredStateChars": 0,
+                  "toolResultChars": 0,
+                  "otherConversationChars": 0,
+                  "conversationChars": 25,
+                  "toolDefinitionsChars": 10118,
+                  "requestBytes": 18903,
+                  "systemPromptTokens": null,
+                  "conversationTokens": null,
+                  "toolDefinitionsTokens": null,
+                  "toolResultTokens": null
+                }
+              },
+              {
+                "requestId": "intent-eval-gemini-E-6993d4c5-3cd9-4750-a6e9-7eb50eabaa95",
+                "conversationId": "intent-eval-gemini-E",
+                "provider": "gemini",
+                "model": "gemini-3-flash-preview",
+                "logicalCallNumber": 1,
+                "attemptNumber": 2,
+                "scope": "full",
+                "toolsAvailable": [
+                  "final_response",
+                  "find_person",
+                  "create_person",
+                  "update_person",
+                  "find_project",
+                  "create_project",
+                  "update_project",
+                  "link_person_to_project",
+                  "update_person_project_relationship",
+                  "record_expense",
+                  "update_expense",
+                  "query_expenses",
+                  "rank_expense_projects",
+                  "get_person_expense_total",
+                  "get_project_expense_total",
+                  "create_task",
+                  "create_commitment",
+                  "create_reminder",
+                  "update_task",
+                  "update_commitment",
+                  "update_reminder",
+                  "delete_expense",
+                  "delete_person",
+                  "delete_project",
+                  "delete_task",
+                  "delete_commitment",
+                  "delete_reminder",
+                  "query_reminders",
+                  "recall_context"
+                ],
+                "inputTokens": null,
+                "outputTokens": null,
+                "totalTokens": null,
+                "cachedTokens": null,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null,
+                "cacheHit": false,
+                "cacheRetry": false,
+                "fallback": true,
+                "retry": false,
+                "httpRequestSent": true,
+                "latencyMs": 84,
+                "success": false,
+                "failureReason": "PROVIDER_RATE_LIMIT",
+                "outputChars": 0,
+                "context": {
+                  "systemPromptChars": 3250,
+                  "requestGuidanceChars": 1692,
+                  "userMessageChars": 25,
+                  "recentConversationChars": 0,
+                  "summaryChars": 0,
+                  "structuredStateChars": 0,
+                  "toolResultChars": 0,
+                  "otherConversationChars": 0,
+                  "conversationChars": 25,
+                  "toolDefinitionsChars": 10118,
+                  "requestBytes": 18903,
+                  "systemPromptTokens": null,
+                  "conversationTokens": null,
+                  "toolDefinitionsTokens": null,
+                  "toolResultTokens": null
+                }
+              }
+            ],
+            "selectedTools": [],
+            "nextDecision": {
+              "kind": "error",
+              "reason": "PROVIDER_RATE_LIMIT",
+              "nextLogicalCallNumber": null,
+              "nextCallKind": null,
+              "nextScope": "full"
+            }
+          }
+        ]
+      },
+      "rowCountsBefore": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountsAfter": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountChanged": false,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": null,
+      "toolSelectionMatch": null,
+      "clarificationMatch": null,
+      "error": {
+        "message": "The configured provider rate limit was reached.",
+        "status": 429,
+        "category": "provider_rate_limit",
+        "code": "PROVIDER_RATE_LIMIT",
+        "provider": "gemini",
+        "retryable": true
+      }
+    }
+  ]
+}
