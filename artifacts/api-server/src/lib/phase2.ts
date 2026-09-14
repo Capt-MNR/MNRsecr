@@ -2812,6 +2812,13 @@ export class GeminiModelGateway implements ModelGateway {
           );
           if (response.status === 429) throw lastError;
           if (![404, 429, 500, 502, 503, 504].includes(response.status)) throw lastError;
+          finishLlmAttempt(context, activeAttempt, undefined, {
+            success: false,
+            failureReason: lastError instanceof SecretaryError
+              ? lastError.code
+              : "PROVIDER_REQUEST_FAILED",
+          });
+          activeAttempt = undefined;
           break;
         }
       } catch (error) {
