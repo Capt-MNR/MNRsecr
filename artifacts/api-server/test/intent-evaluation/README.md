@@ -61,6 +61,19 @@ pnpm --filter @workspace/api-server run test:intent-eval -- \
 
 Repeat separately with `--provider gemini` and `--provider failover`. The runner never runs all three modes in one command, which prevents accidental quota multiplication.
 
+Run the bounded Phase 1 instrumentation baseline (six cases, dry-run only):
+
+```bash
+pnpm --filter @workspace/api-server run test:intent-eval -- \
+  --provider groq \
+  --dataset test/intent-evaluation/baseline-scenarios.json \
+  --all --max-cases 6 \
+  --out test/intent-evaluation/results/phase1-baseline-groq.json \
+  --confirm-live
+```
+
+The report records `null` for token fields that the provider did not return; report consumers must render that as `N/A — not measured`, never as zero or an estimate. Scenario E remains `context_not_provided` unless an external fixture is supplied.
+
 Optional flags:
 
 - `--out path.json` saves the report to a chosen path.

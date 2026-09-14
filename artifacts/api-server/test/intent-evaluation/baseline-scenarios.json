@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "description": "Bounded Phase 1 instrumentation baseline. Dry-run only; scenario E needs a prepared conversation fixture.",
+  "contextPolicy": "Scenario E is excluded from accuracy unless INTENT_EVAL_CONVERSATION_ID points at an externally prepared fixture.",
+  "cases": [
+    {
+      "id": "A",
+      "category": "simple_read",
+      "message": "إيه مواعيدي النهارده؟",
+      "contextMode": "none",
+      "expected": {
+        "intent": "schedule_read",
+        "primaryTool": "list_reminders",
+        "acceptableTools": ["list_reminders", "final_response"],
+        "clarification": false,
+        "write": false
+      }
+    },
+    {
+      "id": "B",
+      "category": "simple_write_intent",
+      "message": "سجل إني دفعت لمحمد 7500 جنيه",
+      "contextMode": "none",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": ["find_person", "record_expense"],
+        "clarification": false,
+        "write": false
+      }
+    },
+    {
+      "id": "C",
+      "category": "long_context",
+      "message": "من فضلك راجع كل المصروفات والمهام والمواعيد المرتبطة بمشروع إطلاق المتجر، ولخص لي ما تم وما يحتاج متابعة هذا الأسبوع.",
+      "contextMode": "none",
+      "expected": {
+        "intent": "context_read",
+        "primaryTool": "final_response",
+        "acceptableTools": ["list_expenses", "list_tasks", "list_reminders", "final_response"],
+        "clarification": false,
+        "write": false
+      }
+    },
+    {
+      "id": "D",
+      "category": "multi_tool",
+      "message": "اعرض مصروفات مشروع المتجر هذا الشهر، واجمعها حسب الشخص، وقل لي مين عليه أكبر مبلغ.",
+      "contextMode": "none",
+      "expected": {
+        "intent": "expense_report",
+        "primaryTool": "list_expenses",
+        "acceptableTools": ["list_expenses", "find_person", "final_response"],
+        "clarification": false,
+        "write": false
+      }
+    },
+    {
+      "id": "E",
+      "category": "follow_up",
+      "message": "عدّل المبلغ إلى 9000 وخليه على مشروع المتجر",
+      "contextMode": "context_required",
+      "expected": {
+        "intent": "correction",
+        "primaryTool": "update_expense",
+        "acceptableTools": ["update_expense", "final_response"],
+        "clarification": true,
+        "write": false
+      }
+    },
+    {
+      "id": "F",
+      "category": "complex_reasoning",
+      "message": "حلل مصروفاتي الأخيرة مقارنة بالمهام والمواعيد، وحدد ثلاثة أشياء أقدر أقلل فيها الإنفاق مع توضيح السبب.",
+      "contextMode": "none",
+      "expected": {
+        "intent": "analysis",
+        "primaryTool": "final_response",
+        "acceptableTools": ["list_expenses", "list_tasks", "list_reminders", "final_response"],
+        "clarification": false,
+        "write": false
+      }
+    }
+  ]
+}

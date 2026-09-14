@@ -134,10 +134,13 @@ export type ToolScope = {
 
 export type GatewayCallContext = {
   requestId: string;
+  conversationId?: string;
   callNumber: number;
   toolCallsExecuted: number;
   toolScope?: ToolScope;
   finalResponseOnly?: boolean;
+  providerFallback?: boolean;
+  currentUserMessage?: string;
   metrics?: GatewayRequestMetrics;
 };
 
@@ -157,6 +160,87 @@ export type GatewayRequestMetrics = {
   cacheHit?: boolean;
   cacheMiss?: boolean;
   cachedTokens?: number;
+  attempts: LlmUsageAttempt[];
+};
+
+export type NormalizedLlmUsage = {
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+  cachedTokens: number | null;
+  completeness: "complete" | "partial" | "unavailable";
+};
+
+export type LlmContextBreakdown = {
+  systemPromptChars: number;
+  requestGuidanceChars: number;
+  userMessageChars: number;
+  recentConversationChars: number;
+  summaryChars: number;
+  structuredStateChars: number;
+  toolResultChars: number;
+  otherConversationChars: number;
+  conversationChars: number;
+  toolDefinitionsChars: number;
+  requestBytes: number;
+  systemPromptTokens: number | null;
+  conversationTokens: number | null;
+  toolDefinitionsTokens: number | null;
+  toolResultTokens: number | null;
+};
+
+export type LlmUsageAttempt = {
+  requestId: string;
+  conversationId: string | null;
+  provider: ProviderName;
+  model: string;
+  logicalCallNumber: number;
+  attemptNumber: number;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+  cachedTokens: number | null;
+  systemPromptTokens: number | null;
+  conversationTokens: number | null;
+  toolDefinitionsTokens: number | null;
+  toolResultTokens: number | null;
+  cacheHit: boolean;
+  fallback: boolean;
+  retry: boolean;
+  latencyMs: number;
+  success: boolean;
+  failureReason: string | null;
+  outputChars: number;
+  context: LlmContextBreakdown;
+};
+
+export type LlmUsageSummary = {
+  totalLogicalLlmCalls: number;
+  totalHttpAttempts: number;
+  totalInputTokens: number | null;
+  totalOutputTokens: number | null;
+  totalTokens: number | null;
+  totalCachedTokens: number | null;
+  usageCompleteness: "complete" | "partial" | "unavailable";
+  totalToolCalls: number;
+  fallbackCount: number;
+  retryCount: number;
+  cacheHit: boolean;
+  cacheMiss: boolean;
+  latencyMs: number;
+  context: {
+    systemPromptChars: number | null;
+    requestGuidanceChars: number | null;
+    userMessageChars: number | null;
+    recentConversationChars: number | null;
+    summaryChars: number | null;
+    structuredStateChars: number | null;
+    toolResultChars: number | null;
+    otherConversationChars: number | null;
+    conversationChars: number | null;
+    toolDefinitionsChars: number | null;
+    requestBytes: number | null;
+  };
 };
 
 function logLlmFailure(
@@ -1797,6 +1881,348 @@ function createGatewayMetrics(): GatewayRequestMetrics {
     cacheHit: false,
     cacheMiss: false,
     cachedTokens: 0,
+    attempts: [],
+  };
+}
+
+function finiteTokenCount(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? Math.floor(value)
+    : null;
+}
+
+function nestedValue(value: unknown, path: string[]): unknown {
+  let current = value;
+  for (const key of path) {
+    if (!current || typeof current !== "object") return undefined;
+    current = (current as Record<string, unknown>)[key];
+  }
+  return current;
+}
+
+export function normalizeProviderUsage(provider: ProviderName, usage: unknown): NormalizedLlmUsage {
+  if (!usage || typeof usage !== "object") {
+    return {
+      inputTokens: null,
+      outputTokens: null,
+      totalTokens: null,
+      cachedTokens: null,
+      completeness: "unavailable",
+    };
+  }
+
+  const value = usage as Record<string, unknown>;
+  const inputTokens = provider === "gemini"
+    ? finiteTokenCount(value.promptTokenCount)
+    : finiteTokenCount(value.prompt_tokens)
+      ?? finiteTokenCount(value.input_tokens)
+      ?? finiteTokenCount(nestedValue(value, ["tokens", "input_tokens"]))
+      ?? finiteTokenCount(nestedValue(value, ["billed_units", "input_tokens"]));
+  const outputTokens = provider === "gemini"
+    ? finiteTokenCount(value.candidatesTokenCount)
+    : finiteTokenCount(value.completion_tokens)
+      ?? finiteTokenCount(value.output_tokens)
+      ?? finiteTokenCount(nestedValue(value, ["tokens", "output_tokens"]))
+      ?? finiteTokenCount(nestedValue(value, ["billed_units", "output_tokens"]));
+  const directTotal = provider === "gemini"
+    ? finiteTokenCount(value.totalTokenCount)
+    : finiteTokenCount(value.total_tokens);
+  const totalTokens = directTotal ?? (
+    inputTokens !== null && outputTokens !== null
+      ? inputTokens + outputTokens
+      : null
+  );
+  const cachedTokens = provider === "gemini"
+    ? finiteTokenCount(value.cachedContentTokenCount)
+    : finiteTokenCount(value.cached_tokens)
+      ?? finiteTokenCount(nestedValue(value, ["prompt_tokens_details", "cached_tokens"]));
+  const knownParts = [inputTokens, outputTokens, totalTokens].filter((part) => part !== null).length;
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    cachedTokens,
+    completeness: knownParts === 3 ? "complete" : knownParts > 0 ? "partial" : "unavailable",
+  };
+}
+
+function contextBreakdown(
+  messages: ConversationMessage[],
+  currentUserMessage: string | undefined,
+  requestBytes: number,
+  toolDefinitionsChars: number,
+): LlmContextBreakdown {
+  const currentUser = currentUserMessage ?? "";
+  let currentUserConsumed = false;
+  let userMessageChars = 0;
+  let recentConversationChars = 0;
+  let summaryChars = 0;
+  let structuredStateChars = 0;
+  let toolResultChars = 0;
+  let otherConversationChars = 0;
+
+  for (const message of messages) {
+    const textChars = message.text?.length ?? 0;
+    if (message.role === "user") {
+      if (!currentUserConsumed && currentUser && message.text === currentUser) {
+        currentUserConsumed = true;
+        userMessageChars += textChars;
+      } else {
+        recentConversationChars += textChars;
+      }
+      continue;
+    }
+    if (message.role === "tool") {
+      toolResultChars += textChars;
+      continue;
+    }
+    if (message.role === "system") {
+      if (message.text?.startsWith("[ملخص محادثة سابق")) {
+        summaryChars += textChars;
+      } else if (message.text?.startsWith("[حالة المحادثة المنظمة")) {
+        structuredStateChars += textChars;
+      } else {
+        otherConversationChars += textChars;
+      }
+      continue;
+    }
+    recentConversationChars += textChars;
+  }
+
+  return {
+    systemPromptChars: systemInstruction.length,
+    requestGuidanceChars: requestGuidance.length,
+    userMessageChars,
+    recentConversationChars,
+    summaryChars,
+    structuredStateChars,
+    toolResultChars,
+    otherConversationChars,
+    conversationChars: messages.reduce((total, message) => total + (message.text?.length ?? 0), 0),
+    toolDefinitionsChars,
+    requestBytes,
+    systemPromptTokens: null,
+    conversationTokens: null,
+    toolDefinitionsTokens: null,
+    toolResultTokens: null,
+  };
+}
+
+type LlmAttemptStart = {
+  provider: ProviderName;
+  model: string;
+  attemptNumber: number;
+  startedAt: number;
+  fallback: boolean;
+  retry: boolean;
+  cacheHit: boolean;
+  context: LlmContextBreakdown;
+};
+
+function beginLlmAttempt(
+  context: GatewayCallContext,
+  provider: ProviderName,
+  model: string,
+  payload: {
+    requestBytes: number;
+    systemPromptChars: number;
+    toolDefinitionsChars: number;
+    toolDefinitionsCount: number;
+    conversationChars: number;
+    context: LlmContextBreakdown;
+    fallback?: boolean;
+    retry?: boolean;
+    cacheHit?: boolean;
+  },
+): LlmAttemptStart {
+  const metrics = context.metrics;
+  if (!metrics) {
+    return {
+      provider,
+      model,
+      attemptNumber: 1,
+      startedAt: Date.now(),
+      fallback: payload.fallback ?? false,
+      retry: payload.retry ?? false,
+      cacheHit: payload.cacheHit ?? false,
+      context: payload.context,
+    };
+  }
+  if (metrics.httpAttempts >= MAX_PROVIDER_HTTP_ATTEMPTS) {
+    throw new SecretaryError("The provider request budget was exhausted.", {
+      status: 503,
+      category: "provider_unavailable",
+      code: "PROVIDER_HTTP_ATTEMPT_BUDGET_EXCEEDED",
+      retryable: false,
+      provider,
+    });
+  }
+  metrics.httpAttempts += 1;
+  if (payload.retry) metrics.retryCount += 1;
+  metrics.httpAttemptsByProvider[provider] = (metrics.httpAttemptsByProvider[provider] ?? 0) + 1;
+  metrics.requestBytesByProvider[provider] = (metrics.requestBytesByProvider[provider] ?? 0) + payload.requestBytes;
+  metrics.maxRequestBytes = Math.max(metrics.maxRequestBytes, payload.requestBytes);
+  metrics.systemPromptChars = Math.max(metrics.systemPromptChars, payload.systemPromptChars);
+  metrics.toolDefinitionsChars = Math.max(metrics.toolDefinitionsChars, payload.toolDefinitionsChars);
+  metrics.toolDefinitionsCount = Math.max(metrics.toolDefinitionsCount, payload.toolDefinitionsCount);
+  metrics.maxConversationChars = Math.max(metrics.maxConversationChars, payload.conversationChars);
+  return {
+    provider,
+    model,
+    attemptNumber: metrics.httpAttempts,
+    startedAt: Date.now(),
+    fallback: payload.fallback ?? false,
+    retry: payload.retry ?? false,
+    cacheHit: payload.cacheHit ?? false,
+    context: payload.context,
+  };
+}
+
+function finishLlmAttempt(
+  context: GatewayCallContext,
+  attempt: LlmAttemptStart,
+  usage: unknown,
+  outcome: {
+    success: boolean;
+    failureReason?: string | null;
+    outputChars?: number;
+  },
+): void {
+  const metrics = context.metrics;
+  if (!metrics) return;
+  const normalized = normalizeProviderUsage(attempt.provider, usage);
+  const entry: LlmUsageAttempt = {
+    requestId: context.requestId,
+    conversationId: context.conversationId ?? null,
+    provider: attempt.provider,
+    model: attempt.model,
+    logicalCallNumber: context.callNumber,
+    attemptNumber: attempt.attemptNumber,
+    inputTokens: normalized.inputTokens,
+    outputTokens: normalized.outputTokens,
+    totalTokens: normalized.totalTokens,
+    cachedTokens: normalized.cachedTokens,
+    systemPromptTokens: attempt.context.systemPromptTokens,
+    conversationTokens: attempt.context.conversationTokens,
+    toolDefinitionsTokens: attempt.context.toolDefinitionsTokens,
+    toolResultTokens: attempt.context.toolResultTokens,
+    cacheHit: attempt.cacheHit,
+    fallback: attempt.fallback,
+    retry: attempt.retry,
+    latencyMs: Date.now() - attempt.startedAt,
+    success: outcome.success,
+    failureReason: outcome.failureReason ?? null,
+    outputChars: outcome.outputChars ?? 0,
+    context: attempt.context,
+  };
+  metrics.attempts.push(entry);
+  logger.info({
+    requestId: entry.requestId,
+    conversationId: entry.conversationId,
+    provider: entry.provider,
+    model: entry.model,
+    logicalCallNumber: entry.logicalCallNumber,
+    attemptNumber: entry.attemptNumber,
+    inputTokens: entry.inputTokens,
+    outputTokens: entry.outputTokens,
+    totalTokens: entry.totalTokens,
+    usageCompleteness: normalized.completeness,
+    systemPromptTokens: entry.systemPromptTokens,
+    conversationTokens: entry.conversationTokens,
+    toolDefinitionsTokens: entry.toolDefinitionsTokens,
+    toolResultTokens: entry.toolResultTokens,
+    cacheHit: entry.cacheHit,
+    fallback: entry.fallback,
+    retry: entry.retry,
+    latencyMs: entry.latencyMs,
+    success: entry.success,
+    failureReason: entry.failureReason,
+    context: entry.context,
+  }, "agent llm usage attempt");
+}
+
+function sumMeasured(values: Array<number | null>): number | null {
+  const measured = values.filter((value): value is number => value !== null);
+  return measured.length > 0 ? measured.reduce((total, value) => total + value, 0) : null;
+}
+
+function summarizeGatewayMetrics(
+  metrics: GatewayRequestMetrics,
+  totalToolCalls: number,
+  requestLatencyMs: number,
+): LlmUsageSummary {
+  const attempts = metrics.attempts;
+  const inputTokens = sumMeasured(attempts.map((attempt) => attempt.inputTokens));
+  const outputTokens = sumMeasured(attempts.map((attempt) => attempt.outputTokens));
+  const totalTokens = sumMeasured(attempts.map((attempt) => attempt.totalTokens));
+  const totalCachedTokens = sumMeasured(attempts.map((attempt) => attempt.cachedTokens));
+  const allTokenFieldsMeasured = attempts.length > 0
+    && attempts.every((attempt) =>
+      attempt.inputTokens !== null
+      && attempt.outputTokens !== null
+      && attempt.totalTokens !== null);
+  const someTokenFieldMeasured = attempts.some((attempt) =>
+    attempt.inputTokens !== null
+    || attempt.outputTokens !== null
+    || attempt.totalTokens !== null);
+  const context = attempts.length === 0
+    ? {
+        systemPromptChars: null,
+        requestGuidanceChars: null,
+        userMessageChars: null,
+        recentConversationChars: null,
+        summaryChars: null,
+        structuredStateChars: null,
+        toolResultChars: null,
+        otherConversationChars: null,
+        conversationChars: null,
+        toolDefinitionsChars: null,
+        requestBytes: null,
+      }
+    : attempts.reduce((total, attempt) => ({
+        systemPromptChars: total.systemPromptChars + attempt.context.systemPromptChars,
+        requestGuidanceChars: total.requestGuidanceChars + attempt.context.requestGuidanceChars,
+        userMessageChars: total.userMessageChars + attempt.context.userMessageChars,
+        recentConversationChars: total.recentConversationChars + attempt.context.recentConversationChars,
+        summaryChars: total.summaryChars + attempt.context.summaryChars,
+        structuredStateChars: total.structuredStateChars + attempt.context.structuredStateChars,
+        toolResultChars: total.toolResultChars + attempt.context.toolResultChars,
+        otherConversationChars: total.otherConversationChars + attempt.context.otherConversationChars,
+        conversationChars: total.conversationChars + attempt.context.conversationChars,
+        toolDefinitionsChars: total.toolDefinitionsChars + attempt.context.toolDefinitionsChars,
+        requestBytes: total.requestBytes + attempt.context.requestBytes,
+      }), {
+        systemPromptChars: 0,
+        requestGuidanceChars: 0,
+        userMessageChars: 0,
+        recentConversationChars: 0,
+        summaryChars: 0,
+        structuredStateChars: 0,
+        toolResultChars: 0,
+        otherConversationChars: 0,
+        conversationChars: 0,
+        toolDefinitionsChars: 0,
+        requestBytes: 0,
+      });
+  return {
+    totalLogicalLlmCalls: metrics.logicalLlmCalls,
+    totalHttpAttempts: metrics.httpAttempts,
+    totalInputTokens: inputTokens,
+    totalOutputTokens: outputTokens,
+    totalTokens,
+    totalCachedTokens,
+    usageCompleteness: allTokenFieldsMeasured
+      ? "complete"
+      : someTokenFieldMeasured
+        ? "partial"
+        : "unavailable",
+    totalToolCalls,
+    fallbackCount: attempts.filter((attempt) => attempt.fallback).length,
+    retryCount: metrics.retryCount,
+    cacheHit: metrics.cacheHit ?? false,
+    cacheMiss: metrics.cacheMiss ?? false,
+    latencyMs: requestLatencyMs,
+    context,
   };
 }
 
@@ -1809,27 +2235,22 @@ function recordProviderRequest(
     toolDefinitionsChars: number;
     toolDefinitionsCount: number;
     conversationChars: number;
+    model?: string;
+    context?: LlmContextBreakdown;
+    fallback?: boolean;
+    retry?: boolean;
+    cacheHit?: boolean;
   },
-): void {
-  const metrics = context.metrics;
-  if (!metrics) return;
-  if (metrics.httpAttempts >= MAX_PROVIDER_HTTP_ATTEMPTS) {
-    throw new SecretaryError("The provider request budget was exhausted.", {
-      status: 503,
-      category: "provider_unavailable",
-      code: "PROVIDER_HTTP_ATTEMPT_BUDGET_EXCEEDED",
-      retryable: false,
-      provider,
-    });
-  }
-  metrics.httpAttempts += 1;
-  metrics.httpAttemptsByProvider[provider] = (metrics.httpAttemptsByProvider[provider] ?? 0) + 1;
-  metrics.requestBytesByProvider[provider] = (metrics.requestBytesByProvider[provider] ?? 0) + payload.requestBytes;
-  metrics.maxRequestBytes = Math.max(metrics.maxRequestBytes, payload.requestBytes);
-  metrics.systemPromptChars = Math.max(metrics.systemPromptChars, payload.systemPromptChars);
-  metrics.toolDefinitionsChars = Math.max(metrics.toolDefinitionsChars, payload.toolDefinitionsChars);
-  metrics.toolDefinitionsCount = Math.max(metrics.toolDefinitionsCount, payload.toolDefinitionsCount);
-  metrics.maxConversationChars = Math.max(metrics.maxConversationChars, payload.conversationChars);
+): LlmAttemptStart {
+  return beginLlmAttempt(context, provider, payload.model ?? provider, {
+    ...payload,
+    context: payload.context ?? contextBreakdown(
+      [],
+      context.currentUserMessage,
+      payload.requestBytes,
+      payload.toolDefinitionsChars,
+    ),
+  });
 }
 
 function compactToolResultForPrompt(toolResult: ToolResult): string {
@@ -2130,6 +2551,7 @@ export class GeminiModelGateway implements ModelGateway {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 25_000);
       const startedAt = Date.now();
+      let activeAttempt: LlmAttemptStart | undefined;
       try {
         // Phase2 always supplies metrics. Keeping direct gateway calls without
         // metrics uncached preserves the gateway's existing adapter contract
@@ -2160,12 +2582,22 @@ export class GeminiModelGateway implements ModelGateway {
             generationConfig: { temperature: 0.15, maxOutputTokens: 8192 },
           };
           const requestBody = JSON.stringify(requestPayload);
-          recordProviderRequest(context, "gemini", {
+            activeAttempt = recordProviderRequest(context, "gemini", {
+              model,
             requestBytes: Buffer.byteLength(requestBody),
             systemPromptChars: systemText.length,
             toolDefinitionsChars: JSON.stringify(toolDefinitions).length,
             toolDefinitionsCount: toolDefinitions.length,
             conversationChars: JSON.stringify(contents).length,
+              context: contextBreakdown(
+                messages,
+                context.currentUserMessage,
+                Buffer.byteLength(requestBody),
+                JSON.stringify(toolDefinitions).length,
+              ),
+              fallback: Boolean(context.providerFallback) || modelIndex > 0,
+              retry: cacheFallbackAttempted,
+              cacheHit: useCachedContent && cache.hit,
           });
           logger.info({
             requestId: context.requestId,
@@ -2211,6 +2643,11 @@ export class GeminiModelGateway implements ModelGateway {
                 : []),
               usage: parsed.usageMetadata,
             };
+            finishLlmAttempt(context, activeAttempt, responseResult.usage, {
+              success: true,
+              outputChars: responseResult.text.length + JSON.stringify(responseResult.toolCalls).length,
+            });
+            activeAttempt = undefined;
             logger.info({
               requestId: context.requestId,
               provider: this.provider,
@@ -2224,6 +2661,11 @@ export class GeminiModelGateway implements ModelGateway {
             return responseResult;
           }
           if (useCachedContent && !cacheFallbackAttempted && [400, 404].includes(response.status)) {
+            finishLlmAttempt(context, activeAttempt, undefined, {
+              success: false,
+              failureReason: "GEMINI_CONTEXT_CACHE_REJECTED",
+            });
+            activeAttempt = undefined;
             this.invalidateCachedContent(cache.cacheKey);
             useCachedContent = false;
             cacheFallbackAttempted = true;
@@ -2246,6 +2688,13 @@ export class GeminiModelGateway implements ModelGateway {
           break;
         }
       } catch (error) {
+        if (activeAttempt) {
+          finishLlmAttempt(context, activeAttempt, undefined, {
+            success: false,
+            failureReason: error instanceof SecretaryError ? error.code : "PROVIDER_REQUEST_FAILED",
+          });
+          activeAttempt = undefined;
+        }
         lastError = error instanceof SecretaryError
           ? error
           : providerExceptionError("gemini", error);
@@ -2315,15 +2764,24 @@ export class GroqModelGateway implements ModelGateway {
       max_tokens: 2048,
     });
     const systemText = `${systemInstruction}\n${requestGuidance}`;
-    recordProviderRequest(context, "groq", {
-      requestBytes: Buffer.byteLength(requestBody),
-      systemPromptChars: systemText.length,
-      toolDefinitionsChars: JSON.stringify(tools).length,
-      toolDefinitionsCount: tools.length,
-      conversationChars: JSON.stringify(apiMessages.slice(1)).length,
-    });
     let lastError: Error | null = null;
     for (let attempt = 0; attempt < MAX_GROQ_HTTP_ATTEMPTS; attempt += 1) {
+      const attemptMeasurement = recordProviderRequest(context, "groq", {
+        model: this.model,
+        requestBytes: Buffer.byteLength(requestBody),
+        systemPromptChars: systemText.length,
+        toolDefinitionsChars: JSON.stringify(tools).length,
+        toolDefinitionsCount: tools.length,
+        conversationChars: JSON.stringify(apiMessages.slice(1)).length,
+        context: contextBreakdown(
+          messages,
+          context.currentUserMessage,
+          Buffer.byteLength(requestBody),
+          JSON.stringify(tools).length,
+        ),
+        fallback: Boolean(context.providerFallback),
+        retry: attempt > 0,
+      });
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 25_000);
       const startedAt = Date.now();
@@ -2373,6 +2831,10 @@ export class GroqModelGateway implements ModelGateway {
             })),
             usage: payload.usage,
           };
+          finishLlmAttempt(context, attemptMeasurement, responseResult.usage, {
+            success: true,
+            outputChars: responseResult.text.length + JSON.stringify(responseResult.toolCalls).length,
+          });
           logger.info({
             requestId: context.requestId,
             provider: this.provider,
@@ -2405,6 +2867,10 @@ export class GroqModelGateway implements ModelGateway {
         }
         throw lastError;
       } catch (error) {
+        finishLlmAttempt(context, attemptMeasurement, undefined, {
+          success: false,
+          failureReason: error instanceof SecretaryError ? error.code : "PROVIDER_REQUEST_FAILED",
+        });
         lastError = error instanceof SecretaryError
           ? error
           : providerExceptionError("groq", error);
@@ -2469,12 +2935,20 @@ export class MistralModelGateway implements ModelGateway {
       max_tokens: 2048,
     });
     const systemText = `${systemInstruction}\n${requestGuidance}`;
-    recordProviderRequest(context, "mistral", {
+    const attemptMeasurement = recordProviderRequest(context, "mistral", {
+      model: this.model,
       requestBytes: Buffer.byteLength(requestBody),
       systemPromptChars: systemText.length,
       toolDefinitionsChars: JSON.stringify(tools).length,
       toolDefinitionsCount: tools.length,
       conversationChars: JSON.stringify(apiMessages.slice(1)).length,
+      context: contextBreakdown(
+        messages,
+        context.currentUserMessage,
+        Buffer.byteLength(requestBody),
+        JSON.stringify(tools).length,
+      ),
+      fallback: Boolean(context.providerFallback),
     });
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 25_000);
@@ -2525,6 +2999,10 @@ export class MistralModelGateway implements ModelGateway {
           })),
           usage: payload.usage,
         };
+        finishLlmAttempt(context, attemptMeasurement, responseResult.usage, {
+          success: true,
+          outputChars: responseResult.text.length + JSON.stringify(responseResult.toolCalls).length,
+        });
         logger.info({
           requestId: context.requestId,
           provider: this.provider,
@@ -2555,6 +3033,10 @@ export class MistralModelGateway implements ModelGateway {
       }
       throw error;
     } catch (error) {
+      finishLlmAttempt(context, attemptMeasurement, undefined, {
+        success: false,
+        failureReason: error instanceof SecretaryError ? error.code : "PROVIDER_REQUEST_FAILED",
+      });
       const classified = error instanceof SecretaryError
         ? error
         : providerExceptionError("mistral", error);
@@ -2747,7 +3229,10 @@ export class FailoverModelGateway implements ModelGateway {
       }
       trace.providersAttempted.push(provider);
       try {
-        const response = await gateway.generate(messages, context);
+        const response = await gateway.generate(messages, {
+          ...context,
+          providerFallback: index > 0 || provider !== this.order[0],
+        });
         this.markSuccess(provider);
         trace.selectedProvider = provider;
         this.requests.set(context.requestId, {
@@ -3073,6 +3558,35 @@ export class Phase2AgentRuntime {
       }, "agent final response");
       return result;
     };
+    let usageSummaryLogged = false;
+    const finishRequestInstrumentation = (): void => {
+      if (usageSummaryLogged) return;
+      usageSummaryLogged = true;
+      const usageSummary = summarizeGatewayMetrics(
+        metrics,
+        toolCalls,
+        Date.now() - startedAt,
+      );
+      logger.info({
+        requestId,
+        conversationId,
+        totalLogicalLlmCalls: usageSummary.totalLogicalLlmCalls,
+        totalHttpAttempts: usageSummary.totalHttpAttempts,
+        totalInputTokens: usageSummary.totalInputTokens,
+        totalOutputTokens: usageSummary.totalOutputTokens,
+        totalTokens: usageSummary.totalTokens,
+        totalCachedTokens: usageSummary.totalCachedTokens,
+        usageCompleteness: usageSummary.usageCompleteness,
+        totalToolCalls: usageSummary.totalToolCalls,
+        fallbackCount: usageSummary.fallbackCount,
+        retryCount: usageSummary.retryCount,
+        cacheHit: usageSummary.cacheHit,
+        cacheMiss: usageSummary.cacheMiss,
+        latencyMs: usageSummary.latencyMs,
+        context: usageSummary.context,
+      }, "agent llm usage summary");
+      this.gateway.finishRequest?.(requestId);
+    };
 
     const recentExpenseTotalContext = conversationMemory.recentTurns.some((turn) =>
       isGlobalExpenseTotalRequest(turn.userMessage)
@@ -3099,13 +3613,21 @@ export class Phase2AgentRuntime {
         type: "expense_report",
         summary: report.summary,
       };
-      return persistResult(broadExpenseReportResponse(report));
+      try {
+        return await persistResult(broadExpenseReportResponse(report));
+      } finally {
+        finishRequestInstrumentation();
+      }
     }
 
     const deterministicSchedule = await deterministicScheduleResponse(identity, input.message);
     if (deterministicSchedule) {
       action = deterministicSchedule.action;
-      return persistResult(deterministicSchedule.response);
+      try {
+        return await persistResult(deterministicSchedule.response);
+      } finally {
+        finishRequestInstrumentation();
+      }
     }
 
     try {
@@ -3122,10 +3644,12 @@ export class Phase2AgentRuntime {
             try {
               const finalization = await this.gateway.generate(messages, {
                 requestId,
+                conversationId,
                 callNumber: llmCalls,
                 toolCallsExecuted: toolCalls,
                 toolScope: activeToolScope,
                 finalResponseOnly: true,
+                currentUserMessage: input.message.trim(),
                 metrics,
               });
               const finalCall = finalization.toolCalls.find((call) => call.name === "final_response");
@@ -3159,9 +3683,11 @@ export class Phase2AgentRuntime {
         metrics.logicalLlmCalls = llmCalls;
         const response = await this.gateway.generate(messages, {
           requestId,
+          conversationId,
           callNumber: llmCalls,
           toolCallsExecuted: toolCalls,
           toolScope: activeToolScope,
+          currentUserMessage: input.message.trim(),
           metrics,
         });
         if (response.toolCalls.length === 0) {
@@ -3266,7 +3792,7 @@ export class Phase2AgentRuntime {
       if (recovered) return persistResult(recovered);
       throw error;
     } finally {
-      this.gateway.finishRequest?.(requestId);
+      finishRequestInstrumentation();
     }
   }
 }
@@ -3326,12 +3852,20 @@ export class CohereModelGateway implements ModelGateway {
       max_tokens: 2048,
     });
     const systemText = `${systemInstruction}\n${requestGuidance}`;
-    recordProviderRequest(context, "cohere", {
+    const attemptMeasurement = recordProviderRequest(context, "cohere", {
+      model: this.model,
       requestBytes: Buffer.byteLength(requestBody),
       systemPromptChars: systemText.length,
       toolDefinitionsChars: JSON.stringify(tools).length,
       toolDefinitionsCount: tools.length,
       conversationChars: JSON.stringify(apiMessages.slice(1)).length,
+      context: contextBreakdown(
+        messages,
+        context.currentUserMessage,
+        Buffer.byteLength(requestBody),
+        JSON.stringify(tools).length,
+      ),
+      fallback: Boolean(context.providerFallback),
     });
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 25_000);
@@ -3388,6 +3922,10 @@ export class CohereModelGateway implements ModelGateway {
           })),
           usage: payload.usage,
         };
+        finishLlmAttempt(context, attemptMeasurement, responseResult.usage, {
+          success: true,
+          outputChars: responseResult.text.length + JSON.stringify(responseResult.toolCalls).length,
+        });
         logger.info({
           requestId: context.requestId,
           provider: this.provider,
@@ -3418,6 +3956,10 @@ export class CohereModelGateway implements ModelGateway {
       }
       throw error;
     } catch (error) {
+      finishLlmAttempt(context, attemptMeasurement, undefined, {
+        success: false,
+        failureReason: error instanceof SecretaryError ? error.code : "PROVIDER_REQUEST_FAILED",
+      });
       const classified = error instanceof SecretaryError
         ? error
         : providerExceptionError("cohere", error);

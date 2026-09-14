@@ -9,6 +9,7 @@ import { routeProvider } from "../src/lib/provider-router.ts";
 import {
   isDeterministicScheduleQuestion,
   looksLikeInternalStructuredResponse,
+  normalizeProviderUsage,
 } from "../src/lib/phase2.ts";
 
 process.env.AI_PROVIDER = "development";
@@ -32,6 +33,58 @@ test("all optimization layers preserve their safe default state", () => {
   assert.equal(buildDeterministicPlan("عايز تقرير بالمصروفات"), null);
   assert.equal(readDecision("missing"), undefined);
   assert.equal(routeProvider("دفعت لمحمد 7500").enabled, false);
+});
+
+test("provider usage normalization preserves null for unavailable fields", () => {
+  assert.deepEqual(
+    normalizeProviderUsage("gemini", {
+      promptTokenCount: 120,
+      candidatesTokenCount: 30,
+      totalTokenCount: 150,
+      cachedContentTokenCount: 40,
+    }),
+    {
+      inputTokens: 120,
+      outputTokens: 30,
+      totalTokens: 150,
+      cachedTokens: 40,
+      completeness: "complete",
+    },
+  );
+  assert.deepEqual(
+    normalizeProviderUsage("groq", {
+      prompt_tokens: 80,
+      completion_tokens: 20,
+      total_tokens: 100,
+    }),
+    {
+      inputTokens: 80,
+      outputTokens: 20,
+      totalTokens: 100,
+      cachedTokens: null,
+      completeness: "complete",
+    },
+  );
+  assert.deepEqual(
+    normalizeProviderUsage("cohere", { billed_units: { input_tokens: 12 } }),
+    {
+      inputTokens: 12,
+      outputTokens: null,
+      totalTokens: null,
+      cachedTokens: null,
+      completeness: "partial",
+    },
+  );
+  assert.deepEqual(
+    normalizeProviderUsage("mistral", undefined),
+    {
+      inputTokens: null,
+      outputTokens: null,
+      totalTokens: null,
+      cachedTokens: null,
+      completeness: "unavailable",
+    },
+  );
 });
 
 test("context budgeter keeps required messages and caps tool definitions when enabled", () => {

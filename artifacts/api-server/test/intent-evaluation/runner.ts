@@ -87,10 +87,10 @@ type CaseResult = {
   fallbackReason: string | null;
   latencyMs: number;
   tokenUsage: unknown[] | null;
-  inputTokens: number;
-  outputTokens: number;
-  totalTokens: number;
-  cachedTokens: number;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+  cachedTokens: number | null;
   cacheHit: boolean;
   cacheMiss: boolean;
   requestBytesByProvider: Record<string, number>;
@@ -99,6 +99,7 @@ type CaseResult = {
   toolDefinitionsChars: number;
   toolDefinitionsCount: number;
   maxConversationChars: number;
+  contextBreakdown: Record<string, number | null>;
   rowCountsBefore: Record<string, number>;
   rowCountsAfter: Record<string, number>;
   rowCountChanged: boolean;
@@ -267,12 +268,42 @@ function usageTotals(usage: unknown[] | undefined): {
   return { inputTokens, outputTokens, totalTokens, cachedTokens };
 }
 
+function measuredLogValue(
+  record: LogRecord | undefined,
+  key: string,
+  fallback: number | null,
+): number | null {
+  if (!record) return fallback;
+  return typeof record[key] === "number" && Number.isFinite(record[key])
+    ? Number(record[key])
+    : null;
+}
+
+function sumMeasured(values: Array<number | null>): number | null {
+  const measured = values.filter((value): value is number => value !== null);
+  return measured.length > 0 ? measured.reduce((sum, value) => sum + value, 0) : null;
+}
+
+function measuredContextNumber(result: CaseResult, key: string): number | null {
+  const value = result.contextBreakdown[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 async function runWorker(
   evaluationCase: EvaluationCase,
   mode: string,
+  datasetPath: string,
 ): Promise<{ worker?: WorkerRecord; logs: LogRecord[]; exitCode: number | null; stderr: string }> {
   return new Promise((resolvePromise) => {
-    const child = spawn(TSX, [WORKER, "--case", evaluationCase.id, "--mode", mode], {
+    const child = spawn(TSX, [
+      WORKER,
+      "--case",
+      evaluationCase.id,
+      "--mode",
+      mode,
+      "--dataset",
+      datasetPath,
+    ], {
       cwd: ROOT,
       env: {
         ...process.env,
@@ -307,6 +338,10 @@ function makeCaseResult(
     ?? (names.includes("final_response") ? "final_response" : worker?.ok ? "text_response" : null);
   const trace = worker?.action?.providerTrace ?? {};
   const usage = usageTotals(worker?.tokenUsage);
+  const usageSummary = run.logs.find((record) => record.msg === "agent llm usage summary");
+  const usageContext = usageSummary?.context && typeof usageSummary.context === "object"
+    ? usageSummary.context as Record<string, unknown>
+    : undefined;
   const fallbackLog = run.logs.find((record) => record.msg === "agent provider fallback");
   const startedLogs = run.logs.filter((record) => record.msg === "agent llm call started");
   const attemptsByProvider: Record<string, number> = {};
@@ -358,9 +393,11 @@ function makeCaseResult(
     actualTools: names,
     toolArguments: tools,
     clarificationAsked: clarification,
-    logicalLlmCalls: worker?.action?.llmCalls
+    logicalLlmCalls: measuredLogValue(usageSummary, "totalLogicalLlmCalls", null)
+      ?? worker?.action?.llmCalls
       ?? Math.max(0, ...startedLogs.map((record) => Number(record.llmCall ?? 0))),
-    actualHttpAttempts: Number(trace.httpAttempts ?? startedLogs.length),
+    actualHttpAttempts: measuredLogValue(usageSummary, "totalHttpAttempts", null)
+      ?? Number(trace.httpAttempts ?? startedLogs.length),
     httpAttemptsByProvider: (trace.httpAttemptsByProvider as Record<string, number> | undefined)
       ?? attemptsByProvider,
     provider: worker?.provider
@@ -379,18 +416,36 @@ function makeCaseResult(
         ?? 0,
     ),
     tokenUsage: worker?.tokenUsage && worker.tokenUsage.length > 0 ? worker.tokenUsage : null,
-    inputTokens: usage.inputTokens,
-    outputTokens: usage.outputTokens,
-    totalTokens: usage.totalTokens,
-    cachedTokens: Math.max(usage.cachedTokens, Number(trace.cachedTokens ?? 0)),
-    cacheHit: trace.cacheHit === true,
-    cacheMiss: trace.cacheMiss === true,
+    inputTokens: measuredLogValue(usageSummary, "totalInputTokens", usage.inputTokens || null),
+    outputTokens: measuredLogValue(usageSummary, "totalOutputTokens", usage.outputTokens || null),
+    totalTokens: measuredLogValue(usageSummary, "totalTokens", usage.totalTokens || null),
+    cachedTokens: measuredLogValue(usageSummary, "totalCachedTokens", usage.cachedTokens || null),
+    cacheHit: usageSummary?.cacheHit === true || trace.cacheHit === true,
+    cacheMiss: usageSummary?.cacheMiss === true || trace.cacheMiss === true,
     requestBytesByProvider: (trace.requestBytesByProvider as Record<string, number> | undefined) ?? {},
     maxRequestBytes: Number(trace.maxRequestBytes ?? 0),
     systemPromptChars: Number(trace.systemPromptChars ?? 0),
     toolDefinitionsChars: Number(trace.toolDefinitionsChars ?? 0),
     toolDefinitionsCount: Number(trace.toolDefinitionsCount ?? 0),
     maxConversationChars: Number(trace.maxConversationChars ?? 0),
+    contextBreakdown: usageContext
+      ? Object.fromEntries(Object.entries(usageContext).map(([key, value]) => [
+        key,
+        typeof value === "number" && Number.isFinite(value) ? value : null,
+      ]))
+      : {
+        systemPromptChars: null,
+        requestGuidanceChars: null,
+        userMessageChars: null,
+        recentConversationChars: null,
+        summaryChars: null,
+        structuredStateChars: null,
+        toolResultChars: null,
+        otherConversationChars: null,
+        conversationChars: null,
+        toolDefinitionsChars: null,
+        requestBytes: null,
+      },
     rowCountsBefore,
     rowCountsAfter,
     rowCountChanged,
@@ -441,16 +496,17 @@ function summarize(results: CaseResult[]) {
     totalLogicalLlmCalls: results.reduce((sum, result) => sum + result.logicalLlmCalls, 0),
     totalHttpAttempts: results.reduce((sum, result) => sum + result.actualHttpAttempts, 0),
     fallbackCases: results.filter((result) => result.fallback).length,
-    totalInputTokens: results.reduce((sum, result) => sum + result.inputTokens, 0),
-    totalOutputTokens: results.reduce((sum, result) => sum + result.outputTokens, 0),
-    totalTokens: results.reduce((sum, result) => sum + result.totalTokens, 0),
-    totalCachedTokens: results.reduce((sum, result) => sum + result.cachedTokens, 0),
+    totalInputTokens: sumMeasured(results.map((result) => result.inputTokens)),
+    totalOutputTokens: sumMeasured(results.map((result) => result.outputTokens)),
+    totalTokens: sumMeasured(results.map((result) => result.totalTokens)),
+    totalCachedTokens: sumMeasured(results.map((result) => result.cachedTokens)),
     cacheHitCases: results.filter((result) => result.cacheHit).length,
     cacheMissCases: results.filter((result) => result.cacheMiss).length,
-    totalRequestBytes: results.reduce(
-      (sum, result) => sum + Object.values(result.requestBytesByProvider).reduce((inner, value) => inner + value, 0),
-      0,
-    ),
+    totalRequestBytes: sumMeasured(results.map((result) => {
+      const contextBytes = measuredContextNumber(result, "requestBytes");
+      return contextBytes ?? Object.values(result.requestBytesByProvider)
+        .reduce((inner, value) => inner + value, 0);
+    })) ?? 0,
     averageLatencyMs: results.length === 0
       ? 0
       : Math.round(results.reduce((sum, result) => sum + result.latencyMs, 0) / results.length),
@@ -458,7 +514,13 @@ function summarize(results: CaseResult[]) {
     latencyP95Ms: percentile(0.95),
     averageConversationChars: results.length === 0
       ? 0
-      : Math.round(results.reduce((sum, result) => sum + result.maxConversationChars, 0) / results.length),
+      : Math.round(results.reduce(
+        (sum, result) => sum + (
+          measuredContextNumber(result, "conversationChars")
+          ?? result.maxConversationChars
+        ),
+        0,
+      ) / results.length),
     rowCountChanges: results.filter((result) => result.rowCountChanged).length,
   };
 }
@@ -553,7 +615,7 @@ async function main(): Promise<void> {
   const results: CaseResult[] = [];
   for (const evaluationCase of cases) {
     console.log(`Running ${evaluationCase.id} (${mode}) in dry-run mode...`);
-    const run = await runWorker(evaluationCase, mode);
+    const run = await runWorker(evaluationCase, mode, datasetPath);
     results.push(makeCaseResult(evaluationCase, mode, run));
   }
 

@@ -163,8 +163,9 @@ async function main(): Promise<void> {
   const mode = readArg("--mode") ?? "groq";
   if (!caseId) throw new Error("--case is required");
 
+  const datasetPath = readArg("--dataset");
   const dataset = JSON.parse(
-    await readFile(new URL("./dataset.json", import.meta.url), "utf8"),
+    await readFile(datasetPath ?? new URL("./dataset.json", import.meta.url), "utf8"),
   ) as Dataset;
   const evaluationCase = dataset.cases.find((item) => item.id === caseId);
   if (!evaluationCase) throw new Error(`Unknown evaluation case: ${caseId}`);

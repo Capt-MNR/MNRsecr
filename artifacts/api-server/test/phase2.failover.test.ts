@@ -257,6 +257,7 @@ test("Groq does not repeat a long 429 cooldown and records the real retry-after"
       toolDefinitionsChars: 0,
       toolDefinitionsCount: 0,
       maxConversationChars: 0,
+      attempts: [],
     };
 
     await assert.rejects(
