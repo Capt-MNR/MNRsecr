@@ -33,6 +33,7 @@ import {
 } from "../src/lib/error-contract.ts";
 import type { Identity } from "../src/lib/secretary.ts";
 import {
+  deterministicExpensePeriod,
   isExpenseTotalCorrectionRequest,
   isGlobalExpenseTotalRequest,
 } from "../src/lib/expense-report.ts";
@@ -368,6 +369,23 @@ test("global expense totals and zero corrections use the deterministic report pa
   assert.equal(isGlobalExpenseTotalRequest("إجمالي مصروفات المشروع"), false);
   assert.equal(isExpenseTotalCorrectionRequest("اعتقد فيه صفر زيادة"), true);
   assert.equal(isExpenseTotalCorrectionRequest("عدّل وصف المصروف"), false);
+});
+
+test("fixed weekly expense totals bypass the model without changing write behavior", async () => {
+  const provider = new ScriptedProvider("gemini", () => {
+    throw new Error("the deterministic period path must not call a provider");
+  });
+  const result = await new Phase2AgentRuntime(
+    new FailoverModelGateway({ gemini: provider }, ["gemini"]),
+  ).run(identity("deterministic-weekly-total"), {
+    message: "أنا صرفت كام الأسبوع ده؟",
+    requestId: "deterministic-weekly-total-request",
+  }, { dryRun: true });
+
+  assert.equal(deterministicExpensePeriod("أنا صرفت كام الأسبوع ده؟"), "this_week");
+  assert.equal(provider.calls.length, 0);
+  assert.equal(result.action?.type, "expense_report");
+  assert.match(result.assistantMessage, /الأسبوع الحالي|لا توجد/);
 });
 
 test("all provider tool builders use the same scoped tool subset", async () => {

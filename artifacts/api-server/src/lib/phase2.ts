@@ -35,9 +35,11 @@ import {
   createPendingOperation,
 } from "./secretary-operations";
 import {
+  deterministicExpensePeriod,
   isBroadExpenseReportRequest,
   isExpenseTotalCorrectionRequest,
   isGlobalExpenseTotalRequest,
+  type DeterministicExpensePeriod,
 } from "./expense-report";
 import { budgetContext } from "./context-budgeter";
 import { envFlag, featureFlags } from "./feature-flags";
@@ -476,7 +478,10 @@ function expenseRowsSummary(rows: unknown[]): {
   return { count: rows.length, totalMinor, currency, projectCount: projects.size };
 }
 
-function broadExpenseReportResponse(result: ToolResult): FinalResponse {
+function broadExpenseReportResponse(
+  result: ToolResult,
+  period?: DeterministicExpensePeriod,
+): FinalResponse {
   const summary = result.summary && typeof result.summary === "object"
     ? result.summary as { count?: unknown; totalMinor?: unknown; currency?: unknown; projectCount?: unknown }
     : {};
@@ -488,9 +493,18 @@ function broadExpenseReportResponse(result: ToolResult): FinalResponse {
     currency,
   }).format(totalMinor / 100);
   const projectCount = typeof summary.projectCount === "number" ? summary.projectCount : 0;
+  const periodLabel = period === "this_week"
+    ? "مصروفات الأسبوع الحالي"
+    : period === "last_week"
+      ? "مصروفات الأسبوع السابق"
+      : period === "this_month"
+        ? "مصروفات الشهر الحالي"
+        : period === "last_month"
+          ? "مصروفات الشهر السابق"
+          : "تقرير المصروفات";
   const message = count === 0
-    ? "لا توجد مصروفات محفوظة حتى الآن."
-    : `تقرير المصروفات: ${amount} عبر ${count} مصروف${projectCount > 0 ? ` موزعة على ${projectCount} مشروع` : ""}.`;
+    ? period ? `لا توجد ${periodLabel.toLocaleLowerCase("ar")} محفوظة.` : "لا توجد مصروفات محفوظة حتى الآن."
+    : `${periodLabel}: ${amount} عبر ${count} مصروف${projectCount > 0 ? ` موزعة على ${projectCount} مشروع` : ""}.`;
   return {
     kind: "answer",
     message,
@@ -3766,12 +3780,17 @@ export class Phase2AgentRuntime {
       isGlobalExpenseTotalRequest(turn.userMessage)
       || /(?:إجمالي|اجمالي|مجموع)\s+(?:المصروفات|المصاريف)/i.test(turn.assistantMessage),
     );
+    const deterministicExpensePeriodRequested = deterministicExpensePeriod(input.message);
     const deterministicExpenseSummaryRequested = isBroadExpenseReportRequest(input.message)
       || isGlobalExpenseTotalRequest(input.message)
+      || deterministicExpensePeriodRequested !== null
       || (isExpenseTotalCorrectionRequest(input.message) && recentExpenseTotalContext);
 
     if (deterministicExpenseSummaryRequested) {
-      const report = await executeStructuredTool(identity, "query_expenses", { limit: 50 }, {
+      const report = await executeStructuredTool(identity, "query_expenses", {
+        limit: 50,
+        ...(deterministicExpensePeriodRequested ? { period: deterministicExpensePeriodRequested } : {}),
+      }, {
         requestId,
         conversationId,
       });
@@ -3788,7 +3807,7 @@ export class Phase2AgentRuntime {
         summary: report.summary,
       };
       try {
-        return await persistResult(broadExpenseReportResponse(report));
+        return await persistResult(broadExpenseReportResponse(report, deterministicExpensePeriodRequested ?? undefined));
       } finally {
         finishRequestInstrumentation();
       }

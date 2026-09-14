@@ -10,6 +10,8 @@ function normalizeArabic(value: string): string {
     .toLocaleLowerCase("ar");
 }
 
+export type DeterministicExpensePeriod = "last_month" | "this_month" | "last_week" | "this_week";
+
 /**
  * Broad expense reports are deterministic reads. Keeping this matcher narrow
  * avoids taking scoped requests away from the model's entity-resolution flow.
@@ -23,6 +25,47 @@ export function isGlobalExpenseTotalRequest(message: string): boolean {
   const normalized = normalizeArabic(message);
   return /^(?:(?:عايز|اريد|محتاج|هات|اعرض)\s+)?(?:اجمالي|مجموع)(?:\s+كل)?\s*(?:ال)?(?:مصروفات|مصاريف)(?:\s+(?:كام|كم))?$/.test(normalized)
     || /^(?:كام|كم)\s+(?:اجمالي|مجموع)\s+(?:ال)?(?:مصروفات|مصاريف)$/.test(normalized);
+}
+
+/**
+ * Period totals are deterministic only when the message is an exact,
+ * unscoped amount question. Anything mentioning a person, project, or
+ * arbitrary date stays on the model path for entity and date resolution.
+ */
+export function deterministicExpensePeriod(message: string): DeterministicExpensePeriod | null {
+  const normalized = normalizeArabic(message);
+  const spendingVerb = "(?:صرفت|صرفنا|انفقت|انفقنا|دفعت|دفعنا)";
+  const amountQuestion = "(?:كام|كم)";
+  const spendingQuestion = `(?:${spendingVerb}\\s+${amountQuestion}|${amountQuestion}\\s+${spendingVerb})`;
+  const expenseWords = "(?:(?:ال)?مصروفات|(?:ال)?مصاريف|انفاق|الصرف)";
+  const week = "(?:ال)?اسبوع";
+  const month = "(?:ال)?شهر";
+
+  if (
+    new RegExp(`^(?:(?:انا|احنا)\\s+)?${spendingQuestion}\\s+(?:في\\s+)?${week}\\s+(?:ده|الحالي)$`).test(normalized)
+    || new RegExp(`^(?:(?:اجمالي|مجموع)\\s+)?${expenseWords}\\s+(?:في\\s+)?${week}\\s+(?:ده|الحالي)$`).test(normalized)
+  ) {
+    return "this_week";
+  }
+  if (
+    new RegExp(`^(?:(?:انا|احنا)\\s+)?${spendingQuestion}\\s+(?:في\\s+)?${week}\\s+(?:اللي\\s+فات|الماضي|السابق)$`).test(normalized)
+    || new RegExp(`^(?:(?:اجمالي|مجموع)\\s+)?${expenseWords}\\s+(?:في\\s+)?${week}\\s+(?:اللي\\s+فات|الماضي|السابق)$`).test(normalized)
+  ) {
+    return "last_week";
+  }
+  if (
+    new RegExp(`^(?:(?:انا|احنا)\\s+)?${spendingQuestion}\\s+(?:في\\s+)?${month}\\s+(?:ده|الحالي)$`).test(normalized)
+    || new RegExp(`^(?:(?:اجمالي|مجموع)\\s+)?${expenseWords}\\s+(?:في\\s+)?${month}\\s+(?:ده|الحالي)$`).test(normalized)
+  ) {
+    return "this_month";
+  }
+  if (
+    new RegExp(`^(?:(?:انا|احنا)\\s+)?${spendingQuestion}\\s+(?:في\\s+)?${month}\\s+(?:اللي\\s+فات|الماضي|السابق)$`).test(normalized)
+    || new RegExp(`^(?:(?:اجمالي|مجموع)\\s+)?${expenseWords}\\s+(?:في\\s+)?${month}\\s+(?:اللي\\s+فات|الماضي|السابق)$`).test(normalized)
+  ) {
+    return "last_month";
+  }
+  return null;
 }
 
 export function isExpenseTotalCorrectionRequest(message: string): boolean {
