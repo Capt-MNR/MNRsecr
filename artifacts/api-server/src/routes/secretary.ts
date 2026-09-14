@@ -28,6 +28,7 @@ import {
   persistedApprovalArgs,
 } from "../lib/approval-schemas";
 import { configuredProvider } from "../lib/phase2";
+import { recordResolverShadow } from "../lib/entity-resolver";
 import {
   classifySecretaryError,
   errorLogFields,
@@ -249,6 +250,7 @@ router.post("/turns", async (req, res): Promise<void> => {
 
   try {
     const currentRequestId = requestId(req);
+    await recordResolverShadow(identity, parsed.data.message);
     req.log.info({
       requestId: currentRequestId,
       provider: configuredProvider(),

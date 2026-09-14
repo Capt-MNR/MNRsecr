@@ -1,0 +1,644 @@
+{
+  "datasetVersion": 1,
+  "providerMode": "gemini",
+  "label": "before",
+  "dryRun": true,
+  "generatedAt": "2026-09-14T12:39:11.032Z",
+  "summary": {
+    "totalCases": 5,
+    "evaluatedCases": 5,
+    "providerErrors": 0,
+    "contextNotProvided": 0,
+    "runnerErrors": 0,
+    "intentAccuracyPercent": 60,
+    "toolSelectionAccuracyPercent": 100,
+    "clarificationAccuracyPercent": 80,
+    "noWriteViolations": 0,
+    "totalLogicalLlmCalls": 13,
+    "totalHttpAttempts": 13,
+    "fallbackCases": 0,
+    "totalInputTokens": 46517,
+    "totalOutputTokens": 435,
+    "totalTokens": 46952,
+    "totalCachedTokens": 0,
+    "cacheHitCases": 0,
+    "cacheMissCases": 5,
+    "totalRequestBytes": 216254,
+    "averageLatencyMs": 7087,
+    "latencyP50Ms": 4850,
+    "latencyP95Ms": 17971,
+    "averageConversationChars": 690,
+    "rowCountChanges": 0
+  },
+  "cases": [
+    {
+      "id": "A01",
+      "category": "expense_intent",
+      "message": "دفعت لمحمد 7500",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": [
+          "find_person",
+          "record_expense"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": null,
+      "actualTool": "find_person",
+      "actualTools": [
+        "find_person"
+      ],
+      "toolArguments": [
+        {
+          "name": "find_person",
+          "arguments": {
+            "name": "محمد"
+          },
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": false,
+      "logicalLlmCalls": 2,
+      "actualHttpAttempts": 2,
+      "httpAttemptsByProvider": {
+        "gemini": 2
+      },
+      "provider": "gemini",
+      "model": "gemini-3.1-flash-lite",
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 3826,
+      "tokenUsage": [
+        {
+          "promptTokenCount": 2934,
+          "candidatesTokenCount": 16,
+          "totalTokenCount": 2950,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 2934
+            }
+          ],
+          "serviceTier": "standard"
+        },
+        {
+          "promptTokenCount": 2971,
+          "candidatesTokenCount": 56,
+          "totalTokenCount": 3027,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 2971
+            }
+          ],
+          "serviceTier": "standard"
+        }
+      ],
+      "inputTokens": 5905,
+      "outputTokens": 72,
+      "totalTokens": 5977,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": true,
+      "requestBytesByProvider": {
+        "gemini": 28373
+      },
+      "maxRequestBytes": 14389,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 5229,
+      "toolDefinitionsCount": 12,
+      "maxConversationChars": 455,
+      "rowCountsBefore": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountsAfter": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountChanged": false,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": false,
+      "toolSelectionMatch": true,
+      "clarificationMatch": true
+    },
+    {
+      "id": "B01",
+      "category": "create_person",
+      "message": "أضف محمد كشخص",
+      "expected": {
+        "intent": "create_person",
+        "primaryTool": "create_person",
+        "acceptableTools": [
+          "create_person"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": "create_person",
+      "actualTool": "find_person",
+      "actualTools": [
+        "find_person",
+        "create_person"
+      ],
+      "toolArguments": [
+        {
+          "name": "find_person",
+          "arguments": {
+            "name": "محمد"
+          },
+          "dryRun": true
+        },
+        {
+          "name": "create_person",
+          "arguments": {
+            "name": "محمد"
+          },
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": false,
+      "logicalLlmCalls": 3,
+      "actualHttpAttempts": 3,
+      "httpAttemptsByProvider": {
+        "gemini": 3
+      },
+      "provider": "gemini",
+      "model": "gemini-3.1-flash-lite",
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 17971,
+      "tokenUsage": [
+        {
+          "promptTokenCount": 2164,
+          "candidatesTokenCount": 16,
+          "totalTokenCount": 2180,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 2164
+            }
+          ],
+          "serviceTier": "standard"
+        },
+        {
+          "promptTokenCount": 2201,
+          "candidatesTokenCount": 16,
+          "totalTokenCount": 2217,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 2201
+            }
+          ],
+          "serviceTier": "standard"
+        },
+        {
+          "promptTokenCount": 2229,
+          "candidatesTokenCount": 33,
+          "totalTokenCount": 2262,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 2229
+            }
+          ],
+          "serviceTier": "standard"
+        }
+      ],
+      "inputTokens": 6594,
+      "outputTokens": 65,
+      "totalTokens": 6659,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": true,
+      "requestBytesByProvider": {
+        "gemini": 33639
+      },
+      "maxRequestBytes": 11594,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 2056,
+      "toolDefinitionsCount": 6,
+      "maxConversationChars": 818,
+      "rowCountsBefore": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountsAfter": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountChanged": false,
+      "approvalReached": false,
+      "wouldSelectWriteTool": true,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": true,
+      "toolSelectionMatch": true,
+      "clarificationMatch": true
+    },
+    {
+      "id": "C01",
+      "category": "ambiguous",
+      "message": "محمد",
+      "expected": {
+        "intent": "clarification",
+        "primaryTool": "final_response",
+        "acceptableTools": [
+          "final_response",
+          "find_person"
+        ],
+        "clarification": true,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": null,
+      "actualTool": "find_person",
+      "actualTools": [
+        "find_person"
+      ],
+      "toolArguments": [
+        {
+          "name": "find_person",
+          "arguments": {
+            "name": "محمد"
+          },
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": false,
+      "logicalLlmCalls": 2,
+      "actualHttpAttempts": 2,
+      "httpAttemptsByProvider": {
+        "gemini": 2
+      },
+      "provider": "gemini",
+      "model": "gemini-3.1-flash-lite",
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 3785,
+      "tokenUsage": [
+        {
+          "promptTokenCount": 4198,
+          "candidatesTokenCount": 16,
+          "totalTokenCount": 4214,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 4198
+            }
+          ],
+          "serviceTier": "standard"
+        },
+        {
+          "promptTokenCount": 4235,
+          "candidatesTokenCount": 37,
+          "totalTokenCount": 4272,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 4235
+            }
+          ],
+          "serviceTier": "standard"
+        }
+      ],
+      "inputTokens": 8433,
+      "outputTokens": 53,
+      "totalTokens": 8486,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": true,
+      "requestBytesByProvider": {
+        "gemini": 38137
+      },
+      "maxRequestBytes": 19271,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 10118,
+      "toolDefinitionsCount": 29,
+      "maxConversationChars": 444,
+      "rowCountsBefore": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountsAfter": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountChanged": false,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": false,
+      "toolSelectionMatch": true,
+      "clarificationMatch": false
+    },
+    {
+      "id": "D01",
+      "category": "expense_with_project",
+      "message": "دفعت لمحمد 7500 على مشروع التشطيبات",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": [
+          "find_person",
+          "find_project",
+          "record_expense"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": "expense",
+      "actualTool": "find_person",
+      "actualTools": [
+        "find_person",
+        "find_project",
+        "record_expense"
+      ],
+      "toolArguments": [
+        {
+          "name": "find_person",
+          "arguments": {
+            "name": "محمد"
+          },
+          "dryRun": true
+        },
+        {
+          "name": "find_project",
+          "arguments": {
+            "name": "التشطيبات"
+          },
+          "dryRun": true
+        },
+        {
+          "name": "record_expense",
+          "arguments": {
+            "currency": "EGP",
+            "description": "مشروع التشطيبات",
+            "amountMinor": 750000
+          },
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": false,
+      "logicalLlmCalls": 3,
+      "actualHttpAttempts": 3,
+      "httpAttemptsByProvider": {
+        "gemini": 3
+      },
+      "provider": "gemini",
+      "model": "gemini-3.1-flash-lite",
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 5004,
+      "tokenUsage": [
+        {
+          "promptTokenCount": 4211,
+          "candidatesTokenCount": 35,
+          "totalTokenCount": 4246,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 4211
+            }
+          ],
+          "serviceTier": "standard"
+        },
+        {
+          "promptTokenCount": 4295,
+          "candidatesTokenCount": 37,
+          "totalTokenCount": 4332,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 4295
+            }
+          ],
+          "serviceTier": "standard"
+        },
+        {
+          "promptTokenCount": 4344,
+          "candidatesTokenCount": 108,
+          "totalTokenCount": 4452,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 4344
+            }
+          ],
+          "serviceTier": "standard"
+        }
+      ],
+      "inputTokens": 12850,
+      "outputTokens": 180,
+      "totalTokens": 13030,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": true,
+      "requestBytesByProvider": {
+        "gemini": 58154
+      },
+      "maxRequestBytes": 19836,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 10118,
+      "toolDefinitionsCount": 29,
+      "maxConversationChars": 891,
+      "rowCountsBefore": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountsAfter": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountChanged": false,
+      "approvalReached": false,
+      "wouldSelectWriteTool": true,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": true,
+      "toolSelectionMatch": true,
+      "clarificationMatch": true
+    },
+    {
+      "id": "F01",
+      "category": "negative_guard",
+      "message": "أضف محمد كشخص من غير ما تسجل أي مصروف",
+      "expected": {
+        "intent": "create_person",
+        "primaryTool": "create_person",
+        "acceptableTools": [
+          "create_person"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": "create_person",
+      "actualTool": "find_person",
+      "actualTools": [
+        "find_person",
+        "create_person"
+      ],
+      "toolArguments": [
+        {
+          "name": "find_person",
+          "arguments": {
+            "name": "محمد"
+          },
+          "dryRun": true
+        },
+        {
+          "name": "create_person",
+          "arguments": {
+            "name": "محمد"
+          },
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": false,
+      "logicalLlmCalls": 3,
+      "actualHttpAttempts": 3,
+      "httpAttemptsByProvider": {
+        "gemini": 3
+      },
+      "provider": "gemini",
+      "model": "gemini-3.1-flash-lite",
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 4850,
+      "tokenUsage": [
+        {
+          "promptTokenCount": 4211,
+          "candidatesTokenCount": 16,
+          "totalTokenCount": 4227,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 4211
+            }
+          ],
+          "serviceTier": "standard"
+        },
+        {
+          "promptTokenCount": 4248,
+          "candidatesTokenCount": 16,
+          "totalTokenCount": 4264,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 4248
+            }
+          ],
+          "serviceTier": "standard"
+        },
+        {
+          "promptTokenCount": 4276,
+          "candidatesTokenCount": 33,
+          "totalTokenCount": 4309,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 4276
+            }
+          ],
+          "serviceTier": "standard"
+        }
+      ],
+      "inputTokens": 12735,
+      "outputTokens": 65,
+      "totalTokens": 12800,
+      "cachedTokens": 0,
+      "cacheHit": false,
+      "cacheMiss": true,
+      "requestBytesByProvider": {
+        "gemini": 57951
+      },
+      "maxRequestBytes": 19698,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 10118,
+      "toolDefinitionsCount": 29,
+      "maxConversationChars": 842,
+      "rowCountsBefore": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountsAfter": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountChanged": false,
+      "approvalReached": false,
+      "wouldSelectWriteTool": true,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": true,
+      "toolSelectionMatch": true,
+      "clarificationMatch": true
+    }
+  ]
+}

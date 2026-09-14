@@ -39,6 +39,9 @@ import {
   isExpenseTotalCorrectionRequest,
   isGlobalExpenseTotalRequest,
 } from "./expense-report";
+import { budgetContext } from "./context-budgeter";
+import { featureFlags } from "./feature-flags";
+import { providerOrder } from "./provider-router";
 
 export type Phase2TurnInput = {
   message: string;
@@ -650,11 +653,21 @@ function scopedToolDefinitions(
   scope: ToolScope | undefined,
   finalResponseOnly = false,
 ): ToolDefinition[] {
+  let definitions: ToolDefinition[];
   if (finalResponseOnly) {
-    return phase2Tools.filter((definition) => definition.name === "final_response");
+    definitions = phase2Tools.filter((definition) => definition.name === "final_response");
+  } else if (!scope || scope.isFull) {
+    definitions = phase2Tools;
+  } else {
+    definitions = phase2Tools.filter((definition) => scope.allowedToolNames.has(definition.name));
   }
-  if (!scope || scope.isFull) return phase2Tools;
-  return phase2Tools.filter((definition) => scope.allowedToolNames.has(definition.name));
+  if (!featureFlags.contextBudgeter()) return definitions;
+  return budgetContext([], definitions).tools as ToolDefinition[];
+}
+
+function budgetMessages(messages: ConversationMessage[]): ConversationMessage[] {
+  if (!featureFlags.contextBudgeter()) return messages;
+  return budgetContext(messages, []).messages as ConversationMessage[];
 }
 
 async function findPeople(identity: Identity, name: string): Promise<Person[]> {
@@ -1636,7 +1649,7 @@ function compactToolResultForPrompt(toolResult: ToolResult): string {
 }
 
 function toGeminiContents(messages: ConversationMessage[]): Array<{ role: string; parts: GeminiPart[] }> {
-  return messages.map((message) => {
+  return budgetMessages(messages).map((message) => {
     if (message.role === "system") {
       return { role: "user", parts: [{ text: `[سياق موثوق من التطبيق]\n${message.text ?? ""}` }] };
     }
@@ -2079,7 +2092,7 @@ export class GroqModelGateway implements ModelGateway {
         role: "system",
         content: `${systemInstruction}\n${requestGuidance}`,
       },
-      ...messages.map((message) => {
+      ...budgetMessages(messages).map((message) => {
         if (message.role === "assistant") {
           return {
             role: "assistant",
@@ -2235,7 +2248,7 @@ export class MistralModelGateway implements ModelGateway {
         role: "system",
         content: `${systemInstruction}\n${requestGuidance}`,
       },
-      ...messages.map((message) => {
+      ...budgetMessages(messages).map((message) => {
         if (message.role === "assistant") {
           return {
             role: "assistant",
@@ -3060,7 +3073,7 @@ export class CohereModelGateway implements ModelGateway {
         role: "system",
         content: `${systemInstruction}\n${requestGuidance}`,
       },
-      ...messages.map((message) => {
+      ...budgetMessages(messages).map((message) => {
         if (message.role === "assistant") {
           return {
             role: "assistant",
@@ -3214,18 +3227,33 @@ function asProvider(value: string | undefined): ProviderName | undefined {
 }
 
 export function configuredProviderOrder(): ProviderName[] {
+  const fallbackPreference = featureFlags.providerRouting()
+    ? providerOrder()
+    : (["groq", "gemini", "mistral", "cohere"] as ProviderName[]);
+  const firstConfiguredByRouting = fallbackPreference.find((provider) => (
+    provider === "groq"
+      ? Boolean(process.env.GROQ_API_KEY)
+      : provider === "gemini"
+        ? Boolean(process.env.GEMINI_API_KEY)
+        : provider === "mistral"
+          ? Boolean(process.env.MISTRAL_API_KEY)
+          : Boolean(process.env.COHERE_API_KEY)
+  ));
+  const originalDefaultProvider = process.env.GEMINI_API_KEY
+    ? "gemini"
+    : process.env.GROQ_API_KEY
+      ? "groq"
+      : process.env.MISTRAL_API_KEY
+        ? "mistral"
+        : process.env.COHERE_API_KEY
+          ? "cohere"
+          : undefined;
   const primary = asProvider(process.env.AI_PRIMARY_PROVIDER)
     ?? asProvider(process.env.AI_PROVIDER)
-    ?? (process.env.GEMINI_API_KEY
-      ? "gemini"
-      : process.env.GROQ_API_KEY
-        ? "groq"
-        : process.env.MISTRAL_API_KEY
-          ? "mistral"
-          : process.env.COHERE_API_KEY
-            ? "cohere"
-          : undefined);
-  const autoFallbacks = (["groq", "gemini", "mistral", "cohere"] as ProviderName[])
+    ?? (featureFlags.providerRouting() ? firstConfiguredByRouting : originalDefaultProvider);
+  const autoFallbacks = (featureFlags.providerRouting()
+    ? fallbackPreference
+    : (["groq", "gemini", "mistral", "cohere"] as ProviderName[]))
     .filter((provider) => provider !== primary)
     .filter((provider) => (
       provider === "groq"
