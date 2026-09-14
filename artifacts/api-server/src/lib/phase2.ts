@@ -151,6 +151,9 @@ export type GatewayRequestMetrics = {
   toolDefinitionsChars: number;
   toolDefinitionsCount: number;
   maxConversationChars: number;
+  cacheHit?: boolean;
+  cacheMiss?: boolean;
+  cachedTokens?: number;
 };
 
 function logLlmFailure(
@@ -203,6 +206,9 @@ export type ProviderTrace = {
   toolDefinitionsChars?: number;
   toolDefinitionsCount?: number;
   maxConversationChars?: number;
+  cacheHit?: boolean;
+  cacheMiss?: boolean;
+  cachedTokens?: number;
 };
 
 type GeminiResponse = {
@@ -214,7 +220,12 @@ type GeminiResponse = {
     promptTokenCount?: number;
     candidatesTokenCount?: number;
     totalTokenCount?: number;
+    cachedContentTokenCount?: number;
   };
+};
+
+type GeminiCachedContentResponse = {
+  name?: string;
 };
 
 type ToolResult = {
@@ -229,6 +240,17 @@ const MAX_GROQ_HTTP_ATTEMPTS = 1;
 const MAX_CIRCUIT_COOLDOWN_MS = 15 * 60_000;
 const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.6-flash";
 const GEMINI_FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL ?? "gemini-3-flash-preview";
+const parsedGeminiCacheTtlSeconds = Number.parseInt(
+  process.env.GEMINI_CONTEXT_CACHE_TTL_SECONDS ?? "3600",
+  10,
+);
+const GEMINI_CONTEXT_CACHE_TTL_SECONDS = Number.isFinite(parsedGeminiCacheTtlSeconds)
+  && parsedGeminiCacheTtlSeconds > 0
+  ? parsedGeminiCacheTtlSeconds
+  : 3600;
+const GEMINI_CONTEXT_CACHE_TTL_MS = GEMINI_CONTEXT_CACHE_TTL_SECONDS * 1000;
+const GEMINI_CONTEXT_CACHE_EXPIRY_SAFETY_MS = 10_000;
+const GEMINI_CONTEXT_CACHE_FAILURE_COOLDOWN_MS = 60_000;
 const GROQ_MODEL = process.env.GROQ_MODEL ?? "openai/gpt-oss-20b";
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const MISTRAL_MODEL = process.env.MISTRAL_MODEL ?? "mistral-small-latest";
@@ -1570,6 +1592,9 @@ function createGatewayMetrics(): GatewayRequestMetrics {
     toolDefinitionsChars: 0,
     toolDefinitionsCount: 0,
     maxConversationChars: 0,
+    cacheHit: false,
+    cacheMiss: false,
+    cachedTokens: 0,
   };
 }
 
@@ -1747,9 +1772,145 @@ export class GeminiModelGateway implements ModelGateway {
   private readonly apiKey = process.env.GEMINI_API_KEY;
   private readonly model = GEMINI_MODEL;
   private activeModel = GEMINI_MODEL;
+  private readonly cachedContents = new Map<string, {
+    name: string;
+    expiresAt: number;
+  }>();
+  private readonly cacheCreationFlights = new Map<string, Promise<string | null>>();
+  private cacheUnavailableUntil = 0;
 
   get modelName(): string {
     return this.activeModel;
+  }
+
+  private cachedContentKey(
+    model: string,
+    systemText: string,
+    toolDefinitions: unknown[],
+    finalResponseOnly: boolean,
+  ): string {
+    return JSON.stringify({
+      model,
+      systemText,
+      toolDefinitions,
+      finalResponseOnly,
+    });
+  }
+
+  private invalidateCachedContent(cacheKey: string): void {
+    this.cachedContents.delete(cacheKey);
+  }
+
+  private async createCachedContent(
+    model: string,
+    systemText: string,
+    toolDefinitions: unknown[],
+    cacheKey: string,
+    requestId: string,
+  ): Promise<string | null> {
+    const existingFlight = this.cacheCreationFlights.get(cacheKey);
+    if (existingFlight) return existingFlight;
+
+    const creation = (async () => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10_000);
+      const startedAt = Date.now();
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/cachedContents?key=${encodeURIComponent(this.apiKey ?? "")}`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              model: model.startsWith("models/") ? model : `models/${model}`,
+              systemInstruction: { parts: [{ text: systemText }] },
+              tools: [{ functionDeclarations: toolDefinitions }],
+              toolConfig: { functionCallingConfig: { mode: "AUTO" } },
+              ttl: `${GEMINI_CONTEXT_CACHE_TTL_SECONDS}s`,
+            }),
+            signal: controller.signal,
+          },
+        );
+        const raw = await response.text();
+        if (!response.ok) {
+          this.cacheUnavailableUntil = Date.now() + GEMINI_CONTEXT_CACHE_FAILURE_COOLDOWN_MS;
+          logger.warn({
+            requestId,
+            provider: this.provider,
+            model,
+            status: response.status,
+            latencyMs: Date.now() - startedAt,
+          }, "gemini context cache unavailable");
+          return null;
+        }
+        const parsed = JSON.parse(raw) as GeminiCachedContentResponse;
+        if (!parsed.name) {
+          logger.warn({
+            requestId,
+            provider: this.provider,
+            model,
+            latencyMs: Date.now() - startedAt,
+          }, "gemini context cache returned no name");
+          return null;
+        }
+        this.cachedContents.set(cacheKey, {
+          name: parsed.name,
+          expiresAt: Date.now() + GEMINI_CONTEXT_CACHE_TTL_MS - GEMINI_CONTEXT_CACHE_EXPIRY_SAFETY_MS,
+        });
+        logger.info({
+          requestId,
+          provider: this.provider,
+          model,
+          cacheName: parsed.name,
+          ttlSeconds: GEMINI_CONTEXT_CACHE_TTL_SECONDS,
+          latencyMs: Date.now() - startedAt,
+        }, "gemini context cache created");
+        return parsed.name;
+      } catch (error) {
+        this.cacheUnavailableUntil = Date.now() + GEMINI_CONTEXT_CACHE_FAILURE_COOLDOWN_MS;
+        logger.warn({
+          requestId,
+          provider: this.provider,
+          model,
+          error: error instanceof Error ? error.message : String(error),
+        }, "gemini context cache creation failed");
+        return null;
+      } finally {
+        clearTimeout(timeout);
+        this.cacheCreationFlights.delete(cacheKey);
+      }
+    })();
+    this.cacheCreationFlights.set(cacheKey, creation);
+    return creation;
+  }
+
+  private async resolveCachedContent(
+    model: string,
+    systemText: string,
+    toolDefinitions: unknown[],
+    finalResponseOnly: boolean,
+    requestId: string,
+    metrics?: GatewayRequestMetrics,
+  ): Promise<{ name?: string; cacheKey: string; hit: boolean }> {
+    const cacheKey = this.cachedContentKey(model, systemText, toolDefinitions, finalResponseOnly);
+    const cached = this.cachedContents.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      if (metrics) metrics.cacheHit = true;
+      return { name: cached.name, cacheKey, hit: true };
+    }
+    this.cachedContents.delete(cacheKey);
+    if (metrics) metrics.cacheMiss = true;
+    if (this.cacheUnavailableUntil > Date.now()) {
+      return { cacheKey, hit: false };
+    }
+    const name = await this.createCachedContent(
+      model,
+      systemText,
+      toolDefinitions,
+      cacheKey,
+      requestId,
+    );
+    return { name: name ?? undefined, cacheKey, hit: false };
   }
 
   async generate(messages: ConversationMessage[], context: GatewayCallContext): Promise<GatewayResponse> {
@@ -1757,13 +1918,6 @@ export class GeminiModelGateway implements ModelGateway {
     const systemText = `${systemInstruction}\n${requestGuidance}`;
     const contents = toGeminiContents(messages);
     const toolDefinitions = toGeminiTools(context.toolScope, context.finalResponseOnly);
-    const requestBody = JSON.stringify({
-      systemInstruction: { parts: [{ text: systemText }] },
-      contents,
-      tools: [{ functionDeclarations: toolDefinitions }],
-      toolConfig: { functionCallingConfig: { mode: "AUTO" } },
-      generationConfig: { temperature: 0.15, maxOutputTokens: 8192 },
-    });
     let lastError: Error | null = null;
     const models = this.model === GEMINI_FALLBACK_MODEL
       ? [this.model]
@@ -1774,69 +1928,121 @@ export class GeminiModelGateway implements ModelGateway {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 25_000);
       const startedAt = Date.now();
-      recordProviderRequest(context, "gemini", {
-        requestBytes: Buffer.byteLength(requestBody),
-        systemPromptChars: systemText.length,
-        toolDefinitionsChars: JSON.stringify(toolDefinitions).length,
-        toolDefinitionsCount: toolDefinitions.length,
-        conversationChars: JSON.stringify(contents).length,
-      });
-      logger.info({
-        requestId: context.requestId,
-        provider: this.provider,
-        model,
-        llmCall: context.callNumber,
-        requestBytes: Buffer.byteLength(requestBody),
-        systemPromptChars: systemText.length,
-        toolDefinitionsChars: JSON.stringify(toolDefinitions).length,
-        toolDefinitionsCount: toolDefinitions.length,
-        conversationChars: JSON.stringify(contents).length,
-      }, "agent llm call started");
       try {
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(this.apiKey)}`,
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: requestBody,
-            signal: controller.signal,
-          },
-        );
-        const raw = await response.text();
-        if (response.ok) {
-          const parsed = JSON.parse(raw) as GeminiResponse;
-          const parts = parsed.candidates?.[0]?.content?.parts ?? [];
-          this.activeModel = model;
-          const responseResult = {
-            text: parts.map((part) => part.text ?? "").join("").trim(),
-            toolCalls: parts.flatMap((part, index) => part.functionCall
-              ? [{
-                  id: `gemini-call-${index}`,
-                  name: part.functionCall.name,
-                  args: part.functionCall.args ?? {},
-                  thoughtSignature: part.functionCall.thoughtSignature ?? part.thoughtSignature,
-                }]
-              : []),
-            usage: parsed.usageMetadata,
+        // Phase2 always supplies metrics. Keeping direct gateway calls without
+        // metrics uncached preserves the gateway's existing adapter contract
+        // for callers and tests that exercise provider serialization alone.
+        const cache = context.metrics
+          ? await this.resolveCachedContent(
+              model,
+              systemText,
+              toolDefinitions,
+              context.finalResponseOnly ?? false,
+              context.requestId,
+              context.metrics,
+            )
+          : { name: undefined, cacheKey: "", hit: false };
+        let useCachedContent = Boolean(cache.name);
+        let cacheFallbackAttempted = false;
+
+        while (true) {
+          const requestPayload = {
+            ...(useCachedContent
+              ? { cachedContent: cache.name }
+              : {
+                  systemInstruction: { parts: [{ text: systemText }] },
+                  tools: [{ functionDeclarations: toolDefinitions }],
+                  toolConfig: { functionCallingConfig: { mode: "AUTO" } },
+                }),
+            contents,
+            generationConfig: { temperature: 0.15, maxOutputTokens: 8192 },
           };
+          const requestBody = JSON.stringify(requestPayload);
+          recordProviderRequest(context, "gemini", {
+            requestBytes: Buffer.byteLength(requestBody),
+            systemPromptChars: systemText.length,
+            toolDefinitionsChars: JSON.stringify(toolDefinitions).length,
+            toolDefinitionsCount: toolDefinitions.length,
+            conversationChars: JSON.stringify(contents).length,
+          });
           logger.info({
             requestId: context.requestId,
             provider: this.provider,
             model,
             llmCall: context.callNumber,
-            toolCalls: responseResult.toolCalls.length,
-            latencyMs: Date.now() - startedAt,
-          }, "agent llm call completed");
-          return responseResult;
+            requestBytes: Buffer.byteLength(requestBody),
+            systemPromptChars: systemText.length,
+            toolDefinitionsChars: JSON.stringify(toolDefinitions).length,
+            toolDefinitionsCount: toolDefinitions.length,
+            conversationChars: JSON.stringify(contents).length,
+            cacheHit: useCachedContent && cache.hit,
+            cacheMiss: context.metrics?.cacheMiss ?? false,
+          }, "agent llm call started");
+
+          const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(this.apiKey)}`,
+            {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: requestBody,
+              signal: controller.signal,
+            },
+          );
+          const raw = await response.text();
+          if (response.ok) {
+            const parsed = JSON.parse(raw) as GeminiResponse;
+            const parts = parsed.candidates?.[0]?.content?.parts ?? [];
+            const cachedTokens = parsed.usageMetadata?.cachedContentTokenCount ?? 0;
+            if (context.metrics) {
+              context.metrics.cachedTokens = Math.max(context.metrics.cachedTokens ?? 0, cachedTokens);
+            }
+            this.activeModel = model;
+            const responseResult = {
+              text: parts.map((part) => part.text ?? "").join("").trim(),
+              toolCalls: parts.flatMap((part, index) => part.functionCall
+                ? [{
+                    id: `gemini-call-${index}`,
+                    name: part.functionCall.name,
+                    args: part.functionCall.args ?? {},
+                    thoughtSignature: part.functionCall.thoughtSignature ?? part.thoughtSignature,
+                  }]
+                : []),
+              usage: parsed.usageMetadata,
+            };
+            logger.info({
+              requestId: context.requestId,
+              provider: this.provider,
+              model,
+              llmCall: context.callNumber,
+              toolCalls: responseResult.toolCalls.length,
+              cacheHit: useCachedContent && cache.hit,
+              cachedTokens,
+              latencyMs: Date.now() - startedAt,
+            }, "agent llm call completed");
+            return responseResult;
+          }
+          if (useCachedContent && !cacheFallbackAttempted && [400, 404].includes(response.status)) {
+            this.invalidateCachedContent(cache.cacheKey);
+            useCachedContent = false;
+            cacheFallbackAttempted = true;
+            logger.warn({
+              requestId: context.requestId,
+              provider: this.provider,
+              model,
+              status: response.status,
+            }, "gemini context cache rejected; retrying without cache");
+            continue;
+          }
+          lastError = providerResponseError(
+            "gemini",
+            response.status,
+            raw,
+            parseRetryAfter(response.headers.get("retry-after")),
+          );
+          if (response.status === 429) throw lastError;
+          if (![404, 429, 500, 502, 503, 504].includes(response.status)) throw lastError;
+          break;
         }
-        lastError = providerResponseError(
-          "gemini",
-          response.status,
-          raw,
-          parseRetryAfter(response.headers.get("retry-after")),
-        );
-        if (response.status === 429) throw lastError;
-        if (![404, 429, 500, 502, 503, 504].includes(response.status)) throw lastError;
       } catch (error) {
         lastError = error instanceof SecretaryError
           ? error
@@ -2282,6 +2488,9 @@ export class FailoverModelGateway implements ModelGateway {
         toolDefinitionsChars: metrics.toolDefinitionsChars,
         toolDefinitionsCount: metrics.toolDefinitionsCount,
         maxConversationChars: metrics.maxConversationChars,
+        cacheHit: metrics.cacheHit,
+        cacheMiss: metrics.cacheMiss,
+        cachedTokens: metrics.cachedTokens,
       } : {}),
     };
   }
