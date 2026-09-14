@@ -14,3 +14,9 @@ Keep real-provider tests as short smoke tests; cover multi-turn behavior with th
 **Why:** Provider capacity and rate limits can fail a later call independently of application behavior, making long real-provider suites flaky while still leaving the deterministic conversation contract untested if it is omitted.
 
 **How to apply:** Use one representative provider request to validate gateway wiring and response compaction, then exercise corrections, restarts, duplicate names, and tenant isolation without consuming provider quota.
+
+For sequential optimization benchmarks, a clean baseline does not establish provider stability for the later branches; each branch must be judged independently, and any later provider error invalidates that branch's aggregate comparison.
+
+**Why:** A Gemini A–E baseline completed without errors, but rate limits appeared when the same dataset was repeated across optimization branches.
+
+**How to apply:** Preserve each raw branch report, stop treating aggregate deltas as comparable after the first provider error, and avoid retrying the whole matrix until capacity is known to persist across the full sequence.
