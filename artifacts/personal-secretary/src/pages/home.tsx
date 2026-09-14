@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import {
   getGetTodayContextQueryKey,
+  getGetSecretaryOperationQueryKey,
   getHealthCheckQueryKey,
   useApproveSecretaryOperation,
   useCreateTurn,
@@ -30,6 +31,7 @@ import {
 import type { ConversationDetail } from '@workspace/api-client-react';
 import { classifySecretaryError } from '../lib/secretary-errors';
 import ConversationHistory from '../components/conversation-history';
+import ApprovalForm from '../components/approval-form';
 
 type LocalMessage = {
   id: string;
@@ -39,8 +41,12 @@ type LocalMessage = {
   meta?: string;
   approval?: {
     operationId: string;
+    toolName: string;
+    initialArgs: Record<string, unknown>;
     title: string;
     details: string[];
+    personCandidates?: Array<{ id: string; name: string; status: string }>;
+    projectCandidates?: Array<{ id: string; name: string; status: string }>;
     status: 'pending' | 'executing' | 'completed' | 'rejected' | 'expired' | 'failed';
   };
 };
@@ -101,10 +107,16 @@ function approvalFromAction(action: Record<string, unknown> | undefined): LocalM
     : {};
   return {
     operationId: action.operationId,
+    toolName: typeof action.toolName === 'string' ? action.toolName : 'record_expense',
+    initialArgs: action.args && typeof action.args === 'object'
+      ? action.args as Record<string, unknown>
+      : {},
     title: typeof display.title === 'string' ? display.title : 'تأكيد التغيير',
     details: Array.isArray(display.details)
       ? display.details.filter((detail): detail is string => typeof detail === 'string')
       : [],
+    ...(Array.isArray(action.personCandidates) ? { personCandidates: action.personCandidates as Array<{ id: string; name: string; status: string }> } : {}),
+    ...(Array.isArray(action.projectCandidates) ? { projectCandidates: action.projectCandidates as Array<{ id: string; name: string; status: string }> } : {}),
     status: action.status === 'pending' ? 'pending' : 'pending',
   };
 }
@@ -143,6 +155,9 @@ function Home() {
   const rejectOperation = useRejectSecretaryOperation({
     request: { timeoutMs: 90_000 },
   });
+  const approvalOperationQueries = messages
+    .filter((message) => Boolean(message.approval?.operationId))
+    .map((message) => message.approval!.operationId);
   const context = todayQuery.data?.context;
   const sendErrorMessage = sendError?.category === 'timeout'
     ? 'لم يصل الرد في الوقت المتوقع. قد يكون الطلب ما زال قيد التنفيذ؛ لا تعيد إرسال طلب حفظ الآن، وتحقق من السجلات أولًا.'
@@ -258,14 +273,19 @@ function Home() {
     queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
   }
 
-  function approve(operationId: string) {
+  function approve(operationId: string, args: Record<string, unknown>) {
     if (approveOperation.isPending || rejectOperation.isPending) return;
     setApprovalError(null);
     approveOperation.mutate(
-      { operationId },
+      { operationId, data: { args } },
       {
         onSuccess: handleApprovalResponse,
-        onError: (error) => setApprovalError(classifySecretaryError(error)?.message ?? 'تعذر تنفيذ الموافقة.'),
+        onError: (error) => {
+          setApprovalError(classifySecretaryError(error)?.message ?? 'تعذر تنفيذ الموافقة.');
+          approvalOperationQueries.forEach((id) => {
+            queryClient.invalidateQueries({ queryKey: getGetSecretaryOperationQueryKey(id) });
+          });
+        },
       },
     );
   }
@@ -422,7 +442,7 @@ function Home() {
                           <span>{message.time}</span>
                           {message.meta && <><span>·</span><span>{message.meta}</span></>}
                         </div>
-                        {message.approval && (
+                         {message.approval && (
                           <div
                             className="mt-3 rounded-2xl border border-primary/20 bg-primary/5 p-3 text-right"
                             data-testid={`approval-${message.approval.operationId}`}
@@ -431,37 +451,30 @@ function Home() {
                               <CircleAlert className="mt-0.5 size-4 shrink-0 text-primary" />
                               <div className="min-w-0 flex-1">
                                 <p className="text-sm font-semibold text-foreground">{message.approval.title}</p>
-                                {message.approval.details.length > 0 && (
+                                {message.approval.status !== 'pending' && message.approval.details.length > 0 && (
                                   <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
                                     {message.approval.details.map((detail) => <li key={detail}>{detail}</li>)}
                                   </ul>
                                 )}
                               </div>
                             </div>
-                            {message.approval.status === 'pending' ? (
-                              <div className="mt-3 flex gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => approve(message.approval!.operationId)}
-                                  disabled={approveOperation.isPending || rejectOperation.isPending}
-                                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-colors hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-                                  data-testid={`button-approve-${message.approval.operationId}`}
-                                >
-                                  {approveOperation.isPending ? <LoaderCircle className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
-                                  موافق
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => reject(message.approval!.operationId)}
-                                  disabled={approveOperation.isPending || rejectOperation.isPending}
-                                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-                                  data-testid={`button-reject-${message.approval.operationId}`}
-                                >
-                                  {rejectOperation.isPending ? <LoaderCircle className="size-3.5 animate-spin" /> : <X className="size-3.5" />}
-                                  إلغاء
-                                </button>
-                              </div>
-                            ) : (
+                             {message.approval.status === 'pending' ? (
+                               <ApprovalForm
+                                 operationId={message.approval.operationId}
+                                 toolName={message.approval.toolName}
+                                 initialArgs={message.approval.initialArgs}
+                                 display={{
+                                   title: message.approval.title,
+                                   details: message.approval.details,
+                                 }}
+                                 personCandidates={message.approval.personCandidates}
+                                 projectCandidates={message.approval.projectCandidates}
+                                 busy={approveOperation.isPending || rejectOperation.isPending}
+                                 error={approvalError}
+                                 onConfirm={(args) => approve(message.approval!.operationId, args)}
+                                 onReject={() => reject(message.approval!.operationId)}
+                               />
+                             ) : (
                               <p className="mt-2 text-xs font-medium text-muted-foreground">
                                 {message.approval.status === 'completed' ? 'تم التنفيذ.' : message.approval.status === 'rejected' ? 'تم الإلغاء.' : 'هذه العملية لم تعد قابلة للتنفيذ.'}
                               </p>

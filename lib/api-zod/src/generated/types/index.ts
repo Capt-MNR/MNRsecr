@@ -7,11 +7,18 @@
  */
 
 export * from './actionResult';
+export * from './approvalInput';
+export * from './approvalInputArgs';
+export * from './approvalOperation';
+export * from './approvalOperationArgs';
+export * from './approvalOperationDisplay';
+export * from './approvalOperationStatus';
 export * from './approvalRequest';
 export * from './approvalRequestDisplay';
 export * from './approvalRequestStatus';
 export * from './approvalResponse';
 export * from './approvalResponseStatus';
+export * from './candidate';
 export * from './commitmentRecord';
 export * from './conversationDetail';
 export * from './conversationDetailState';
@@ -27,6 +34,8 @@ export * from './finalResponse';
 export * from './finalResponseGroundedFactsItem';
 export * from './finalResponseGroundedFactsItemType';
 export * from './finalResponseKind';
+export * from './getCandidatesParams';
+export * from './getCandidatesType';
 export * from './healthStatus';
 export * from './listConversationsParams';
 export * from './namedItem';

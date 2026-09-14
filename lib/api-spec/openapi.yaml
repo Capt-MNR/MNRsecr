@@ -125,6 +125,12 @@ paths:
           schema:
             type: string
             format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApprovalInput"
       responses:
         "200":
           description: Approval status or stored operation result
@@ -132,6 +138,37 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApprovalResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Approval operation not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /approvals/{operationId}:
+    get:
+      operationId: getSecretaryOperation
+      tags: [secretary]
+      summary: Get one scoped approval operation for editing
+      parameters:
+        - name: operationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Stored approval operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApprovalOperation"
         "401":
           description: Authentication required
           content:
@@ -241,6 +278,45 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/RecordsResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /candidates:
+    get:
+      operationId: getCandidates
+      tags: [records]
+      summary: Search scoped person or project candidates
+      parameters:
+        - name: type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [person, project]
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        "200":
+          description: Up to ten matching candidates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Candidate"
+        "400":
+          description: Invalid candidate query
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Authentication required
           content:
@@ -527,6 +603,54 @@ components:
         model:
           type: string
       required: [operationId, status, conversationId, assistantMessage, provider, model]
+    ApprovalInput:
+      type: object
+      properties:
+        args:
+          type: object
+          additionalProperties: true
+      additionalProperties: false
+    ApprovalOperation:
+      type: object
+      properties:
+        operationId:
+          type: string
+          format: uuid
+        conversationId:
+          type: ["string", "null"]
+        toolName:
+          type: string
+        args:
+          type: object
+          additionalProperties: true
+        display:
+          type: object
+          properties:
+            title:
+              type: string
+            details:
+              type: array
+              items:
+                type: string
+          required: [title, details]
+        status:
+          type: string
+          enum: [pending, executing, completed, rejected, expired, failed]
+        updatedAt:
+          type: string
+          format: date-time
+      required: [operationId, toolName, args, display, status, updatedAt]
+    Candidate:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        status:
+          type: string
+      required: [id, name, status]
     ReminderSummary:
       type: object
       properties:

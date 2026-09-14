@@ -11,14 +11,22 @@ import {
   saveApprovedOperationTurn,
   type Identity,
 } from "../lib/secretary";
+import { executeStructuredTool } from "../lib/phase2";
 import {
   claimOperation,
   completeOperation,
   failOperation,
+  getOperation,
   rejectOperation,
   type OperationExecutionResult,
   type PendingOperation,
 } from "../lib/secretary-operations";
+import {
+  approvalRequestSchema,
+  approvalOperationIdSchema,
+  approvalSchemaForTool,
+  persistedApprovalArgs,
+} from "../lib/approval-schemas";
 import { configuredProvider } from "../lib/phase2";
 import {
   classifySecretaryError,
@@ -115,6 +123,59 @@ function approvalError(message: string, code: string, status: number): Secretary
   });
 }
 
+function publicOperation(operation: PendingOperation) {
+  return {
+    operationId: operation.operationId,
+    conversationId: operation.conversationId,
+    toolName: operation.toolName,
+    args: operation.args,
+    display: operation.display,
+    status: operation.status,
+    updatedAt: operation.updatedAt.toISOString(),
+  };
+}
+
+async function executeExpenseApproval(
+  identity: Identity,
+  operation: PendingOperation,
+): Promise<OperationExecutionResult> {
+  const args = persistedApprovalArgs(operation.args);
+  const toolResult = await executeStructuredTool(identity, operation.toolName, args, {
+    requestId: `approval-${operation.operationId}`,
+    conversationId: operation.conversationId,
+    approvedOperationId: operation.operationId,
+  });
+  if (!toolResult.ok || toolResult.pendingApproval) {
+    throw new Error(typeof toolResult.error === "string" ? toolResult.error : "تعذر تنفيذ العملية.");
+  }
+  const expense = toolResult.expense as Record<string, unknown> | undefined;
+  return {
+    conversationId: operation.conversationId ?? "",
+    assistantMessage: "تمام، سجلت المصروف بنجاح.",
+    action: {
+      type: "expense_recorded",
+      operationId: operation.operationId,
+      ...(expense ?? {}),
+      args,
+    },
+    provider: "server",
+    model: "approved-operation",
+  };
+}
+
+function resultWithActualArgs(
+  result: OperationExecutionResult,
+  operation: PendingOperation,
+): OperationExecutionResult {
+  return {
+    ...result,
+    action: {
+      ...(result.action ?? {}),
+      args: persistedApprovalArgs(operation.args),
+    },
+  };
+}
+
 router.get("/today", async (req, res): Promise<void> => {
   const identity = getIdentity(req);
   if (!identity) {
@@ -130,6 +191,33 @@ router.get("/today", async (req, res): Promise<void> => {
   try {
     const context = await persistence.getTodayContext(identity);
     res.json(GetTodayContextResponse.parse({ context }));
+  } catch (error) {
+    sendError(req, res, error);
+  }
+});
+
+router.get("/approvals/:operationId", async (req, res): Promise<void> => {
+  const identity = getIdentity(req);
+  if (!identity) {
+    sendError(req, res, new SecretaryError("Authentication required.", {
+      status: 401,
+      category: "authentication_error",
+      code: "AUTHENTICATION_REQUIRED",
+      retryable: false,
+    }), "warn");
+    return;
+  }
+  if (!approvalOperationIdSchema.safeParse(req.params.operationId).success) {
+    sendError(req, res, approvalError("Pending operation was not found.", "APPROVAL_NOT_FOUND", 404));
+    return;
+  }
+  try {
+    const operation = await getOperation(identity, req.params.operationId);
+    if (!operation) {
+      sendError(req, res, approvalError("Pending operation was not found.", "APPROVAL_NOT_FOUND", 404));
+      return;
+    }
+    res.json(publicOperation(operation));
   } catch (error) {
     sendError(req, res, error);
   }
@@ -198,7 +286,36 @@ router.post("/approvals/:operationId/approve", async (req, res): Promise<void> =
 
   const operationId = req.params.operationId;
   try {
-    const claim = await claimOperation(identity, operationId);
+    if (!approvalOperationIdSchema.safeParse(operationId).success) {
+      sendError(req, res, approvalError("Pending operation was not found.", "APPROVAL_NOT_FOUND", 404));
+      return;
+    }
+    const body = approvalRequestSchema.safeParse(req.body ?? {});
+    if (!body.success) {
+      sendError(req, res, approvalError("بيانات الموافقة غير صالحة.", "INVALID_APPROVAL_BODY", 400), "warn");
+      return;
+    }
+    let argsOverride: Record<string, unknown> | undefined;
+    if (body.data.args !== undefined) {
+      const operation = await getOperation(identity, operationId);
+      if (!operation) {
+        sendError(req, res, approvalError("Pending operation was not found.", "APPROVAL_NOT_FOUND", 404));
+        return;
+      }
+      const schema = approvalSchemaForTool(operation.toolName);
+      if (!schema) {
+        sendError(req, res, approvalError("تعديل هذه العملية غير مدعوم بعد.", "APPROVAL_ARGS_NOT_SUPPORTED", 400), "warn");
+        return;
+      }
+      const parsedArgs = schema.safeParse(body.data.args);
+      if (!parsedArgs.success) {
+        sendError(req, res, approvalError("بيانات العملية المعدلة غير صالحة.", "INVALID_APPROVAL_ARGS", 400), "warn");
+        return;
+      }
+      argsOverride = parsedArgs.data as Record<string, unknown>;
+    }
+
+    const claim = await claimOperation(identity, operationId, argsOverride);
     if (claim.kind === "existing") {
       res.json(operationResultResponse(claim.operation));
       return;
@@ -206,7 +323,10 @@ router.post("/approvals/:operationId/approve", async (req, res): Promise<void> =
 
     let result: OperationExecutionResult;
     try {
-      result = await executeApprovedOperation(identity, claim.operation);
+      result = claim.operation.toolName === "record_expense"
+        ? await executeExpenseApproval(identity, claim.operation)
+        : await executeApprovedOperation(identity, claim.operation);
+      result = resultWithActualArgs(result, claim.operation);
     } catch (error) {
       const message = error instanceof Error ? error.message : "تعذر تنفيذ العملية.";
       const failed = await failOperation(identity, operationId, message);
@@ -244,6 +364,10 @@ router.post("/approvals/:operationId/reject", async (req, res): Promise<void> =>
   }
 
   try {
+    if (!approvalOperationIdSchema.safeParse(req.params.operationId).success) {
+      sendError(req, res, approvalError("Pending operation was not found.", "APPROVAL_NOT_FOUND", 404));
+      return;
+    }
     const operation = await rejectOperation(identity, req.params.operationId);
     res.json(operationResultResponse(operation));
   } catch (error) {

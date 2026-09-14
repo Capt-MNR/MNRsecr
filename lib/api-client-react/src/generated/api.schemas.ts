@@ -112,6 +112,48 @@ export interface ApprovalResponse {
   model: string;
 }
 
+export type ApprovalInputArgs = { [key: string]: unknown };
+
+export interface ApprovalInput {
+  args?: ApprovalInputArgs;
+}
+
+export type ApprovalOperationArgs = { [key: string]: unknown };
+
+export type ApprovalOperationDisplay = {
+  title: string;
+  details: string[];
+};
+
+export type ApprovalOperationStatus = typeof ApprovalOperationStatus[keyof typeof ApprovalOperationStatus];
+
+
+export const ApprovalOperationStatus = {
+  pending: 'pending',
+  executing: 'executing',
+  completed: 'completed',
+  rejected: 'rejected',
+  expired: 'expired',
+  failed: 'failed',
+} as const;
+
+export interface ApprovalOperation {
+  operationId: string;
+  /** @nullable */
+  conversationId?: string | null;
+  toolName: string;
+  args: ApprovalOperationArgs;
+  display: ApprovalOperationDisplay;
+  status: ApprovalOperationStatus;
+  updatedAt: string;
+}
+
+export interface Candidate {
+  id: string;
+  name: string;
+  status: string;
+}
+
 export interface ReminderSummary {
   id: string;
   text: string;
@@ -374,4 +416,20 @@ export interface RecordsResponse {
 export type ListConversationsParams = {
 search?: string;
 };
+
+export type GetCandidatesParams = {
+type: GetCandidatesType;
+/**
+ * @minLength 1
+ */
+q: string;
+};
+
+export type GetCandidatesType = typeof GetCandidatesType[keyof typeof GetCandidatesType];
+
+
+export const GetCandidatesType = {
+  person: 'person',
+  project: 'project',
+} as const;
 

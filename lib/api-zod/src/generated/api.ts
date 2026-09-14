@@ -95,6 +95,10 @@ export const ApproveSecretaryOperationParams = zod.object({
   "operationId": zod.coerce.string().uuid()
 })
 
+export const ApproveSecretaryOperationBody = zod.object({
+  "args": zod.record(zod.string(), zod.unknown()).optional()
+})
+
 export const ApproveSecretaryOperationResponse = zod.object({
   "operationId": zod.string().uuid(),
   "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
@@ -113,6 +117,27 @@ export const ApproveSecretaryOperationResponse = zod.object({
 }).optional(),
   "provider": zod.string(),
   "model": zod.string()
+})
+
+
+/**
+ * @summary Get one scoped approval operation for editing
+ */
+export const GetSecretaryOperationParams = zod.object({
+  "operationId": zod.coerce.string().uuid()
+})
+
+export const GetSecretaryOperationResponse = zod.object({
+  "operationId": zod.string().uuid(),
+  "conversationId": zod.string().nullish(),
+  "toolName": zod.string(),
+  "args": zod.record(zod.string(), zod.unknown()),
+  "display": zod.object({
+  "title": zod.string(),
+  "details": zod.array(zod.string())
+}),
+  "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
+  "updatedAt": zod.coerce.date()
 })
 
 
@@ -240,6 +265,25 @@ export const ListRecordsResponse = zod.object({
   "createdAt": zod.string()
 }))
 })
+
+
+/**
+ * @summary Search scoped person or project candidates
+ */
+
+
+
+export const GetCandidatesQueryParams = zod.object({
+  "type": zod.enum(['person', 'project']),
+  "q": zod.coerce.string().min(1)
+})
+
+export const GetCandidatesResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "name": zod.string(),
+  "status": zod.string()
+})
+export const GetCandidatesResponse = zod.array(GetCandidatesResponseItem)
 
 
 /**

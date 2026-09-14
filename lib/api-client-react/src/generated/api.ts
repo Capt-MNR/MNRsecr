@@ -20,10 +20,14 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  ApprovalInput,
+  ApprovalOperation,
   ApprovalResponse,
+  Candidate,
   ConversationDetail,
   ConversationListResponse,
   ErrorResponse,
+  GetCandidatesParams,
   HealthStatus,
   ListConversationsParams,
   RecordCreateInput,
@@ -317,14 +321,29 @@ export const getApproveSecretaryOperationUrl = (operationId: string,) => {
 /**
  * @summary Approve and execute one stored secretary operation
  */
-export const approveSecretaryOperation = async (operationId: string, options?: Parameters<typeof customFetch>[1]): Promise<ApprovalResponse> => {
+export const approveSecretaryOperation = async (operationId: string,
+    approvalInput?: ApprovalInput, options?: Parameters<typeof customFetch>[1]): Promise<ApprovalResponse> => {
 
-  return customFetch<ApprovalResponse>(getApproveSecretaryOperationUrl(operationId),
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<ApprovalResponse>(getApproveSecretaryOperationUrl(operationId),
   {
     ...options,
-    method: 'POST'
-
-
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(approvalInput)
   }
 );}
 
@@ -349,9 +368,9 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof approveSecretaryOperation>>, ApproveSecretaryOperationMutationVariables> = (props) => {
-          const {operationId} = props ?? {};
+          const {operationId,data} = props ?? {};
 
-          return  approveSecretaryOperation(operationId,requestOptions)
+          return  approveSecretaryOperation(operationId,data,requestOptions)
         }
 
 
@@ -362,9 +381,9 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type ApproveSecretaryOperationMutationResult = NonNullable<Awaited<ReturnType<typeof approveSecretaryOperation>>>
-
+    export type ApproveSecretaryOperationMutationBody = BodyType<ApprovalInput> | undefined
     export type ApproveSecretaryOperationMutationError = ErrorType<ErrorResponse>
-    export type ApproveSecretaryOperationMutationVariables = {operationId: string}
+    export type ApproveSecretaryOperationMutationVariables = {operationId: string;data?: BodyType<ApprovalInput>}
 
     /**
  * @summary Approve and execute one stored secretary operation
@@ -379,6 +398,83 @@ export const useApproveSecretaryOperation = <TError = ErrorType<ErrorResponse>,
       > => {
       return useMutation(getApproveSecretaryOperationMutationOptions(options));
     }
+
+export const getGetSecretaryOperationUrl = (operationId: string,) => {
+
+
+
+
+  return `/api/approvals/${operationId}`
+}
+
+/**
+ * @summary Get one scoped approval operation for editing
+ */
+export const getSecretaryOperation = async (operationId: string, options?: Parameters<typeof customFetch>[1]): Promise<ApprovalOperation> => {
+
+  return customFetch<ApprovalOperation>(getGetSecretaryOperationUrl(operationId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSecretaryOperationQueryKey = (operationId: string,) => {
+    return [
+    `/api/approvals/${operationId}`
+    ] as const;
+    }
+
+
+export const getGetSecretaryOperationQueryOptions = <TData = Awaited<ReturnType<typeof getSecretaryOperation>>, TError = ErrorType<ErrorResponse>>(operationId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSecretaryOperation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSecretaryOperationQueryKey(operationId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSecretaryOperation>>> = ({ signal }) => getSecretaryOperation(operationId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: operationId !== null && operationId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSecretaryOperation>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSecretaryOperationQueryResult = NonNullable<Awaited<ReturnType<typeof getSecretaryOperation>>>
+export type GetSecretaryOperationQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Get one scoped approval operation for editing
+ */
+
+export function useGetSecretaryOperation<TData = Awaited<ReturnType<typeof getSecretaryOperation>>, TError = ErrorType<ErrorResponse>>(
+ operationId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSecretaryOperation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSecretaryOperationQueryOptions(operationId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getRejectSecretaryOperationUrl = (operationId: string,) => {
 
@@ -692,12 +788,96 @@ export function useListRecords<TData = Awaited<ReturnType<typeof listRecords>>, 
 
 
 
+export const getGetCandidatesUrl = (params: GetCandidatesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/candidates?${stringifiedParams}` : `/api/candidates`
+}
+
+/**
+ * @summary Search scoped person or project candidates
+ */
+export const getCandidates = async (params: GetCandidatesParams, options?: Parameters<typeof customFetch>[1]): Promise<Candidate[]> => {
+
+  return customFetch<Candidate[]>(getGetCandidatesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCandidatesQueryKey = (params?: GetCandidatesParams,) => {
+    return [
+    `/api/candidates`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetCandidatesQueryOptions = <TData = Awaited<ReturnType<typeof getCandidates>>, TError = ErrorType<ErrorResponse>>(params: GetCandidatesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCandidates>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCandidatesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCandidates>>> = ({ signal }) => getCandidates(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCandidates>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCandidatesQueryResult = NonNullable<Awaited<ReturnType<typeof getCandidates>>>
+export type GetCandidatesQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Search scoped person or project candidates
+ */
+
+export function useGetCandidates<TData = Awaited<ReturnType<typeof getCandidates>>, TError = ErrorType<ErrorResponse>>(
+ params: GetCandidatesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCandidates>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCandidatesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getCreateRecordUrl = () => {
 
 
 
 
-  return `/api/records`
+  return `/api/candidates`
 }
 
 /**

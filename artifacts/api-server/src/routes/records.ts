@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, ilike } from "drizzle-orm";
 import {
   commitmentsTable,
   db,
@@ -106,6 +106,45 @@ router.get("/records", async (req, res): Promise<void> => {
   } catch (error) {
     req.log.error({ error }, "Records list failed");
     sendRouteError(req, res, 500, "تعذر تحميل السجلات.", "RECORDS_READ_FAILED");
+  }
+});
+
+router.get("/candidates", async (req, res): Promise<void> => {
+  const identity = requireIdentity(req, res);
+  if (!identity) return;
+  const type = typeof req.query.type === "string" ? req.query.type : "";
+  const query = typeof req.query.q === "string" ? req.query.q.trim() : "";
+  if ((type !== "person" && type !== "project") || !query) {
+    sendRouteError(req, res, 400, "نوع البحث والنص مطلوبان.", "INVALID_CANDIDATE_QUERY");
+    return;
+  }
+  const pattern = `%${query.replaceAll("%", "\\%").replaceAll("_", "\\_")}%`;
+  try {
+    if (type === "person") {
+      const people = await db.select({
+        id: peopleTable.id,
+        name: peopleTable.name,
+      }).from(peopleTable).where(and(
+        eq(peopleTable.tenantId, identity.tenantId),
+        eq(peopleTable.ownerUserId, identity.userId),
+        ilike(peopleTable.name, pattern),
+      )).orderBy(peopleTable.name).limit(10);
+      res.json(people.map((person) => ({ ...person, status: "active" })));
+      return;
+    }
+    const projects = await db.select({
+      id: projectsTable.id,
+      name: projectsTable.name,
+      status: projectsTable.status,
+    }).from(projectsTable).where(and(
+      eq(projectsTable.tenantId, identity.tenantId),
+      eq(projectsTable.ownerUserId, identity.userId),
+      ilike(projectsTable.name, pattern),
+    )).orderBy(projectsTable.name).limit(10);
+    res.json(projects);
+  } catch (error) {
+    req.log.error({ error }, "Candidate lookup failed");
+    sendRouteError(req, res, 500, "تعذر تحميل المرشحين.", "CANDIDATE_LOOKUP_FAILED");
   }
 });
 

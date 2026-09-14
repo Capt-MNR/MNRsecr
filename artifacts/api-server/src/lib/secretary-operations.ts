@@ -1,6 +1,7 @@
 import { and, eq, gt, isNull, lte, or } from "drizzle-orm";
 import { db, secretaryOperationsTable, type SecretaryOperation } from "@workspace/db";
 import type { Identity } from "./secretary";
+import { persistedApprovalArgs } from "./approval-schemas";
 
 export type OperationStatus =
   | "pending"
@@ -31,6 +32,7 @@ export type PendingOperation = {
   args: Record<string, unknown>;
   display: OperationDisplay;
   status: OperationStatus;
+  updatedAt: Date;
   result?: OperationExecutionResult;
   error?: { message: string };
 };
@@ -90,6 +92,7 @@ function toOperation(row: SecretaryOperation): PendingOperation {
     args,
     display: parseDisplay(row.displayJson),
     status: row.status as OperationStatus,
+    updatedAt: row.updatedAt,
     ...(result ? { result } : {}),
     ...(error ? { error } : {}),
   };
@@ -225,13 +228,31 @@ export type ApprovalOutcome =
 export async function claimOperation(
   identity: Identity,
   operationId: string,
+  argsOverride?: Record<string, unknown>,
 ): Promise<ApprovalOutcome> {
   const now = new Date();
+  const storedArgs = argsOverride ? persistedApprovalArgs(argsOverride) : undefined;
+  const [current] = storedArgs
+    ? await db.select({
+        toolName: secretaryOperationsTable.toolName,
+      }).from(secretaryOperationsTable)
+        .where(scopedOperation(identity, operationId))
+        .limit(1)
+    : [];
   const [claimed] = await db.update(secretaryOperationsTable)
     .set({
       status: "executing",
       approvedAt: now,
       claimedAt: now,
+      updatedAt: now,
+      ...(storedArgs
+        ? {
+            argumentsJson: JSON.stringify(storedArgs),
+            ...(current
+              ? { displayJson: JSON.stringify(displayForOperation(current.toolName, storedArgs)) }
+              : {}),
+          }
+        : {}),
     })
     .where(and(
       scopedOperation(identity, operationId),
@@ -239,7 +260,13 @@ export async function claimOperation(
       or(isNull(secretaryOperationsTable.expiresAt), gt(secretaryOperationsTable.expiresAt, now)),
     ))
     .returning();
-  if (claimed) return { kind: "claimed", operation: toOperation(claimed) };
+  if (claimed) {
+    const operation = toOperation(claimed);
+    return {
+      kind: "claimed",
+      operation: argsOverride ? { ...operation, args: argsOverride } : operation,
+    };
+  }
   const operation = await getOperation(identity, operationId);
   if (!operation) throw new Error("Pending operation was not found.");
   return { kind: "existing", operation };
@@ -250,7 +277,7 @@ export async function rejectOperation(
   operationId: string,
 ): Promise<PendingOperation> {
   const [rejected] = await db.update(secretaryOperationsTable)
-    .set({ status: "rejected" })
+    .set({ status: "rejected", updatedAt: new Date() })
     .where(and(
       scopedOperation(identity, operationId),
       eq(secretaryOperationsTable.status, "pending"),
@@ -272,6 +299,7 @@ export async function completeOperation(
       status: "completed",
       resultJson: JSON.stringify(result),
       completedAt: new Date(),
+        updatedAt: new Date(),
     })
     .where(and(
       scopedOperation(identity, operationId),
@@ -294,6 +322,7 @@ export async function failOperation(
       status: "failed",
       errorJson: JSON.stringify({ message }),
       completedAt: new Date(),
+        updatedAt: new Date(),
     })
     .where(and(
       scopedOperation(identity, operationId),
