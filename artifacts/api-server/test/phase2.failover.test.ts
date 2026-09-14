@@ -37,6 +37,11 @@ import {
   isGlobalExpenseTotalRequest,
 } from "../src/lib/expense-report.ts";
 
+process.env.AI_PROVIDER = "development";
+delete process.env.AI_PRIMARY_PROVIDER;
+delete process.env.AI_FALLBACK_PROVIDER;
+delete process.env.AI_SECONDARY_FALLBACK_PROVIDER;
+
 type GatewayCall = {
   messages: ConversationMessage[];
   context: GatewayCallContext;

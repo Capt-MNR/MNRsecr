@@ -7,6 +7,11 @@ import { buildDeterministicPlan } from "../src/lib/deterministic-plans.ts";
 import { routeLocally } from "../src/lib/local-router.ts";
 import { routeProvider } from "../src/lib/provider-router.ts";
 
+process.env.AI_PROVIDER = "development";
+delete process.env.AI_PRIMARY_PROVIDER;
+delete process.env.AI_FALLBACK_PROVIDER;
+delete process.env.AI_SECONDARY_FALLBACK_PROVIDER;
+
 test("all optimization layers preserve their safe default state", () => {
   delete process.env.CTX_BUDGETER_ENABLED;
   delete process.env.LOCAL_ROUTER_ENABLED;

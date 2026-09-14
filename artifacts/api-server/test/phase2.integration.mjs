@@ -4,6 +4,11 @@ import { once } from "node:events";
 import { execFileSync } from "node:child_process";
 import test from "node:test";
 
+process.env.AI_PROVIDER = "development";
+delete process.env.AI_PRIMARY_PROVIDER;
+delete process.env.AI_FALLBACK_PROVIDER;
+delete process.env.AI_SECONDARY_FALLBACK_PROVIDER;
+
 const port = 8091;
 const baseUrl = `http://127.0.0.1:${port}/api`;
 const testTenantId = `phase2-test-${process.pid}-${Date.now()}`;
