@@ -42,9 +42,18 @@ async function startServer() {
     SECRETARY_TENANT_ID: testTenantId,
     SECRETARY_USER_ID: testUserId,
   };
-  if (provider === "unavailable") {
+  delete env.AI_PRIMARY_PROVIDER;
+  delete env.AI_FALLBACK_PROVIDER;
+  delete env.AI_SECONDARY_FALLBACK_PROVIDER;
+  if (provider === "development" || provider === "unavailable") {
     delete env.GEMINI_API_KEY;
     delete env.GROQ_API_KEY;
+    delete env.MISTRAL_API_KEY;
+    delete env.COHERE_API_KEY;
+  }
+  if (provider === "unavailable") {
+    delete env.AI_PROVIDER;
+    env.AI_PROVIDER = "unavailable";
   }
   server = spawn("node", ["--enable-source-maps", "dist/index.mjs"], {
     cwd: new URL("..", import.meta.url),
