@@ -6,6 +6,10 @@ import { resolveFromCandidates } from "../src/lib/entity-resolver.ts";
 import { buildDeterministicPlan } from "../src/lib/deterministic-plans.ts";
 import { routeLocally } from "../src/lib/local-router.ts";
 import { routeProvider } from "../src/lib/provider-router.ts";
+import {
+  isDeterministicScheduleQuestion,
+  looksLikeInternalStructuredResponse,
+} from "../src/lib/phase2.ts";
 
 process.env.AI_PROVIDER = "development";
 delete process.env.AI_PRIMARY_PROVIDER;
@@ -92,4 +96,21 @@ test("provider router reports a recommendation without changing providers by def
   const route = routeProvider("دفعت لمحمد 7500");
   assert.equal(route.provider, "gemini");
   assert.equal(route.enabled, false);
+});
+
+test("schedule questions are deterministic and write requests are excluded", () => {
+  assert.equal(isDeterministicScheduleQuestion("عندنا مواعيد النهارده؟"), true);
+  assert.equal(isDeterministicScheduleQuestion("دعوة الفرح ميعادها امته؟"), true);
+  assert.equal(isDeterministicScheduleQuestion("فكرني بكرة أكلم محمد"), false);
+});
+
+test("internal provider payloads are never accepted as user-facing text", () => {
+  assert.equal(
+    looksLikeInternalStructuredResponse('{"candidateProjects":[],"toolResult":{"ok":true}}'),
+    true,
+  );
+  assert.equal(
+    looksLikeInternalStructuredResponse("تمام، عندك موعد الساعة 5."),
+    false,
+  );
 });

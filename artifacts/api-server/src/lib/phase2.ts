@@ -718,6 +718,195 @@ function cairoDateParts(date: Date): CairoDateParts {
   };
 }
 
+type ScheduleItem = {
+  kind: "reminder" | "task";
+  id: string;
+  title: string;
+  dueAt: Date | null;
+  status: string;
+};
+
+type ScheduleQuery = {
+  dayOffset?: 0 | 1;
+  searchTokens: string[];
+};
+
+const SCHEDULE_STOP_WORDS = new Set([
+  "عندنا",
+  "ايه",
+  "اي",
+  "ماذا",
+  "متى",
+  "امتى",
+  "امته",
+  "ميعاد",
+  "ميعادها",
+  "موعد",
+  "مواعيد",
+  "تذكير",
+  "تذكيرات",
+  "مهمه",
+  "مهام",
+  "النهارده",
+  "اليوم",
+  "بكره",
+  "غدا",
+  "فيه",
+  "في",
+  "هو",
+  "هي",
+  "ام",
+  "هل",
+  "reminder",
+  "task",
+]);
+
+function scheduleToken(value: string): string {
+  return normalize(value).replace(/^ال(?=\S)/, "");
+}
+
+export function isDeterministicScheduleQuestion(message: string): boolean {
+  const normalized = normalize(message);
+  if (WRITE_INTENT_PATTERN.test(message)) return false;
+  const hasScheduleTerm = /موعد|مواعيد|ميعاد|تذكير|مهمه|مهام|دعوه|فرح|reminder|task/i.test(normalized);
+  const hasQuestionContext = /عندنا|فيه|النهارده|اليوم|بكره|غدا|امتى|امته|متى|ماذا|ايه|هل|\?/i.test(normalized);
+  return hasScheduleTerm && hasQuestionContext;
+}
+
+function scheduleQuery(message: string): ScheduleQuery | null {
+  if (!isDeterministicScheduleQuestion(message)) return null;
+  const normalized = normalize(message);
+  const dayOffset = /بكره|غدا|غدا/i.test(normalized)
+    ? 1 as const
+    : /النهارده|اليوم/i.test(normalized)
+      ? 0 as const
+      : undefined;
+  const searchTokens = normalized
+    .split(/[^\p{L}\p{N}]+/u)
+    .map(scheduleToken)
+    .filter((token) => token.length > 1 && !SCHEDULE_STOP_WORDS.has(token));
+  return { dayOffset, searchTokens };
+}
+
+function sameCairoDay(value: Date | null, target: CairoDateParts): boolean {
+  if (!value) return false;
+  const parts = cairoDateParts(value);
+  return parts.year === target.year && parts.month === target.month && parts.day === target.day;
+}
+
+function formatScheduleDueAt(value: Date | null, dayOffset?: 0 | 1): string {
+  if (!value) return "من غير موعد محدد";
+  const options: Intl.DateTimeFormatOptions = dayOffset === undefined
+    ? { weekday: "long", day: "numeric", month: "long", hour: "numeric", minute: "2-digit" }
+    : { hour: "numeric", minute: "2-digit" };
+  return new Intl.DateTimeFormat("ar-EG", {
+    ...options,
+    timeZone: DEFAULT_TIMEZONE,
+  }).format(value);
+}
+
+function scheduleItemText(item: ScheduleItem, dayOffset?: 0 | 1): string {
+  const prefix = item.kind === "task" ? "مهمة" : "تذكير";
+  return `${prefix}: ${item.title} — ${formatScheduleDueAt(item.dueAt, dayOffset)}`;
+}
+
+async function deterministicScheduleResponse(
+  identity: Identity,
+  message: string,
+): Promise<{ response: FinalResponse; action: Record<string, unknown> } | null> {
+  const query = scheduleQuery(message);
+  if (!query) return null;
+
+  const [reminders, tasks] = await Promise.all([
+    db.select({
+      id: remindersTable.id,
+      title: remindersTable.text,
+      dueAt: remindersTable.dueAt,
+      status: remindersTable.status,
+    }).from(remindersTable)
+      .where(and(
+        identityWhere(identity, remindersTable),
+        eq(remindersTable.status, "scheduled"),
+      ))
+      .orderBy(asc(remindersTable.dueAt))
+      .limit(50),
+    db.select({
+      id: tasksTable.id,
+      title: tasksTable.title,
+      dueAt: tasksTable.dueAt,
+      status: tasksTable.status,
+    }).from(tasksTable)
+      .where(and(
+        identityWhere(identity, tasksTable),
+        inArray(tasksTable.status, ["pending", "in_progress"]),
+      ))
+      .orderBy(asc(tasksTable.dueAt))
+      .limit(50),
+  ]);
+
+  const items: ScheduleItem[] = [
+    ...reminders.map((item) => ({ ...item, kind: "reminder" as const })),
+    ...tasks.map((item) => ({ ...item, kind: "task" as const })),
+  ].sort((left, right) => {
+    if (!left.dueAt) return 1;
+    if (!right.dueAt) return -1;
+    return left.dueAt.getTime() - right.dueAt.getTime();
+  });
+
+  const today = cairoDateParts(new Date());
+  const targetDay = query.dayOffset === undefined
+    ? undefined
+    : shiftLocalDate(today, query.dayOffset);
+  const requiredTokenMatches = query.searchTokens.length > 1 ? 2 : 1;
+  const matchingItems = items.filter((item) => {
+    if (targetDay && !sameCairoDay(item.dueAt, targetDay)) return false;
+    if (query.searchTokens.length === 0) return true;
+    const haystack = scheduleToken(item.title);
+    const matches = query.searchTokens.filter((token) => haystack.includes(token)).length;
+    return matches >= requiredTokenMatches;
+  }).slice(0, 8);
+
+  const dayLabel = query.dayOffset === 0 ? "النهارده" : query.dayOffset === 1 ? "بكرة" : null;
+  const action = {
+    type: "schedule_context",
+    day: dayLabel,
+    count: matchingItems.length,
+    items: matchingItems.map((item) => ({
+      kind: item.kind,
+      id: item.id,
+      title: item.title,
+      dueAt: item.dueAt?.toISOString() ?? null,
+      status: item.status,
+    })),
+  };
+
+  if (matchingItems.length === 0) {
+    const target = dayLabel ? `${dayLabel}` : "المحفوظة";
+    return {
+      response: {
+        kind: "not_found",
+        message: query.searchTokens.length > 0
+          ? `مش لاقي تذكير أو مهمة باسم قريب من "${query.searchTokens.join(" ")}" في بياناتك ${dayLabel ? `ليوم ${dayLabel}` : "الحالية"}.`
+          : `مفيش تذكيرات أو مهام ${target}.`,
+      },
+      action,
+    };
+  }
+
+  const heading = query.searchTokens.length > 0
+    ? `لقيت لك ${matchingItems.length === 1 ? "ده" : `${matchingItems.length} نتائج`}:`
+    : dayLabel
+      ? `عندك ${matchingItems.length} ${matchingItems.length === 1 ? "حاجة" : "حاجات"} ${dayLabel}:`
+      : `عندك ${matchingItems.length} تذكير أو مهمة محفوظة:`;
+  return {
+    response: {
+      kind: "answer",
+      message: `${heading}\n${matchingItems.map((item) => `• ${scheduleItemText(item, query.dayOffset)}`).join("\n")}`,
+    },
+    action,
+  };
+}
+
 function cairoOffsetAt(utcGuess: number): number {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: DEFAULT_TIMEZONE,
@@ -2652,12 +2841,32 @@ function isFinancialMessage(message: string): boolean {
   return /جنيه|دولار|ريال|مصروف|مصروفات|مصاريف|اجمالي|إجمالي|مبلغ|دفع|دفعت|صرف|فلوس|فلوس/i.test(message);
 }
 
+export function looksLikeInternalStructuredResponse(message: string): boolean {
+  const trimmed = message.trim();
+  if (!trimmed) return false;
+  if (/^\s*[\[{]/.test(trimmed)) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed && typeof parsed === "object") return true;
+    } catch {
+      // Providers sometimes return truncated JSON; inspect known internal keys below.
+    }
+  }
+  return /"(?:toolResult|providerTrace|candidateProjects|candidatePeople|conversationState|cachedTokens|providersAttempted|toolCallsExecutedBeforeFailure)"\s*:/.test(trimmed);
+}
+
 function safeFinalResponse(
   kind: FinalResponseKind,
   message: string,
   history: ToolHistoryEntry[],
   groundedFacts?: GroundedFact[],
 ): FinalResponse {
+  if (looksLikeInternalStructuredResponse(message)) {
+    return {
+      kind: "error",
+      message: "راجعت البيانات المحفوظة، لكن لم أستطع صياغة رد واضح الآن. جرّب السؤال مرة أخرى.",
+    };
+  }
   const facts = groundedFacts?.filter((fact) => {
     if (!fact || !["money", "count"].includes(fact.type) || !Number.isSafeInteger(fact.value)) return false;
     const values = groundedValues(history);
@@ -2891,6 +3100,12 @@ export class Phase2AgentRuntime {
         summary: report.summary,
       };
       return persistResult(broadExpenseReportResponse(report));
+    }
+
+    const deterministicSchedule = await deterministicScheduleResponse(identity, input.message);
+    if (deterministicSchedule) {
+      action = deterministicSchedule.action;
+      return persistResult(deterministicSchedule.response);
     }
 
     try {

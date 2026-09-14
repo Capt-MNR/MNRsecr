@@ -9,3 +9,4 @@
 - [Gemini context caching](gemini-context-cache.md) — the current Gemini model key reports zero free-tier CachedContent storage, so live cached-token verification needs another permitted environment.
 - [Intent evaluation baselines](intent-evaluation-baselines.md) — exclude provider-rate-limited cases from accuracy and validate dry-run writes with scoped row-count snapshots.
 - [Editable approval execution](editable-approval-execution.md) — edited expense approvals must execute and record scoped IDs, not display labels.
+- [Arabic schedule queries](arabic-schedule-queries.md) — normalize Arabic punctuation before matching date words; deterministic read paths must stay separate from write intent.
