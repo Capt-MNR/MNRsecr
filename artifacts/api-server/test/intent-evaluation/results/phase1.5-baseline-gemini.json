@@ -1,0 +1,803 @@
+{
+  "datasetVersion": 1,
+  "providerMode": "gemini",
+  "label": "after",
+  "dryRun": true,
+  "generatedAt": "2026-09-14T15:06:24.979Z",
+  "summary": {
+    "totalCases": 6,
+    "evaluatedCases": 5,
+    "providerErrors": 0,
+    "contextNotProvided": 1,
+    "runnerErrors": 0,
+    "intentAccuracyPercent": 20,
+    "toolSelectionAccuracyPercent": 60,
+    "clarificationAccuracyPercent": 80,
+    "noWriteViolations": 0,
+    "totalLogicalLlmCalls": 13,
+    "totalHttpAttempts": 19,
+    "fallbackCases": 0,
+    "totalInputTokens": 44624,
+    "totalOutputTokens": 519,
+    "totalTokens": 47284,
+    "totalCachedTokens": null,
+    "cacheHitCases": 0,
+    "cacheMissCases": 5,
+    "totalRequestBytes": 208649,
+    "averageLatencyMs": 8351,
+    "latencyP50Ms": 7055,
+    "latencyP95Ms": 12860,
+    "averageConversationChars": 226,
+    "rowCountChanges": 0
+  },
+  "cases": [
+    {
+      "id": "A",
+      "category": "simple_write_intent",
+      "message": "فكرني بكرة الساعة 5",
+      "expected": {
+        "intent": "create_reminder",
+        "primaryTool": "create_reminder",
+        "acceptableTools": [
+          "create_reminder",
+          "final_response"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": "clarification",
+      "actualTool": "text_response",
+      "actualTools": [],
+      "toolArguments": [],
+      "clarificationAsked": true,
+      "logicalLlmCalls": 1,
+      "actualHttpAttempts": 2,
+      "httpAttemptsByProvider": {
+        "gemini": 2
+      },
+      "provider": "gemini",
+      "model": "gemini-3-flash-preview",
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 4883,
+      "tokenUsage": [
+        {
+          "promptTokenCount": 2129,
+          "candidatesTokenCount": 61,
+          "totalTokenCount": 2553,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 2129
+            }
+          ],
+          "thoughtsTokenCount": 363,
+          "serviceTier": "standard"
+        }
+      ],
+      "inputTokens": 2129,
+      "outputTokens": 61,
+      "totalTokens": 2553,
+      "cachedTokens": null,
+      "cacheHit": false,
+      "cacheMiss": true,
+      "requestBytesByProvider": {
+        "gemini": 21234
+      },
+      "maxRequestBytes": 10617,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 1852,
+      "toolDefinitionsCount": 6,
+      "maxConversationChars": 58,
+      "contextBreakdown": {
+        "systemPromptChars": 3250,
+        "requestGuidanceChars": 1692,
+        "userMessageChars": 19,
+        "recentConversationChars": 0,
+        "summaryChars": 0,
+        "structuredStateChars": 0,
+        "toolResultChars": 0,
+        "otherConversationChars": 0,
+        "conversationChars": 19,
+        "toolDefinitionsChars": 1852,
+        "requestBytes": 10617
+      },
+      "rowCountsBefore": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountsAfter": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountChanged": false,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": false,
+      "toolSelectionMatch": false,
+      "clarificationMatch": false
+    },
+    {
+      "id": "B",
+      "category": "simple_read",
+      "message": "أنا صرفت كام الأسبوع ده؟",
+      "expected": {
+        "intent": "expense_report",
+        "primaryTool": "query_expenses",
+        "acceptableTools": [
+          "query_expenses",
+          "final_response"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": null,
+      "actualTool": "query_expenses",
+      "actualTools": [
+        "query_expenses"
+      ],
+      "toolArguments": [
+        {
+          "name": "query_expenses",
+          "arguments": {
+            "period": "this_week"
+          },
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": false,
+      "logicalLlmCalls": 2,
+      "actualHttpAttempts": 2,
+      "httpAttemptsByProvider": {
+        "gemini": 2
+      },
+      "provider": "gemini",
+      "model": "gemini-3.1-flash-lite",
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 7055,
+      "tokenUsage": [
+        {
+          "promptTokenCount": 2934,
+          "candidatesTokenCount": 18,
+          "totalTokenCount": 2952,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 2934
+            }
+          ],
+          "serviceTier": "standard"
+        },
+        {
+          "promptTokenCount": 2990,
+          "candidatesTokenCount": 35,
+          "totalTokenCount": 3025,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 2990
+            }
+          ],
+          "serviceTier": "standard"
+        }
+      ],
+      "inputTokens": 5924,
+      "outputTokens": 53,
+      "totalTokens": 5977,
+      "cachedTokens": null,
+      "cacheHit": false,
+      "cacheMiss": true,
+      "requestBytesByProvider": {
+        "gemini": 28481
+      },
+      "maxRequestBytes": 14477,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 5229,
+      "toolDefinitionsCount": 12,
+      "maxConversationChars": 536,
+      "contextBreakdown": {
+        "systemPromptChars": 6500,
+        "requestGuidanceChars": 3384,
+        "userMessageChars": 48,
+        "recentConversationChars": 0,
+        "summaryChars": 0,
+        "structuredStateChars": 0,
+        "toolResultChars": 110,
+        "otherConversationChars": 0,
+        "conversationChars": 158,
+        "toolDefinitionsChars": 10458,
+        "requestBytes": 28481
+      },
+      "rowCountsBefore": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountsAfter": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountChanged": false,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": false,
+      "toolSelectionMatch": true,
+      "clarificationMatch": true
+    },
+    {
+      "id": "C",
+      "category": "context_read",
+      "message": "آخر حاجة سجلناها عن شركة المحجر؟",
+      "expected": {
+        "intent": "context_read",
+        "primaryTool": "final_response",
+        "acceptableTools": [
+          "find_person",
+          "query_expenses",
+          "final_response"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": null,
+      "actualTool": "find_project",
+      "actualTools": [
+        "find_project",
+        "find_person",
+        "query_expenses",
+        "query_expenses",
+        "find_project"
+      ],
+      "toolArguments": [
+        {
+          "name": "find_project",
+          "arguments": {
+            "name": "شركة المحجر"
+          },
+          "dryRun": true
+        },
+        {
+          "name": "find_person",
+          "arguments": {
+            "name": "شركة المحجر"
+          },
+          "dryRun": true
+        },
+        {
+          "name": "query_expenses",
+          "arguments": {
+            "limit": 1,
+            "description": "شركة المحجر"
+          },
+          "dryRun": true
+        },
+        {
+          "name": "query_expenses",
+          "arguments": {
+            "limit": 5,
+            "description": "المحجر"
+          },
+          "dryRun": true
+        },
+        {
+          "name": "find_project",
+          "arguments": {
+            "name": "المحجر"
+          },
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": false,
+      "logicalLlmCalls": 5,
+      "actualHttpAttempts": 6,
+      "httpAttemptsByProvider": {
+        "gemini": 6
+      },
+      "provider": "gemini",
+      "model": "gemini-3.1-flash-lite",
+      "fallback": false,
+      "fallbackReason": "PROVIDER_HTTP_ATTEMPT_BUDGET_EXCEEDED",
+      "latencyMs": 12860,
+      "tokenUsage": [
+        {
+          "promptTokenCount": 4207,
+          "candidatesTokenCount": 36,
+          "totalTokenCount": 4325,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 4207
+            }
+          ],
+          "thoughtsTokenCount": 82,
+          "serviceTier": "standard"
+        },
+        {
+          "promptTokenCount": 4291,
+          "candidatesTokenCount": 22,
+          "totalTokenCount": 4684,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 4291
+            }
+          ],
+          "thoughtsTokenCount": 371,
+          "serviceTier": "standard"
+        },
+        {
+          "promptTokenCount": 4722,
+          "candidatesTokenCount": 22,
+          "totalTokenCount": 4744,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 4722
+            }
+          ],
+          "serviceTier": "standard"
+        },
+        {
+          "promptTokenCount": 4782,
+          "candidatesTokenCount": 18,
+          "totalTokenCount": 4800,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 4782
+            }
+          ],
+          "serviceTier": "standard"
+        }
+      ],
+      "inputTokens": 18002,
+      "outputTokens": 98,
+      "totalTokens": 18553,
+      "cachedTokens": null,
+      "cacheHit": false,
+      "cacheMiss": true,
+      "requestBytesByProvider": {
+        "gemini": 121113
+      },
+      "maxRequestBytes": 22488,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 10118,
+      "toolDefinitionsCount": 29,
+      "maxConversationChars": 3540,
+      "contextBreakdown": {
+        "systemPromptChars": 13000,
+        "requestGuidanceChars": 6768,
+        "userMessageChars": 128,
+        "recentConversationChars": 0,
+        "summaryChars": 0,
+        "structuredStateChars": 0,
+        "toolResultChars": 636,
+        "otherConversationChars": 0,
+        "conversationChars": 764,
+        "toolDefinitionsChars": 40472,
+        "requestBytes": 82799
+      },
+      "rowCountsBefore": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountsAfter": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountChanged": false,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": false,
+      "toolSelectionMatch": true,
+      "clarificationMatch": true
+    },
+    {
+      "id": "D",
+      "category": "expense_intent",
+      "message": "سجل إني دفعت 11,500 جنيه تشطيبات لشركة المحجر.",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": [
+          "find_person",
+          "record_expense",
+          "final_response"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": "expense",
+      "actualTool": "find_person",
+      "actualTools": [
+        "find_person",
+        "find_project",
+        "record_expense"
+      ],
+      "toolArguments": [
+        {
+          "name": "find_person",
+          "arguments": {
+            "name": "شركة المحجر"
+          },
+          "dryRun": true
+        },
+        {
+          "name": "find_project",
+          "arguments": {
+            "name": "تشطيبات"
+          },
+          "dryRun": true
+        },
+        {
+          "name": "record_expense",
+          "arguments": {
+            "amountMinor": 1150000,
+            "description": "تشطيبات لشركة المحجر",
+            "currency": "EGP"
+          },
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": false,
+      "logicalLlmCalls": 3,
+      "actualHttpAttempts": 5,
+      "httpAttemptsByProvider": {
+        "gemini": 5
+      },
+      "provider": "gemini",
+      "model": "gemini-3-flash-preview",
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 12655,
+      "tokenUsage": [
+        {
+          "promptTokenCount": 2947,
+          "candidatesTokenCount": 36,
+          "totalTokenCount": 3219,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 2947
+            }
+          ],
+          "thoughtsTokenCount": 236,
+          "serviceTier": "standard"
+        },
+        {
+          "promptTokenCount": 3031,
+          "candidatesTokenCount": 40,
+          "totalTokenCount": 3071,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 3031
+            }
+          ],
+          "serviceTier": "standard"
+        },
+        {
+          "promptTokenCount": 3083,
+          "candidatesTokenCount": 86,
+          "totalTokenCount": 3169,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 3083
+            }
+          ],
+          "serviceTier": "standard"
+        }
+      ],
+      "inputTokens": 9061,
+      "outputTokens": 162,
+      "totalTokens": 9459,
+      "cachedTokens": null,
+      "cacheHit": false,
+      "cacheMiss": true,
+      "requestBytesByProvider": {
+        "gemini": 72524
+      },
+      "maxRequestBytes": 14965,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 5229,
+      "toolDefinitionsCount": 12,
+      "maxConversationChars": 908,
+      "contextBreakdown": {
+        "systemPromptChars": 9750,
+        "requestGuidanceChars": 5076,
+        "userMessageChars": 138,
+        "recentConversationChars": 0,
+        "summaryChars": 0,
+        "structuredStateChars": 0,
+        "toolResultChars": 215,
+        "otherConversationChars": 0,
+        "conversationChars": 353,
+        "toolDefinitionsChars": 15687,
+        "requestBytes": 43521
+      },
+      "rowCountsBefore": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountsAfter": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountChanged": false,
+      "approvalReached": false,
+      "wouldSelectWriteTool": true,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": true,
+      "toolSelectionMatch": true,
+      "clarificationMatch": true
+    },
+    {
+      "id": "E",
+      "category": "follow_up",
+      "message": "وكان ده الأسبوع اللي فات.",
+      "expected": {
+        "intent": "correction",
+        "primaryTool": "update_expense",
+        "acceptableTools": [
+          "update_expense",
+          "record_expense",
+          "final_response"
+        ],
+        "clarification": true,
+        "write": false
+      },
+      "contextMode": "context_required",
+      "status": "context_not_provided",
+      "actualIntent": "expense",
+      "actualTool": "record_expense",
+      "actualTools": [
+        "record_expense"
+      ],
+      "toolArguments": [
+        {
+          "name": "record_expense",
+          "arguments": {
+            "description": "أعمال السباكة (الأسبوع الماضي)",
+            "projectId": "project_1",
+            "personId": "person_2",
+            "amountMinor": 500000,
+            "currency": "EGP"
+          },
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": false,
+      "logicalLlmCalls": 2,
+      "actualHttpAttempts": 4,
+      "httpAttemptsByProvider": {
+        "gemini": 4
+      },
+      "provider": "gemini",
+      "model": "gemini-3-flash-preview",
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 12629,
+      "tokenUsage": [
+        {
+          "promptTokenCount": 4204,
+          "candidatesTokenCount": 59,
+          "totalTokenCount": 5292,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 4204
+            }
+          ],
+          "thoughtsTokenCount": 1029,
+          "serviceTier": "standard"
+        },
+        {
+          "promptTokenCount": 5304,
+          "candidatesTokenCount": 86,
+          "totalTokenCount": 5450,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 5304
+            }
+          ],
+          "thoughtsTokenCount": 60,
+          "serviceTier": "standard"
+        }
+      ],
+      "inputTokens": 9508,
+      "outputTokens": 145,
+      "totalTokens": 10742,
+      "cachedTokens": null,
+      "cacheHit": false,
+      "cacheMiss": true,
+      "requestBytesByProvider": {
+        "gemini": 86462
+      },
+      "maxRequestBytes": 24328,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 10118,
+      "toolDefinitionsCount": 29,
+      "maxConversationChars": 5464,
+      "contextBreakdown": {
+        "systemPromptChars": 6500,
+        "requestGuidanceChars": 3384,
+        "userMessageChars": 50,
+        "recentConversationChars": 0,
+        "summaryChars": 0,
+        "structuredStateChars": 0,
+        "toolResultChars": 11,
+        "otherConversationChars": 0,
+        "conversationChars": 61,
+        "toolDefinitionsChars": 20236,
+        "requestBytes": 43231
+      },
+      "rowCountsBefore": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountsAfter": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountChanged": false,
+      "approvalReached": false,
+      "wouldSelectWriteTool": true,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": null,
+      "toolSelectionMatch": null,
+      "clarificationMatch": null
+    },
+    {
+      "id": "F",
+      "category": "complex_reasoning",
+      "message": "حلل مصروفاتي الأخيرة مقارنة بالمهام والمواعيد، وحدد ثلاثة أشياء أقدر أقلل فيها الإنفاق مع توضيح السبب.",
+      "expected": {
+        "intent": "analysis",
+        "primaryTool": "final_response",
+        "acceptableTools": [
+          "list_expenses",
+          "list_tasks",
+          "list_reminders",
+          "final_response"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": null,
+      "actualTool": "text_response",
+      "actualTools": [],
+      "toolArguments": [],
+      "clarificationAsked": false,
+      "logicalLlmCalls": 0,
+      "actualHttpAttempts": 0,
+      "httpAttemptsByProvider": {},
+      "provider": "gemini",
+      "model": "gemini-3.1-flash-lite",
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 22,
+      "tokenUsage": null,
+      "inputTokens": null,
+      "outputTokens": null,
+      "totalTokens": null,
+      "cachedTokens": null,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {},
+      "maxRequestBytes": 0,
+      "systemPromptChars": 0,
+      "toolDefinitionsChars": 0,
+      "toolDefinitionsCount": 0,
+      "maxConversationChars": 0,
+      "contextBreakdown": {
+        "systemPromptChars": null,
+        "requestGuidanceChars": null,
+        "userMessageChars": null,
+        "recentConversationChars": null,
+        "summaryChars": null,
+        "structuredStateChars": null,
+        "toolResultChars": null,
+        "otherConversationChars": null,
+        "conversationChars": null,
+        "toolDefinitionsChars": null,
+        "requestBytes": null
+      },
+      "rowCountsBefore": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountsAfter": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountChanged": false,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": false,
+      "toolSelectionMatch": false,
+      "clarificationMatch": true
+    }
+  ]
+}

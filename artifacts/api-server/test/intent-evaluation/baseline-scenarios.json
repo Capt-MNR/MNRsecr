@@ -5,52 +5,52 @@
   "cases": [
     {
       "id": "A",
-      "category": "simple_read",
-      "message": "إيه مواعيدي النهارده؟",
+      "category": "simple_write_intent",
+      "message": "فكرني بكرة الساعة 5",
       "contextMode": "none",
       "expected": {
-        "intent": "schedule_read",
-        "primaryTool": "list_reminders",
-        "acceptableTools": ["list_reminders", "final_response"],
+        "intent": "create_reminder",
+        "primaryTool": "create_reminder",
+        "acceptableTools": ["create_reminder", "final_response"],
         "clarification": false,
         "write": false
       }
     },
     {
       "id": "B",
-      "category": "simple_write_intent",
-      "message": "سجل إني دفعت لمحمد 7500 جنيه",
+      "category": "simple_read",
+      "message": "أنا صرفت كام الأسبوع ده؟",
       "contextMode": "none",
       "expected": {
-        "intent": "expense",
-        "primaryTool": "record_expense",
-        "acceptableTools": ["find_person", "record_expense"],
+        "intent": "expense_report",
+        "primaryTool": "query_expenses",
+        "acceptableTools": ["query_expenses", "final_response"],
         "clarification": false,
         "write": false
       }
     },
     {
       "id": "C",
-      "category": "long_context",
-      "message": "من فضلك راجع كل المصروفات والمهام والمواعيد المرتبطة بمشروع إطلاق المتجر، ولخص لي ما تم وما يحتاج متابعة هذا الأسبوع.",
+      "category": "context_read",
+      "message": "آخر حاجة سجلناها عن شركة المحجر؟",
       "contextMode": "none",
       "expected": {
         "intent": "context_read",
         "primaryTool": "final_response",
-        "acceptableTools": ["list_expenses", "list_tasks", "list_reminders", "final_response"],
+        "acceptableTools": ["find_person", "query_expenses", "final_response"],
         "clarification": false,
         "write": false
       }
     },
     {
       "id": "D",
-      "category": "multi_tool",
-      "message": "اعرض مصروفات مشروع المتجر هذا الشهر، واجمعها حسب الشخص، وقل لي مين عليه أكبر مبلغ.",
+      "category": "expense_intent",
+      "message": "سجل إني دفعت 11,500 جنيه تشطيبات لشركة المحجر.",
       "contextMode": "none",
       "expected": {
-        "intent": "expense_report",
-        "primaryTool": "list_expenses",
-        "acceptableTools": ["list_expenses", "find_person", "final_response"],
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": ["find_person", "record_expense", "final_response"],
         "clarification": false,
         "write": false
       }
@@ -58,12 +58,12 @@
     {
       "id": "E",
       "category": "follow_up",
-      "message": "عدّل المبلغ إلى 9000 وخليه على مشروع المتجر",
+      "message": "وكان ده الأسبوع اللي فات.",
       "contextMode": "context_required",
       "expected": {
         "intent": "correction",
         "primaryTool": "update_expense",
-        "acceptableTools": ["update_expense", "final_response"],
+        "acceptableTools": ["update_expense", "record_expense", "final_response"],
         "clarification": true,
         "write": false
       }
