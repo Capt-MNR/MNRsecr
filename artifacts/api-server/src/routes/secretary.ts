@@ -178,6 +178,7 @@ function resultWithActualArgs(
 }
 
 router.get("/today", async (req, res): Promise<void> => {
+  console.log("TODAY_ROUTE_TENANT:", process.env.SECRETARY_TENANT_ID);
   const identity = getIdentity(req);
   if (!identity) {
     sendError(req, res, new SecretaryError("Authentication required.", {
@@ -297,6 +298,7 @@ router.post("/approvals/:operationId/approve", async (req, res): Promise<void> =
       sendError(req, res, approvalError("بيانات الموافقة غير صالحة.", "INVALID_APPROVAL_BODY", 400), "warn");
       return;
     }
+    console.log("APPROVE_ROUTE_TENANT:", process.env.SECRETARY_TENANT_ID);
     let argsOverride: Record<string, unknown> | undefined;
     if (body.data.args !== undefined) {
       const operation = await getOperation(identity, operationId);

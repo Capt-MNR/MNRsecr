@@ -99,6 +99,7 @@ async function listRecords(identity: Identity) {
 }
 
 router.get("/records", async (req, res): Promise<void> => {
+  console.log("RECORDS_ROUTE_TENANT:", process.env.SECRETARY_TENANT_ID);
   const identity = requireIdentity(req, res);
   if (!identity) return;
   try {
