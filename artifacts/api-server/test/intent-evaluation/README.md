@@ -100,6 +100,7 @@ Each case records:
 - request bytes, prompt/tool/conversation sizes;
 - cache hit/miss and cached token metrics;
 - approval reached, write occurred, and no-write violation;
+- a Phase 1.7 diagnostic trace linking each logical call to provider attempts, model, scope, available tools, selected tool arguments, sanitized result metadata, and the next orchestration decision;
 - per-case accuracy fields and exclusion status.
 
 The summary reports:
@@ -114,5 +115,13 @@ The summary reports:
 - average/p50/p95 latency and conversation size;
 - cache hit/miss cases and cached tokens;
 - no-write violations.
+
+The diagnostic trace is emitted only in structured telemetry and is copied into each
+case result by the runner. It is not added to prompts, assistant responses, or
+persisted conversation memory. Calls counted logically but blocked before an HTTP
+request have an empty `attempts` array. Each recorded attempt explicitly includes
+`httpRequestSent`, `failureReason`, `retry`, `fallback`, and `cacheRetry`; failed
+HTTP attempts remain in the corresponding logical call when provider usage is
+unavailable.
 
 Provider errors are not counted as NLU failures. A run that never reaches a real LLM reports zero evaluated cases rather than claiming a passing or failing NLU score.

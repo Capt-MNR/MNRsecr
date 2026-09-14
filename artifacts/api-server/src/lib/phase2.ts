@@ -196,6 +196,8 @@ export type LlmUsageAttempt = {
   model: string;
   logicalCallNumber: number;
   attemptNumber: number;
+  scope: ToolScope["name"] | null;
+  toolsAvailable: string[];
   inputTokens: number | null;
   outputTokens: number | null;
   totalTokens: number | null;
@@ -205,13 +207,67 @@ export type LlmUsageAttempt = {
   toolDefinitionsTokens: number | null;
   toolResultTokens: number | null;
   cacheHit: boolean;
+  cacheRetry: boolean;
   fallback: boolean;
   retry: boolean;
+  httpRequestSent: boolean;
   latencyMs: number;
   success: boolean;
   failureReason: string | null;
   outputChars: number;
   context: LlmContextBreakdown;
+};
+
+export type DiagnosticToolResult = {
+  ok: boolean | null;
+  keys: string[];
+  resultChars: number;
+  resultBytes: number;
+  promptChars: number;
+  pendingApproval: boolean;
+  errorCode: string | null;
+};
+
+export type DiagnosticSelectedTool = {
+  callId: string;
+  name: string;
+  arguments: Record<string, unknown>;
+  argumentChars: number;
+  argumentBytes: number;
+  result: DiagnosticToolResult | null;
+};
+
+export type DiagnosticNextDecision = {
+  kind:
+    | "continue_after_tool_results"
+    | "schedule_finalization"
+    | "return_text"
+    | "return_final_response"
+    | "return_approval"
+    | "scope_widened"
+    | "finalization_failed"
+    | "error"
+    | "tool_limit";
+  reason: string;
+  nextLogicalCallNumber: number | null;
+  nextCallKind: "tool_round" | "finalization" | null;
+  nextScope: ToolScope["name"] | null;
+};
+
+export type DiagnosticLogicalCall = {
+  logicalCallNumber: number;
+  phase: "tool_round" | "finalization";
+  scope: ToolScope["name"] | null;
+  requestedTools: string[];
+  finalResponseOnly: boolean;
+  attempts: LlmUsageAttempt[];
+  selectedTools: DiagnosticSelectedTool[];
+  nextDecision: DiagnosticNextDecision | null;
+};
+
+export type Phase2DiagnosticTrace = {
+  version: 1;
+  calls: DiagnosticLogicalCall[];
 };
 
 export type LlmUsageSummary = {
@@ -2012,10 +2068,13 @@ type LlmAttemptStart = {
   provider: ProviderName;
   model: string;
   attemptNumber: number;
+  scope: ToolScope["name"] | null;
+  toolsAvailable: string[];
   startedAt: number;
   fallback: boolean;
   retry: boolean;
   cacheHit: boolean;
+  cacheRetry: boolean;
   context: LlmContextBreakdown;
 };
 
@@ -2028,11 +2087,13 @@ function beginLlmAttempt(
     systemPromptChars: number;
     toolDefinitionsChars: number;
     toolDefinitionsCount: number;
+    toolNames: string[];
     conversationChars: number;
     context: LlmContextBreakdown;
     fallback?: boolean;
     retry?: boolean;
     cacheHit?: boolean;
+    cacheRetry?: boolean;
   },
 ): LlmAttemptStart {
   const metrics = context.metrics;
@@ -2041,10 +2102,13 @@ function beginLlmAttempt(
       provider,
       model,
       attemptNumber: 1,
+      scope: context.toolScope?.name ?? null,
+      toolsAvailable: payload.toolNames,
       startedAt: Date.now(),
       fallback: payload.fallback ?? false,
       retry: payload.retry ?? false,
       cacheHit: payload.cacheHit ?? false,
+      cacheRetry: payload.cacheRetry ?? false,
       context: payload.context,
     };
   }
@@ -2070,10 +2134,13 @@ function beginLlmAttempt(
     provider,
     model,
     attemptNumber: metrics.httpAttempts,
+    scope: context.toolScope?.name ?? null,
+    toolsAvailable: payload.toolNames,
     startedAt: Date.now(),
     fallback: payload.fallback ?? false,
     retry: payload.retry ?? false,
     cacheHit: payload.cacheHit ?? false,
+    cacheRetry: payload.cacheRetry ?? false,
     context: payload.context,
   };
 }
@@ -2098,6 +2165,8 @@ function finishLlmAttempt(
     model: attempt.model,
     logicalCallNumber: context.callNumber,
     attemptNumber: attempt.attemptNumber,
+    scope: attempt.scope,
+    toolsAvailable: attempt.toolsAvailable,
     inputTokens: normalized.inputTokens,
     outputTokens: normalized.outputTokens,
     totalTokens: normalized.totalTokens,
@@ -2107,8 +2176,10 @@ function finishLlmAttempt(
     toolDefinitionsTokens: attempt.context.toolDefinitionsTokens,
     toolResultTokens: attempt.context.toolResultTokens,
     cacheHit: attempt.cacheHit,
+    cacheRetry: attempt.cacheRetry,
     fallback: attempt.fallback,
     retry: attempt.retry,
+    httpRequestSent: true,
     latencyMs: Date.now() - attempt.startedAt,
     success: outcome.success,
     failureReason: outcome.failureReason ?? null,
@@ -2123,6 +2194,8 @@ function finishLlmAttempt(
     model: entry.model,
     logicalCallNumber: entry.logicalCallNumber,
     attemptNumber: entry.attemptNumber,
+    scope: entry.scope,
+    toolsAvailable: entry.toolsAvailable,
     inputTokens: entry.inputTokens,
     outputTokens: entry.outputTokens,
     totalTokens: entry.totalTokens,
@@ -2132,8 +2205,10 @@ function finishLlmAttempt(
     toolDefinitionsTokens: entry.toolDefinitionsTokens,
     toolResultTokens: entry.toolResultTokens,
     cacheHit: entry.cacheHit,
+    cacheRetry: entry.cacheRetry,
     fallback: entry.fallback,
     retry: entry.retry,
+    httpRequestSent: entry.httpRequestSent,
     latencyMs: entry.latencyMs,
     success: entry.success,
     failureReason: entry.failureReason,
@@ -2150,6 +2225,7 @@ function summarizeGatewayMetrics(
   metrics: GatewayRequestMetrics,
   totalToolCalls: number,
   requestLatencyMs: number,
+  diagnosticCalls: DiagnosticLogicalCall[] = [],
 ): LlmUsageSummary {
   const attempts = metrics.attempts;
   const inputTokens = sumMeasured(attempts.map((attempt) => attempt.inputTokens));
@@ -2226,6 +2302,21 @@ function summarizeGatewayMetrics(
   };
 }
 
+function buildDiagnosticTrace(
+  metrics: GatewayRequestMetrics,
+  diagnosticCalls: DiagnosticLogicalCall[],
+): Phase2DiagnosticTrace {
+  return {
+    version: 1,
+    calls: diagnosticCalls.map((call) => ({
+      ...call,
+      attempts: metrics.attempts.filter(
+        (attempt) => attempt.logicalCallNumber === call.logicalCallNumber,
+      ),
+    })),
+  };
+}
+
 function recordProviderRequest(
   context: GatewayCallContext,
   provider: ProviderName,
@@ -2234,16 +2325,19 @@ function recordProviderRequest(
     systemPromptChars: number;
     toolDefinitionsChars: number;
     toolDefinitionsCount: number;
+    toolNames?: string[];
     conversationChars: number;
     model?: string;
     context?: LlmContextBreakdown;
     fallback?: boolean;
     retry?: boolean;
     cacheHit?: boolean;
+    cacheRetry?: boolean;
   },
 ): LlmAttemptStart {
   return beginLlmAttempt(context, provider, payload.model ?? provider, {
     ...payload,
+    toolNames: payload.toolNames ?? [],
     context: payload.context ?? contextBreakdown(
       [],
       context.currentUserMessage,
@@ -2256,6 +2350,37 @@ function recordProviderRequest(
 function compactToolResultForPrompt(toolResult: ToolResult): string {
   const compact = compactActionForMemory({ toolResult: jsonSafe(toolResult) }) as { toolResult?: unknown } | undefined;
   return JSON.stringify(compact?.toolResult ?? toolResult);
+}
+
+function diagnosticToolResult(toolResult: ToolResult): DiagnosticToolResult {
+  const safeResult = jsonSafe(toolResult);
+  const serialized = JSON.stringify(safeResult);
+  const promptResult = compactToolResultForPrompt(toolResult);
+  const record = safeResult && typeof safeResult === "object"
+    ? safeResult as Record<string, unknown>
+    : {};
+  return {
+    ok: typeof record.ok === "boolean" ? record.ok : null,
+    keys: Object.keys(record).sort(),
+    resultChars: serialized.length,
+    resultBytes: Buffer.byteLength(serialized),
+    promptChars: promptResult.length,
+    pendingApproval: record.pendingApproval === true,
+    errorCode: typeof record.errorCode === "string" ? record.errorCode : null,
+  };
+}
+
+function diagnosticSelectedTool(call: GatewayToolCall): DiagnosticSelectedTool {
+  const safeArguments = jsonSafe(call.args) as Record<string, unknown>;
+  const serialized = JSON.stringify(safeArguments);
+  return {
+    callId: call.id,
+    name: call.name,
+    arguments: safeArguments,
+    argumentChars: serialized.length,
+    argumentBytes: Buffer.byteLength(serialized),
+    result: null,
+  };
 }
 
 function toGeminiContents(messages: ConversationMessage[]): Array<{ role: string; parts: GeminiPart[] }> {
@@ -2588,6 +2713,7 @@ export class GeminiModelGateway implements ModelGateway {
             systemPromptChars: systemText.length,
             toolDefinitionsChars: JSON.stringify(toolDefinitions).length,
             toolDefinitionsCount: toolDefinitions.length,
+            toolNames: toolDefinitions.map((definition) => definition.name),
             conversationChars: JSON.stringify(contents).length,
               context: contextBreakdown(
                 messages,
@@ -2597,6 +2723,7 @@ export class GeminiModelGateway implements ModelGateway {
               ),
               fallback: Boolean(context.providerFallback) || modelIndex > 0,
               retry: cacheFallbackAttempted,
+              cacheRetry: cacheFallbackAttempted,
               cacheHit: useCachedContent && cache.hit,
           });
           logger.info({
@@ -2772,6 +2899,7 @@ export class GroqModelGateway implements ModelGateway {
         systemPromptChars: systemText.length,
         toolDefinitionsChars: JSON.stringify(tools).length,
         toolDefinitionsCount: tools.length,
+        toolNames: tools.map((definition) => definition.function.name),
         conversationChars: JSON.stringify(apiMessages.slice(1)).length,
         context: contextBreakdown(
           messages,
@@ -2941,6 +3069,7 @@ export class MistralModelGateway implements ModelGateway {
       systemPromptChars: systemText.length,
       toolDefinitionsChars: JSON.stringify(tools).length,
       toolDefinitionsCount: tools.length,
+      toolNames: tools.map((definition) => definition.function.name),
       conversationChars: JSON.stringify(apiMessages.slice(1)).length,
       context: contextBreakdown(
         messages,
@@ -2963,6 +3092,7 @@ export class MistralModelGateway implements ModelGateway {
       systemPromptChars: systemText.length,
       toolDefinitionsChars: JSON.stringify(tools).length,
       toolDefinitionsCount: tools.length,
+      toolNames: tools.map((definition) => definition.function.name),
       conversationChars: JSON.stringify(apiMessages.slice(1)).length,
     }, "agent llm call started");
     try {
@@ -3511,6 +3641,35 @@ export class Phase2AgentRuntime {
     const toolHistory: ToolHistoryEntry[] = [];
     let finalizationAttempted = false;
     let conversationState: ConversationState = conversationMemory.state;
+    const diagnosticCalls: DiagnosticLogicalCall[] = [];
+
+    const startDiagnosticCall = (
+      logicalCallNumber: number,
+      phase: DiagnosticLogicalCall["phase"],
+      scope: ToolScope["name"] | null,
+      requestedTools: string[],
+      finalResponseOnly: boolean,
+    ): DiagnosticLogicalCall => {
+      const call: DiagnosticLogicalCall = {
+        logicalCallNumber,
+        phase,
+        scope,
+        requestedTools: [...requestedTools],
+        finalResponseOnly,
+        attempts: [],
+        selectedTools: [],
+        nextDecision: null,
+      };
+      diagnosticCalls.push(call);
+      return call;
+    };
+
+    const setDiagnosticDecision = (
+      call: DiagnosticLogicalCall,
+      decision: DiagnosticNextDecision,
+    ): void => {
+      call.nextDecision = decision;
+    };
 
     const persistResult = async (finalResponse: FinalResponse): Promise<Phase2TurnResult> => {
       const providerSelection = this.gateway.getProviderForRequest?.(requestId) ?? {
@@ -3566,7 +3725,9 @@ export class Phase2AgentRuntime {
         metrics,
         toolCalls,
         Date.now() - startedAt,
+        diagnosticCalls,
       );
+      const diagnosticTrace = buildDiagnosticTrace(metrics, diagnosticCalls);
       logger.info({
         requestId,
         conversationId,
@@ -3584,6 +3745,7 @@ export class Phase2AgentRuntime {
         cacheMiss: usageSummary.cacheMiss,
         latencyMs: usageSummary.latencyMs,
         context: usageSummary.context,
+        diagnosticTrace,
       }, "agent llm usage summary");
       this.gateway.finishRequest?.(requestId);
     };
@@ -3641,6 +3803,13 @@ export class Phase2AgentRuntime {
             });
             llmCalls += 1;
             metrics.logicalLlmCalls = llmCalls;
+              const diagnosticCall = startDiagnosticCall(
+                llmCalls,
+                "finalization",
+                activeToolScope.name,
+                ["final_response"],
+                true,
+              );
             try {
               const finalization = await this.gateway.generate(messages, {
                 requestId,
@@ -3654,13 +3823,42 @@ export class Phase2AgentRuntime {
               });
               const finalCall = finalization.toolCalls.find((call) => call.name === "final_response");
               if (finalCall) {
+                  diagnosticCall.selectedTools = [diagnosticSelectedTool(finalCall)];
+                  setDiagnosticDecision(diagnosticCall, {
+                    kind: "return_final_response",
+                    reason: "Finalization returned a final_response tool call.",
+                    nextLogicalCallNumber: null,
+                    nextCallKind: null,
+                    nextScope: activeToolScope.name,
+                  });
                 return persistResult(finalResponseFromArgs(finalCall.args, toolHistory));
               }
               if (finalization.text.trim()) {
+                  setDiagnosticDecision(diagnosticCall, {
+                    kind: "return_text",
+                    reason: "Finalization returned text without a tool call.",
+                    nextLogicalCallNumber: null,
+                    nextCallKind: null,
+                    nextScope: activeToolScope.name,
+                  });
                 return persistResult(finalResponseFromText(finalization.text, toolHistory));
               }
+                setDiagnosticDecision(diagnosticCall, {
+                  kind: "finalization_failed",
+                  reason: "Finalization returned neither final_response nor text.",
+                  nextLogicalCallNumber: null,
+                  nextCallKind: null,
+                  nextScope: activeToolScope.name,
+                });
               return persistResult(recoveryResponseAfterToolLimit(toolHistory));
             } catch (error) {
+                setDiagnosticDecision(diagnosticCall, {
+                  kind: "finalization_failed",
+                  reason: error instanceof SecretaryError ? error.code : "FINALIZATION_FAILED",
+                  nextLogicalCallNumber: null,
+                  nextCallKind: null,
+                  nextScope: activeToolScope.name,
+                });
               logger.warn({
                 requestId,
                 errorCode: error instanceof SecretaryError ? error.code : "FINALIZATION_FAILED",
@@ -3681,25 +3879,54 @@ export class Phase2AgentRuntime {
         }
         llmCalls += 1;
         metrics.logicalLlmCalls = llmCalls;
-        const response = await this.gateway.generate(messages, {
-          requestId,
-          conversationId,
-          callNumber: llmCalls,
-          toolCallsExecuted: toolCalls,
-          toolScope: activeToolScope,
-          currentUserMessage: input.message.trim(),
-          metrics,
-        });
+        const diagnosticCall = startDiagnosticCall(
+          llmCalls,
+          "tool_round",
+          activeToolScope.name,
+          [...activeToolScope.allowedToolNames],
+          false,
+        );
+        let response: GatewayResponse;
+        try {
+          response = await this.gateway.generate(messages, {
+            requestId,
+            conversationId,
+            callNumber: llmCalls,
+            toolCallsExecuted: toolCalls,
+            toolScope: activeToolScope,
+            currentUserMessage: input.message.trim(),
+            metrics,
+          });
+        } catch (error) {
+          setDiagnosticDecision(diagnosticCall, {
+            kind: "error",
+            reason: error instanceof SecretaryError ? error.code : "LLM_GENERATION_FAILED",
+            nextLogicalCallNumber: null,
+            nextCallKind: null,
+            nextScope: activeToolScope.name,
+          });
+          throw error;
+        }
+        diagnosticCall.selectedTools = response.toolCalls.map(diagnosticSelectedTool);
         if (response.toolCalls.length === 0) {
+          setDiagnosticDecision(diagnosticCall, {
+            kind: "return_text",
+            reason: "Provider returned no tool calls, so the text response ended the turn.",
+            nextLogicalCallNumber: null,
+            nextCallKind: null,
+            nextScope: activeToolScope.name,
+          });
           return persistResult(finalResponseFromText(response.text, toolHistory));
         }
 
+        let scopeWasWidened = false;
         const outOfScopeCall = response.toolCalls.find(
           (call) => !activeToolScope.allowedToolNames.has(call.name),
         );
         if (outOfScopeCall && !activeToolScope.isFull) {
           const previousScope = activeToolScope;
           activeToolScope = fullToolScope();
+          scopeWasWidened = true;
           logger.warn({
             requestId,
             scope: previousScope.name,
@@ -3717,6 +3944,13 @@ export class Phase2AgentRuntime {
 
         const finalCall = response.toolCalls.find((call) => call.name === "final_response");
         if (finalCall && response.toolCalls.length === 1) {
+          setDiagnosticDecision(diagnosticCall, {
+            kind: "return_final_response",
+            reason: "Provider returned only the final_response tool.",
+            nextLogicalCallNumber: null,
+            nextCallKind: null,
+            nextScope: activeToolScope.name,
+          });
           return persistResult(finalResponseFromArgs(finalCall.args, toolHistory));
         }
 
@@ -3736,8 +3970,17 @@ export class Phase2AgentRuntime {
               idempotencyKey: input.idempotencyKey,
             });
           } catch (error) {
+            setDiagnosticDecision(diagnosticCall, {
+              kind: "error",
+              reason: error instanceof SecretaryError ? error.code : "TOOL_EXECUTION_FAILED",
+              nextLogicalCallNumber: null,
+              nextCallKind: null,
+              nextScope: activeToolScope.name,
+            });
             throw agentToolError(call.name, error);
           }
+          const selectedTool = diagnosticCall.selectedTools.find((item) => item.callId === call.id);
+          if (selectedTool) selectedTool.result = diagnosticToolResult(toolResult);
           toolHistory.push({ name: call.name, result: toolResult });
           conversationState = updateConversationState(conversationState, call.name, toolResult);
           action = {
@@ -3760,6 +4003,13 @@ export class Phase2AgentRuntime {
             const details = Array.isArray(display.details)
               ? display.details.filter((detail): detail is string => typeof detail === "string")
               : [];
+            setDiagnosticDecision(diagnosticCall, {
+              kind: "return_approval",
+              reason: "The write tool returned a pending approval operation.",
+              nextLogicalCallNumber: null,
+              nextCallKind: null,
+              nextScope: activeToolScope.name,
+            });
             action = {
               type: "approval_required",
               operationId: approval.operationId,
@@ -3777,6 +4027,32 @@ export class Phase2AgentRuntime {
             toolCallId: call.id,
             toolName: call.name,
             text: compactToolResultForPrompt(toolResult),
+          });
+        }
+        if (toolCalls >= MAX_TOOL_CALLS) {
+          setDiagnosticDecision(diagnosticCall, {
+            kind: "tool_limit",
+            reason: "The tool-call limit was reached after executing the selected tools.",
+            nextLogicalCallNumber: null,
+            nextCallKind: null,
+            nextScope: activeToolScope.name,
+          });
+        } else {
+          const nextIsFinalization = llmCalls >= MAX_LOGICAL_LLM_CALLS && toolHistory.length > 0;
+          setDiagnosticDecision(diagnosticCall, {
+            kind: scopeWasWidened
+              ? "scope_widened"
+              : nextIsFinalization
+                ? "schedule_finalization"
+                : "continue_after_tool_results",
+            reason: scopeWasWidened
+              ? `The selected tool was outside the ${diagnosticCall.scope ?? "unknown"} scope; the next call uses full scope.`
+              : nextIsFinalization
+                ? "The logical-call limit was reached while tool history exists; the next call is finalization."
+                : "Tool results were appended to the conversation; the next call continues orchestration.",
+            nextLogicalCallNumber: llmCalls + 1,
+            nextCallKind: nextIsFinalization ? "finalization" : "tool_round",
+            nextScope: activeToolScope.name,
           });
         }
       }
@@ -3858,6 +4134,7 @@ export class CohereModelGateway implements ModelGateway {
       systemPromptChars: systemText.length,
       toolDefinitionsChars: JSON.stringify(tools).length,
       toolDefinitionsCount: tools.length,
+      toolNames: tools.map((definition) => definition.function.name),
       conversationChars: JSON.stringify(apiMessages.slice(1)).length,
       context: contextBreakdown(
         messages,
@@ -3880,6 +4157,7 @@ export class CohereModelGateway implements ModelGateway {
       systemPromptChars: systemText.length,
       toolDefinitionsChars: JSON.stringify(tools).length,
       toolDefinitionsCount: tools.length,
+      toolNames: tools.map((definition) => definition.function.name),
       conversationChars: JSON.stringify(apiMessages.slice(1)).length,
     }, "agent llm call started");
     try {

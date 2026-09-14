@@ -100,6 +100,7 @@ type CaseResult = {
   toolDefinitionsCount: number;
   maxConversationChars: number;
   contextBreakdown: Record<string, number | null>;
+  diagnosticTrace: unknown | null;
   rowCountsBefore: Record<string, number>;
   rowCountsAfter: Record<string, number>;
   rowCountChanged: boolean;
@@ -342,6 +343,7 @@ function makeCaseResult(
   const usageContext = usageSummary?.context && typeof usageSummary.context === "object"
     ? usageSummary.context as Record<string, unknown>
     : undefined;
+  const diagnosticTrace = usageSummary?.diagnosticTrace ?? null;
   const fallbackLog = run.logs.find((record) => record.msg === "agent provider fallback");
   const startedLogs = run.logs.filter((record) => record.msg === "agent llm call started");
   const attemptsByProvider: Record<string, number> = {};
@@ -446,6 +448,7 @@ function makeCaseResult(
         toolDefinitionsChars: null,
         requestBytes: null,
       },
+    diagnosticTrace,
     rowCountsBefore,
     rowCountsAfter,
     rowCountChanged,
