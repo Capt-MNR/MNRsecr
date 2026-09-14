@@ -1,0 +1,510 @@
+Deep Audit: Token Efficiency, LLM Calls & Proactive-Ready Architecture
+
+أريد منك إجراء Deep Technical Audit للكود الحالي بالكامل في المشروع، وليس مجرد مراجعة عامة أو اقتراحات نظرية.
+
+السياق المهم:
+
+هذا المشروع هو Personal AI Secretary، والهدف الأساسي في المرحلة الحالية هو:
+
+«تقليل استهلاك الـLLM tokens وعدد الـLLM/API calls إلى أقل حد ممكن، مع الحفاظ على جودة المساعد، وعدم التضحية بالـarchitecture المطلوبة لاحقًا لبناء مساعد Proactive حقيقي.»
+
+مهم جدًا:
+لا تضف features جديدة.
+لا تعيد كتابة المشروع بالكامل.
+لا تفترض أن زيادة عدد calls تجعل الـagent أذكى.
+أريد أولًا قياس وتحليل ما هو موجود حاليًا.
+
+---
+
+1. Full Architecture Audit
+
+راجع الـcodebase بالكامل وحدد بدقة:
+
+- كل مكان يتم فيه استدعاء Gemini أو Groq أو أي LLM.
+- كل LLM call يتم تنفيذها لكل user request.
+- هل هناك requests تؤدي إلى أكثر من LLM call بدون ضرورة.
+- هل Gemini وGroq يمكن أن يعملا معًا في نفس الطلب.
+- هل Groq يستخدم كـfallback فقط أم يمكن أن يعمل parallel.
+- كل مكان يتم فيه إرسال conversation history.
+- كل مكان يتم فيه إرسال memory.
+- كل مكان يتم فيه إرسال system prompt.
+- كل مكان يتم فيه إرسال tool definitions.
+- كل مكان يتم فيه إرسال tool results مرة أخرى إلى الـLLM.
+- أي retry / fallback / loop يمكن أن يسبب calls إضافية.
+
+أنشئ flow واضح مثل:
+
+User Request
+→ Router
+→ Context Retrieval
+→ LLM
+→ Tool
+→ Tool Result
+→ LLM
+→ Final Response
+
+ولكن استخدم الـflow الحقيقي الموجود في الكود، وليس flow افتراضي.
+
+---
+
+2. TOKEN AUDIT
+
+هذه أهم نقطة.
+
+أريد منك حساب/تقدير الـtoken consumption الفعلي لكل مرحلة.
+
+حدد لكل LLM request:
+
+Input tokens
+
+- System prompt
+- Developer instructions
+- User message
+- Conversation state
+- Conversation summary
+- Structured memory
+- Retrieved context
+- Tool definitions
+- Previous tool calls/results
+- أي metadata إضافية
+
+Output tokens
+
+- reasoning/output إن كان ظاهرًا في الـAPI
+- tool calls
+- final response
+
+إذا كان المشروع لا يحتوي حاليًا على instrumentation كافية لقياس الأرقام الفعلية، لا تخترع أرقامًا.
+
+بدلًا من ذلك:
+
+1. حدد بالضبط أين يجب إضافة instrumentation.
+2. اقترح طريقة قياس دقيقة.
+3. أعطني estimated token ranges فقط عندما يكون ذلك ضروريًا.
+4. فرّق بوضوح بين measured و estimated.
+
+---
+
+3. REQUEST CLASSIFICATION
+
+اختبر architecture الحالية على الأقل على هذه السيناريوهات:
+
+A — Simple deterministic request
+
+مثال:
+
+"فكرني بكرة الساعة 5"
+
+B — Simple information retrieval
+
+"أنا صرفت كام الأسبوع ده؟"
+
+C — Memory request
+
+"إيه آخر حاجة سجلناها عن شركة المحجر؟"
+
+D — Multi-step task
+
+"سجل إنّي دفعت 11,500 جنيه تشطيبات لشركة المحجر، وحطها تحت المصروفات."
+
+E — Conversational follow-up
+
+User:
+"دفعت 5000 جنيه للمحامي."
+
+ثم:
+"وكان ده الأسبوع اللي فات."
+
+F — Complex reasoning request
+
+طلب يحتاج فهم وتحليل وليس مجرد CRUD.
+
+G — Future proactive behavior
+
+مثال:
+
+النظام يكتشف أن هناك موعدًا قريبًا أو التزامًا مهمًا ويحتاج إرسال notification.
+
+بالنسبة لكل scenario، حدد:
+
+- عدد LLM calls
+- كمية context المطلوبة
+- كمية memory المطلوبة
+- tools التي يتم تحميلها
+- estimated input/output tokens
+- هل يوجد call يمكن إلغاؤه
+- هل يمكن تنفيذ جزء deterministic
+- أفضل architecture لتنفيذه
+
+---
+
+4. IMPORTANT: ZERO-UNNECESSARY-CALL PRINCIPLE
+
+أريد منك مراجعة المشروع وفق القاعدة التالية:
+
+«The LLM should only be called when intelligence is actually required.»
+
+ابحث عن أي حالة يمكن فيها تنفيذ العملية بدون LLM.
+
+مثل:
+
+- database lookup
+- appointment creation
+- reminder scheduling
+- simple arithmetic
+- currency storage/conversion عندما تكون القاعدة deterministic
+- CRUD operations
+- validation
+- authentication
+- permissions
+- routing
+- formatting
+- notifications
+- checking dates/times
+
+إذا كان أي جزء من هذه العمليات يمر عبر Gemini بدون ضرورة، حدده.
+
+---
+
+5. CONTEXT MINIMIZATION
+
+راجع نظام الـconversation memory الحالي بدقة.
+
+أريد معرفة:
+
+هل يتم إرسال:
+
+- entire conversation؟
+- recent messages؟
+- summary؟
+- structured memory؟
+- retrieved memories؟
+
+وهل يتم إرسال أكثر من واحد منها في نفس request بدون فائدة؟
+
+الهدف:
+
+«Send the minimum context required to correctly answer the request.»
+
+حدد architecture مثالية لـcontext tiers، مثل:
+
+Tier 0
+
+No context
+
+Tier 1
+
+Current user message only
+
+Tier 2
+
+Small recent conversation window
+
+Tier 3
+
+Relevant structured memory
+
+Tier 4
+
+Relevant historical conversation
+
+ولا تستخدم Tier أعلى إلا إذا كان الطلب يحتاجه فعلًا.
+
+إذا كان هناك طريقة أفضل من هذا، اقترحها.
+
+---
+
+6. TOOL TOKEN AUDIT
+
+هذه نقطة مهمة جدًا.
+
+راجع كيفية تعريف الأدوات وإرسالها إلى Gemini.
+
+أريد معرفة:
+
+- هل كل tools يتم إرسالها مع كل request؟
+- هل يمكن عمل tool routing قبل LLM؟
+- هل يمكن إرسال subset فقط من الأدوات؟
+- هل descriptions طويلة بشكل غير ضروري؟
+- هل schemas تحتوي fields غير ضرورية؟
+- هل tool result يرجع بيانات أكثر من المطلوب؟
+- هل هناك tool calls متتابعة يمكن دمجها؟
+- هل هناك tool call يمكن تنفيذها deterministic بدون LLM؟
+
+احسب مقدار الـtokens التي يمكن توفيرها من هذه النقطة.
+
+---
+
+7. MULTI-LLM STRATEGY
+
+راجع Gemini + Groq architecture تحديدًا.
+
+المطلوب:
+
+- لا تستخدم Gemini وGroq معًا إلا إذا كان هناك سبب حقيقي.
+- fallback يجب أن يكون fallback وليس parallel execution.
+- لا نريد duplicate processing.
+- لا نريد request واحد يستهلك quota من providerين بدون داعٍ.
+
+حدد:
+
+1. متى يجب استخدام Gemini؟
+2. متى يمكن استخدام Groq؟
+3. هل توجد requests يمكن routing لها إلى provider أرخص؟
+4. هل routing نفسه يحتاج LLM؟ إذا كان كذلك، هل يمكن جعله deterministic؟
+
+---
+
+8. PROACTIVE ARCHITECTURE
+
+راجع المشروع من ناحية المستقبل.
+
+أريد أن نصل لاحقًا إلى:
+
+«Proactive Personal AI Secretary»
+
+لكن بدون:
+
+«LLM running continuously / polling continuously / wasting tokens.»
+
+حلل كيف يمكن بناء proactive layer بحيث:
+
+- scheduler يعمل deterministic
+- database events تعمل deterministic
+- triggers تعمل deterministic
+- notifications تعمل deterministic
+- LLM يتم استدعاؤه فقط عندما يحتاج الحدث إلى reasoning/generation
+
+مثال:
+
+❌ سيئ:
+
+Every 5 minutes:
+→ Ask Gemini "هل هناك شيء يجب أن أخبر المستخدم به؟"
+
+✅ أفضل:
+
+Database/Event/Scheduler
+→ Detect relevant event
+→ Call LLM only if reasoning is required
+→ Notification
+
+أريد منك تقييم مدى جاهزية architecture الحالية لهذا النموذج.
+
+---
+
+9. USER PERMISSION / SAFETY
+
+المشروع عنده مبدأ مهم:
+
+«Every meaningful action must require user permission.»
+
+راجع أن تقليل الـLLM calls لا يؤدي إلى bypass للـpermission system.
+
+حدد:
+
+- أين يتم enforcement؟
+- هل الـLLM يستطيع تنفيذ action مباشرة؟
+- هل tool layer تتحقق من permission؟
+- هل permission enforcement deterministic؟
+- هل يمكن للـLLM التحايل عليها؟
+
+---
+
+10. OBSERVABILITY
+
+حدد هل لدينا حاليًا instrumentation كافية لمعرفة:
+
+- request ID
+- user ID
+- provider
+- model
+- input tokens
+- output tokens
+- total tokens
+- number of LLM calls
+- number of tool calls
+- latency
+- fallback events
+- errors
+
+إذا كانت غير موجودة، اقترح minimal-cost instrumentation.
+
+لا أريد logging يستهلك tokens أو يضيف unnecessary external API calls.
+
+---
+
+11. TOKEN BUDGET
+
+اقترح token budgets لكل نوع request.
+
+مثال مبدئي فقط، لا تفترض أنه صحيح:
+
+Simple request:
+→ 0–1 LLM call
+
+Normal request:
+→ ideally 1 LLM call
+
+Complex request:
+→ minimum necessary calls
+
+Tool execution:
+→ deterministic whenever possible
+
+Proactive trigger:
+→ 0 LLM calls unless reasoning is required
+
+أريد منك تحديد architecture واقعية بدل الأرقام الافتراضية.
+
+---
+
+12. FIND ACTUAL WASTE
+
+هذه النقطة مهمة جدًا.
+
+لا أريد قائمة عامة من نوع:
+
+"يمكن تحسين الـprompt."
+
+أريد تحديد waste حقيقي في الكود.
+
+لكل مشكلة أعطني:
+
+Problem
+
+ما الذي يحدث؟
+
+Location
+
+اسم الملف + function، وإذا أمكن line numbers.
+
+Why it wastes tokens/calls
+
+شرح تقني.
+
+Current behavior
+
+ما الذي يحدث الآن؟
+
+Recommended behavior
+
+ما الذي يجب أن يحدث؟
+
+Estimated saving
+
+- calls saved
+- input tokens saved
+- output tokens saved
+- percentage if measurable/estimable
+
+Risk
+
+هل التعديل يمكن أن يؤثر على functionality؟
+
+---
+
+13. PRIORITY MATRIX
+
+في النهاية أنشئ جدول:
+
+Priority| Problem| Tokens Saved| Calls Saved| Complexity| Risk
+P0| ...| ...| ...| ...| ...
+P1| ...| ...| ...| ...| ...
+P2| ...| ...| ...| ...| ...
+
+ركز أولًا على الأشياء التي توفر أكبر amount of tokens/API calls بأقل تعديل.
+
+---
+
+14. DO NOT OVER-ENGINEER
+
+لا تقترح:
+
+- Redis لمجرد استخدام Redis
+- microservices بدون حاجة
+- additional AI agents
+- extra LLM calls
+- embeddings/vector DB إذا لم تكن ضرورية
+- complicated orchestration
+- continuous LLM polling
+
+كل dependency أو service جديد يجب أن يكون له سبب واضح وmeasurable benefit.
+
+---
+
+15. FINAL VERDICT
+
+في نهاية الـaudit أريد إجابة صريحة على:
+
+A
+
+هل architecture الحالية بالفعل تقلل token usage بشكل جيد؟
+
+B
+
+ما أكبر 5 مصادر waste حاليًا؟
+
+C
+
+ما أكبر 5 تعديلات ستقلل التكلفة؟
+
+D
+
+هل Gemini + Groq architecture الحالية صحيحة؟
+
+E
+
+هل conversation memory الحالية efficient؟
+
+F
+
+هل tool architecture efficient؟
+
+G
+
+هل المشروع جاهز لإضافة proactive behavior بدون explosion في token/API costs؟
+
+H
+
+إذا كان علينا اختيار 3 تعديلات فقط الآن، ما هي؟
+
+---
+
+VERY IMPORTANT
+
+لا تقم بأي modifications للكود أثناء الـaudit.
+
+لا تعمل refactor.
+
+لا تضف features.
+
+لا تغير architecture.
+
+أريد Audit Report فقط أولًا.
+
+ويجب أن يكون التقرير مبنيًا على الكود الفعلي الحالي في repository وليس على افتراضات.
+
+إذا وجدت شيئًا غير واضح، قل إنه غير واضح بدل التخمين.
+
+وأريدك أن تفرق دائمًا بين:
+
+Verified from code
+و
+Estimated
+و
+Recommendation
+
+الهدف النهائي:
+
+«Maximum intelligence per token.
+
+Minimum LLM calls.
+
+No unnecessary context.
+
+No unnecessary tool calls.
+
+No continuous LLM usage for proactive behavior.
+
+Keep the architecture ready for the future Personal AI Secretary Proactive system.»
