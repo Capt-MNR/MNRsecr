@@ -64,7 +64,8 @@ Repeat separately with `--provider gemini` and `--provider failover`. The runner
 Optional flags:
 
 - `--out path.json` saves the report to a chosen path.
-- `--baseline path.json` prints Before/After accuracy deltas.
+- `--label before|after` labels the report for comparison.
+- `--baseline path.json` prints Before/After accuracy and cost deltas.
 - `--dataset path.json` evaluates a compatible dataset file.
 - `INTENT_EVAL_TENANT_ID` and `INTENT_EVAL_USER_ID` scope read-only fixtures.
 - `INTENT_EVAL_CONVERSATION_ID` marks context-required cases as having an externally prepared conversation fixture. The harness itself never creates that fixture.
@@ -82,6 +83,9 @@ Each case records:
 - fallback and fallback reason;
 - latency;
 - raw provider usage metadata when returned;
+- normalized input/output/total/cached token counts;
+- request bytes, prompt/tool/conversation sizes;
+- cache hit/miss and cached token metrics;
 - approval reached, write occurred, and no-write violation;
 - per-case accuracy fields and exclusion status.
 
@@ -93,6 +97,9 @@ The summary reports:
 - provider errors;
 - cases excluded because context was not provided;
 - total logical calls and HTTP attempts;
+- total tokens and request bytes;
+- average latency and conversation size;
+- cache hit/miss cases and cached tokens;
 - no-write violations.
 
 Provider errors are not counted as NLU failures. A run that never reaches a real LLM reports zero evaluated cases rather than claiming a passing or failing NLU score.

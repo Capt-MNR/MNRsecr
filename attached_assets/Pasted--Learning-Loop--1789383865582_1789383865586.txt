@@ -1,0 +1,920 @@
+.
+تقرير تدقيق وتصميم: Learning Loop للسكرتير الشخصي
+تم إجراء التدقيق على الكود الحالي فقط. لم يتم تعديل كود الإنتاج أو مخطط قاعدة البيانات أو الواجهة أو الاختبارات.
+
+الخلاصة التنفيذية
+المشروع لديه حدود معمارية جيدة يمكن البناء عليها:
+
+البيانات القانونية موجودة في جداول منظمة.
+ذاكرة المحادثة منفصلة ومحدودة ومعلّمة بأنها غير مصدر قانوني.
+كل الكتابات تمر بمسار موافقة durable.
+عمليات الموافقة محمية من التكرار والتنفيذ المتزامن.
+عزل المستخدم والـtenant موجود في معظم عمليات القراءة والكتابة.
+حل الكيانات الحالي يتعامل مع التكرار والغموض بدل الاختيار العشوائي.
+لكن لا توجد حاليًا طبقة تعلم للمستخدم:
+
+لا توجد جداول aliases.
+لا توجد provenance أو confidence أو learning signals.
+لا توجد آلية Memory Commit Report.
+لا توجد واجهة لعرض أو حذف ما تعلمه النظام.
+تقييم NLU الحالي لا يختبر دورة التعلم فعلًا.
+لا توجد domain باسم appointments حاليًا؛ الموجود هو reminders وcommitments.
+التوصية الرئيسية
+MUST: إضافة Learning/Normalization داخل PostgreSQL الحالي، وليس قاعدة بيانات منفصلة.
+
+MUST: إبقاء التعلم منفصلًا عن Structured Memory في البداية، وعدم تحويل أي alias إلى حقيقة دائمة إلا عبر إشارة قوية ومصدر معروف.
+
+MUST: جعل الطبقة الجديدة data-driven وconfidence-driven، وليست parser جديدًا يعتمد على مجموعة كبيرة من Regex.
+
+MUST: تسجيل learning signal بعد نجاح العملية وموافقة المستخدم، وليس عند مجرد اقتراح النموذج أو وصول رسالة عادية.
+
+DO NOT DO: اعتبار موافقة المستخدم على تسجيل مصروف موافقة تلقائية على alias دائم.
+
+DO NOT DO: السماح للنموذج بإنشاء أو تعديل alias دائم مباشرة.
+
+1. المعمارية الحالية ذات الصلة بالتعلم
+المسار الحالي
+المسار العام هو:
+
+Browser
+  → secretary route
+  → identity
+  → Phase2AgentRuntime
+  → conversation memory
+  → LLM gateway
+  → registered tools
+  → pending operation for writes
+  → Approval UI
+  → atomic approval claim
+  → database write
+  → conversation state update
+المكونات الأساسية:
+
+artifacts/api-server/src/routes/secretary.ts
+
+يستقبل المحادثة.
+يحدد هوية المستخدم.
+يعالج الموافقة والرفض.
+artifacts/api-server/src/lib/phase2.ts
+
+يحتوي Phase2AgentRuntime.
+يبني سياق المحادثة.
+يختار نطاق الأدوات.
+يدير استدعاءات LLM والأدوات.
+يحتوي أدوات البحث والكتابة.
+ينشئ pending operations للكتابات.
+يحتوي Gemini/Groq/Mistral/Cohere gateways.
+artifacts/api-server/src/lib/conversation-memory.ts
+
+يخزن ذاكرة المحادثة.
+يحتفظ بآخر ستة أدوار.
+يبني summary بعد عدة أدوار.
+يحتفظ بحالة منظمة مثل آخر شخص أو مشروع أو مصروف.
+artifacts/api-server/src/lib/secretary-operations.ts
+
+ينشئ ويدير pending operations.
+ينفذ claim ذريًا للموافقة.
+يمنع تنفيذ العملية مرتين.
+lib/db/src/schema/personal-secretary.ts
+
+يحتوي جداول الأشخاص والمشاريع والمصروفات والمهام والتذكيرات والالتزامات والمحادثات والعمليات.
+ذاكرة المحادثة الحالية
+ذاكرة المحادثة تحتوي على ثلاث طبقات عملية:
+
+Structured Memory
+
+جداول الأشخاص والمشاريع والمصروفات وغيرها.
+هي المصدر القانوني للبيانات.
+Conversation State
+
+أشخاص ومشاريع مرشحة.
+آخر شخص/مشروع/مصروف.
+تستخدم لفهم عبارات مثل "ده" و"التاني".
+Conversation Summary
+
+ملخص محدود الحجم.
+موصوف صراحة بأنه ليس مصدرًا قانونيًا.
+يجب التحقق من البيانات عبر الأدوات.
+الحجم الحالي محدود نسبيًا:
+
+آخر 6 أدوار.
+summary حتى 3200 حرف.
+بعض القيم مقيدة إلى 320 حرفًا.
+قوائم الكيانات مقيدة تقريبًا إلى 10 عناصر.
+هذا جيد للسلامة، لكنه لا يمثل قاموسًا دائمًا للمستخدم.
+
+حدود LLM الحالية
+المسار الحالي يفرض:
+
+حتى 8 tool calls.
+حتى 4 logical LLM calls.
+نطاق أدوات محدود في البداية لبعض الطلبات.
+توسيع النطاق عند اكتشاف أن الطلب خارج المجال الأولي.
+finalization منفصل عند الحاجة.
+تعريفات الأدوات وsystem prompt يعاد إرسالها مع الطلبات. أُضيف Gemini Context Caching، لكن بيئة Gemini الحالية رفضت إنشاء cache بسبب أن حد تخزين CachedContent المتاح للمفتاح الحالي يساوي صفرًا. لذلك لا يمكن الاعتماد على cache كجزء من baseline الحالي.
+
+2. ما هو موجود ويمكن إعادة استخدامه
+2.1 تطبيع الأسماء
+يوجد تطبيع عربي حالي في:
+
+secretary.ts
+phase2.ts
+وهو يعالج:
+
+أشكال الألف.
+التاء المربوطة.
+الألف المقصورة.
+التشكيل.
+المسافات.
+حالة الأحرف.
+هذا مفيد كبداية لـaliasKey، لكنه ليس تعلمًا؛ فهو normalization عام فقط.
+
+MUST: إعادة استخدام نفس normalization الأساسي حتى لا تنتج طبقة التعلم قاموسًا مختلفًا عن resolver الحالي.
+
+DO NOT DO: إنشاء normalization مستقل داخل طبقة aliases تختلف قواعده عن nameKey.
+
+2.2 حل الأشخاص والمشاريع
+الأدوات الحالية:
+
+find_person
+find_project
+تدعم:
+
+عدة نتائج.
+ترتيبًا ordinal.
+needsClarification.
+منع الاختيار العشوائي.
+تحققًا من tenant/user.
+هذا هو المكان الصحيح لإضافة alias candidates، وليس إنشاء resolver منفصل يلتف حول الأدوات.
+
+SHOULD: جعل طبقة التعلم تضيف candidates موثقة إلى مسار الحل الحالي، ثم تترك التحقق النهائي للأدوات الحالية.
+
+2.3 Conversation State
+الحالة الحالية تحفظ:
+
+آخر شخص.
+آخر مشروع.
+آخر مصروف.
+المرشحين الذين ظهروا أثناء المحادثة.
+بعض الكيانات الأخيرة.
+هذا يغطي جزءًا من:
+
+{
+  "activePerson": "...",
+  "activeProject": "...",
+  "pendingReferences": []
+}
+لكنه لا يحتوي حاليًا على:
+
+currentIntent واضح.
+مصدر كل candidate.
+confidence.
+وقت انتهاء reference.
+سجل تصحيح منظم.
+SHOULD: توسيع Conversation State تدريجيًا بدل وضع المعلومات قصيرة العمر في جدول aliases دائم.
+
+2.4 Approval Operations
+secretary_operations يحتوي على معلومات قوية قابلة لإعادة الاستخدام كـprovenance:
+
+conversationId
+toolName
+argumentsJson
+displayJson
+status
+result
+error
+timestamps
+idempotency key
+هذا يجعل العملية المعتمدة مصدرًا جيدًا لتكوين جزء كبير من Memory Commit Report دون استدعاء LLM.
+
+2.5 Idempotency and safety
+المشروع لديه:
+
+idempotency لكل مستخدم وtenant.
+atomic claim للموافقة.
+رفض نهائي للعملية.
+انتهاء صلاحية العملية.
+منع إعادة التنفيذ.
+dry-run.
+عزل conversation memory.
+هذه أساس مهم لمنع أن تنتج طبقة التعلم أثرًا جانبيًا غير مقصود.
+
+2.6 الواجهة الحالية
+الواجهة تدعم:
+
+الأشخاص.
+المشاريع.
+المصروفات.
+المهام.
+التذكيرات.
+الالتزامات.
+الإنشاء والتعديل والحذف.
+مراجعة الموافقة.
+محادثة وسجل محادثات.
+أفضل أماكن التوسعة المستقبلية:
+
+صفحة الشخص لعرض “معروف أيضًا باسم”.
+بطاقة الشخص أو المشروع لعرض مصدر alias.
+شاشة مستقلة لإدارة aliases.
+approval modal لعرض أن العملية تستخدم alias متعلمًا.
+conversation history للانتقال إلى مصدر التعلم.
+3. المعمارية المقترحة لـ Learning/Normalization
+المكونات
+أقترح أربع طبقات:
+
+Normalization
+  → Candidate Resolver
+  → Context Engine
+  → Learning Signal / Commit
+3.1 Normalization
+مسؤوليته:
+
+تحويل النص إلى aliasKey.
+توحيد المسافات والحروف.
+عدم اتخاذ قرار intent.
+عدم تنفيذ database write.
+3.2 Candidate Resolver
+مسؤوليته:
+
+البحث عن aliases المعروفة للمستخدم.
+حساب candidates.
+تطبيق confidence والسياسات.
+إرجاع:
+مرشح واحد موثوق.
+عدة مرشحين.
+لا نتيجة.
+alias منتهي أو مرفوض.
+3.3 Context Engine
+مسؤوليته:
+
+دمج:
+Conversation State.
+aliases المعتمدة.
+الكيانات المذكورة مؤخرًا.
+pending references.
+نتائج resolver.
+إنشاء snapshot صغير للـLLM.
+تقليل إرسال المحادثة الكاملة.
+3.4 Learning Signal / Commit
+مسؤوليته:
+
+استقبال إشارة موثقة.
+تحديد هل هي:
+correction.
+explicit teaching.
+context selection.
+approved operation.
+تحديد هل تصبح candidate أم alias approved.
+حفظ provenance.
+عدم اعتماد أي قرار غير متوافق مع العملية الفعلية.
+تدفق مقترح
+رسالة المستخدم
+  → تطبيع محلي
+  → البحث في aliases الخاصة بالمستخدم
+  → بناء candidates موثقة
+  → بناء Context Snapshot صغير
+  → LLM للمعنى العام عند الحاجة
+  → أدوات الحل والقراءة
+  → pending operation للكتابة
+  → موافقة المستخدم
+  → تنفيذ DB
+  → Memory Commit Report
+  → تحديث learning signals
+MUST: تظل طبقة LLM هي طبقة الفهم الدلالي.
+
+MUST: تستخدم طبقة التعلم لتضييق الاحتمالات وتحسين reference resolution، لا لتصبح parserًا عامًا للغة العربية.
+
+DO NOT DO: تحويل كل رسالة إلى مجموعة قواعد Regex جديدة.
+
+4. تصميم قاعدة البيانات الأدنى
+القرار: لا نحتاج قاعدة بيانات منفصلة
+MUST: استخدام PostgreSQL الحالي.
+
+الأسباب:
+
+نفس tenant/user boundary.
+نفس transaction model.
+نفس backup وlifecycle.
+aliases مرتبطة مباشرة بكيانات موجودة.
+provenance مرتبط بالمحادثات والعمليات الحالية.
+4.1 جدول aliases
+لأعلى مستوى من سلامة foreign keys، أوصي في MVP بجداول typed:
+
+person_aliases
+project_aliases
+بدل جدول polymorphic واحد يحتوي على entityType + entityId فقط.
+
+الحقول المقترحة
+لكل جدول:
+
+id
+tenant_id
+owner_user_id
+person_id أو project_id
+alias
+alias_key
+status
+confidence
+source
+conversation_id
+operation_id
+usage_count
+last_used_at
+expires_at
+created_at
+updated_at
+status
+candidate
+approved
+rejected
+ambiguous
+expired
+source
+explicit_teaching
+explicit_correction
+context_selection
+approved_operation
+manual_ui
+الفهارس والقيود
+MUST:
+
+فهرس على:
+tenant_id
+owner_user_id
+alias_key
+uniqueness على alias + canonical entity ضمن المستخدم.
+منع alias approved واحد من الإشارة إلى كيانين مختلفين دون تسجيل الحالة كـambiguous.
+تحقق التطبيق من ownership حتى مع وجود foreign key.
+SHOULD: السماح بتسجيل أكثر من candidate لنفس alias بحالة candidate، لكن عدم السماح باستخدامها تلقائيًا حتى يصبح هناك اختيار واضح.
+
+4.2 جدول learning signals
+أوصي بجدول append-only منفصل:
+
+id
+tenant_id
+owner_user_id
+conversation_id
+operation_id
+entity_type
+entity_id
+surface_form
+signal_type
+suggested_confidence
+decision
+reason
+source_turn_reference
+created_at
+أمثلة signal_type:
+
+candidate_selected
+user_correction
+explicit_teaching
+approved_record
+rejected_candidate
+alias_used
+alias_removed
+أمثلة decision:
+
+recorded
+promoted
+ignored
+rejected
+expired
+SHOULD: الاحتفاظ بالـsignal حتى إذا لم يتحول إلى alias؛ ذلك يسمح بفهم سبب ظهور alias أو رفضه.
+
+OPTIONAL: إضافة raw_context_excerpt محدود الحجم، بشرط ألا يكون هذا بديلًا عن conversation memory وألا يحتوي بيانات أكثر مما يلزم.
+
+4.3 ما لا يجب وضعه في alias table
+DO NOT DO:
+
+تخزين intent كامل داخل alias.
+تخزين مبلغ أو عملية مالية كـalias.
+تخزين كل جملة قالها المستخدم.
+تخزين alias بدون tenant/user.
+تخزين confidence يحدده النموذج وحده.
+استخدام alias دائم إذا كان المصدر مجرد approval عادي.
+5. تصميم Context Engine
+Context Snapshot مقترح
+{
+  "activePerson": {
+    "id": "P27",
+    "displayName": "محمد أحمد",
+    "source": "approved_alias",
+    "confidenceBand": "high"
+  },
+  "activeProject": {
+    "id": "PR12",
+    "displayName": "المحجر",
+    "source": "conversation_state"
+  },
+  "recentEntities": [
+    {
+      "type": "person",
+      "id": "P27",
+      "source": "recent_selection"
+    }
+  ],
+  "pendingReferences": [],
+  "candidateResolutions": [],
+  "relevantFacts": []
+}
+قواعد resolver
+High confidence
+يمكن اعتبار alias عالي الثقة فقط إذا:
+
+tenant/user مطابقان.
+entity ما زال موجودًا.
+alias حالته approved.
+لا توجد نتيجة approved متعارضة.
+لم ينتهِ alias.
+confidence policy تسمح بذلك.
+حتى في هذه الحالة، يجب أن يعاد التحقق من entity قبل تمرير ID إلى tool.
+
+Medium confidence
+MUST: يرسل كـcandidate فقط.
+
+مثال:
+
+وجدت أن عبارة "محمد بتاع المحجر" قد تشير إلى محمد أحمد.
+ولا يتم تسجيل أو تعديل أي شيء تلقائيًا.
+
+Low confidence
+لا تستخدم للحسم. يمكن الاحتفاظ بها كإشارة تحليلية فقط.
+
+كيف نتجنب parser جديدًا؟
+بدل Regex خاص بـ:
+
+دفعت لمحمد بتاع المحجر 3000
+تستخدم الطبقة:
+
+normalization.
+alias lookup data-driven.
+longest matching alias.
+candidate scoring.
+domain/type validation.
+إعادة النتيجة إلى LLM أو tool executor.
+الطبقة لا تحاول فهم أن “دفعت” تعني مصروفًا. هذا يظل من مسؤولية LLM/tool orchestration الحالي.
+
+MUST: local engine يحل references فقط، ولا يعيد بناء intent classifier كامل.
+
+انتهاء وصلاحية السياق
+SHOULD:
+
+تحديد TTL للـpending references.
+استخدام Conversation State فقط داخل conversation.
+عدم اعتبار آخر مشروع معروف صالحًا إلى أجل غير محدود.
+زيادة confidence عند الاستخدام الصحيح.
+تطبيق decay أو expiration على candidates غير المستخدمة.
+6. تصميم Memory Commit Report
+الهدف
+التقرير ليس نسخة من المحادثة. هو نتيجة صغيرة لما تغير فعليًا.
+
+شكل مقترح
+{
+  "conversationId": "conversation-123",
+  "operationId": "operation-456",
+  "committedFacts": [
+    {
+      "entityType": "expense",
+      "entityId": "expense-789",
+      "change": "created",
+      "source": "approved_operation"
+    }
+  ],
+  "resolvedEntities": [
+    {
+      "surfaceForm": "محمد بتاع المحجر",
+      "entityType": "person",
+      "entityId": "P27",
+      "resolutionSource": "approved_alias"
+    }
+  ],
+  "learningSignals": [
+    {
+      "type": "approved_operation",
+      "surfaceForm": "محمد بتاع المحجر",
+      "entityType": "person",
+      "entityId": "P27",
+      "decision": "candidate_signal"
+    }
+  ],
+  "contextUpdates": [
+    {
+      "key": "lastPerson",
+      "value": "P27"
+    }
+  ],
+  "provenance": {
+    "conversationId": "conversation-123",
+    "operationId": "operation-456"
+  }
+}
+ما يمكن بناؤه deterministic
+MUST: تكون هذه العناصر server-generated من البيانات الفعلية:
+
+entity تم إنشاؤه.
+entity تم تحديثه.
+record ID.
+tool name.
+approved operation ID.
+العملية التي نجحت.
+الكيانات التي تم التحقق منها.
+Conversation State الجديدة.
+ما قد يحتاج LLM
+OPTIONAL: استخدام LLM لاستخراج candidate alias من correction معقدة.
+
+مثال:
+
+لا، أقصد مشروع المحجر.
+لكن الناتج يجب أن يكون:
+
+{
+  "surfaceForm": "...",
+  "candidateEntity": "...",
+  "reason": "user_correction"
+}
+وليس write مباشرًا.
+
+MUST: أي LLM-generated report يدخل كاقتراح فقط، ويعاد التحقق منه مقابل:
+
+conversation state.
+operation.
+canonical entity.
+user identity.
+approval result.
+متى يتم commit؟
+MUST: بعد نجاح العملية المعتمدة فقط.
+
+الحالات التالية لا تنشئ alias دائمًا:
+
+مجرد اقتراح من النموذج.
+قراءة سجل.
+pending approval لم يتم اعتماده.
+عملية rejected.
+عملية failed.
+تصحيح غير واضح.
+candidate لم يختره المستخدم.
+7. التفاعل مع Approval وLearning
+المسار المقترح:
+
+User request
+  → interpretation
+  → proposed record
+  → pending approval
+  → user approval
+  → atomic claim
+  → DB write
+  → deterministic commit report
+  → learning signal
+الفرق الضروري
+موافقة على السجل
+تعني:
+
+المستخدم وافق على تسجيل هذا المصروف بهذه البيانات.
+تعليم alias صراحة
+تعني:
+
+المستخدم قرر أن "محمد بتاع المحجر" هو "محمد أحمد".
+ليستا الشيء نفسه.
+
+السياسة المقترحة
+MUST:
+
+approval يسجل learning signal عن صحة العملية.
+approval لا يرقّي alias تلقائيًا إلى approved.
+explicit teaching أو confirmation صريح هو المصدر الأقوى للترقية.
+تعديل record بعد alias خاطئ يسجل correction signal.
+rejection لا يمسح alias معتمدًا تلقائيًا، لكنه قد يخفض الثقة أو ينشئ conflict signal حسب السبب.
+مثال
+إذا قال المستخدم:
+
+دفعت لمحمد بتاع المحجر 3000
+ثم وافق على العملية، هذا يعني أن العملية صحيحة في هذه اللحظة. لا يعني بالضرورة أن المستخدم يريد حفظ “محمد بتاع المحجر” كاسم دائم.
+
+إذا قال:
+
+افتكر إن محمد بتاع المحجر هو محمد أحمد
+فهذه إشارة تعليم صريحة ويمكن عرضها للتأكيد أو تخزينها وفق سياسة alias.
+
+8. الآثار المطلوبة على الواجهة
+الوضع الحالي
+واجهة Records تدعم:
+
+عرض ستة أنواع من السجلات.
+الإنشاء.
+التعديل.
+الحذف.
+approval modal.
+عدم وجود شاشة aliases أو provenance.
+Home يدعم:
+
+المحادثة.
+approval inline.
+provider/model metadata.
+conversation history.
+Today context.
+التوسعة المقترحة
+صفحة الشخص
+SHOULD:
+
+إضافة قسم:
+
+معروف أيضًا باسم:
+- محمد
+- محمد بتاع المحجر
+مع عرض:
+
+الحالة.
+مصدر التعلم.
+تاريخ آخر استخدام.
+إزالة alias.
+لا أنصح بعرض رقم confidence الخام للمستخدم. الأفضل استعمال:
+
+موثوق.
+يحتاج تأكيد.
+متعارض.
+منتهي.
+صفحة المشروع
+نفس النموذج للأسماء البديلة.
+
+Learning Inbox
+SHOULD: إضافة شاشة مستقلة مستقبلًا لعرض:
+
+“هل تريد حفظ هذا الاسم البديل؟”
+aliases المقترحة.
+corrections غير محسومة.
+aliases المتعارضة.
+سجل المصدر.
+Provenance
+SHOULD: إظهار رابط أو تفاصيل:
+
+تم التعلم من محادثة بتاريخ ...
+العملية المرتبطة: ...
+Approval modal
+SHOULD: إذا استخدم الطلب alias متعلمًا، يعرض approval modal ذلك بوضوح:
+
+تم التعرف على "محمد بتاع المحجر" باعتباره محمد أحمد.
+بدون أن يعني ذلك أن المستخدم يوافق على alias جديد في نفس اللحظة.
+
+لا يوجد حاليًا appointments
+MUST: عدم تصميم واجهة aliases لـappointments كأنه domain موجود. المخطط الحالي يحتوي reminders وcommitments فقط. إذا تم إضافة appointments مستقبلًا، تضاف كـdomain مستقل ضمن نفس السياسة.
+
+9. فرص تقليل tokens وLLM calls
+ما يتكرر حاليًا
+system prompt.
+tool definitions.
+آخر ستة أدوار.
+summary/state.
+أسماء الكيانات المتكررة.
+نتائج الأدوات داخل سياق الجولة.
+بعض نتائج القراءة التي قد يعاد إرسالها.
+ما هو موجود بالفعل
+tool scoping يقلل تعريفات الأدوات من 29 أداة إلى نطاقات أصغر.
+compact tool results.
+حد logical calls.
+context cache في Gemini، لكنه حاليًا غير فعال في البيئة بسبب حد CachedContent يساوي صفرًا.
+metrics لقياس request bytes وبعض metadata، لكنها ليست baseline قابلة للمقارنة بعد.
+التأثير الواقعي المتوقع
+لا ينبغي افتراض أن alias learning سيزيل كل استدعاء LLM.
+
+أول استخدام
+غالبًا لن يكون هناك توفير كبير؛ النظام يحتاج إلى:
+
+فهم النية.
+حل alias أو تأكيده.
+تنفيذ الأداة.
+الاستخدام المتكرر بعد alias approved
+التوفير المتوقع مبدئيًا:
+
+حذف أو تقليل استدعاء find_person أو find_project.
+تقليل نص candidates.
+تقليل conversation context عند استخدام snapshot.
+تقليل input tokens في المحادثات الطويلة.
+تقدير أولي قابل للاختبار، وليس وعدًا:
+
+0% تقريبًا في أول ظهور للكيان.
+10–25% تقليل input tokens في سيناريوهات multi-turn التي تستخدم نفس الكيانات، إذا استُبدل التاريخ القديم بـsnapshot.
+tool call أقل في التدفقات التي كان resolver يعيد فيها البحث عن نفس الكيان.
+تقليل logical LLM calls غير مضمون؛ يعتمد على ما إذا كان orchestration يستطيع تمرير ID موثق مباشرة إلى tool.
+MUST: قياس هذه النتائج من harness فعلي، وليس من طول النص النظري.
+
+المقارنة المطلوبة
+يجب مقارنة:
+
+Baseline:
+full conversation + current tools
+Scoped:
+current tool scoping
+Context snapshot:
+snapshot + reduced history
+Learned alias:
+snapshot + approved aliases
+Gemini cache:
+cache enabled vs cache unavailable
+Metrics إضافية مقترحة
+input tokens.
+output tokens.
+total tokens.
+request bytes.
+system prompt chars.
+tool definitions chars.
+conversation chars.
+logical calls.
+tool calls.
+cache hit.
+cached tokens.
+latency p50/p95.
+false resolution rate.
+10. الأمن وعزل الـtenant
+قواعد إلزامية
+MUST:
+
+كل alias يحمل tenantId وownerUserId.
+لا يقبل resolver entity ID من النموذج كحقيقة.
+كل entity ID يعاد التحقق منه قبل استخدامه.
+البحث عن alias يكون scoped قبل أي normalization match.
+لا توجد aliases مشتركة بين المستخدمين افتراضيًا.
+approval operation لا يمكن للمستخدم الآخر استخدامه.
+provenance يجب أن يبقى scoped.
+مخاطر مهمة
+alias collision
+المستخدم لديه شخصان:
+
+محمد
+أو alias واحد مرتبط بأكثر من مشروع.
+
+الحل:
+
+إرجاع ambiguity.
+عدم الاختيار تلقائيًا.
+تسجيل candidate متعدد.
+إظهار clarification.
+cross-tenant leakage
+إذا كان alias string عامًا مثل:
+
+المحجر
+لا يجوز أن يجد مشروعًا من tenant آخر.
+
+prompt injection داخل alias
+Alias هو user data، وليس instruction.
+
+MUST: إدخاله في prompt على أنه data محاطة بحدود واضحة، وليس نصًا يمكنه تغيير قواعد النظام.
+
+حذف الكيان
+إذا حذف الشخص أو المشروع:
+
+alias يصبح orphan/expired.
+لا يتم حذفه صامتًا إذا كان يلزم provenance.
+لا يستخدم مرة أخرى للحل.
+تغيير الهوية
+إذا أشار alias إلى كيان تم دمجه أو تعديله، يجب وجود سياسة:
+
+alias يبقى على ID نفسه إن لم تتغير الهوية.
+أو يترقى إلى entity جديد عبر signal موثق.
+لا يعاد ربطه تلقائيًا بالاسم فقط.
+11. حالات الفشل والضمانات
+الحالة	الخطر	الضمان
+alias خاطئ	تسجيل عملية على كيان خاطئ	high confidence لا يكفي وحده للكتابة دون tool validation وapproval
+alias متعارض	اختيار الشخص الخطأ	إرجاع clarification
+correction غير واضح	تعلم معلومة خاطئة	candidate فقط
+approval مرفوض	تعلم alias من عملية لم تحدث	لا commit
+العملية فشلت	signal كاذب	لا commit
+العملية تكررت	duplicate learning	idempotency على signal
+entity محذوف	resolver يرجع ID ميتًا	تحقق canonical قبل الاستخدام
+alias من tenant آخر	تسريب/تلوث	composite ownership filters
+context قديم	تفسير “ده” خطأ	TTL وconversation scope
+LLM اخترع confidence	ترقية غير آمنة	confidence server-managed
+concurrent confirmation	alias duplicate	unique constraints + atomic decision
+cache غير متاح	latency إضافية	fallback وcooldown كما في Gemini الحالي
+DO NOT DO: جعل فشل Learning Loop يفشل تسجيل العملية الأساسية.
+
+MUST: التعلم best-effort، لكن لا يغير نتيجة العملية المعتمدة.
+
+12. خطة التقييم
+الوضع الحالي
+يوجد harness في:
+
+artifacts/api-server/test/intent-evaluation/
+ويضم 36 حالة:
+
+expense intent.
+create person.
+ambiguity.
+person + amount + project.
+corrections.
+negative guards.
+لكن الحالات التي تحتاج context لا تنشئ fixture كاملًا تلقائيًا، ولذلك لا تقيس correction learning فعليًا في الوضع الافتراضي.
+
+مجموعة Learning Loop المقترحة
+1. Alias learning
+"محمد بتاع المحجر هو محمد أحمد"
+المتوقع:
+
+alias candidate أو approved حسب السياسة.
+provenance محفوظ.
+لا write domain غير مطلوب.
+2. Alias reuse
+"دفعت لمحمد بتاع المحجر 3000"
+المتوقع:
+
+حل P27.
+عدم البحث العشوائي.
+عدم تسريب IDs.
+tool args تحتوي canonical entity الصحيح.
+3. User correction
+"لا، أقصد مشروع المحجر"
+المتوقع:
+
+تحديث conversation-local reference.
+signal تصحيح.
+لا alias دائم بدون السياسة المطلوبة.
+4. Project disambiguation
+مشروعان بنفس الاسم.
+alias واحد يتطابق مع الاثنين.
+النظام يطلب clarification.
+5. Person disambiguation
+شخصان بنفس الاسم.
+ordinal selection.
+invalid ordinal.
+اختيار قديم من conversation state.
+6. Context references
+"المشروع التاني"
+"سجلها عليه"
+"بدون الشخص ده"
+المتوقع:
+
+استخدام state الحالي فقط.
+expiry للحالة القديمة.
+عدم الخلط بين محادثتين.
+7. False learning prevention
+أمثلة:
+
+"قابلت محمد في المحجر"
+"محمد قال لي..."
+"المحجر بعيد"
+المتوقع:
+
+لا alias.
+لا record.
+لا تغيير دائم.
+8. Tenant isolation
+tenant A وtenant B بنفس الأسماء.
+نفس alias في الاثنين.
+نفس conversation ID.
+لا تظهر أي نتيجة أو candidate عبر الحدود.
+9. Approval safety
+العملية لا تكتب قبل approval.
+approval تنفذ مرة واحدة.
+rejection لا ينشئ alias دائمًا.
+approval لا يساوي explicit teaching.
+10. No unintended writes
+يجب أخذ snapshot لعدد الصفوف قبل وبعد كل حالة:
+
+people.
+projects.
+expenses.
+tasks.
+reminders.
+commitments.
+aliases.
+learning signals.
+11. Token/call reduction
+كل حالة تسجل:
+
+logical LLM calls.
+tool calls.
+input/output/total tokens.
+request bytes.
+tool definition size.
+conversation size.
+cache status.
+latency.
+ثم تقارن baseline وLearning Loop.
+
+تعديلات مستقبلية على harness
+SHOULD:
+
+دعم multi-turn case كامل.
+setup/teardown fixture لكل حالة.
+عدم استخدام tenant مشترك بين workers.
+snapshot database قبل وبعد.
+تقييم resolvedEntityId.
+تقييم learning decision.
+تقييم عدم إنشاء alias في الحالات السلبية.
+اعتبار approval_required نتيجة آمنة، وليس violation، في حالات الكتابة.
+13. أصغر MVP آمن
+نطاق MVP
+المرحلة الأولى
+MUST:
+
+إضافة aliases للأشخاص والمشاريع فقط.
+دعم explicit teaching أو explicit confirmation فقط.
+إنشاء learning signal بعد correction/selection.
+عدم تفعيل auto-learning من approval العادي.
+resolver في shadow mode:
+يحسب candidates.
+يسجل النتيجة.
+لا يغير behavior بعد.
+اختبار tenant isolation.
+إضافة metrics للـresolution: …
+This response is too long to display in full.

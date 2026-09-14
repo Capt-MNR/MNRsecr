@@ -85,6 +85,18 @@ type CaseResult = {
   fallbackReason: string | null;
   latencyMs: number;
   tokenUsage: unknown[] | null;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cachedTokens: number;
+  cacheHit: boolean;
+  cacheMiss: boolean;
+  requestBytesByProvider: Record<string, number>;
+  maxRequestBytes: number;
+  systemPromptChars: number;
+  toolDefinitionsChars: number;
+  toolDefinitionsCount: number;
+  maxConversationChars: number;
   approvalReached: boolean;
   wouldSelectWriteTool: boolean;
   writeOccurred: false;
@@ -207,6 +219,49 @@ function actualIntent(
   return null;
 }
 
+function numberFrom(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function usageTotals(usage: unknown[] | undefined): {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cachedTokens: number;
+} {
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let totalTokens = 0;
+  let cachedTokens = 0;
+  for (const item of usage ?? []) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as Record<string, unknown>;
+    const promptTokens = numberFrom(record.promptTokenCount ?? record.prompt_tokens ?? record.input_tokens);
+    const completionTokens = numberFrom(
+      record.candidatesTokenCount
+      ?? record.completion_tokens
+      ?? record.output_tokens,
+    );
+    const itemTotal = numberFrom(record.totalTokenCount ?? record.total_tokens);
+    const details = record.prompt_tokens_details;
+    const cachedFromDetails = details && typeof details === "object"
+      ? numberFrom((details as Record<string, unknown>).cached_tokens)
+      : 0;
+    const nestedTokens = record.tokens;
+    const nestedInput = nestedTokens && typeof nestedTokens === "object"
+      ? numberFrom((nestedTokens as Record<string, unknown>).input_tokens)
+      : 0;
+    const nestedOutput = nestedTokens && typeof nestedTokens === "object"
+      ? numberFrom((nestedTokens as Record<string, unknown>).output_tokens)
+      : 0;
+    inputTokens += promptTokens || nestedInput;
+    outputTokens += completionTokens || nestedOutput;
+    totalTokens += itemTotal || promptTokens + completionTokens || nestedInput + nestedOutput;
+    cachedTokens += numberFrom(record.cachedContentTokenCount ?? record.cached_tokens) || cachedFromDetails;
+  }
+  return { inputTokens, outputTokens, totalTokens, cachedTokens };
+}
+
 async function runWorker(
   evaluationCase: EvaluationCase,
   mode: string,
@@ -246,6 +301,7 @@ function makeCaseResult(
   const actualTool = nonFinalTools[0]
     ?? (names.includes("final_response") ? "final_response" : worker?.ok ? "text_response" : null);
   const trace = worker?.action?.providerTrace ?? {};
+  const usage = usageTotals(worker?.tokenUsage);
   const fallbackLog = run.logs.find((record) => record.msg === "agent provider fallback");
   const startedLogs = run.logs.filter((record) => record.msg === "agent llm call started");
   const attemptsByProvider: Record<string, number> = {};
@@ -307,6 +363,18 @@ function makeCaseResult(
         ?? 0,
     ),
     tokenUsage: worker?.tokenUsage && worker.tokenUsage.length > 0 ? worker.tokenUsage : null,
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    totalTokens: usage.totalTokens,
+    cachedTokens: Math.max(usage.cachedTokens, Number(trace.cachedTokens ?? 0)),
+    cacheHit: trace.cacheHit === true,
+    cacheMiss: trace.cacheMiss === true,
+    requestBytesByProvider: (trace.requestBytesByProvider as Record<string, number> | undefined) ?? {},
+    maxRequestBytes: Number(trace.maxRequestBytes ?? 0),
+    systemPromptChars: Number(trace.systemPromptChars ?? 0),
+    toolDefinitionsChars: Number(trace.toolDefinitionsChars ?? 0),
+    toolDefinitionsCount: Number(trace.toolDefinitionsCount ?? 0),
+    maxConversationChars: Number(trace.maxConversationChars ?? 0),
     approvalReached,
     wouldSelectWriteTool,
     writeOccurred: false,
@@ -344,7 +412,32 @@ function summarize(results: CaseResult[]) {
     noWriteViolations: results.filter((result) => result.noWriteViolation || result.writeOccurred).length,
     totalLogicalLlmCalls: results.reduce((sum, result) => sum + result.logicalLlmCalls, 0),
     totalHttpAttempts: results.reduce((sum, result) => sum + result.actualHttpAttempts, 0),
+    totalInputTokens: results.reduce((sum, result) => sum + result.inputTokens, 0),
+    totalOutputTokens: results.reduce((sum, result) => sum + result.outputTokens, 0),
+    totalTokens: results.reduce((sum, result) => sum + result.totalTokens, 0),
+    totalCachedTokens: results.reduce((sum, result) => sum + result.cachedTokens, 0),
+    cacheHitCases: results.filter((result) => result.cacheHit).length,
+    cacheMissCases: results.filter((result) => result.cacheMiss).length,
+    totalRequestBytes: results.reduce(
+      (sum, result) => sum + Object.values(result.requestBytesByProvider).reduce((inner, value) => inner + value, 0),
+      0,
+    ),
+    averageLatencyMs: results.length === 0
+      ? 0
+      : Math.round(results.reduce((sum, result) => sum + result.latencyMs, 0) / results.length),
+    averageConversationChars: results.length === 0
+      ? 0
+      : Math.round(results.reduce((sum, result) => sum + result.maxConversationChars, 0) / results.length),
   };
+}
+
+function numericDelta(
+  current: number | null | undefined,
+  baseline: number | null | undefined,
+): number | null {
+  return typeof current === "number" && typeof baseline === "number"
+    ? current - baseline
+    : null;
 }
 
 function printComparison(
@@ -366,6 +459,18 @@ function printComparison(
         || baseline.clarificationAccuracyPercent === null
         ? null
         : current.clarificationAccuracyPercent - baseline.clarificationAccuracyPercent,
+      totalLogicalLlmCalls: numericDelta(current.totalLogicalLlmCalls, baseline.totalLogicalLlmCalls),
+      totalHttpAttempts: numericDelta(current.totalHttpAttempts, baseline.totalHttpAttempts),
+      totalInputTokens: numericDelta(current.totalInputTokens, baseline.totalInputTokens),
+      totalOutputTokens: numericDelta(current.totalOutputTokens, baseline.totalOutputTokens),
+      totalTokens: numericDelta(current.totalTokens, baseline.totalTokens),
+      totalCachedTokens: numericDelta(current.totalCachedTokens, baseline.totalCachedTokens),
+      totalRequestBytes: numericDelta(current.totalRequestBytes, baseline.totalRequestBytes),
+      averageLatencyMs: numericDelta(current.averageLatencyMs, baseline.averageLatencyMs),
+      averageConversationChars: numericDelta(
+        current.averageConversationChars,
+        baseline.averageConversationChars,
+      ),
     } : null,
   }, null, 2));
 }
@@ -435,6 +540,7 @@ async function main(): Promise<void> {
   const report = {
     datasetVersion: dataset.version,
     providerMode: mode,
+    label: valueArg(args, "--label") ?? "after",
     dryRun: true,
     generatedAt: new Date().toISOString(),
     summary,
