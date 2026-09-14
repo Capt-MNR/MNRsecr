@@ -1,0 +1,358 @@
+We are going to explore a new capability for the Personal AI Secretary: a Learning Loop that improves the secretary’s understanding of the user over time, while reducing unnecessary LLM usage.
+
+IMPORTANT:
+This is an AUDIT + DESIGN task only.
+Do NOT modify production code, database schema, UI, prompts, or behavior yet.
+Do NOT create migrations.
+Do NOT refactor existing code.
+Do NOT implement anything.
+
+First inspect the current repository and understand the existing architecture, especially:
+
+- Phase2AgentRuntime / LLM-first flow
+- conversation memory
+- structured memory
+- people/projects/expenses/tasks/appointments
+- entity/reference resolution
+- approval flow
+- record creation/edit/delete
+- failover gateway
+- NLU evaluation harness
+- current tool definitions and tool execution
+- existing database schema
+- frontend Records UI
+
+Goal
+
+We want to investigate whether we can create a local intelligence layer that gradually learns the user's vocabulary, aliases, corrections, relationships and recurring interpretations.
+
+The principle is:
+
+LLM should NOT be the secretary's entire intelligence.
+
+Instead:
+
+User Data + Structured Memory + Normalization + Context Engine + Learned User Vocabulary + LLM when necessary
+
+The system should become more useful over time without proportionally increasing LLM token consumption.
+
+Core concept
+
+We want to introduce, conceptually, a:
+
+Secretary Context & Learning Engine
+
+It would sit between the user request and the LLM/database.
+
+Example:
+
+User:
+"دفعت لمحمد بتاع المحجر 3000"
+
+The system may eventually know:
+
+"محمد بتاع المحجر" → Person P27
+"المحجر" → Project PR12
+"دفعت" → financial outgoing / expense
+
+If confidence is sufficiently high, the system can resolve these locally without asking the LLM to rediscover the same information every time.
+
+However, the system MUST NOT become a giant regex/deterministic parser.
+
+We explicitly want to avoid returning to the previous architecture where many natural-language rules were hard-coded.
+
+The learning layer should primarily be DATA-driven and confidence-driven.
+
+Learning examples
+
+Example 1:
+
+User:
+"محمد بتاع المحجر"
+
+System discovers two possible people.
+
+User:
+"أيوه محمد أحمد"
+
+Potential learned mapping:
+
+"محمد بتاع المحجر" → P27
+
+Future use:
+
+"دفعت لمحمد بتاع المحجر 3000"
+
+should resolve the person locally if confidence is high.
+
+Example 2:
+
+User:
+"المشروع التاني"
+
+If the conversation context establishes that two projects were recently discussed and the user selects the second one, the system should be able to retain the resolved reference in conversation context.
+
+Example 3:
+
+User correction:
+
+System:
+"هل تقصد مشروع A؟"
+
+User:
+"لا، أقصد مشروع المحجر."
+
+The correction should potentially become a learning signal, but NOT automatically become permanent truth unless the architecture provides a safe mechanism for validating/promoting it.
+
+Very important distinction
+
+We need to distinguish:
+
+1. Permanent structured facts
+2. Conversation-local context
+3. Learned aliases/preferences
+4. Temporary hypotheses
+5. User corrections
+6. Confidence scores
+7. Provenance/source
+8. User-approved knowledge
+
+We do NOT want the system to blindly learn every sentence and eventually corrupt the user's memory.
+
+Memory Commit Report
+
+Investigate a mechanism called:
+
+Memory Commit Report
+
+Instead of sending the entire conversation to the real/structured memory layer, the conversation could produce a compact structured report containing only what materially changed.
+
+Conceptually:
+
+{
+conversationId,
+newFacts: [...],
+updatedFacts: [...],
+resolvedEntities: [...],
+learnedAliases: [...],
+corrections: [...],
+contextUpdates: [...],
+confidence: ...,
+provenance: ...
+}
+
+The report should be small and structured.
+
+IMPORTANT:
+Do not assume the LLM must generate this report.
+Investigate which parts can be generated deterministically from already-approved database operations and which parts genuinely require an LLM.
+
+Database / normalization investigation
+
+Design a possible schema for a normalization/learning layer.
+
+Potential concepts:
+
+- aliases
+- canonical entities
+- entity types
+- confidence
+- source
+- usage count
+- last used
+- approved/rejected
+- learned_from
+- context scope
+- tenant/user scope
+- expiration/decay if appropriate
+
+Example conceptual record:
+
+alias:
+"محمد بتاع المحجر"
+
+canonical_entity:
+Person P27
+
+confidence:
+0.96
+
+source:
+user_correction
+
+scope:
+user
+
+approved:
+true
+
+But DO NOT assume this exact schema is correct.
+Recommend the minimum viable design.
+
+Context Engine
+
+Investigate how the current system could produce a compact context snapshot such as:
+
+{
+activePerson: P27,
+activeProject: PR12,
+recentEntities: [...],
+pendingReferences: [...],
+currentIntent: ...,
+relevantFacts: [...]
+}
+
+The objective is to avoid repeatedly sending large conversation histories to the LLM.
+
+Token efficiency
+
+Estimate where this architecture could reduce tokens.
+
+Inspect the current implementation and identify:
+
+- repeated conversation history
+- repeated tool definitions
+- repeated entity names
+- repeated database results
+- repeated context
+- repeated system instructions
+- unnecessary LLM calls
+
+Do NOT propose token savings based on theoretical numbers alone.
+
+Use actual current repository structure where possible.
+
+Approval integration
+
+This is critical.
+
+The user wants every action that changes user data to require permission.
+
+Investigate how:
+
+User request
+→ interpretation
+→ proposed Record
+→ Approval UI
+→ user approval
+→ actual DB write
+→ Memory Commit / Learning signal
+
+could work.
+
+Approval should be treated as a potentially strong learning signal, but distinguish:
+
+"User approved this record"
+
+from:
+
+"User explicitly taught the system this alias."
+
+Do not conflate them automatically.
+
+UI investigation
+
+The future UI should make learned information understandable and editable.
+
+Investigate how the existing Records UI could eventually support:
+
+People
+Projects
+Expenses
+Tasks
+Appointments
+Aliases / learned vocabulary
+Pending approvals
+History/provenance
+
+For example, a person page could eventually show:
+
+محمد أحمد
+
+Known as:
+
+- محمد
+- محمد بتاع المحجر
+
+The user should be able to edit/remove learned aliases.
+
+Again: DESIGN ONLY. No UI implementation.
+
+Evaluation
+
+Use the existing NLU evaluation harness.
+
+Design a small Learning Loop evaluation set that tests:
+
+1. Alias learning
+2. Alias reuse
+3. User correction
+4. Project disambiguation
+5. Person disambiguation
+6. Context-dependent references
+7. False learning prevention
+8. Tenant isolation
+9. Approval safety
+10. No unintended writes
+11. Token/call reduction
+
+Especially test:
+
+Conversation 1:
+"محمد بتاع المحجر"
+→ user confirms identity
+
+Conversation 2:
+"دفعت لمحمد بتاع المحجر 3000"
+
+Expected:
+The system should resolve the entity using learned knowledge without requiring the LLM to rediscover the same alias.
+
+Architecture decision
+
+At the end, provide a concrete recommendation:
+
+A. Do we need a separate database?
+B. Or should this be additional tables in the existing PostgreSQL database?
+C. What should remain in structured memory?
+D. What should remain in conversation memory?
+E. What belongs in normalization/learning?
+F. What should never be learned automatically?
+G. Which parts can run without an LLM?
+H. When should the LLM be invoked?
+I. How does Memory Commit work?
+J. How much token/LLM-call reduction is realistically expected?
+K. What is the smallest safe MVP?
+
+Required output
+
+Return a detailed report with these sections:
+
+1. Current architecture relevant to Learning
+2. What already exists and can be reused
+3. Proposed Learning/Normalization architecture
+4. Proposed minimal database schema
+5. Context Engine design
+6. Memory Commit Report design
+7. Approval + Learning interaction
+8. UI implications
+9. Token/call optimization opportunities
+10. Security / tenant isolation considerations
+11. Failure modes and safeguards
+12. Evaluation plan
+13. Minimal MVP
+14. Phase 2 / future expansion
+15. Exact files/modules that would eventually need modification
+
+For every recommendation, clearly label it as:
+
+- MUST
+- SHOULD
+- OPTIONAL
+- DO NOT DO
+
+Finally, give us a proposed implementation sequence, but DO NOT implement it yet.
+
+The most important requirement:
+
+Do not optimize for "making the system more deterministic." Optimize for making it progressively more knowledgeable about the individual user while keeping the LLM as the semantic reasoning layer when genuinely necessary.
