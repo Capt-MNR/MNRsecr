@@ -60,8 +60,6 @@ async function startServer() {
     env,
     stdio: ["ignore", "pipe", "pipe"],
   });
-  console.log("SPAWNED_WITH_TENANT:", env.SECRETARY_TENANT_ID);
-  server.stdout.on("data", (chunk) => process.stdout.write(chunk));
   if (provider === "groq") {
     server.stdout.on("data", (chunk) => process.stdout.write(chunk));
   }
@@ -219,8 +217,6 @@ test("returns a provider-unavailable error instead of a connection error", async
 });
 
 test("persists a natural-language expense and deduplicates an idempotent retry", async () => {
-  console.log("TEST_RUNNING_TENANT:", testTenantId);
-  console.log("TEST_RUNNING_USER:", testUserId);
   const body = {
     message: "دفعت لاختبار المرحلة الثانية 275 جنيه اختبار تكامل",
     idempotencyKey: `phase2-integration-${Date.now()}`,
