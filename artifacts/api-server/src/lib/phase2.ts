@@ -1359,6 +1359,7 @@ async function executeTool(
         status: pending.status,
         toolName: pending.toolName,
         display: pending.display,
+        args: jsonSafe(pending.args),
       },
     };
     logger.info({
@@ -4040,6 +4041,7 @@ function deterministicApprovalResponse(
       status: approval.status,
       toolName,
       display: { title, details },
+      args: approval.args,
     },
   };
 }
@@ -4797,6 +4799,7 @@ export class Phase2AgentRuntime {
               status: approval.status,
               toolName: approval.toolName,
               display: { title, details },
+              args: approval.args,
             };
             return persistResult({
               kind: "clarification",

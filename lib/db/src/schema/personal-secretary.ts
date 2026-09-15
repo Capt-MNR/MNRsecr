@@ -487,6 +487,7 @@ export const taskPurposesTable = pgTable(
 
 function reminderRelationshipTable(
   name: string,
+  targetProperty: string,
   targetColumn: string,
   target: () => any,
 ) {
@@ -496,7 +497,7 @@ function reminderRelationshipTable(
       id: uuid("id").primaryKey().defaultRandom(),
       ...ownershipColumns,
       reminderId: uuid("reminder_id").notNull().references(() => remindersTable.id),
-      [targetColumn]: uuid(targetColumn).notNull().references(target),
+      [targetProperty]: uuid(targetColumn).notNull().references(target),
       relationship: text("relationship"),
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
       updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -504,24 +505,25 @@ function reminderRelationshipTable(
     },
     (table: any) => [
       uniqueIndex(`${name}_owner_pair_unique`).on(
-        table.tenantId, table.ownerUserId, table.reminderId, table[targetColumn],
+        table.tenantId, table.ownerUserId, table.reminderId, table[targetProperty],
       ),
     ],
   );
 }
 
 export const reminderPeopleTable = reminderRelationshipTable(
-  "reminder_people", "person_id", () => peopleTable.id,
+  "reminder_people", "personId", "person_id", () => peopleTable.id,
 );
 export const reminderProjectsTable = reminderRelationshipTable(
-  "reminder_projects", "project_id", () => projectsTable.id,
+  "reminder_projects", "projectId", "project_id", () => projectsTable.id,
 );
 export const reminderTasksTable = reminderRelationshipTable(
-  "reminder_tasks", "task_id", () => tasksTable.id,
+  "reminder_tasks", "taskId", "task_id", () => tasksTable.id,
 );
 
 function commitmentRelationshipTable(
   name: string,
+  targetProperty: string,
   targetColumn: string,
   target: () => any,
 ) {
@@ -531,7 +533,7 @@ function commitmentRelationshipTable(
       id: uuid("id").primaryKey().defaultRandom(),
       ...ownershipColumns,
       commitmentId: uuid("commitment_id").notNull().references(() => commitmentsTable.id),
-      [targetColumn]: uuid(targetColumn).notNull().references(target),
+      [targetProperty]: uuid(targetColumn).notNull().references(target),
       relationship: text("relationship"),
       createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
       updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -539,20 +541,20 @@ function commitmentRelationshipTable(
     },
     (table: any) => [
       uniqueIndex(`${name}_owner_pair_unique`).on(
-        table.tenantId, table.ownerUserId, table.commitmentId, table[targetColumn],
+        table.tenantId, table.ownerUserId, table.commitmentId, table[targetProperty],
       ),
     ],
   );
 }
 
 export const commitmentPeopleTable = commitmentRelationshipTable(
-  "commitment_people", "person_id", () => peopleTable.id,
+  "commitment_people", "personId", "person_id", () => peopleTable.id,
 );
 export const commitmentProjectsTable = commitmentRelationshipTable(
-  "commitment_projects", "project_id", () => projectsTable.id,
+  "commitment_projects", "projectId", "project_id", () => projectsTable.id,
 );
 export const commitmentPurposesTable = commitmentRelationshipTable(
-  "commitment_purposes", "purpose_id", () => purposesTable.id,
+  "commitment_purposes", "purposeId", "purpose_id", () => purposesTable.id,
 );
 
 export const commitmentsTable = pgTable(

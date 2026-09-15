@@ -26,6 +26,7 @@ import {
 export type DbExecutor = Pick<typeof db, "select" | "insert" | "update" | "delete">;
 export type GraphEntityType = "person" | "project" | "financial_party";
 export type Identity = { tenantId: string; userId: string };
+const GRAPH_LIMIT = 100;
 
 type ActivityEntityRef = {
   entityType: string;
@@ -277,7 +278,8 @@ export async function getPersonGraph(identity: Identity, personId: string) {
         eq(projectsTable.tenantId, identity.tenantId),
         eq(projectsTable.ownerUserId, identity.userId),
       ))
-      .orderBy(asc(projectsTable.name)),
+      .orderBy(asc(projectsTable.name))
+      .limit(GRAPH_LIMIT),
     db.select({
       id: expensesTable.id,
       amountMinor: expensesTable.amountMinor,
@@ -305,7 +307,8 @@ export async function getPersonGraph(identity: Identity, personId: string) {
         eq(expensesTable.ownerUserId, identity.userId),
         eq(expensesTable.personId, personId),
       ))
-      .orderBy(desc(expensesTable.occurredAt)),
+      .orderBy(desc(expensesTable.occurredAt))
+      .limit(GRAPH_LIMIT),
     db.select({
       id: commitmentsTable.id,
       title: commitmentsTable.title,
@@ -316,7 +319,7 @@ export async function getPersonGraph(identity: Identity, personId: string) {
       eq(commitmentsTable.tenantId, identity.tenantId),
       eq(commitmentsTable.ownerUserId, identity.userId),
       eq(commitmentsTable.personId, personId),
-    )).orderBy(desc(commitmentsTable.createdAt)),
+    )).orderBy(desc(commitmentsTable.createdAt)).limit(GRAPH_LIMIT),
     db.select({
       id: commitmentsTable.id,
       title: commitmentsTable.title,
@@ -332,7 +335,7 @@ export async function getPersonGraph(identity: Identity, personId: string) {
         eq((commitmentPeopleTable as any).personId, personId),
         eq(commitmentsTable.tenantId, identity.tenantId),
         eq(commitmentsTable.ownerUserId, identity.userId),
-      )).orderBy(desc(commitmentsTable.createdAt)),
+      )).orderBy(desc(commitmentsTable.createdAt)).limit(GRAPH_LIMIT),
     db.select({
       id: tasksTable.id,
       title: tasksTable.title,
@@ -348,7 +351,7 @@ export async function getPersonGraph(identity: Identity, personId: string) {
         eq(taskPeopleTable.personId, personId),
         eq(tasksTable.tenantId, identity.tenantId),
         eq(tasksTable.ownerUserId, identity.userId),
-      )).orderBy(desc(tasksTable.updatedAt)),
+      )).orderBy(desc(tasksTable.updatedAt)).limit(GRAPH_LIMIT),
     db.select({
       id: remindersTable.id,
       text: remindersTable.text,
@@ -364,7 +367,7 @@ export async function getPersonGraph(identity: Identity, personId: string) {
         eq((reminderPeopleTable as any).personId, personId),
         eq(remindersTable.tenantId, identity.tenantId),
         eq(remindersTable.ownerUserId, identity.userId),
-      )).orderBy(desc(remindersTable.dueAt)),
+      )).orderBy(desc(remindersTable.dueAt)).limit(GRAPH_LIMIT),
     db.select({ id: financialPartiesTable.id, name: financialPartiesTable.name, partyType: financialPartiesTable.partyType, relationship: financialPartyPeopleTable.relationship })
       .from(financialPartyPeopleTable)
       .innerJoin(financialPartiesTable, eq(financialPartyPeopleTable.partyId, financialPartiesTable.id))
@@ -374,7 +377,7 @@ export async function getPersonGraph(identity: Identity, personId: string) {
         eq(financialPartyPeopleTable.personId, personId),
         eq(financialPartiesTable.tenantId, identity.tenantId),
         eq(financialPartiesTable.ownerUserId, identity.userId),
-      )),
+      )).limit(GRAPH_LIMIT),
     timelineFor(identity, "person", personId),
   ]);
 
@@ -418,7 +421,8 @@ export async function getProjectGraph(identity: Identity, projectId: string) {
         eq(peopleTable.tenantId, identity.tenantId),
         eq(peopleTable.ownerUserId, identity.userId),
       ))
-      .orderBy(asc(peopleTable.name)),
+      .orderBy(asc(peopleTable.name))
+      .limit(GRAPH_LIMIT),
     db.select({
       id: expensesTable.id,
       amountMinor: expensesTable.amountMinor,
@@ -439,7 +443,8 @@ export async function getProjectGraph(identity: Identity, projectId: string) {
         eq(expensesTable.ownerUserId, identity.userId),
         eq(expensesTable.projectId, projectId),
       ))
-      .orderBy(desc(expensesTable.occurredAt)),
+      .orderBy(desc(expensesTable.occurredAt))
+      .limit(GRAPH_LIMIT),
     db.select({
       id: tasksTable.id,
       title: tasksTable.title,
@@ -455,7 +460,7 @@ export async function getProjectGraph(identity: Identity, projectId: string) {
         eq(taskProjectsTable.projectId, projectId),
         eq(tasksTable.tenantId, identity.tenantId),
         eq(tasksTable.ownerUserId, identity.userId),
-      )).orderBy(desc(tasksTable.updatedAt)),
+      )).orderBy(desc(tasksTable.updatedAt)).limit(GRAPH_LIMIT),
     db.select({
       id: remindersTable.id,
       text: remindersTable.text,
@@ -471,7 +476,7 @@ export async function getProjectGraph(identity: Identity, projectId: string) {
         eq((reminderProjectsTable as any).projectId, projectId),
         eq(remindersTable.tenantId, identity.tenantId),
         eq(remindersTable.ownerUserId, identity.userId),
-      )).orderBy(desc(remindersTable.dueAt)),
+      )).orderBy(desc(remindersTable.dueAt)).limit(GRAPH_LIMIT),
     db.select({ id: financialPartiesTable.id, name: financialPartiesTable.name, partyType: financialPartiesTable.partyType, relationship: financialPartyProjectsTable.relationship })
       .from(financialPartyProjectsTable)
       .innerJoin(financialPartiesTable, eq(financialPartyProjectsTable.partyId, financialPartiesTable.id))
@@ -481,7 +486,7 @@ export async function getProjectGraph(identity: Identity, projectId: string) {
         eq(financialPartyProjectsTable.projectId, projectId),
         eq(financialPartiesTable.tenantId, identity.tenantId),
         eq(financialPartiesTable.ownerUserId, identity.userId),
-      )),
+      )).limit(GRAPH_LIMIT),
     timelineFor(identity, "project", projectId),
   ]);
 
@@ -545,7 +550,7 @@ export async function getEntityGraph(identity: Identity, entityType: GraphEntity
         eq(financialPartyPeopleTable.ownerUserId, identity.userId),
         eq(peopleTable.tenantId, identity.tenantId),
         eq(peopleTable.ownerUserId, identity.userId),
-      )),
+      )).limit(GRAPH_LIMIT),
     db.select({ id: projectsTable.id, name: projectsTable.name, relationship: financialPartyProjectsTable.relationship })
       .from(financialPartyProjectsTable)
       .innerJoin(projectsTable, eq(financialPartyProjectsTable.projectId, projectsTable.id))
@@ -555,7 +560,7 @@ export async function getEntityGraph(identity: Identity, entityType: GraphEntity
         eq(financialPartyProjectsTable.ownerUserId, identity.userId),
         eq(projectsTable.tenantId, identity.tenantId),
         eq(projectsTable.ownerUserId, identity.userId),
-      )),
+      )).limit(GRAPH_LIMIT),
     db.select({ id: purposesTable.id, name: purposesTable.name })
       .from(financialPartyPurposesTable)
       .innerJoin(purposesTable, eq(financialPartyPurposesTable.purposeId, purposesTable.id))
@@ -565,7 +570,7 @@ export async function getEntityGraph(identity: Identity, entityType: GraphEntity
         eq(financialPartyPurposesTable.ownerUserId, identity.userId),
         eq(purposesTable.tenantId, identity.tenantId),
         eq(purposesTable.ownerUserId, identity.userId),
-      )),
+      )).limit(GRAPH_LIMIT),
     timelineFor(identity, "financial_party", entityId),
   ]);
   return {

@@ -7,4 +7,6 @@ Typed relationships must be stored in explicit additive junction tables with ten
 
 **Why:** Drizzle generation against the legacy schema snapshots can produce a destructive full-schema migration; the safe Phase 3 migration is a reviewed additive migration that creates only the new junction tables.
 
-**How to apply:** Review generated migration SQL before applying it, keep relationship endpoint authorization on both sides, and expose entity detail/timeline reads with explicit limits and pagination.
+**How to apply:** Review generated migration SQL before applying it, keep relationship endpoint authorization on both sides, and expose entity detail/timeline reads with explicit limits and pagination. Dynamic Drizzle relationship helpers must expose camelCase properties while retaining snake_case SQL column names.
+
+**Why:** Entity graph queries use Drizzle property names; exposing only the database column spelling makes the generated predicate undefined and produces invalid SQL at runtime.

@@ -276,7 +276,24 @@ router.post("/turns", async (req, res): Promise<void> => {
       model: result.model,
       conversationId: result.conversationId,
     }, "Secretary request completed");
-    res.json(CreateTurnResponse.parse(result));
+    const operationId = result.action?.type === "approval_required"
+      && typeof result.action.operationId === "string"
+      ? result.action.operationId
+      : null;
+    const operation = operationId ? await getOperation(identity, operationId) : null;
+    const response = operation
+      ? {
+          ...result,
+          action: {
+            ...result.action,
+            args: operation.args,
+            status: operation.status,
+            toolName: operation.toolName,
+            display: operation.display,
+          },
+        }
+      : result;
+    res.json(CreateTurnResponse.parse(response));
   } catch (error) {
     const classified = classifySecretaryError(error);
     const provider = configuredProvider() === "unavailable" ? undefined : configuredProvider();
