@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  buildPatternInsights,
   canonicalizeArabicText,
   createDeterministicRequestMetrics,
   decideDeterministically,
@@ -11,6 +10,7 @@ import {
   parseSemanticRequest,
   validateDeterministicPayload,
 } from "../src/lib/deterministic-intelligence.ts";
+import { buildPatternInsights } from "../src/lib/experimental-pattern-insights.ts";
 import { Phase2AgentRuntime, type ModelGateway } from "../src/lib/phase2.ts";
 import type { Identity } from "../src/lib/secretary.ts";
 
@@ -103,6 +103,7 @@ test("request metrics start conservative", () => {
     decision: "not_run",
     solvedWithoutLlm: false,
     llmCallsAvoided: 0,
+    llmAvoidanceMeasurement: "not_claimed",
     falsePositiveGuard: "not_applicable",
   });
 });
@@ -132,6 +133,8 @@ test("Phase2 resolves high-signal reminder and clarification before any provider
   assert.equal(gateway.calls, 0);
   assert.equal(reminder.action?.type, "deterministic_write");
   assert.equal(reminder.response?.kind, "answer");
+  assert.equal((reminder.action?.deterministicIntelligence as { llmCallsAvoided?: number } | undefined)?.llmCallsAvoided, 0);
+  assert.equal(Object.prototype.hasOwnProperty.call(reminder.action ?? {}, "patternInsights"), false);
 
   const missing = await runtime.run(identity, {
     message: "سجل مصروف لمحمد",

@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { conversationMemoryTable, db } from "@workspace/db";
 import type { Identity } from "./secretary";
+import { featureFlags } from "./feature-flags";
 
 export type ConversationTurn = {
   userMessage: string;
@@ -390,19 +391,24 @@ export function updateConversationState(
       const project = state.projects.find((item) => item.id === expense.projectId);
       if (person) state.lastPerson = person;
       if (project) state.lastProject = project;
-      state.facts = [
-        ...state.facts.filter((fact) => fact.key !== `expense:${expense.id}`),
-        {
-          key: `expense:${expense.id}`,
-          value: `${expense.amountMinor} ${expense.currency}`,
-          confidence: 1,
-          evidence: "saved_row" as const,
-        },
-      ].slice(-20);
+      if (featureFlags.experimentalMemoryIntelligence()) {
+        state.facts = [
+          ...state.facts.filter((fact) => fact.key !== `expense:${expense.id}`),
+          {
+            key: `expense:${expense.id}`,
+            value: `${expense.amountMinor} ${expense.currency}`,
+            confidence: 1,
+            evidence: "saved_row" as const,
+          },
+        ].slice(-20);
+      }
     }
   }
 
-  if (toolName === "link_person_to_project" || toolName === "update_person_project_relationship") {
+  if (
+    featureFlags.experimentalMemoryIntelligence()
+    && (toolName === "link_person_to_project" || toolName === "update_person_project_relationship")
+  ) {
     const relationshipValue = result.relationship;
     if (relationshipValue && typeof relationshipValue === "object") {
       const relationship = relationshipValue as Record<string, unknown>;
@@ -607,6 +613,14 @@ export function conversationContextMessages(
   snapshot: ConversationMemorySnapshot,
 ): Array<{ role: "system" | "user" | "assistant"; text: string }> {
   const context: Array<{ role: "system" | "user" | "assistant"; text: string }> = [];
+  const state = featureFlags.experimentalMemoryIntelligence()
+    ? snapshot.state
+    : {
+        ...snapshot.state,
+        facts: [],
+        preferences: [],
+        relationships: [],
+      };
   if (snapshot.summary) {
     context.push({
       role: "system",
@@ -614,20 +628,20 @@ export function conversationContextMessages(
     });
   }
   if (
-    snapshot.state.people.length > 0
-    || snapshot.state.projects.length > 0
-    || snapshot.state.candidatePeople.length > 0
-    || snapshot.state.candidateProjects.length > 0
-    || snapshot.state.lastPerson
-    || snapshot.state.lastProject
-    || snapshot.state.lastExpense
-    || snapshot.state.facts.length > 0
-    || snapshot.state.preferences.length > 0
-    || snapshot.state.relationships.length > 0
+    state.people.length > 0
+    || state.projects.length > 0
+    || state.candidatePeople.length > 0
+    || state.candidateProjects.length > 0
+    || state.lastPerson
+    || state.lastProject
+    || state.lastExpense
+    || state.facts.length > 0
+    || state.preferences.length > 0
+    || state.relationships.length > 0
   ) {
     context.push({
       role: "system",
-      text: `[حالة المحادثة المنظمة، استخدمها لفهم الإشارات فقط ثم تحقق من Structured Memory بالأدوات]\n${JSON.stringify(snapshot.state)}`,
+      text: `[حالة المحادثة المنظمة، استخدمها لفهم الإشارات فقط ثم تحقق من Structured Memory بالأدوات]\n${JSON.stringify(state)}`,
     });
   }
   for (const turn of snapshot.recentTurns) {

@@ -45,11 +45,11 @@ import { budgetContext } from "./context-budgeter";
 import { envFlag, featureFlags } from "./feature-flags";
 import { providerOrder } from "./provider-router";
 import {
-  buildPatternInsights,
   createDeterministicRequestMetrics,
   decideDeterministically,
   parseSemanticRequest,
   validateDeterministicPayload,
+  isProductionDeterministicIntent,
   type DeterministicRequestMetrics,
   type DeterministicDecision,
   type SemanticParse,
@@ -3974,7 +3974,14 @@ export class Phase2AgentRuntime {
     let action: Record<string, unknown> | undefined;
     const toolHistory: ToolHistoryEntry[] = [];
     let finalizationAttempted = false;
-    let conversationState: ConversationState = conversationMemory.state;
+    let conversationState: ConversationState = featureFlags.experimentalMemoryIntelligence()
+      ? conversationMemory.state
+      : {
+          ...conversationMemory.state,
+          facts: [],
+          preferences: [],
+          relationships: [],
+        };
     const diagnosticCalls: DiagnosticLogicalCall[] = [];
 
     const startDiagnosticCall = (
@@ -4030,10 +4037,12 @@ export class Phase2AgentRuntime {
           projectId: typeof item.projectId === "string" ? item.projectId : null,
         }];
       });
-      const patternInsights = buildPatternInsights(
-        conversationState.relationships,
-        patternExpenses,
-      );
+      const patternInsights = featureFlags.experimentalPatternInsights()
+        ? (await import("./experimental-pattern-insights")).buildPatternInsights(
+            conversationState.relationships,
+            patternExpenses,
+          )
+        : [];
       const finalAction = {
         ...(compactActionForMemory(action) ?? {
           type: "llm_response",
@@ -4125,11 +4134,22 @@ export class Phase2AgentRuntime {
       || (isExpenseTotalCorrectionRequest(input.message) && recentExpenseTotalContext);
 
     if (semanticParse) {
-      const decision = decideDeterministically(semanticParse);
+      const parsedDecision = decideDeterministically(semanticParse);
+      const decision = !featureFlags.experimentalGeneralArabicUnderstanding()
+        && parsedDecision.kind === "deterministic"
+        && !isProductionDeterministicIntent(semanticParse.intent)
+        ? {
+            kind: "llm" as const,
+            intent: "unknown" as const,
+            confidence: parsedDecision.confidence,
+            reason: "intent_outside_production_safe_gate",
+          }
+        : parsedDecision;
       deterministicMetrics.decision = decision.kind === "llm" ? "llm_fallback" : decision.kind;
       deterministicMetrics.falsePositiveGuard = decision.kind === "llm" ? "not_applicable" : "passed";
-      if (decision.kind === "deterministic") {
+      if (decision.kind === "deterministic" && featureFlags.experimentalProviderClaims()) {
         deterministicMetrics.llmCallsAvoided = 1;
+        deterministicMetrics.llmAvoidanceMeasurement = "decision_level_estimate";
       }
       if (decision.kind !== "llm") {
         const entityMentions = semanticParse.entityMentions;
@@ -4156,9 +4176,12 @@ export class Phase2AgentRuntime {
           }
           deterministicMetrics.decision = "llm_fallback";
           deterministicMetrics.llmCallsAvoided = 0;
+          deterministicMetrics.llmAvoidanceMeasurement = "not_claimed";
           deterministicMetrics.falsePositiveGuard = "not_applicable";
         } catch (error) {
           deterministicMetrics.decision = "llm_fallback";
+          deterministicMetrics.llmCallsAvoided = 0;
+          deterministicMetrics.llmAvoidanceMeasurement = "not_claimed";
           deterministicMetrics.falsePositiveGuard = "blocked";
           logger.warn({
             requestId,
