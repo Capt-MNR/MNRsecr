@@ -1,4 +1,4 @@
-import { and, asc, eq, ilike } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import {
   db,
   peopleTable,
@@ -35,11 +35,16 @@ const PERSON_THRESHOLD = 0.88;
 const PROJECT_THRESHOLD = 0.92;
 const shadowTableReady = new Map<string, Promise<void>>();
 
-function normalize(value: string): string {
+export function normalizeEntityText(value: string): string {
   return value
     .trim()
+    .normalize("NFKC")
+    .replace(/\u0640/g, "")
     .replace(/[أإآ]/g, "ا")
+    .replace(/ؤ/g, "و")
+    .replace(/[ئىي]/g, "ي")
     .replace(/ة/g, "ه")
+    .replace(/[،؛؟!.,:()[\]{}]/g, " ")
     .replace(/ى/g, "ي")
     .replace(/[\u064B-\u065F]/g, "")
     .replace(/\s+/g, " ")
@@ -70,9 +75,9 @@ function similarity(left: string, right: string): number {
 }
 
 function candidateScore(query: string, candidate: ResolverCandidate): { score: number; type: ResolverMatchType } {
-  const normalizedQuery = normalize(query);
+  const normalizedQuery = normalizeEntityText(query);
   const names = [candidate.name, candidate.nameKey ?? "", ...(candidate.aliases ?? [])]
-    .map(normalize)
+    .map(normalizeEntityText)
     .filter(Boolean);
   if (names.includes(normalizedQuery)) {
     return {
@@ -131,18 +136,15 @@ export function resolveFromCandidates(
 }
 
 async function queryCandidates(identity: Identity, entityType: EntityType, query: string): Promise<ResolverCandidate[]> {
-  const normalizedQuery = normalize(query);
   if (entityType === "person") {
     const rows = await db.select().from(peopleTable).where(and(
       eqOwnership(identity, peopleTable),
-      ilike(peopleTable.nameKey, `%${normalizedQuery}%`),
-    )).orderBy(asc(peopleTable.createdAt)).limit(25);
+    )).orderBy(asc(peopleTable.createdAt)).limit(100);
     return rows.map((row: Person) => ({ id: row.id, name: row.name, nameKey: row.nameKey }));
   }
   const rows = await db.select().from(projectsTable).where(and(
     eqOwnership(identity, projectsTable),
-    ilike(projectsTable.nameKey, `%${normalizedQuery}%`),
-  )).orderBy(asc(projectsTable.createdAt)).limit(25);
+  )).orderBy(asc(projectsTable.createdAt)).limit(100);
   return rows.map((row: Project) => ({ id: row.id, name: row.name, nameKey: row.nameKey }));
 }
 

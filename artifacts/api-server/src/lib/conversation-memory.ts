@@ -36,6 +36,25 @@ export type ConversationState = {
   projects: ConversationEntity[];
   candidatePeople: ConversationEntity[];
   candidateProjects: ConversationEntity[];
+  facts: Array<{
+    key: string;
+    value: string;
+    confidence: number;
+    evidence: "saved_row" | "user_stated";
+  }>;
+  preferences: Array<{
+    key: string;
+    value: string;
+    confidence: number;
+    evidence: "user_stated";
+  }>;
+  relationships: Array<{
+    personId: string;
+    projectId: string;
+    relationship?: string | null;
+    confidence: number;
+    evidence: "saved_row";
+  }>;
   lastPerson?: ConversationEntity;
   lastProject?: ConversationEntity;
   lastExpense?: {
@@ -53,6 +72,9 @@ export const emptyConversationState = (): ConversationState => ({
   projects: [],
   candidatePeople: [],
   candidateProjects: [],
+  facts: [],
+  preferences: [],
+  relationships: [],
 });
 
 function validEntity(value: unknown, type: ConversationEntity["type"]): ConversationEntity | null {
@@ -66,6 +88,33 @@ function validEntity(value: unknown, type: ConversationEntity["type"]): Conversa
     ...(typeof item.status === "string" ? { status: item.status } : {}),
     ...(typeof item.ordinal === "number" ? { ordinal: item.ordinal } : {}),
   };
+}
+
+function validFact(value: unknown): value is ConversationState["facts"][number] {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Record<string, unknown>;
+  return typeof item.key === "string"
+    && typeof item.value === "string"
+    && typeof item.confidence === "number"
+    && (item.evidence === "saved_row" || item.evidence === "user_stated");
+}
+
+function validPreference(value: unknown): value is ConversationState["preferences"][number] {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Record<string, unknown>;
+  return typeof item.key === "string"
+    && typeof item.value === "string"
+    && typeof item.confidence === "number"
+    && item.evidence === "user_stated";
+}
+
+function validRelationship(value: unknown): value is ConversationState["relationships"][number] {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Record<string, unknown>;
+  return typeof item.personId === "string"
+    && typeof item.projectId === "string"
+    && typeof item.confidence === "number"
+    && item.evidence === "saved_row";
 }
 
 function normalizeState(value: unknown): ConversationState {
@@ -83,6 +132,15 @@ function normalizeState(value: unknown): ConversationState {
     : [];
   const candidateProjects = Array.isArray(input.candidateProjects)
     ? input.candidateProjects.map((item) => validEntity(item, "project")).filter((item): item is ConversationEntity => Boolean(item))
+    : [];
+  const facts = Array.isArray(input.facts)
+    ? input.facts.filter(validFact)
+    : [];
+  const preferences = Array.isArray(input.preferences)
+    ? input.preferences.filter(validPreference)
+    : [];
+  const relationships = Array.isArray(input.relationships)
+    ? input.relationships.filter(validRelationship)
     : [];
   const lastPerson = validEntity(input.lastPerson, "person") ?? undefined;
   const lastProject = validEntity(input.lastProject, "project") ?? undefined;
@@ -110,6 +168,9 @@ function normalizeState(value: unknown): ConversationState {
     projects: projects.slice(-10),
     candidatePeople: candidatePeople.slice(-10),
     candidateProjects: candidateProjects.slice(-10),
+    facts: facts.slice(-20),
+    preferences: preferences.slice(-20),
+    relationships: relationships.slice(-20),
     ...(lastPerson ? { lastPerson } : {}),
     ...(lastProject ? { lastProject } : {}),
     ...(lastExpense ? { lastExpense } : {}),
@@ -329,6 +390,37 @@ export function updateConversationState(
       const project = state.projects.find((item) => item.id === expense.projectId);
       if (person) state.lastPerson = person;
       if (project) state.lastProject = project;
+      state.facts = [
+        ...state.facts.filter((fact) => fact.key !== `expense:${expense.id}`),
+        {
+          key: `expense:${expense.id}`,
+          value: `${expense.amountMinor} ${expense.currency}`,
+          confidence: 1,
+          evidence: "saved_row" as const,
+        },
+      ].slice(-20);
+    }
+  }
+
+  if (toolName === "link_person_to_project" || toolName === "update_person_project_relationship") {
+    const relationshipValue = result.relationship;
+    if (relationshipValue && typeof relationshipValue === "object") {
+      const relationship = relationshipValue as Record<string, unknown>;
+      if (typeof relationship.personId === "string" && typeof relationship.projectId === "string") {
+        state.relationships = [
+          ...state.relationships.filter((item) =>
+            item.personId !== relationship.personId || item.projectId !== relationship.projectId),
+          {
+            personId: relationship.personId,
+            projectId: relationship.projectId,
+            ...(typeof relationship.relationship === "string"
+              ? { relationship: relationship.relationship }
+              : {}),
+            confidence: 1,
+            evidence: "saved_row" as const,
+          },
+        ].slice(-20);
+      }
     }
   }
 
@@ -529,6 +621,9 @@ export function conversationContextMessages(
     || snapshot.state.lastPerson
     || snapshot.state.lastProject
     || snapshot.state.lastExpense
+    || snapshot.state.facts.length > 0
+    || snapshot.state.preferences.length > 0
+    || snapshot.state.relationships.length > 0
   ) {
     context.push({
       role: "system",

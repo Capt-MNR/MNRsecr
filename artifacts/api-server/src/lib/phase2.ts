@@ -44,6 +44,17 @@ import {
 import { budgetContext } from "./context-budgeter";
 import { envFlag, featureFlags } from "./feature-flags";
 import { providerOrder } from "./provider-router";
+import {
+  buildPatternInsights,
+  createDeterministicRequestMetrics,
+  decideDeterministically,
+  parseSemanticRequest,
+  validateDeterministicPayload,
+  type DeterministicRequestMetrics,
+  type DeterministicDecision,
+  type SemanticParse,
+} from "./deterministic-intelligence";
+import { resolveEntity, type ResolverResult } from "./entity-resolver";
 
 export type Phase2TurnInput = {
   message: string;
@@ -3638,6 +3649,295 @@ async function saveIdempotent(identity: Identity, key: string, response: Phase2T
   }).onConflictDoNothing();
 }
 
+type DeterministicPreflightResult = {
+  response: FinalResponse;
+  action: Record<string, unknown>;
+};
+
+function deterministicEntityClarification(
+  result: ResolverResult,
+  label: string,
+): DeterministicPreflightResult {
+  const ambiguous = result.matchType === "ambiguous";
+  return {
+    response: {
+      kind: "clarification",
+      message: ambiguous
+        ? `عندك أكثر من ${label} قريب من "${result.query}"، تقصد أي واحد؟`
+        : `مش لاقي ${label} باسم "${result.query}". هل تقصد اسمًا مختلفًا أم تريد المتابعة من غير ربطه؟`,
+    },
+    action: {
+      type: "clarification_needed",
+      source: "deterministic_intelligence",
+      reason: ambiguous ? `ambiguous_${result.entityType}` : `unresolved_${result.entityType}`,
+      [`${result.entityType}Candidates`]: result.candidates.slice(0, 10).map((candidate) => ({
+        id: candidate.id,
+        name: candidate.name,
+      })),
+    },
+  };
+}
+
+function deterministicApprovalResponse(
+  toolName: string,
+  result: ToolResult,
+): DeterministicPreflightResult | null {
+  if (!result.pendingApproval || !result.approval || typeof result.approval !== "object") return null;
+  const approval = result.approval as Record<string, unknown>;
+  const display = approval.display && typeof approval.display === "object"
+    ? approval.display as { title?: unknown; details?: unknown }
+    : {};
+  const title = typeof display.title === "string" ? display.title : "هذا التغيير";
+  const details = Array.isArray(display.details)
+    ? display.details.filter((detail): detail is string => typeof detail === "string")
+    : [];
+  return {
+    response: {
+      kind: "clarification",
+      message: `قبل ما أنفذ ${title}${details.length > 0 ? ` (${details.join(" — ")})` : ""}، هل توافق؟`,
+    },
+    action: {
+      type: "approval_required",
+      source: "deterministic_intelligence",
+      operationId: approval.operationId,
+      status: approval.status,
+      toolName,
+      display: { title, details },
+    },
+  };
+}
+
+function reminderText(message: string): string {
+  return message
+    .replace(/^(?:فكرني|ذكرني|remind)\s*/iu, "")
+    .replace(/\b(?:بكره|بكرة|غدا|غدًا|اليوم)\b/giu, "")
+    .replace(/(?:الساعه|الساعة)\s*[0-9٠-٩]{1,2}(?:\s*[:٫]\s*[0-9٠-٩]{1,2})?\s*(?:صباحا|مساء|بالليل|ليل|ظهر)?/giu, "")
+    .replace(/[\u064B-\u065F]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim() || "تذكير";
+}
+
+function createdEntityName(message: string, entityType: "person" | "project"): string | null {
+  const patterns = entityType === "person"
+    ? [
+      /(?:أضف|اضف|أضيف|اضيف|ضيف)\s+([^\u060C,]+?)\s+(?:كشخص|كجهة|كـ?person|كـ?contact)/iu,
+      /(?:أضف|اضف|أضيف|اضيف|ضيف)\s+(?:شخص|جهة|person|contact)(?:\s+جديد)?(?:\s+اسمه?)?\s+([^\u060C,]+?)(?=\s+من\s+غير|\s+مش|\s+ما|$)/iu,
+      /(?:سجل|سجّل)\s+([^\u060C,]+?)\s+(?:عندي\s+)?كشخص/iu,
+      /(?:اعمل|أنشئ|انشئ)\s+شخص(?:\s+جديد)?\s+اسمه?\s+([^\u060C,]+?)(?=\s+من\s+غير|\s+مش|\s+ما|$)/iu,
+    ]
+    : [
+      /(?:بدأت|أنشئ|انشئ|اعمل|create)\s+(?:مشروع|project)(?:\s+جديد)?(?:\s+اسمه?)?\s+([^\u060C,]+?)(?=\s+من\s+غير|\s+مش|\s+ما|$)/iu,
+    ];
+  for (const pattern of patterns) {
+    const match = message.match(pattern);
+    if (match?.[1]?.trim()) return match[1].trim();
+  }
+  return null;
+}
+
+async function deterministicPreflight(
+  identity: Identity,
+  parsed: SemanticParse,
+  decision: DeterministicDecision,
+  options: {
+    requestId: string;
+    conversationId: string;
+    idempotencyKey?: string | null;
+    dryRun?: boolean;
+    metrics: DeterministicRequestMetrics;
+  },
+): Promise<DeterministicPreflightResult | null> {
+  if (decision.kind === "llm") return null;
+  const resolve = async (entityType: "person" | "project", query: string): Promise<ResolverResult> => {
+    options.metrics.resolverUsed = true;
+    const result = await resolveEntity(identity, entityType, query);
+    if (result.selected) options.metrics.entityMatches += 1;
+    if (result.matchType === "ambiguous") options.metrics.entityAmbiguities += 1;
+    return result;
+  };
+  if (
+    decision.kind === "deterministic"
+    && ["expense_report", "schedule_read"].includes(parsed.intent)
+  ) return null;
+
+  if (decision.kind === "clarification") {
+    return {
+      response: {
+        kind: "clarification",
+        message: parsed.intent === "create_reminder"
+          ? "تحب التذكير الساعة كام؟ اكتب الوقت، أو قل «أي وقت» لأضعه الساعة 9 صباحًا."
+          : "كام المبلغ المطلوب تسجيله؟",
+      },
+      action: {
+        type: "clarification_needed",
+        source: "deterministic_intelligence",
+        reason: decision.reason,
+      },
+    };
+  }
+
+  if (parsed.intent === "person_expense_total") {
+    const mention = parsed.entityMentions.find((item) => item.entityType === "person");
+    if (!mention) return null;
+    const resolved = await resolve("person", mention.query);
+    if (!resolved.selected) return null;
+    const [total] = await db.select({
+      amountMinor: sql<number>`coalesce(sum(${expensesTable.amountMinor}), 0)::bigint`,
+      count: sql<number>`count(*)::int`,
+      currency: sql<string>`coalesce(min(${expensesTable.currency}), 'unknown')`,
+    }).from(expensesTable).where(and(
+      identityWhere(identity, expensesTable),
+      eq(expensesTable.personId, resolved.selected.id),
+    ));
+    const amountMinor = Number(total?.amountMinor ?? 0);
+    const count = Number(total?.count ?? 0);
+    const currency = total?.currency ?? "EGP";
+    return {
+      response: {
+        kind: count > 0 ? "answer" : "not_found",
+        message: count > 0
+          ? `${resolved.selected.name} أخد منك ${new Intl.NumberFormat("ar-EG", {
+            style: "currency",
+            currency,
+          }).format(amountMinor / 100)} في ${new Intl.NumberFormat("ar-EG").format(count)} دفعة.`
+          : `مش لاقي مصروفات مسجلة لـ${resolved.selected.name}.`,
+        ...(count > 0 ? {
+          groundedFacts: [{ type: "money" as const, value: amountMinor, currency, label: "إجمالي المدفوع" }],
+        } : {}),
+      },
+      action: {
+        type: "person_expense_total",
+        source: "deterministic_intelligence",
+        personId: resolved.selected.id,
+        personName: resolved.selected.name,
+        amountMinor,
+        count,
+        currency,
+      },
+    };
+  }
+
+  if (parsed.intent === "project_people") {
+    const mention = parsed.entityMentions.find((item) => item.entityType === "project");
+    if (!mention) return null;
+    const resolved = await resolve("project", mention.query);
+    if (!resolved.selected) return null;
+    const people = await db.select({
+      id: peopleTable.id,
+      name: peopleTable.name,
+    }).from(projectPeopleTable)
+      .innerJoin(peopleTable, eq(projectPeopleTable.personId, peopleTable.id))
+      .where(and(
+        identityWhere(identity, projectPeopleTable),
+        identityWhere(identity, peopleTable),
+        eq(projectPeopleTable.projectId, resolved.selected.id),
+      ))
+      .orderBy(asc(peopleTable.createdAt));
+    return {
+      response: {
+        kind: people.length > 0 ? "answer" : "not_found",
+        message: people.length > 0
+          ? `المرتبطين بمشروع ${resolved.selected.name}: ${people.map((person) => person.name).join("، ")}.`
+          : `مش لاقي أشخاص مرتبطين بمشروع ${resolved.selected.name}.`,
+      },
+      action: {
+        type: "project_people",
+        source: "deterministic_intelligence",
+        projectId: resolved.selected.id,
+        projectName: resolved.selected.name,
+        people: people.map((person) => ({ id: person.id, name: person.name })),
+      },
+    };
+  }
+
+  if (parsed.intent === "record_expense" && parsed.amount) {
+    const personMention = parsed.entityMentions.find((item) => item.entityType === "person");
+    const projectMention = parsed.entityMentions.find((item) => item.entityType === "project");
+    const person = personMention ? await resolve("person", personMention.query) : null;
+    const project = projectMention ? await resolve("project", projectMention.query) : null;
+    if (person && !person.selected) return null;
+    if (project && !project.selected) return null;
+    if (!project?.selected) return null;
+    const args: Record<string, unknown> = {
+      amountMinor: parsed.amount.amountMinor,
+      currency: parsed.amount.currency,
+      description: "مصروف مسجل من طلب المستخدم",
+      ...(person?.selected ? { personId: person.selected.id } : {}),
+      projectId: project.selected.id,
+    };
+    const validation = validateDeterministicPayload(parsed, args);
+    if (!validation.valid) {
+      options.metrics.validationFailures += validation.issues.length;
+      return {
+        response: { kind: "error", message: validation.issues.map((issue) => issue.message).join(" ") },
+        action: { type: "deterministic_validation_failed", source: "deterministic_intelligence", issues: validation.issues },
+      };
+    }
+    const result = await executeStructuredTool(identity, "record_expense", args, {
+      requestId: options.requestId,
+      dryRun: options.dryRun,
+      conversationId: options.conversationId,
+      idempotencyKey: options.idempotencyKey,
+    });
+    return deterministicApprovalResponse("record_expense", result) ?? {
+      response: {
+        kind: result.ok ? "answer" : "error",
+        message: result.ok ? "حللت المصروف وجهزته للموافقة." : "لم أستطع تجهيز المصروف بشكل آمن.",
+      },
+      action: { type: "deterministic_write", source: "deterministic_intelligence", toolName: "record_expense" },
+    };
+  }
+
+  if (parsed.intent === "create_reminder" && parsed.dateTime) {
+    const args = {
+      text: reminderText(parsed.originalText),
+      dueAt: parsed.dateTime.iso,
+      timezone: "Africa/Cairo",
+    };
+    const validation = validateDeterministicPayload(parsed, args);
+    if (!validation.valid) {
+      options.metrics.validationFailures += validation.issues.length;
+      return {
+        response: { kind: "clarification", message: validation.issues.map((issue) => issue.message).join(" ") },
+        action: { type: "deterministic_validation_failed", source: "deterministic_intelligence", issues: validation.issues },
+      };
+    }
+    const result = await executeStructuredTool(identity, "create_reminder", args, {
+      requestId: options.requestId,
+      dryRun: options.dryRun,
+      conversationId: options.conversationId,
+      idempotencyKey: options.idempotencyKey,
+    });
+    return deterministicApprovalResponse("create_reminder", result) ?? {
+      response: {
+        kind: result.ok ? "answer" : "error",
+        message: result.ok ? "جهزت التذكير للموافقة." : "لم أستطع تجهيز التذكير بشكل آمن.",
+      },
+      action: { type: "deterministic_write", source: "deterministic_intelligence", toolName: "create_reminder" },
+    };
+  }
+
+  if (parsed.intent === "create_person" || parsed.intent === "create_project") {
+    const entityType = parsed.intent === "create_person" ? "person" : "project";
+    const name = createdEntityName(parsed.originalText, entityType);
+    if (!name) return null;
+    const resolved = await resolve(entityType, name);
+    if (resolved.selected || resolved.matchType === "ambiguous") {
+      return deterministicEntityClarification(resolved, entityType === "person" ? "شخص" : "مشروع");
+    }
+    const toolName = entityType === "person" ? "create_person" : "create_project";
+    const result = await executeStructuredTool(identity, toolName, { name }, {
+      requestId: options.requestId,
+      dryRun: options.dryRun,
+      conversationId: options.conversationId,
+      idempotencyKey: options.idempotencyKey,
+    });
+    return deterministicApprovalResponse(toolName, result);
+  }
+
+  return null;
+}
+
 export class Phase2AgentRuntime {
   constructor(private readonly gateway: ModelGateway) {}
 
@@ -3655,11 +3955,19 @@ export class Phase2AgentRuntime {
 
     const conversationId = input.conversationId || crypto.randomUUID();
     const conversationMemory = await loadConversationMemory(identity, conversationId);
+    const semanticParse = featureFlags.deterministicIntelligence()
+      ? parseSemanticRequest(input.message)
+      : null;
+    const deterministicMetrics: DeterministicRequestMetrics = createDeterministicRequestMetrics();
+    if (semanticParse) {
+      deterministicMetrics.normalizationApplied = semanticParse.normalizedText !== input.message.trim();
+      deterministicMetrics.semanticParsed = true;
+    }
     const messages: ConversationMessage[] = [
       ...conversationContextMessages(conversationMemory),
       { role: "user", text: input.message.trim() },
     ];
-    let activeToolScope = classifyToolScope(input.message);
+    let activeToolScope = classifyToolScope(semanticParse?.normalizedText ?? input.message);
     let toolCalls = 0;
     let llmCalls = 0;
     const metrics = createGatewayMetrics();
@@ -3703,11 +4011,36 @@ export class Phase2AgentRuntime {
         model: this.gateway.modelName,
       };
       const providerTrace = this.gateway.getTrace?.(requestId);
+      const patternExpenses = toolHistory.flatMap((entry) => {
+        const expense = entry.result.expense;
+        if (!expense || typeof expense !== "object") return [];
+        const item = expense as Record<string, unknown>;
+        if (
+          typeof item.id !== "string"
+          || typeof item.amountMinor !== "number"
+          || typeof item.currency !== "string"
+          || typeof item.occurredAt !== "string"
+        ) return [];
+        return [{
+          id: item.id,
+          amountMinor: item.amountMinor,
+          currency: item.currency,
+          occurredAt: item.occurredAt,
+          personId: typeof item.personId === "string" ? item.personId : null,
+          projectId: typeof item.projectId === "string" ? item.projectId : null,
+        }];
+      });
+      const patternInsights = buildPatternInsights(
+        conversationState.relationships,
+        patternExpenses,
+      );
       const finalAction = {
         ...(compactActionForMemory(action) ?? {
           type: "llm_response",
           conversationState,
         }),
+        deterministicIntelligence: deterministicMetrics,
+        ...(patternInsights.length > 0 ? { patternInsights } : {}),
         llmCalls,
         toolCalls,
         ...(providerTrace ? { providerTrace } : {}),
@@ -3741,6 +4074,11 @@ export class Phase2AgentRuntime {
         latencyMs: Date.now() - startedAt,
         dryRun: options.dryRun ?? false,
       }, "agent final response");
+      logger.info({
+        requestId,
+        conversationId,
+        ...deterministicMetrics,
+      }, "agent deterministic intelligence summary");
       return result;
     };
     let usageSummaryLogged = false;
@@ -3786,7 +4124,55 @@ export class Phase2AgentRuntime {
       || deterministicExpensePeriodRequested !== null
       || (isExpenseTotalCorrectionRequest(input.message) && recentExpenseTotalContext);
 
+    if (semanticParse) {
+      const decision = decideDeterministically(semanticParse);
+      deterministicMetrics.decision = decision.kind === "llm" ? "llm_fallback" : decision.kind;
+      deterministicMetrics.falsePositiveGuard = decision.kind === "llm" ? "not_applicable" : "passed";
+      if (decision.kind === "deterministic") {
+        deterministicMetrics.llmCallsAvoided = 1;
+      }
+      if (decision.kind !== "llm") {
+        const entityMentions = semanticParse.entityMentions;
+        deterministicMetrics.resolverUsed = entityMentions.length > 0;
+        try {
+          const preflight = await deterministicPreflight(identity, semanticParse, decision, {
+            requestId,
+            conversationId,
+            idempotencyKey: input.idempotencyKey,
+            dryRun: options.dryRun,
+            metrics: deterministicMetrics,
+          });
+          if (preflight) {
+            action = {
+              ...preflight.action,
+              deterministicIntelligence: deterministicMetrics,
+            };
+            deterministicMetrics.solvedWithoutLlm = true;
+            if (preflight.action.type === "clarification_needed") {
+              deterministicMetrics.decision = "clarification";
+              deterministicMetrics.falsePositiveGuard = "blocked";
+            }
+            return await persistResult(preflight.response);
+          }
+          deterministicMetrics.decision = "llm_fallback";
+          deterministicMetrics.llmCallsAvoided = 0;
+          deterministicMetrics.falsePositiveGuard = "not_applicable";
+        } catch (error) {
+          deterministicMetrics.decision = "llm_fallback";
+          deterministicMetrics.falsePositiveGuard = "blocked";
+          logger.warn({
+            requestId,
+            error: error instanceof SecretaryError ? error.code : "DETERMINISTIC_PREFLIGHT_FAILED",
+          }, "deterministic preflight failed; falling back to LLM");
+        }
+      }
+    }
+
     if (deterministicExpenseSummaryRequested) {
+      if (semanticParse) {
+        deterministicMetrics.solvedWithoutLlm = true;
+        deterministicMetrics.decision = "deterministic";
+      }
       const report = await executeStructuredTool(identity, "query_expenses", {
         limit: 50,
         ...(deterministicExpensePeriodRequested ? { period: deterministicExpensePeriodRequested } : {}),
@@ -3815,6 +4201,10 @@ export class Phase2AgentRuntime {
 
     const deterministicSchedule = await deterministicScheduleResponse(identity, input.message);
     if (deterministicSchedule) {
+      if (semanticParse) {
+        deterministicMetrics.solvedWithoutLlm = true;
+        deterministicMetrics.decision = "deterministic";
+      }
       action = deterministicSchedule.action;
       try {
         return await persistResult(deterministicSchedule.response);

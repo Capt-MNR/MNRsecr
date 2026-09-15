@@ -9,7 +9,8 @@ export const expenseApprovalSchema = z.object({
   description: z.string().trim().min(1).max(500),
   personId: nullableUuid,
   projectId: nullableUuid,
-  // Display-only labels. The server strips these before persisting/executing args.
+  // Candidate lists are display-only. Names remain part of the stored operation
+  // because the approved executor uses them when no UUID was resolved.
   personName: optionalDisplayName,
   projectName: optionalDisplayName,
   personCandidates: z.array(z.object({
@@ -33,6 +34,10 @@ export const reminderApprovalSchema = z.object({
 
 export const approvalRequestSchema = z.object({
   args: z.record(z.string(), z.unknown()).optional(),
+  // Older clients may send these fields when approving. They are accepted for
+  // compatibility but never used to choose or replace the stored operation.
+  toolName: z.string().optional(),
+  arguments: z.record(z.string(), z.unknown()).optional(),
 }).strict();
 
 export const approvalOperationIdSchema = z.string().uuid();
@@ -48,8 +53,6 @@ export function approvalSchemaForTool(toolName: string) {
 
 export function persistedApprovalArgs(args: Record<string, unknown>): Record<string, unknown> {
   const {
-    personName: _personName,
-    projectName: _projectName,
     personCandidates: _personCandidates,
     projectCandidates: _projectCandidates,
     ...persisted

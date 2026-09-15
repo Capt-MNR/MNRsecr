@@ -140,6 +140,10 @@ async function executeExpenseApproval(
   identity: Identity,
   operation: PendingOperation,
 ): Promise<OperationExecutionResult> {
+  if (configuredProvider() === "development") {
+    return executeApprovedOperation(identity, operation);
+  }
+
   const args = persistedApprovalArgs(operation.args);
   const toolResult = await executeStructuredTool(identity, operation.toolName, args, {
     requestId: `approval-${operation.operationId}`,
@@ -157,6 +161,12 @@ async function executeExpenseApproval(
       type: "expense_recorded",
       operationId: operation.operationId,
       ...(expense ?? {}),
+      ...(typeof expense?.id === "string" ? { expenseId: expense.id } : {}),
+      ...(typeof args.personName === "string" ? { personName: args.personName } : {}),
+      ...(typeof args.projectName === "string" ? { projectName: args.projectName } : {}),
+      ...(Array.isArray(operation.args.projectCandidates)
+        ? { projectCandidates: operation.args.projectCandidates }
+        : {}),
       args,
     },
     provider: "server",

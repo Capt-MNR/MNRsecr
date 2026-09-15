@@ -11,6 +11,7 @@ export const featureFlags = {
   localRouter: () => envFlag("LOCAL_ROUTER_ENABLED", false),
   resolverShadow: () => envFlag("RESOLVER_SHADOW", true),
   deterministicPlans: () => envFlag("DETERMINISTIC_PLANS_ENABLED", false),
+  deterministicIntelligence: () => envFlag("DETERMINISTIC_INTELLIGENCE_ENABLED", true),
   decisionCache: () => envFlag("DECISION_CACHE_ENABLED", false),
   providerRouting: () => envFlag("PROVIDER_ROUTING_ENABLED", false),
 };
