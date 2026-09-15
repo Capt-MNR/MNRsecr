@@ -9,6 +9,7 @@
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:errors": "node --experimental-strip-types --test test/error-classification.test.ts",
+    "test:record-editing": "node --experimental-strip-types --test test/record-editing.test.ts",
     "test:provenance-navigation": "node test/provenance-navigation.e2e.mjs"
   },
   "devDependencies": {

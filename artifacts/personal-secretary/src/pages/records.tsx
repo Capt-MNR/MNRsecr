@@ -48,6 +48,7 @@ import type {
   TaskRecord,
 } from '@workspace/api-client-react';
 import { classifySecretaryError } from '../lib/secretary-errors';
+import { RECORD_REFRESH_FAILURE_MESSAGE, resolveRecordForEditing } from '../lib/record-editing';
 import { useLocation } from 'wouter';
 import ApprovalForm from '../components/approval-form';
 import { entityPath, financialRecordPath } from '../components/graph/context-link';
@@ -456,6 +457,7 @@ function RecordCard({
   kind,
   record,
   onEdit,
+  isRefreshing,
   onDelete,
   onOpen,
   setLocation,
@@ -463,6 +465,7 @@ function RecordCard({
   kind: RecordType;
   record: RecordItem;
   onEdit: () => void;
+  isRefreshing: boolean;
   onDelete: () => void;
   onOpen?: () => void;
   setLocation: (path: string) => void;
@@ -489,7 +492,9 @@ function RecordCard({
            </div>
         </div>
         <div className="flex shrink-0 gap-1 opacity-70 transition group-hover:opacity-100">
-          <button type="button" onClick={onEdit} className="rounded-lg p-2 text-muted-foreground hover:bg-primary/10 hover:text-primary" aria-label="تعديل"><Edit3 className="size-3.5" /></button>
+           <button type="button" onClick={onEdit} disabled={isRefreshing} className="rounded-lg p-2 text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:cursor-wait disabled:opacity-50" aria-label={isRefreshing ? 'تحديث السجل قبل التعديل' : 'تعديل'} aria-busy={isRefreshing}>
+             {isRefreshing ? <LoaderCircle className="size-3.5 animate-spin" /> : <Edit3 className="size-3.5" />}
+           </button>
           <button type="button" onClick={onDelete} className="rounded-lg p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" aria-label="حذف"><Trash2 className="size-3.5" /></button>
         </div>
       </div>
@@ -527,6 +532,7 @@ export default function Records() {
   const [pendingApproval, setPendingApproval] = useState<{ kind: RecordType; recordId: string; approval: ApprovalRequest } | null>(null);
   const [approvalError, setApprovalError] = useState<string | null>(null);
   const [staleRecordMessage, setStaleRecordMessage] = useState<string | null>(null);
+  const [refreshingRecordId, setRefreshingRecordId] = useState<string | null>(null);
   const recordsQuery = useListRecords({ query: { queryKey: getListRecordsQueryKey(), staleTime: 20_000 } });
   const createMutation = useCreateRecord();
   const updateMutation = useUpdateRecord();
@@ -637,14 +643,28 @@ export default function Records() {
     setStaleRecordMessage(null);
     updateMutation.reset();
     deleteMutation.reset();
-    const latest = await recordsQuery.refetch();
-    const latestRecords = tab === 'financial' ? [] : latest.data?.[tab] ?? [];
-    const current = latestRecords.find((candidate: RecordItem) => candidate.id === record.id);
-    if (!current) {
-      setStaleRecordMessage('تم تحديث القائمة لأن هذا السجل لم يعد متاحًا للتعديل.');
-      return;
+    setRefreshingRecordId(record.id);
+    try {
+      const latest = await recordsQuery.refetch();
+      const latestRecords = (tab === 'financial' ? [] : latest.data?.[tab] ?? []) as RecordItem[];
+      const decision = resolveRecordForEditing(
+        { isSuccess: latest.isSuccess, data: latest.data ? latestRecords : undefined },
+        record.id,
+      );
+      if (decision.status === 'refresh_failed') {
+        setStaleRecordMessage(RECORD_REFRESH_FAILURE_MESSAGE);
+        return;
+      }
+      if (decision.status === 'missing') {
+        setStaleRecordMessage('تم تحديث القائمة لأن هذا السجل لم يعد متاحًا للتعديل.');
+        return;
+      }
+      setEditing({ kind, record: decision.record });
+    } catch {
+      setStaleRecordMessage(RECORD_REFRESH_FAILURE_MESSAGE);
+    } finally {
+      setRefreshingRecordId(null);
     }
-    setEditing({ kind, record: current as RecordItem });
   }
 
   function openCreate() {
@@ -702,7 +722,7 @@ export default function Records() {
           {staleRecordMessage && <div className="mb-5 flex items-center gap-2 rounded-2xl border border-amber-500/25 bg-amber-500/5 p-4 text-sm text-amber-700 dark:text-amber-300" role="status"><CircleAlert className="size-4" /> {staleRecordMessage}</div>}
            {error && <div className="mb-5 rounded-2xl border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive" role="alert"><div className="flex items-center gap-2"><CircleAlert className="size-4" /> {error.message}</div><button type="button" onClick={() => void recordsQuery.refetch()} className="mt-3 text-xs font-semibold underline underline-offset-4">حاول مرة أخرى</button></div>}
           {!recordsQuery.isLoading && !error && currentRecords.length === 0 && <div className="rounded-[24px] border border-dashed border-border bg-card/50 px-6 py-16 text-center"><Check className="mx-auto size-8 text-primary/60" /><h2 className="mt-4 font-serif text-xl">لا توجد سجلات هنا بعد</h2><p className="mt-2 text-sm text-muted-foreground">يمكنك إضافة أول سجل يدويًا أو من خلال المحادثة.</p><button type="button" onClick={openCreate} className="mx-auto mt-5 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"><Plus className="size-4" /> إضافة {labelForKind(kind)}</button></div>}
-           {!recordsQuery.isLoading && currentRecords.length > 0 && <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{currentRecords.map((record) => <RecordCard key={record.id} kind={kind} record={record} setLocation={setLocation} onEdit={() => void editItem(record)} onDelete={() => deleteItem(record)} onOpen={kind === 'person' ? () => setLocation(entityPath('person', record.id)) : kind === 'project' ? () => setLocation(entityPath('project', record.id)) : undefined} />)}</div>}
+            {!recordsQuery.isLoading && currentRecords.length > 0 && <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{currentRecords.map((record) => <RecordCard key={record.id} kind={kind} record={record} setLocation={setLocation} isRefreshing={refreshingRecordId === record.id} onEdit={() => void editItem(record)} onDelete={() => deleteItem(record)} onOpen={kind === 'person' ? () => setLocation(entityPath('person', record.id)) : kind === 'project' ? () => setLocation(entityPath('project', record.id)) : undefined} />)}</div>}
         </>}
       </main>
       {creating && <EditModal kind={creating} record={null} isCreate people={data?.people ?? []} projects={data?.projects ?? []} onClose={() => setCreating(null)} isSaving={createMutation.isPending} onSave={(form) => createMutation.mutate({ data: form as RecordCreateInput }, { onSuccess: (response) => handleCreateResult(response, creating) })} />}
