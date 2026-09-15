@@ -1,0 +1,458 @@
+استكمل العمل على branch "personal-information-graph" فقط.
+
+ممنوع تمامًا:
+
+- merge إلى "main"
+- push أو نشر production
+- حذف أو إعادة كتابة البيانات الحالية
+- تغيير الـarchitecture المتفق عليها إلى Graph Database
+- إضافة LLM calls جديدة لأي جزء من هذا العمل
+- اعتبار نجاح build وحده دليلًا على صحة الـworkflow
+
+الهدف:
+نعمل Hardening كامل لما تم في Phase 2، وأي مشكلة يتم اكتشافها يتم إصلاحها في نفس الـbranch، ثم نكمل Phase 3: Typed Relationships.
+
+أولًا: Phase 2 Hardening أثناء التنفيذ
+
+قبل البدء في Phase 3، راجع التنفيذ الحالي فعليًا، وليس التقرير فقط.
+
+1. Financial balance invariants
+
+تأكد من أن:
+
+- "financial_obligations.principal_amount_minor"
+- settlement totals
+- "outstanding_amount_minor"
+- obligation status
+
+متسقة دائمًا.
+
+المطلوب:
+
+- partial settlement صحيح.
+- multiple settlements لنفس obligation صحيح.
+- settlement لا يتجاوز المتبقي.
+- cancellation/correction لا تترك outstanding غير صحيح.
+- correction لا تنتج duplicate settlement.
+- "settled" لا يمكن أن يكون لها outstanding > 0.
+- "open" لا تتحول إلى settled بدون تغطية صحيحة.
+- إذا كان "outstanding_amount_minor" مخزنًا، فيجب أن يكون له invariant واضح ومحمى، وليس مصدر حقيقة مستقل يمكن أن ينفصل عن settlement history.
+
+إذا وجدت أن التصميم الحالي يسمح بانفصال balance عن settlement history، أصلح ذلك قبل Phase 3.
+
+2. Currency integrity
+
+راجع كل المسارات المتعلقة بـ:
+
+- obligations
+- payments
+- settlements
+- donations
+- income/receivables
+- payment_links
+
+وتأكد أن:
+
+- settlement لا يمكن أن يربط payment بعملة مختلفة عن obligation.
+- أي financial relationship لها currency semantics واضحة.
+- لا توجد conversion افتراضية أو implicit conversion.
+- multi-currency محفوظ بدون فقدان للمعلومة.
+
+أضف tests للحالات السلبية، وليس فقط happy path.
+
+3. Approval lifecycle — مهم جدًا
+
+راجع المشكلة التي ظهرت سابقًا:
+
+أحيانًا أول رسالة من المستخدم يتم تفسيرها كأن هناك approval، لكن Approval UI لا يظهر، ويحتاج المستخدم لإرسال نفس الطلب مرة ثانية حتى يظهر.
+
+المطلوب إصلاح architecture وليس workaround.
+
+المسار الصحيح يجب أن يكون:
+
+User Request
+→ deterministic/LLM intent resolution
+→ canonical validated action
+→ write policy
+→ pending operation persisted
+→ response indicates pending approval
+→ frontend receives pending operation
+→ Approval UI appears
+→ approve/reject
+→ atomic mutation + activity event
+
+يجب ألا يعتمد ظهور Approval UI على أن الـLLM "يتذكر" أن يعرض modal.
+
+إذا كانت mutation تحتاج approval، يجب أن يكون وجود pending operation حالة server-side مؤكدة.
+
+اختبر specifically:
+
+1. first request فقط.
+2. لا يوجد second request.
+3. pending operation يتم إنشاؤها.
+4. frontend يحصل عليها.
+5. modal يظهر.
+6. reject لا ينفذ mutation.
+7. approve ينفذ mutation مرة واحدة فقط.
+8. refresh لا ينشئ operation ثانية.
+9. retry لا ينفذ mutation ثانية.
+10. نفس operation لا يمكن approve مرتين.
+11. operation تخص نفس tenant/user.
+12. canonical args/operation hash لا يمكن تغييره بين request وapproval.
+
+إذا كانت المشكلة موجودة، أصلحها قبل الانتقال.
+
+4. Activity atomicity
+
+تأكد أن كل financial mutation المهمة تعمل:
+
+mutation + activity event
+
+داخل نفس transaction.
+
+اختبر failure injection:
+
+- إذا mutation نجحت وactivity event فشل → rollback كامل.
+- إذا transaction نجحت → mutation + activity event موجودان.
+- correction كذلك.
+- settlement كذلك.
+- payment-link كذلك.
+
+راجع أيضًا event metadata بحيث يمكن معرفة:
+
+- actor
+- operation/source
+- entity
+- correction إن كانت correction
+- relevant financial relationship
+
+بدون تخزين أسرار أو بيانات غير لازمة.
+
+5. Correction + rowVersion
+
+اختبر:
+
+- stale rowVersion → reject.
+- current rowVersion → update.
+- correction لا تنشئ record جديد بدل تعديل القديم إلا إذا كان ذلك مقصودًا.
+- correction لا تكسر settlement/payment relationships.
+- correction تعيد حساب/تتحقق من balances عند الحاجة.
+- concurrent updates لا تسمح بالـlost update.
+
+---
+
+ثانيًا: Phase 3 — Typed Relationships
+
+بعد نجاح Phase 2 Hardening، نفّذ Phase 3 في نفس branch.
+
+الهدف هو تحويل النظام إلى relational Personal Information Graph باستخدام PostgreSQL/Drizzle.
+
+ممنوع استخدام Graph Database.
+
+العلاقات المطلوبة
+
+أضف typed relationships واضحة وقابلة للاستعلام بين:
+
+People ↔ Projects
+
+استخدم/طوّر:
+
+"project_people"
+
+بحيث يمكن معرفة:
+
+- الشخص المرتبط بالمشروع
+- المشروع المرتبط بالشخص
+- role إن كان مناسبًا
+- relationship metadata إن كانت مطلوبة
+
+People ↔ Tasks
+
+أضف junction مناسب مثل:
+
+"task_people"
+
+مع tenant ownership.
+
+Projects ↔ Tasks
+
+أضف:
+
+"task_projects"
+
+إذا كان الـtask يمكن أن يرتبط بأكثر من project.
+
+إذا كان business rule الحالي يفرض project واحد فقط، حافظ على ذلك ولا تضف تعقيدًا بلا داعٍ.
+
+Tasks ↔ Purposes
+
+أضف:
+
+"task_purposes"
+
+إذا كان task يمكن أن يرتبط بأكثر من purpose.
+
+Reminders
+
+اربط reminder typed مع:
+
+- people
+- projects
+- tasks
+
+باستخدام junction tables عند الحاجة.
+
+Commitments
+
+اربط commitment مع:
+
+- people
+- projects
+- purposes
+
+مع الحفاظ مؤقتًا على "commitment.personId" للتوافق مع البيانات الحالية.
+
+لا تحذف "personId" الآن.
+
+Financial Graph
+
+تأكد من العلاقات بين:
+
+Person
+Project
+Purpose
+Financial Party
+Obligation
+Payment
+Settlement
+Donation
+Income/Receivable
+
+بشكل typed وواضح.
+
+لا تستخدم polymorphic relation كـsource of truth للبيانات المالية.
+
+---
+
+ثالثًا: Entity Detail / Related API
+
+طوّر الـentity detail architecture بحيث تصبح العلاقات قابلة للاكتشاف.
+
+نريد architecture شبيهة بـ:
+
+"GET /api/entities/:entityType/:entityId"
+
+ويكون الناتج conceptually:
+
+entity
+related
+relationships
+timeline
+capabilities
+
+مع الحفاظ على APIs الحالية.
+
+لا تكسر:
+
+- "/api/people/:id"
+- "/api/projects/:id"
+- existing records APIs
+- generated clients
+
+أضف endpoints المتخصصة فقط إذا كان ذلك أنظف وأكثر أمانًا.
+
+Security
+
+كل traversal يجب أن يبدأ بـ tenant/user authorization.
+
+ممنوع أن يؤدي relationship traversal إلى كشف entity من tenant آخر.
+
+لا تسمح للـLLM بإرسال tenant/user IDs.
+
+---
+
+رابعًا: Bounded Relationship Traversal
+
+لا تبنِ graph traversal مفتوحًا.
+
+الـdefault:
+
+- depth = 1
+- hard maximum للـnodes
+- server-side joins
+- pagination للعلاقات الكبيرة
+- authorization قبل traversal
+
+يمكن تجهيز architecture تسمح depth=2 لاحقًا، لكن لا نحتاج تنفيذ traversal عميق الآن.
+
+---
+
+خامسًا: Activity Timeline
+
+تأكد أن الـtimeline يستطيع تجميع الأحداث المتعلقة بالـentity من خلال:
+
+"activity_event_entities"
+
+مثال:
+
+Person → يظهر له:
+
+- expense
+- payment
+- debt
+- advance
+- donation
+- income
+- task
+- commitment
+- correction
+
+Project → نفس الفكرة حسب العلاقات.
+
+Timeline يجب أن يكون bounded/paginated.
+
+---
+
+سادسًا: Frontend
+
+لا تبنِ force-directed graph أو visualization معقدة الآن.
+
+نريد UX عملي:
+
+Entity Detail:
+
+- Header
+- Summary
+- Related records
+- Relationships
+- Financial summary عند الحاجة
+- Timeline
+- Links قابلة للضغط إلى entities الأخرى
+
+ابدأ بـ:
+
+- Person
+- Project
+
+ثم Financial Party عند الحاجة.
+
+كل related item يجب أن يكون navigable.
+
+---
+
+سابعًا: Data Integrity
+
+استخدم:
+
+- tenant_id
+- owner_user_id
+- foreign keys
+- indexes للعلاقات والاستعلامات المتوقعة
+- unique constraints حيث يلزم
+- rowVersion للـmutable entities
+- updatedAt
+
+لا تعتمد على application code فقط إذا كان constraint يمكن فرضه في database بشكل آمن.
+
+لا تعمل destructive migration.
+
+أي migration يجب أن تكون additive قدر الإمكان.
+
+إذا ظهرت حاجة إلى migration destructive أو تغيير semantics لبيانات موجودة، توقف وابلغني بدل اتخاذ القرار بنفسك.
+
+---
+
+ثامنًا: Tests المطلوبة
+
+بعد التنفيذ شغّل على الأقل:
+
+1. full workspace typecheck
+2. API build
+3. full build
+4. drizzle-kit check
+5. migrations
+6. git diff --check
+7. existing integration tests
+8. financial tests
+9. atomicity tests
+10. approval tests
+11. idempotency tests
+12. correction/rowVersion tests
+13. tenant isolation tests
+14. currency tests
+15. settlement/balance invariant tests
+16. relationship tests
+17. entity detail API tests
+18. timeline tests
+19. frontend smoke test
+
+أضف negative tests، خصوصًا:
+
+- cross-tenant entity
+- wrong currency
+- stale rowVersion
+- duplicate approval
+- duplicate payment
+- over-settlement
+- invalid relationship
+- unauthorized traversal
+
+---
+
+تاسعًا: لا تضف LLM calls
+
+هذه المرحلة ليست لتحسين الذكاء عن طريق زيادة استدعاءات Gemini/Groq/Mistral/Cohere.
+
+الـPersonal Information Graph يجب أن يزيد ذكاء السكرتير عن طريق:
+
+- structured data
+- deterministic relationships
+- entity resolution
+- financial invariants
+- activity history
+- bounded retrieval
+
+وليس عن طريق زيادة عدد model calls.
+
+---
+
+عاشرًا: Reporting
+
+في النهاية لا تكتفِ بعبارة "Phase completed".
+
+أعطني تقريرًا واضحًا يحتوي:
+
+A. ما تم إصلاحه في Phase 2
+
+B. ما تم تنفيذه في Phase 3
+
+C. أي schema changes
+
+D. أي API changes
+
+E. أي frontend changes
+
+F. financial semantics التي تم تثبيتها
+
+G. approval lifecycle وهل تم اختبار first-request → modal
+
+H. نتائج كل الاختبارات بالأرقام
+
+I. أي مشاكل متبقية
+
+J. أي technical debt
+
+K. commit hash
+
+مهم جدًا:
+
+إذا وجدت أثناء التنفيذ قرارًا يمس semantics المالية أو قد يسبب data loss أو يغير معنى بيانات موجودة، لا تخترع قرارًا من نفسك. توقف عند هذه النقطة فقط واذكر القرار المطلوب.
+
+أما أي مشكلة implementation عادية أو bug يمكن إصلاحه بأمان، أصلحه بنفسك، اختبره، وكمل.
+
+وفي النهاية:
+
+- لا merge إلى main.
+- لا deploy.
+- اترك branch "personal-information-graph" فقط.
+- أعطني commit hash النهائي.
