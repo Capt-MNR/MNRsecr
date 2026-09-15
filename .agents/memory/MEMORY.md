@@ -12,3 +12,4 @@
 - [Arabic schedule queries](arabic-schedule-queries.md) — normalize Arabic punctuation before matching date words; deterministic read paths must stay separate from write intent.
 - [Phase 1 instrumentation baseline](phase1-instrumentation-baseline.md) — measure each provider attempt separately; missing usage stays null and is reported as N/A, never estimated.
 - [Drizzle migration layout](drizzle-migrations.md) — keep the migration output path relative when using custom SQL against the legacy schema.
+- [Financial mutation atomicity](financial-mutation-atomicity.md) — approved domain writes and their activity events must share one transaction; injected writer failures must roll back the write.

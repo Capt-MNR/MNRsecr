@@ -2,7 +2,7 @@ import { and, asc, desc, eq, gte, ilike, inArray, isNull, lt, ne, or, sql } from
 import { logger } from "./logger";
 import {
   commitmentsTable,
-  db,
+  db as database,
   expensesTable,
   idempotencyRecordsTable,
   peopleTable,
@@ -56,7 +56,22 @@ import {
   type SemanticParse,
 } from "./deterministic-intelligence";
 import { resolveEntity, type ResolverResult } from "./entity-resolver";
-import { recordToolActivity } from "./entity-graph";
+import { recordToolActivity, type DbExecutor } from "./entity-graph";
+import {
+  createDonation,
+  createFinancialObligation,
+  createFinancialParty,
+  createFinancialPayment,
+  createIncomeReceivable,
+  createPaymentLink,
+  settleObligation,
+  updateDonation,
+  updateFinancialObligation,
+  updateFinancialPayment,
+  updateIncomeReceivable,
+} from "./financial-graph";
+
+const db = database;
 
 export type Phase2TurnInput = {
   message: string;
@@ -418,6 +433,18 @@ const COHERE_API_URL = "https://api.cohere.com/v2/chat";
 const DEFAULT_TIMEZONE = "Africa/Cairo";
 const WRITE_TOOLS = new Set([
   "create_person",
+  "create_person_and_link_person_to_project",
+  "create_financial_party",
+  "create_financial_obligation",
+  "create_financial_payment",
+  "settle_financial_obligation",
+  "create_donation",
+  "create_income_receivable",
+  "create_payment_link",
+  "update_financial_obligation",
+  "update_financial_payment",
+  "update_donation",
+  "update_income_receivable",
   "update_person",
   "create_project",
   "update_project",
@@ -611,6 +638,99 @@ export const phase2Tools: ToolDefinition[] = [
      purposeId: { type: ["STRING", "NULL"], description: "Optional saved purpose ID" },
     occurredAt: { type: "STRING", description: "ISO timestamp if explicitly known" },
   }, ["amountMinor", "description"]),
+  tool("create_financial_party", "Create an explicit party for financial direction. Link it to an accessible person or project when provided.", {
+    partyType: { type: "STRING", enum: ["person", "project", "organization", "external"] },
+    name: { type: "STRING" },
+    personId: { type: "STRING" },
+    projectId: { type: "STRING" },
+    purposeId: { type: "STRING" },
+  }, ["partyType", "name"]),
+  tool("create_financial_obligation", "Create an advance or debt with explicit lender and borrower party IDs.", {
+    kind: { type: "STRING", enum: ["advance", "debt"] },
+    title: { type: "STRING" },
+    lenderPartyId: { type: "STRING" },
+    borrowerPartyId: { type: "STRING" },
+    principalAmountMinor: { type: "INTEGER" },
+    currency: { type: "STRING" },
+    purposeId: { type: "STRING" },
+    projectId: { type: "STRING" },
+    dueAt: { type: "STRING" },
+  }, ["kind", "title", "lenderPartyId", "borrowerPartyId", "principalAmountMinor", "currency"]),
+  tool("create_financial_payment", "Record an actual payment with explicit payer and payee party IDs.", {
+    payerPartyId: { type: "STRING" },
+    payeePartyId: { type: "STRING" },
+    amountMinor: { type: "INTEGER" },
+    currency: { type: "STRING" },
+    paymentKind: { type: "STRING" },
+    description: { type: "STRING" },
+    occurredAt: { type: "STRING" },
+  }, ["payerPartyId", "payeePartyId", "amountMinor", "currency"]),
+  tool("settle_financial_obligation", "Apply part or all of an actual payment to an obligation. Multiple settlements are allowed.", {
+    obligationId: { type: "STRING" },
+    paymentId: { type: "STRING" },
+    amountMinor: { type: "INTEGER" },
+    settledAt: { type: "STRING" },
+  }, ["obligationId", "paymentId", "amountMinor"]),
+  tool("create_donation", "Create a donation pledge or paid donation. A pledge is not a receivable.", {
+    donorPartyId: { type: "STRING" },
+    recipientPartyId: { type: "STRING" },
+    amountMinor: { type: "INTEGER" },
+    currency: { type: "STRING" },
+    purposeId: { type: "STRING" },
+    projectId: { type: "STRING" },
+    description: { type: "STRING" },
+    status: { type: "STRING", enum: ["pledged", "paid", "cancelled"] },
+    pledgedAt: { type: "STRING" },
+    paidAt: { type: "STRING" },
+  }, ["donorPartyId", "recipientPartyId", "amountMinor", "currency"]),
+  tool("create_income_receivable", "Create expected income or a receivable. This is separate from a collected payment.", {
+    kind: { type: "STRING", enum: ["income", "receivable"] },
+    title: { type: "STRING" },
+    creditorPartyId: { type: "STRING" },
+    debtorPartyId: { type: "STRING" },
+    amountMinor: { type: "INTEGER" },
+    currency: { type: "STRING" },
+    purposeId: { type: "STRING" },
+    projectId: { type: "STRING" },
+    dueAt: { type: "STRING" },
+  }, ["kind", "title", "creditorPartyId", "debtorPartyId", "amountMinor", "currency"]),
+  tool("create_payment_link", "Create a link targeting exactly one payment, receivable, or donation.", {
+    token: { type: "STRING" },
+    paymentId: { type: "STRING" },
+    receivableId: { type: "STRING" },
+    donationId: { type: "STRING" },
+    provider: { type: "STRING" },
+    expiresAt: { type: "STRING" },
+  }, ["token"]),
+  tool("update_financial_obligation", "Correct an advance or debt without creating a second obligation.", {
+    obligationId: { type: "STRING" },
+    title: { type: "STRING" },
+    status: { type: "STRING", enum: ["open", "settled", "cancelled"] },
+    dueAt: { type: "STRING" },
+    expectedRowVersion: { type: "INTEGER" },
+  }, ["obligationId"]),
+  tool("update_financial_payment", "Correct an actual payment without creating a second payment.", {
+    paymentId: { type: "STRING" },
+    amountMinor: { type: "INTEGER" },
+    currency: { type: "STRING" },
+    description: { type: "STRING" },
+    occurredAt: { type: "STRING" },
+    expectedRowVersion: { type: "INTEGER" },
+  }, ["paymentId"]),
+  tool("update_donation", "Correct a donation pledge or payment.", {
+    donationId: { type: "STRING" },
+    amountMinor: { type: "INTEGER" },
+    status: { type: "STRING", enum: ["pledged", "paid", "cancelled"] },
+    description: { type: "STRING" },
+    expectedRowVersion: { type: "INTEGER" },
+  }, ["donationId"]),
+  tool("update_income_receivable", "Correct expected income or a receivable.", {
+    receivableId: { type: "STRING" },
+    title: { type: "STRING" },
+    amountMinor: { type: "INTEGER" },
+    status: { type: "STRING", enum: ["open", "settled", "cancelled"] },
+    expectedRowVersion: { type: "INTEGER" },
+  }, ["receivableId"]),
   tool("update_expense", "Correct an existing saved expense; never create a second expense for a correction.", {
     expenseId: { type: "STRING" },
     amountMinor: { type: "INTEGER" },
@@ -1174,8 +1294,17 @@ async function executeTool(
     conversationId?: string | null;
     idempotencyKey?: string | null;
     approvedOperationId?: string;
+    transactionExecutor?: DbExecutor;
+    activityWriter?: typeof recordToolActivity;
   },
 ): Promise<ToolResult> {
+  if (WRITE_TOOLS.has(name) && options.approvedOperationId && !options.transactionExecutor) {
+    return database.transaction(async (tx) => executeTool(identity, name, rawArgs, {
+      ...options,
+      transactionExecutor: tx,
+    }));
+  }
+  const db = options.transactionExecutor ?? database;
   const args = rawArgs ?? {};
   logger.info({
     requestId: options.requestId,
@@ -1268,6 +1397,37 @@ async function executeTool(
         notes: args.notes === null ? null : stringArg("notes") ?? null,
       }).returning();
       result = { ok: true, created: true, person: created };
+      break;
+    }
+    case "create_person_and_link_person_to_project": {
+      const name = stringArg("personName");
+      const relationship = stringArg("relationship");
+      if (!name || !projectId || !relationship) {
+        return { ok: false, error: "Person name, project ID, and relationship are required." };
+      }
+      const [project] = await db.select({ id: projectsTable.id, name: projectsTable.name })
+        .from(projectsTable)
+        .where(and(identityWhere(identity, projectsTable), eq(projectsTable.id, projectId)));
+      if (!project) return { ok: false, error: "Project is not accessible." };
+      const [person] = await db.insert(peopleTable).values({
+        tenantId: identity.tenantId,
+        ownerUserId: identity.userId,
+        name,
+        nameKey: normalize(name),
+      }).returning();
+      const [relationshipRow] = await db.insert(projectPeopleTable).values({
+        tenantId: identity.tenantId,
+        ownerUserId: identity.userId,
+        personId: person.id,
+        projectId,
+        relationship,
+      }).returning();
+      result = {
+        ok: true,
+        person,
+        relationship: relationshipRow,
+        project,
+      };
       break;
     }
     case "update_person": {
@@ -1391,18 +1551,34 @@ async function executeTool(
       const amountMinor = Number(args.amountMinor);
       const currency = stringArg("currency") ?? "EGP";
       const description = stringArg("description");
+      let resolvedPersonId = personId;
+      let resolvedProjectId = projectId;
+      const personName = stringArg("personName");
+      const projectName = stringArg("projectName");
+      if (!resolvedPersonId && personName) {
+        const [person] = await db.select({ id: peopleTable.id }).from(peopleTable).where(and(
+          identityWhere(identity, peopleTable), eq(peopleTable.nameKey, normalize(personName)),
+        )).limit(1);
+        resolvedPersonId = person?.id;
+      }
+      if (!resolvedProjectId && projectName) {
+        const [project] = await db.select({ id: projectsTable.id }).from(projectsTable).where(and(
+          identityWhere(identity, projectsTable), eq(projectsTable.nameKey, normalize(projectName)),
+        )).limit(1);
+        resolvedProjectId = project?.id;
+      }
       if (!Number.isSafeInteger(amountMinor) || amountMinor <= 0 || !description) {
         return { ok: false, error: "Amount, currency, and description are required; amount must be integer minor units." };
       }
-      if (personId) {
+      if (resolvedPersonId) {
         const [person] = await db.select({ id: peopleTable.id }).from(peopleTable).where(and(
-          identityWhere(identity, peopleTable), eq(peopleTable.id, personId),
+          identityWhere(identity, peopleTable), eq(peopleTable.id, resolvedPersonId),
         ));
         if (!person) return { ok: false, error: "Person is not accessible." };
       }
-      if (projectId) {
+      if (resolvedProjectId) {
         const [project] = await db.select({ id: projectsTable.id }).from(projectsTable).where(and(
-          identityWhere(identity, projectsTable), eq(projectsTable.id, projectId),
+          identityWhere(identity, projectsTable), eq(projectsTable.id, resolvedProjectId),
         ));
         if (!project) return { ok: false, error: "Project is not accessible." };
       }
@@ -1423,8 +1599,8 @@ async function executeTool(
         amountMinor,
         currency: currency.toUpperCase(),
         description,
-        personId: personId ?? null,
-        projectId: projectId ?? null,
+        personId: resolvedPersonId ?? null,
+        projectId: resolvedProjectId ?? null,
         purposeId: purposeId ?? null,
         occurredAt,
       }).returning();
@@ -1434,8 +1610,8 @@ async function executeTool(
     case "update_expense": {
       const expenseId = stringArg("expenseId");
       const amountMinor = Number(args.amountMinor);
-      if (!expenseId || !Number.isSafeInteger(amountMinor) || amountMinor <= 0) {
-        return { ok: false, error: "expenseId and a positive integer amountMinor are required." };
+      if (!expenseId || (args.amountMinor !== undefined && (!Number.isSafeInteger(amountMinor) || amountMinor <= 0))) {
+        return { ok: false, error: "expenseId and a valid amountMinor are required when changing the amount." };
       }
       const [existing] = await db.select().from(expensesTable).where(and(
         identityWhere(identity, expensesTable),
@@ -1443,10 +1619,10 @@ async function executeTool(
       )).limit(1);
       if (!existing) return { ok: false, error: "Expense not found." };
       const updates: Record<string, unknown> = {
-        amountMinor,
         updatedAt: new Date(),
         rowVersion: sql`${expensesTable.rowVersion} + 1`,
       };
+      if (args.amountMinor !== undefined) updates.amountMinor = amountMinor;
       const currency = stringArg("currency");
       const description = stringArg("description");
       if (currency) updates.currency = currency.toUpperCase();
@@ -1834,6 +2010,83 @@ async function executeTool(
       result = { ok: true, total: { amountMinor: Number(total?.amountMinor ?? 0), count: Number(total?.count ?? 0), currency: total?.currency ?? "unknown" } };
       break;
     }
+    case "create_financial_party":
+      try {
+        result = { ok: true, financial_party: await createFinancialParty(identity, args, db) };
+      } catch (error) {
+        result = { ok: false, error: error instanceof Error ? error.message : "Could not create financial party." };
+      }
+      break;
+    case "create_financial_obligation":
+      try {
+        result = { ok: true, financial_obligation: await createFinancialObligation(identity, args, db) };
+      } catch (error) {
+        result = { ok: false, error: error instanceof Error ? error.message : "Could not create financial obligation." };
+      }
+      break;
+    case "create_financial_payment":
+      try {
+        result = { ok: true, financial_payment: await createFinancialPayment(identity, args, db) };
+      } catch (error) {
+        result = { ok: false, error: error instanceof Error ? error.message : "Could not create payment." };
+      }
+      break;
+    case "settle_financial_obligation":
+      try {
+        result = { ok: true, obligation_settlement: await settleObligation(identity, args, db) };
+      } catch (error) {
+        result = { ok: false, error: error instanceof Error ? error.message : "Could not settle obligation." };
+      }
+      break;
+    case "create_donation":
+      try {
+        result = { ok: true, donation: await createDonation(identity, args, db) };
+      } catch (error) {
+        result = { ok: false, error: error instanceof Error ? error.message : "Could not create donation." };
+      }
+      break;
+    case "create_income_receivable":
+      try {
+        result = { ok: true, income_receivable: await createIncomeReceivable(identity, args, db) };
+      } catch (error) {
+        result = { ok: false, error: error instanceof Error ? error.message : "Could not create receivable." };
+      }
+      break;
+    case "create_payment_link":
+      try {
+        result = { ok: true, payment_link: await createPaymentLink(identity, args, db) };
+      } catch (error) {
+        result = { ok: false, error: error instanceof Error ? error.message : "Could not create payment link." };
+      }
+      break;
+    case "update_financial_obligation":
+      try {
+        result = { ok: true, financial_obligation: await updateFinancialObligation(identity, args, db), corrected: true };
+      } catch (error) {
+        result = { ok: false, error: error instanceof Error ? error.message : "Could not update obligation." };
+      }
+      break;
+    case "update_financial_payment":
+      try {
+        result = { ok: true, financial_payment: await updateFinancialPayment(identity, args, db), corrected: true };
+      } catch (error) {
+        result = { ok: false, error: error instanceof Error ? error.message : "Could not update payment." };
+      }
+      break;
+    case "update_donation":
+      try {
+        result = { ok: true, donation: await updateDonation(identity, args, db), corrected: true };
+      } catch (error) {
+        result = { ok: false, error: error instanceof Error ? error.message : "Could not update donation." };
+      }
+      break;
+    case "update_income_receivable":
+      try {
+        result = { ok: true, income_receivable: await updateIncomeReceivable(identity, args, db), corrected: true };
+      } catch (error) {
+        result = { ok: false, error: error instanceof Error ? error.message : "Could not update receivable." };
+      }
+      break;
     case "create_task": {
       const title = stringArg("title");
       if (!title) return { ok: false, error: "Task title is required." };
@@ -1918,15 +2171,8 @@ async function executeTool(
   }
 
   if (result.ok && WRITE_TOOLS.has(name)) {
-    try {
-      await recordToolActivity(identity, name, args, result);
-    } catch (error) {
-      logger.warn({
-        requestId: options.requestId,
-        tool: name,
-        error,
-      }, "Activity event recording failed after a successful mutation");
-    }
+    const activityWriter = options.activityWriter ?? recordToolActivity;
+    await activityWriter(identity, name, args, result, db);
   }
 
   logger.info({
@@ -1949,6 +2195,7 @@ export async function executeStructuredTool(
     conversationId?: string | null;
     idempotencyKey?: string | null;
     approvedOperationId?: string;
+    activityWriter?: typeof recordToolActivity;
   } = { requestId: crypto.randomUUID() },
 ): Promise<ToolResult> {
   return executeTool(identity, name, args, options);

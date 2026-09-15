@@ -8,6 +8,13 @@
       "when": 1789473533173,
       "tag": "0000_phase1-expand",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789474516990,
+      "tag": "0001_smooth_inhumans",
+      "breakpoints": true
     }
   ]
 }

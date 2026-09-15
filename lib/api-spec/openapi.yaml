@@ -16,7 +16,232 @@ tags:
     description: Conversation history operations
   - name: records
     description: Structured memory records operations
+  - name: financial
+    description: Financial graph operations
 paths:
+  /financial/parties:
+    get:
+      operationId: listFinancialParties
+      tags: [financial]
+      summary: List scoped financial parties
+      responses:
+        "200":
+          description: Financial parties
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FinancialListResponse" }
+    post:
+      operationId: createFinancialParty
+      tags: [financial]
+      summary: Create a financial party
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FinancialMutationInput" }
+      responses:
+        "201":
+          description: Created or approved result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FinancialMutationResponse" }
+        "202":
+          description: Approval required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FinancialMutationResponse" }
+  /financial/parties/{partyId}:
+    get:
+      operationId: getFinancialParty
+      tags: [financial]
+      summary: Get a financial party graph
+      parameters:
+        - { name: partyId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Financial party and related records
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FinancialEntityResponse" }
+        "404":
+          description: Financial party not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /financial/obligations:
+    get:
+      operationId: listFinancialObligations
+      tags: [financial]
+      summary: List advances and debts
+      responses:
+        "200":
+          description: Obligations
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FinancialListResponse" }
+    post:
+      operationId: createFinancialObligation
+      tags: [financial]
+      summary: Create an advance or debt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FinancialMutationInput" }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/FinancialMutationResponse" } } } }
+        "202": { description: Approval required, content: { application/json: { schema: { $ref: "#/components/schemas/FinancialMutationResponse" } } } }
+  /financial/obligations/{obligationId}/settlements:
+    post:
+      operationId: settleFinancialObligation
+      tags: [financial]
+      summary: Apply a payment partially or fully to an obligation
+      parameters:
+        - { name: obligationId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FinancialMutationInput" }
+      responses:
+        "201": { description: Settlement created, content: { application/json: { schema: { $ref: "#/components/schemas/FinancialMutationResponse" } } } }
+        "202": { description: Approval required, content: { application/json: { schema: { $ref: "#/components/schemas/FinancialMutationResponse" } } } }
+  /financial/payments:
+    get:
+      operationId: listFinancialPayments
+      tags: [financial]
+      summary: List actual payments
+      responses:
+        "200": { description: Payments, content: { application/json: { schema: { $ref: "#/components/schemas/FinancialListResponse" } } } }
+    post:
+      operationId: createFinancialPayment
+      tags: [financial]
+      summary: Record an actual payer-to-payee payment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FinancialMutationInput" }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/FinancialMutationResponse" } } } }
+        "202": { description: Approval required, content: { application/json: { schema: { $ref: "#/components/schemas/FinancialMutationResponse" } } } }
+  /financial/obligations/{obligationId}:
+    patch:
+      operationId: updateFinancialObligation
+      tags: [financial]
+      summary: Correct an obligation
+      parameters:
+        - { name: obligationId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FinancialMutationInput" }
+      responses:
+        "201": { description: Updated, content: { application/json: { schema: { $ref: "#/components/schemas/FinancialMutationResponse" } } } }
+        "202": { description: Approval required, content: { application/json: { schema: { $ref: "#/components/schemas/FinancialMutationResponse" } } } }
+  /financial/payments/{paymentId}:
+    patch:
+      operationId: updateFinancialPayment
+      tags: [financial]
+      summary: Correct an actual payment
+      parameters:
+        - { name: paymentId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FinancialMutationInput" }
+      responses:
+        "201": { description: Updated, content: { application/json: { schema: { $ref: "#/components/schemas/FinancialMutationResponse" } } } }
+        "202": { description: Approval required, content: { application/json: { schema: { $ref: "#/components/schemas/FinancialMutationResponse" } } } }
+  /financial/donations/{donationId}:
+    patch:
+      operationId: updateDonation
+      tags: [financial]
+      summary: Correct a donation
+      parameters:
+        - { name: donationId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FinancialMutationInput" }
+      responses:
+        "201": { description: Updated, content: { application/json: { schema: { $ref: "#/components/schemas/FinancialMutationResponse" } } } }
+        "202": { description: Approval required, content: { application/json: { schema: { $ref: "#/components/schemas/FinancialMutationResponse" } } } }
+  /financial/receivables/{receivableId}:
+    patch:
+      operationId: updateIncomeReceivable
+      tags: [financial]
+      summary: Correct income or a receivable
+      parameters:
+        - { name: receivableId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FinancialMutationInput" }
+      responses:
+        "201": { description: Updated, content: { application/json: { schema: { $ref: "#/components/schemas/FinancialMutationResponse" } } } }
+        "202": { description: Approval required, content: { application/json: { schema: { $ref: "#/components/schemas/FinancialMutationResponse" } } } }
+  /financial/donations:
+    get:
+      operationId: listDonations
+      tags: [financial]
+      summary: List donations and pledges
+      responses:
+        "200": { description: Donations, content: { application/json: { schema: { $ref: "#/components/schemas/FinancialListResponse" } } } }
+    post:
+      operationId: createDonation
+      tags: [financial]
+      summary: Create a donation pledge or payment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FinancialMutationInput" }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/FinancialMutationResponse" } } } }
+        "202": { description: Approval required, content: { application/json: { schema: { $ref: "#/components/schemas/FinancialMutationResponse" } } } }
+  /financial/receivables:
+    get:
+      operationId: listIncomeReceivables
+      tags: [financial]
+      summary: List expected income and receivables
+      responses:
+        "200": { description: Income and receivables, content: { application/json: { schema: { $ref: "#/components/schemas/FinancialListResponse" } } } }
+    post:
+      operationId: createIncomeReceivable
+      tags: [financial]
+      summary: Create expected income or a receivable
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FinancialMutationInput" }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/FinancialMutationResponse" } } } }
+        "202": { description: Approval required, content: { application/json: { schema: { $ref: "#/components/schemas/FinancialMutationResponse" } } } }
+  /financial/payment-links:
+    get:
+      operationId: listPaymentLinks
+      tags: [financial]
+      summary: List payment links
+      responses:
+        "200": { description: Payment links, content: { application/json: { schema: { $ref: "#/components/schemas/FinancialListResponse" } } } }
+    post:
+      operationId: createPaymentLink
+      tags: [financial]
+      summary: Create a scoped payment link
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FinancialMutationInput" }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/FinancialMutationResponse" } } } }
+        "202": { description: Approval required, content: { application/json: { schema: { $ref: "#/components/schemas/FinancialMutationResponse" } } } }
   /healthz:
     get:
       operationId: healthCheck
@@ -1252,3 +1477,34 @@ components:
           type: array
           items: { $ref: "#/components/schemas/CommitmentRecord" }
       required: [expenses, people, projects, tasks, reminders, commitments]
+    FinancialMutationInput:
+      type: object
+      additionalProperties: true
+    FinancialMutationResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        ok: { type: boolean }
+        pendingApproval: { type: boolean }
+        approval: { $ref: "#/components/schemas/ApprovalResponse" }
+    FinancialListResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+      required: [items]
+    FinancialEntityResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        entity:
+          type: object
+          additionalProperties: true
+        related:
+          type: object
+          additionalProperties: true
+      required: [entity, related]

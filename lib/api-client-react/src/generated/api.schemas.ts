@@ -534,6 +534,32 @@ export interface RecordsResponse {
   commitments: CommitmentRecord[];
 }
 
+export interface FinancialMutationInput { [key: string]: unknown }
+
+export interface FinancialMutationResponse {
+  ok?: boolean;
+  pendingApproval?: boolean;
+  approval?: ApprovalResponse;
+  [key: string]: unknown;
+ }
+
+export type FinancialListResponseItemsItem = { [key: string]: unknown };
+
+export interface FinancialListResponse {
+  items: FinancialListResponseItemsItem[];
+  [key: string]: unknown;
+ }
+
+export type FinancialEntityResponseEntity = { [key: string]: unknown };
+
+export type FinancialEntityResponseRelated = { [key: string]: unknown };
+
+export interface FinancialEntityResponse {
+  entity: FinancialEntityResponseEntity;
+  related: FinancialEntityResponseRelated;
+  [key: string]: unknown;
+ }
+
 export type ListConversationsParams = {
 search?: string;
 };

@@ -9,6 +9,417 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary List scoped financial parties
+ */
+export const ListFinancialPartiesResponse = zod.object({
+  "items": zod.array(zod.record(zod.string(), zod.unknown()))
+})
+
+
+/**
+ * @summary Create a financial party
+ */
+export const CreateFinancialPartyBody = zod.record(zod.string(), zod.unknown())
+
+export const CreateFinancialPartyResponse = zod.object({
+  "ok": zod.boolean().optional(),
+  "pendingApproval": zod.boolean().optional(),
+  "approval": zod.object({
+  "operationId": zod.string().uuid(),
+  "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
+  "conversationId": zod.string(),
+  "assistantMessage": zod.string(),
+  "action": zod.record(zod.string(), zod.unknown()).optional(),
+  "response": zod.object({
+  "kind": zod.enum(['answer', 'clarification', 'not_found', 'error']),
+  "message": zod.string(),
+  "groundedFacts": zod.array(zod.object({
+  "type": zod.enum(['money', 'count']),
+  "value": zod.number().int(),
+  "currency": zod.string().optional(),
+  "label": zod.string().optional()
+})).optional()
+}).optional(),
+  "provider": zod.string(),
+  "model": zod.string()
+}).optional()
+})
+
+
+/**
+ * @summary Get a financial party graph
+ */
+export const GetFinancialPartyParams = zod.object({
+  "partyId": zod.coerce.string().uuid()
+})
+
+export const GetFinancialPartyResponse = zod.object({
+  "entity": zod.record(zod.string(), zod.unknown()),
+  "related": zod.record(zod.string(), zod.unknown())
+})
+
+
+/**
+ * @summary List advances and debts
+ */
+export const ListFinancialObligationsResponse = zod.object({
+  "items": zod.array(zod.record(zod.string(), zod.unknown()))
+})
+
+
+/**
+ * @summary Create an advance or debt
+ */
+export const CreateFinancialObligationBody = zod.record(zod.string(), zod.unknown())
+
+export const CreateFinancialObligationResponse = zod.object({
+  "ok": zod.boolean().optional(),
+  "pendingApproval": zod.boolean().optional(),
+  "approval": zod.object({
+  "operationId": zod.string().uuid(),
+  "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
+  "conversationId": zod.string(),
+  "assistantMessage": zod.string(),
+  "action": zod.record(zod.string(), zod.unknown()).optional(),
+  "response": zod.object({
+  "kind": zod.enum(['answer', 'clarification', 'not_found', 'error']),
+  "message": zod.string(),
+  "groundedFacts": zod.array(zod.object({
+  "type": zod.enum(['money', 'count']),
+  "value": zod.number().int(),
+  "currency": zod.string().optional(),
+  "label": zod.string().optional()
+})).optional()
+}).optional(),
+  "provider": zod.string(),
+  "model": zod.string()
+}).optional()
+})
+
+
+/**
+ * @summary Apply a payment partially or fully to an obligation
+ */
+export const SettleFinancialObligationParams = zod.object({
+  "obligationId": zod.coerce.string().uuid()
+})
+
+export const SettleFinancialObligationBody = zod.record(zod.string(), zod.unknown())
+
+export const SettleFinancialObligationResponse = zod.object({
+  "ok": zod.boolean().optional(),
+  "pendingApproval": zod.boolean().optional(),
+  "approval": zod.object({
+  "operationId": zod.string().uuid(),
+  "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
+  "conversationId": zod.string(),
+  "assistantMessage": zod.string(),
+  "action": zod.record(zod.string(), zod.unknown()).optional(),
+  "response": zod.object({
+  "kind": zod.enum(['answer', 'clarification', 'not_found', 'error']),
+  "message": zod.string(),
+  "groundedFacts": zod.array(zod.object({
+  "type": zod.enum(['money', 'count']),
+  "value": zod.number().int(),
+  "currency": zod.string().optional(),
+  "label": zod.string().optional()
+})).optional()
+}).optional(),
+  "provider": zod.string(),
+  "model": zod.string()
+}).optional()
+})
+
+
+/**
+ * @summary List actual payments
+ */
+export const ListFinancialPaymentsResponse = zod.object({
+  "items": zod.array(zod.record(zod.string(), zod.unknown()))
+})
+
+
+/**
+ * @summary Record an actual payer-to-payee payment
+ */
+export const CreateFinancialPaymentBody = zod.record(zod.string(), zod.unknown())
+
+export const CreateFinancialPaymentResponse = zod.object({
+  "ok": zod.boolean().optional(),
+  "pendingApproval": zod.boolean().optional(),
+  "approval": zod.object({
+  "operationId": zod.string().uuid(),
+  "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
+  "conversationId": zod.string(),
+  "assistantMessage": zod.string(),
+  "action": zod.record(zod.string(), zod.unknown()).optional(),
+  "response": zod.object({
+  "kind": zod.enum(['answer', 'clarification', 'not_found', 'error']),
+  "message": zod.string(),
+  "groundedFacts": zod.array(zod.object({
+  "type": zod.enum(['money', 'count']),
+  "value": zod.number().int(),
+  "currency": zod.string().optional(),
+  "label": zod.string().optional()
+})).optional()
+}).optional(),
+  "provider": zod.string(),
+  "model": zod.string()
+}).optional()
+})
+
+
+/**
+ * @summary Correct an obligation
+ */
+export const UpdateFinancialObligationParams = zod.object({
+  "obligationId": zod.coerce.string().uuid()
+})
+
+export const UpdateFinancialObligationBody = zod.record(zod.string(), zod.unknown())
+
+export const UpdateFinancialObligationResponse = zod.object({
+  "ok": zod.boolean().optional(),
+  "pendingApproval": zod.boolean().optional(),
+  "approval": zod.object({
+  "operationId": zod.string().uuid(),
+  "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
+  "conversationId": zod.string(),
+  "assistantMessage": zod.string(),
+  "action": zod.record(zod.string(), zod.unknown()).optional(),
+  "response": zod.object({
+  "kind": zod.enum(['answer', 'clarification', 'not_found', 'error']),
+  "message": zod.string(),
+  "groundedFacts": zod.array(zod.object({
+  "type": zod.enum(['money', 'count']),
+  "value": zod.number().int(),
+  "currency": zod.string().optional(),
+  "label": zod.string().optional()
+})).optional()
+}).optional(),
+  "provider": zod.string(),
+  "model": zod.string()
+}).optional()
+})
+
+
+/**
+ * @summary Correct an actual payment
+ */
+export const UpdateFinancialPaymentParams = zod.object({
+  "paymentId": zod.coerce.string().uuid()
+})
+
+export const UpdateFinancialPaymentBody = zod.record(zod.string(), zod.unknown())
+
+export const UpdateFinancialPaymentResponse = zod.object({
+  "ok": zod.boolean().optional(),
+  "pendingApproval": zod.boolean().optional(),
+  "approval": zod.object({
+  "operationId": zod.string().uuid(),
+  "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
+  "conversationId": zod.string(),
+  "assistantMessage": zod.string(),
+  "action": zod.record(zod.string(), zod.unknown()).optional(),
+  "response": zod.object({
+  "kind": zod.enum(['answer', 'clarification', 'not_found', 'error']),
+  "message": zod.string(),
+  "groundedFacts": zod.array(zod.object({
+  "type": zod.enum(['money', 'count']),
+  "value": zod.number().int(),
+  "currency": zod.string().optional(),
+  "label": zod.string().optional()
+})).optional()
+}).optional(),
+  "provider": zod.string(),
+  "model": zod.string()
+}).optional()
+})
+
+
+/**
+ * @summary Correct a donation
+ */
+export const UpdateDonationParams = zod.object({
+  "donationId": zod.coerce.string().uuid()
+})
+
+export const UpdateDonationBody = zod.record(zod.string(), zod.unknown())
+
+export const UpdateDonationResponse = zod.object({
+  "ok": zod.boolean().optional(),
+  "pendingApproval": zod.boolean().optional(),
+  "approval": zod.object({
+  "operationId": zod.string().uuid(),
+  "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
+  "conversationId": zod.string(),
+  "assistantMessage": zod.string(),
+  "action": zod.record(zod.string(), zod.unknown()).optional(),
+  "response": zod.object({
+  "kind": zod.enum(['answer', 'clarification', 'not_found', 'error']),
+  "message": zod.string(),
+  "groundedFacts": zod.array(zod.object({
+  "type": zod.enum(['money', 'count']),
+  "value": zod.number().int(),
+  "currency": zod.string().optional(),
+  "label": zod.string().optional()
+})).optional()
+}).optional(),
+  "provider": zod.string(),
+  "model": zod.string()
+}).optional()
+})
+
+
+/**
+ * @summary Correct income or a receivable
+ */
+export const UpdateIncomeReceivableParams = zod.object({
+  "receivableId": zod.coerce.string().uuid()
+})
+
+export const UpdateIncomeReceivableBody = zod.record(zod.string(), zod.unknown())
+
+export const UpdateIncomeReceivableResponse = zod.object({
+  "ok": zod.boolean().optional(),
+  "pendingApproval": zod.boolean().optional(),
+  "approval": zod.object({
+  "operationId": zod.string().uuid(),
+  "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
+  "conversationId": zod.string(),
+  "assistantMessage": zod.string(),
+  "action": zod.record(zod.string(), zod.unknown()).optional(),
+  "response": zod.object({
+  "kind": zod.enum(['answer', 'clarification', 'not_found', 'error']),
+  "message": zod.string(),
+  "groundedFacts": zod.array(zod.object({
+  "type": zod.enum(['money', 'count']),
+  "value": zod.number().int(),
+  "currency": zod.string().optional(),
+  "label": zod.string().optional()
+})).optional()
+}).optional(),
+  "provider": zod.string(),
+  "model": zod.string()
+}).optional()
+})
+
+
+/**
+ * @summary List donations and pledges
+ */
+export const ListDonationsResponse = zod.object({
+  "items": zod.array(zod.record(zod.string(), zod.unknown()))
+})
+
+
+/**
+ * @summary Create a donation pledge or payment
+ */
+export const CreateDonationBody = zod.record(zod.string(), zod.unknown())
+
+export const CreateDonationResponse = zod.object({
+  "ok": zod.boolean().optional(),
+  "pendingApproval": zod.boolean().optional(),
+  "approval": zod.object({
+  "operationId": zod.string().uuid(),
+  "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
+  "conversationId": zod.string(),
+  "assistantMessage": zod.string(),
+  "action": zod.record(zod.string(), zod.unknown()).optional(),
+  "response": zod.object({
+  "kind": zod.enum(['answer', 'clarification', 'not_found', 'error']),
+  "message": zod.string(),
+  "groundedFacts": zod.array(zod.object({
+  "type": zod.enum(['money', 'count']),
+  "value": zod.number().int(),
+  "currency": zod.string().optional(),
+  "label": zod.string().optional()
+})).optional()
+}).optional(),
+  "provider": zod.string(),
+  "model": zod.string()
+}).optional()
+})
+
+
+/**
+ * @summary List expected income and receivables
+ */
+export const ListIncomeReceivablesResponse = zod.object({
+  "items": zod.array(zod.record(zod.string(), zod.unknown()))
+})
+
+
+/**
+ * @summary Create expected income or a receivable
+ */
+export const CreateIncomeReceivableBody = zod.record(zod.string(), zod.unknown())
+
+export const CreateIncomeReceivableResponse = zod.object({
+  "ok": zod.boolean().optional(),
+  "pendingApproval": zod.boolean().optional(),
+  "approval": zod.object({
+  "operationId": zod.string().uuid(),
+  "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
+  "conversationId": zod.string(),
+  "assistantMessage": zod.string(),
+  "action": zod.record(zod.string(), zod.unknown()).optional(),
+  "response": zod.object({
+  "kind": zod.enum(['answer', 'clarification', 'not_found', 'error']),
+  "message": zod.string(),
+  "groundedFacts": zod.array(zod.object({
+  "type": zod.enum(['money', 'count']),
+  "value": zod.number().int(),
+  "currency": zod.string().optional(),
+  "label": zod.string().optional()
+})).optional()
+}).optional(),
+  "provider": zod.string(),
+  "model": zod.string()
+}).optional()
+})
+
+
+/**
+ * @summary List payment links
+ */
+export const ListPaymentLinksResponse = zod.object({
+  "items": zod.array(zod.record(zod.string(), zod.unknown()))
+})
+
+
+/**
+ * @summary Create a scoped payment link
+ */
+export const CreatePaymentLinkBody = zod.record(zod.string(), zod.unknown())
+
+export const CreatePaymentLinkResponse = zod.object({
+  "ok": zod.boolean().optional(),
+  "pendingApproval": zod.boolean().optional(),
+  "approval": zod.object({
+  "operationId": zod.string().uuid(),
+  "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
+  "conversationId": zod.string(),
+  "assistantMessage": zod.string(),
+  "action": zod.record(zod.string(), zod.unknown()).optional(),
+  "response": zod.object({
+  "kind": zod.enum(['answer', 'clarification', 'not_found', 'error']),
+  "message": zod.string(),
+  "groundedFacts": zod.array(zod.object({
+  "type": zod.enum(['money', 'count']),
+  "value": zod.number().int(),
+  "currency": zod.string().optional(),
+  "label": zod.string().optional()
+})).optional()
+}).optional(),
+  "provider": zod.string(),
+  "model": zod.string()
+}).optional()
+})
+
+
+/**
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({

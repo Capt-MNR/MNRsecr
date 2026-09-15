@@ -1399,135 +1399,84 @@ export async function executeApprovedOperation(
   let action: Record<string, unknown>;
   let assistantMessage: string;
 
-  if (operation.toolName === "record_expense") {
-    const amountMinor = operationNumberArg(operation, "amountMinor");
-    const description = operationStringArg(operation, "description");
-    const currency = operationStringArg(operation, "currency") ?? "EGP";
-    if (amountMinor === undefined || !description) throw new Error("بيانات المصروف غير مكتملة.");
-    const saved = await persistence.createExpense(identity, {
-      amountMinor,
-      currency,
-      description,
-      personName: operationStringArg(operation, "personName"),
-      projectName: operationStringArg(operation, "projectName"),
-      projectId: operationStringArg(operation, "projectId"),
-    });
-    assistantMessage = `تمام، سجلت ${moneyLabel(saved.amountMinor, saved.currency)} لـ${saved.personName ?? operationStringArg(operation, "personName") ?? "الشخص"}${saved.projectName ? ` على مشروع ${saved.projectName}` : ""}.`;
+  const toolResult = await executeStructuredTool(identity, operation.toolName, operation.args, {
+    requestId: `approval-${operation.operationId}`,
+    conversationId,
+    approvedOperationId: operation.operationId,
+  });
+  if (!toolResult.ok || toolResult.pendingApproval) {
+    throw new Error(typeof toolResult.error === "string" ? toolResult.error : "تعذر تنفيذ العملية.");
+  }
+  const resultRecord = (key: string) => {
+    const value = toolResult[key];
+    return value && typeof value === "object" && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : undefined;
+  };
+  const expense = resultRecord("expense");
+  const project = resultRecord("project");
+  const person = resultRecord("person");
+  const reminder = resultRecord("reminder");
+  if (operation.toolName === "record_expense" && expense) {
+    assistantMessage = `تمام، سجلت ${moneyLabel(Number(expense.amountMinor), String(expense.currency))}.`;
     action = {
       type: "expense_recorded",
       operationId: operation.operationId,
-      expenseId: saved.id,
-      amountMinor: saved.amountMinor,
-      currency: saved.currency,
-      personId: saved.personId,
-      projectId: saved.projectId,
-      personName: saved.personName,
-      projectName: saved.projectName,
+      expenseId: expense.id,
+      amountMinor: expense.amountMinor,
+      currency: expense.currency,
+      personId: expense.personId,
+      projectId: expense.projectId,
+      personName: operationStringArg(operation, "personName"),
+      projectName: operationStringArg(operation, "projectName"),
       ...(Array.isArray(operation.args.projectCandidates)
         ? { projectCandidates: operation.args.projectCandidates }
         : {}),
     };
-  } else if (operation.toolName === "create_project") {
-    const name = operationStringArg(operation, "name");
-    if (!name) throw new Error("اسم المشروع غير موجود.");
-    const project = await persistence.createProject(identity, name);
-    assistantMessage = `تمام، سجلت مشروع ${project.name}.`;
+  } else if (operation.toolName === "create_project" && project) {
+    assistantMessage = `تمام، سجلت مشروع ${String(project.name)}.`;
     action = { type: "project_created", operationId: operation.operationId, projectId: project.id, projectName: project.name };
-  } else if (operation.toolName === "create_person") {
-    const name = operationStringArg(operation, "name");
-    if (!name) throw new Error("اسم الشخص غير موجود.");
-    const person = await persistence.createPerson(identity, name);
-    assistantMessage = `تمام، سجلت ${person.name}.`;
+  } else if (operation.toolName === "create_person" && person) {
+    assistantMessage = `تمام، سجلت ${String(person.name)}.`;
     action = { type: "person_created", operationId: operation.operationId, personId: person.id, personName: person.name };
-  } else if (operation.toolName === "create_person_and_link_person_to_project") {
-    const name = operationStringArg(operation, "personName");
-    const projectId = operationStringArg(operation, "projectId");
-    const relationship = operationStringArg(operation, "relationship");
-    if (!name || !projectId || !relationship) throw new Error("بيانات العلاقة غير مكتملة.");
-    const person = await persistence.createPerson(identity, name);
-    await persistence.linkPersonToProject(identity, { personId: person.id, projectId, relationship });
-    assistantMessage = `تمام، ربطت ${person.name} بمشروع ${operationStringArg(operation, "projectName") ?? "المشروع المحدد"} كـ${relationship}.`;
+  } else if (operation.toolName === "update_expense" && expense) {
+    const projectCorrection = operationNumberArg(operation, "amountMinor") === undefined
+      && Boolean(operationStringArg(operation, "projectId"));
+    assistantMessage = projectCorrection
+      ? "تمام، نقلت المصروف إلى المشروع الآخر."
+      : `تمام، صححت المصروف إلى ${moneyLabel(Number(expense.amountMinor), String(expense.currency))}.`;
+    action = {
+      type: projectCorrection ? "expense_project_corrected" : "expense_corrected",
+      operationId: operation.operationId,
+      expenseId: expense.id,
+      amountMinor: expense.amountMinor,
+      currency: expense.currency,
+      personId: expense.personId,
+      projectId: expense.projectId,
+      personName: operationStringArg(operation, "personName"),
+      projectName: operationStringArg(operation, "projectName"),
+      description: expense.description,
+    };
+  } else if (operation.toolName === "create_person_and_link_person_to_project" && person) {
+    assistantMessage = `تمام، ربطت ${String(person.name)} بالمشروع المحدد.`;
     action = {
       type: "person_linked",
       operationId: operation.operationId,
       personId: person.id,
       personName: person.name,
-      projectId,
-      projectName: operationStringArg(operation, "projectName"),
-      relationship,
+      projectId: operation.args.projectId,
+      projectName: operation.args.projectName,
+      relationship: operation.args.relationship,
     };
-  } else if (operation.toolName === "update_expense") {
-    const expenseId = operationStringArg(operation, "expenseId");
-    if (!expenseId) throw new Error("معرف المصروف غير موجود.");
-    const projectCorrection = operationNumberArg(operation, "amountMinor") === undefined
-      && Boolean(operationStringArg(operation, "projectId"));
-    const updated = await persistence.updateExpense(identity, {
-      expenseId,
-      ...(operationNumberArg(operation, "amountMinor") !== undefined
-        ? { amountMinor: operationNumberArg(operation, "amountMinor") }
-        : {}),
-      ...(operation.args.projectId === null
-        ? { projectId: null }
-        : operationStringArg(operation, "projectId")
-          ? { projectId: operationStringArg(operation, "projectId") }
-          : {}),
-      ...(operation.args.personId === null
-        ? { personId: null }
-        : operationStringArg(operation, "personId")
-          ? { personId: operationStringArg(operation, "personId") }
-          : {}),
-      ...(operationStringArg(operation, "currency")
-        ? { currency: operationStringArg(operation, "currency") }
-        : {}),
-      ...(operationStringArg(operation, "description")
-        ? { description: operationStringArg(operation, "description") }
-        : {}),
-      ...(operationStringArg(operation, "occurredAt")
-        ? { occurredAt: new Date(operationStringArg(operation, "occurredAt")!) }
-        : {}),
-    });
-    if (!updated) throw new Error("لم أجد المصروف المطلوب.");
-    assistantMessage = projectCorrection
-      ? "تمام، نقلت المصروف إلى المشروع الآخر."
-      : `تمام، صححت المصروف إلى ${moneyLabel(updated.amountMinor, updated.currency)}.`;
-    action = {
-      type: projectCorrection ? "expense_project_corrected" : "expense_corrected",
-      operationId: operation.operationId,
-      expenseId: updated.id,
-      amountMinor: updated.amountMinor,
-      currency: updated.currency,
-      personId: updated.personId,
-      projectId: updated.projectId,
-      personName: updated.personName,
-      projectName: updated.projectName,
-      description: updated.description,
-    };
-  } else if (operation.toolName === "create_reminder") {
-    const text = operationStringArg(operation, "text");
-    const dueAt = operationStringArg(operation, "dueAt");
-    const timezone = operationStringArg(operation, "timezone") ?? "Africa/Cairo";
-    if (!text || !dueAt || Number.isNaN(new Date(dueAt).getTime())) throw new Error("بيانات التذكير غير مكتملة.");
-    const reminder = await persistence.createReminder(identity, {
-      text,
-      dueAt: new Date(dueAt),
-      timezone,
-    });
-    assistantMessage = `حاضر، هفكرك: ${reminder.text}.`;
+  } else if (operation.toolName === "create_reminder" && reminder) {
+    assistantMessage = `حاضر، هفكرك: ${String(reminder.text)}.`;
     action = {
       type: "reminder_created",
       operationId: operation.operationId,
       reminderId: reminder.id,
-      dueAt: reminder.dueAt.toISOString(),
+      dueAt: reminder.dueAt instanceof Date ? reminder.dueAt.toISOString() : reminder.dueAt,
     };
   } else {
-    const toolResult = await executeStructuredTool(identity, operation.toolName, operation.args, {
-      requestId: `approval-${operation.operationId}`,
-      conversationId,
-      approvedOperationId: operation.operationId,
-    });
-    if (!toolResult.ok || toolResult.pendingApproval) {
-      throw new Error(typeof toolResult.error === "string" ? toolResult.error : "تعذر تنفيذ العملية.");
-    }
     assistantMessage = "تم تنفيذ التغيير المطلوب.";
     action = {
       type: "operation_completed",

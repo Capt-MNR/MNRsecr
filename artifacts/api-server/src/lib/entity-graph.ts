@@ -12,6 +12,7 @@ import {
   type ActivityEvent,
 } from "@workspace/db";
 
+export type DbExecutor = Pick<typeof db, "select" | "insert" | "update" | "delete">;
 export type GraphEntityType = "person" | "project";
 export type Identity = { tenantId: string; userId: string };
 
@@ -31,34 +32,33 @@ export async function recordActivityEvent(
     metadata?: Record<string, unknown>;
     entities: ActivityEntityRef[];
   },
+  executor: DbExecutor = db,
 ) {
-  return db.transaction(async (tx) => {
-    const [event] = await tx.insert(activityEventsTable).values({
-      tenantId: identity.tenantId,
-      ownerUserId: identity.userId,
-      eventType: input.eventType,
-      sourceType: input.sourceType,
-      sourceId: input.sourceId ?? null,
-      actorType: "user",
-      actorId: identity.userId,
-      summary: input.summary,
-      metadata: input.metadata ?? {},
-    }).returning();
+  const [event] = await executor.insert(activityEventsTable).values({
+    tenantId: identity.tenantId,
+    ownerUserId: identity.userId,
+    eventType: input.eventType,
+    sourceType: input.sourceType,
+    sourceId: input.sourceId ?? null,
+    actorType: "user",
+    actorId: identity.userId,
+    summary: input.summary,
+    metadata: input.metadata ?? {},
+  }).returning();
 
-    if (input.entities.length > 0) {
-      await tx.insert(activityEventEntitiesTable).values(
-        input.entities.map((entity) => ({
-          tenantId: identity.tenantId,
-          ownerUserId: identity.userId,
-          eventId: event.id,
-          entityType: entity.entityType,
-          entityId: entity.entityId,
-          role: entity.role ?? "related",
-        })),
-      ).onConflictDoNothing();
-    }
-    return event;
-  });
+  if (input.entities.length > 0) {
+    await executor.insert(activityEventEntitiesTable).values(
+      input.entities.map((entity) => ({
+        tenantId: identity.tenantId,
+        ownerUserId: identity.userId,
+        eventId: event.id,
+        entityType: entity.entityType,
+        entityId: entity.entityId,
+        role: entity.role ?? "related",
+      })),
+    ).onConflictDoNothing();
+  }
+  return event;
 }
 
 function entityRef(entityType: string, entityId: unknown, role = "related"): ActivityEntityRef | null {
@@ -74,6 +74,8 @@ function recordFromResult(result: Record<string, unknown>, toolName: string): Re
       ? "expense"
       : toolName === "link_person_to_project" || toolName === "update_person_project_relationship"
         ? "relationship"
+        : toolName === "settle_financial_obligation"
+          ? "obligation_settlement"
         : toolName.replace(/^(create_|update_)/, "");
   const value = result[key];
   return value && typeof value === "object" && !Array.isArray(value)
@@ -88,6 +90,13 @@ function entityTypeForTool(toolName: string): string | null {
   if (toolName.includes("reminder")) return "reminder";
   if (toolName.includes("commitment")) return "commitment";
   if (toolName.includes("task")) return "task";
+  if (toolName.includes("financial_party")) return "financial_party";
+  if (toolName.includes("financial_obligation")) return "financial_obligation";
+  if (toolName.includes("financial_payment")) return "financial_payment";
+  if (toolName.includes("donation")) return "donation";
+  if (toolName.includes("income_receivable")) return "income_receivable";
+  if (toolName.includes("payment_link")) return "payment_link";
+  if (toolName.includes("settle_financial_obligation")) return "obligation_settlement";
   return null;
 }
 
@@ -96,6 +105,7 @@ export async function recordToolActivity(
   toolName: string,
   args: Record<string, unknown>,
   result: Record<string, unknown>,
+  executor: DbExecutor = db,
 ): Promise<void> {
   if (result.ok !== true || result.pendingApproval === true) return;
   if (toolName === "find_person" || toolName === "find_project" || toolName.startsWith("query_") || toolName === "recall_context") return;
@@ -112,6 +122,33 @@ export async function recordToolActivity(
   const project = entityRef("project", args.projectId, "project");
   if (person && !entities.some((item) => item.entityType === person.entityType && item.entityId === person.entityId)) entities.push(person);
   if (project && !entities.some((item) => item.entityType === project.entityType && item.entityId === project.entityId)) entities.push(project);
+  for (const [key, role] of [
+    ["lenderPartyId", "lender"],
+    ["borrowerPartyId", "borrower"],
+    ["payerPartyId", "payer"],
+    ["payeePartyId", "payee"],
+    ["donorPartyId", "donor"],
+    ["recipientPartyId", "recipient"],
+    ["creditorPartyId", "creditor"],
+    ["debtorPartyId", "debtor"],
+    ["obligationId", "obligation"],
+    ["paymentId", "payment"],
+    ["receivableId", "receivable"],
+    ["donationId", "donation"],
+  ] as const) {
+    const financialRef = entityRef(
+      key.endsWith("PartyId") ? "financial_party" :
+        key === "obligationId" ? "financial_obligation" :
+          key === "paymentId" ? "financial_payment" :
+            key === "receivableId" ? "income_receivable" :
+              key === "donationId" ? "donation" : "financial_entity",
+      args[key],
+      role,
+    );
+    if (financialRef && !entities.some((item) => item.entityType === financialRef.entityType && item.entityId === financialRef.entityId)) {
+      entities.push(financialRef);
+    }
+  }
 
   if (toolName === "link_person_to_project" || toolName === "update_person_project_relationship") {
     const relationship = entityRef("project_person", record?.id, "subject");
@@ -141,7 +178,7 @@ export async function recordToolActivity(
       ),
     ) },
     entities,
-  });
+  }, executor);
 }
 
 function iso(date: Date | null): string | null {

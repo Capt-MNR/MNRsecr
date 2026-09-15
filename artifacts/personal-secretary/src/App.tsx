@@ -7,6 +7,7 @@ import Home from '@/pages/home';
 import Records from '@/pages/records';
 import NotFound from '@/pages/not-found';
 import EntityDetail from '@/pages/entity-detail';
+import FinancialDetail from '@/pages/financial-detail';
 import {
   Route,
   Switch,
@@ -26,6 +27,7 @@ function Router() {
          <Route path="/records" component={Records} />
           <Route path="/people/:id" component={() => <EntityDetail entityType="person" />} />
           <Route path="/projects/:id" component={() => <EntityDetail entityType="project" />} />
+           <Route path="/financial/parties/:id" component={FinancialDetail} />
         <Route component={NotFound} />
       </Switch>
     </RoutedErrorBoundary>

@@ -80,6 +80,257 @@ export const purposesTable = pgTable(
   ],
 );
 
+export const financialPartiesTable = pgTable(
+  "financial_parties",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    partyType: text("party_type").notNull(),
+    name: text("name").notNull(),
+    nameKey: text("name_key").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    rowVersion: integer("row_version").notNull().default(1),
+  },
+  (table) => [
+    index("financial_parties_owner_name_key_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.nameKey,
+    ),
+  ],
+);
+
+export const financialPartyPeopleTable = pgTable(
+  "financial_party_people",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    partyId: uuid("party_id").notNull().references(() => financialPartiesTable.id),
+    personId: uuid("person_id").notNull().references(() => peopleTable.id),
+    relationship: text("relationship"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("financial_party_people_owner_pair_unique").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.partyId,
+      table.personId,
+    ),
+  ],
+);
+
+export const financialPartyProjectsTable = pgTable(
+  "financial_party_projects",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    partyId: uuid("party_id").notNull().references(() => financialPartiesTable.id),
+    projectId: uuid("project_id").notNull().references(() => projectsTable.id),
+    relationship: text("relationship"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("financial_party_projects_owner_pair_unique").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.partyId,
+      table.projectId,
+    ),
+  ],
+);
+
+export const financialPartyPurposesTable = pgTable(
+  "financial_party_purposes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    partyId: uuid("party_id").notNull().references(() => financialPartiesTable.id),
+    purposeId: uuid("purpose_id").notNull().references(() => purposesTable.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("financial_party_purposes_owner_pair_unique").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.partyId,
+      table.purposeId,
+    ),
+  ],
+);
+
+export const financialObligationsTable = pgTable(
+  "financial_obligations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    kind: text("kind").notNull(),
+    title: text("title").notNull(),
+    lenderPartyId: uuid("lender_party_id").notNull().references(() => financialPartiesTable.id),
+    borrowerPartyId: uuid("borrower_party_id").notNull().references(() => financialPartiesTable.id),
+    principalAmountMinor: bigint("principal_amount_minor", { mode: "number" }).notNull(),
+    currency: text("currency").notNull(),
+    purposeId: uuid("purpose_id").references(() => purposesTable.id),
+    projectId: uuid("project_id").references(() => projectsTable.id),
+    dueAt: timestamp("due_at", { withTimezone: true }),
+    status: text("status").notNull().default("open"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    rowVersion: integer("row_version").notNull().default(1),
+  },
+  (table) => [
+    index("financial_obligations_owner_status_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.status,
+    ),
+    index("financial_obligations_owner_due_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.dueAt,
+    ),
+  ],
+);
+
+export const financialPaymentsTable = pgTable(
+  "financial_payments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    paymentKind: text("payment_kind").notNull().default("general"),
+    payerPartyId: uuid("payer_party_id").notNull().references(() => financialPartiesTable.id),
+    payeePartyId: uuid("payee_party_id").notNull().references(() => financialPartiesTable.id),
+    amountMinor: bigint("amount_minor", { mode: "number" }).notNull(),
+    currency: text("currency").notNull(),
+    description: text("description"),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    rowVersion: integer("row_version").notNull().default(1),
+  },
+  (table) => [
+    index("financial_payments_owner_occurred_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.occurredAt,
+    ),
+  ],
+);
+
+export const obligationSettlementsTable = pgTable(
+  "obligation_settlements",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    obligationId: uuid("obligation_id").notNull().references(() => financialObligationsTable.id),
+    paymentId: uuid("payment_id").notNull().references(() => financialPaymentsTable.id),
+    amountMinor: bigint("amount_minor", { mode: "number" }).notNull(),
+    currency: text("currency").notNull(),
+    settledAt: timestamp("settled_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("obligation_settlements_owner_obligation_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.obligationId,
+      table.settledAt,
+    ),
+    uniqueIndex("obligation_settlements_owner_payment_unique").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.obligationId,
+      table.paymentId,
+    ),
+  ],
+);
+
+export const donationsTable = pgTable(
+  "donations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    donorPartyId: uuid("donor_party_id").notNull().references(() => financialPartiesTable.id),
+    recipientPartyId: uuid("recipient_party_id").notNull().references(() => financialPartiesTable.id),
+    amountMinor: bigint("amount_minor", { mode: "number" }).notNull(),
+    currency: text("currency").notNull(),
+    purposeId: uuid("purpose_id").references(() => purposesTable.id),
+    projectId: uuid("project_id").references(() => projectsTable.id),
+    description: text("description"),
+    status: text("status").notNull().default("pledged"),
+    pledgedAt: timestamp("pledged_at", { withTimezone: true }).notNull().defaultNow(),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    rowVersion: integer("row_version").notNull().default(1),
+  },
+  (table) => [
+    index("donations_owner_status_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.status,
+    ),
+  ],
+);
+
+export const incomeReceivablesTable = pgTable(
+  "income_receivables",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    kind: text("kind").notNull(),
+    title: text("title").notNull(),
+    creditorPartyId: uuid("creditor_party_id").notNull().references(() => financialPartiesTable.id),
+    debtorPartyId: uuid("debtor_party_id").notNull().references(() => financialPartiesTable.id),
+    amountMinor: bigint("amount_minor", { mode: "number" }).notNull(),
+    currency: text("currency").notNull(),
+    purposeId: uuid("purpose_id").references(() => purposesTable.id),
+    projectId: uuid("project_id").references(() => projectsTable.id),
+    dueAt: timestamp("due_at", { withTimezone: true }),
+    status: text("status").notNull().default("open"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    rowVersion: integer("row_version").notNull().default(1),
+  },
+  (table) => [
+    index("income_receivables_owner_status_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.status,
+    ),
+  ],
+);
+
+export const paymentLinksTable = pgTable(
+  "payment_links",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    token: text("token").notNull(),
+    paymentId: uuid("payment_id").references(() => financialPaymentsTable.id),
+    receivableId: uuid("receivable_id").references(() => incomeReceivablesTable.id),
+    donationId: uuid("donation_id").references(() => donationsTable.id),
+    provider: text("provider").notNull().default("internal"),
+    status: text("status").notNull().default("active"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("payment_links_owner_token_unique").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.token,
+    ),
+    index("payment_links_owner_status_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.status,
+    ),
+  ],
+);
+
 export const expensesTable = pgTable(
   "expenses",
   {
@@ -374,6 +625,16 @@ export type Commitment = typeof commitmentsTable.$inferSelect;
 export type ConversationMemory = typeof conversationMemoryTable.$inferSelect;
 export type SecretaryOperation = typeof secretaryOperationsTable.$inferSelect;
 export type Purpose = typeof purposesTable.$inferSelect;
+export type FinancialParty = typeof financialPartiesTable.$inferSelect;
+export type FinancialPartyPerson = typeof financialPartyPeopleTable.$inferSelect;
+export type FinancialPartyProject = typeof financialPartyProjectsTable.$inferSelect;
+export type FinancialPartyPurpose = typeof financialPartyPurposesTable.$inferSelect;
+export type FinancialObligation = typeof financialObligationsTable.$inferSelect;
+export type FinancialPayment = typeof financialPaymentsTable.$inferSelect;
+export type ObligationSettlement = typeof obligationSettlementsTable.$inferSelect;
+export type Donation = typeof donationsTable.$inferSelect;
+export type IncomeReceivable = typeof incomeReceivablesTable.$inferSelect;
+export type PaymentLink = typeof paymentLinksTable.$inferSelect;
 export type ActivityEvent = typeof activityEventsTable.$inferSelect;
 export type ActivityEventEntity = typeof activityEventEntitiesTable.$inferSelect;
 export type InsertPerson = z.infer<typeof insertPersonSchema>;
