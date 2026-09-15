@@ -1,0 +1,550 @@
+استمر في العمل على branch "personal-information-graph" فقط.
+
+لا merge إلى "main".
+لا push.
+لا deploy.
+لا تضف LLM calls جديدة إلا إذا أثبتت أن ذلك ضروريًا وطلبت قرارًا مني مسبقًا.
+
+Phase 1, Phase 2, Phase 3 وFinancial Graph تم تنفيذها والتحقق منها.
+
+الآن ابدأ Phase 4:
+
+Context & Relationship Intelligence
+
+الهدف الرئيسي:
+
+اجعل Personal AI Secretary أكثر ذكاءً في فهم واسترجاع واستخدام المعلومات الموجودة في الـPersonal Information Graph، بدون زيادة عدد LLM calls.
+
+الفكرة:
+
+LLM ليس مصدر الحقيقة للعلاقات أو الحسابات.
+
+PostgreSQL + typed relationships + activity + deterministic services هي مصدر الحقيقة.
+
+الـLLM يستخدم فقط السياق الضروري عندما يكون reasoning/language generation مطلوبًا.
+
+---
+
+1. ابدأ بتحليل الـarchitecture الحالية
+
+افحص فعليًا:
+
+- conversation state
+- structured memory
+- deterministic intelligence
+- entity resolution
+- tools
+- records
+- financial graph
+- activity events
+- entity detail
+- approval operations
+- existing context retrieval
+
+لا تفترض أن التقارير السابقة تصف implementation الحالي بالكامل.
+
+حدد:
+
+- ما يمكن إعادة استخدامه.
+- أين يوجد duplication.
+- أين يمكن تقليل context المرسل للـLLM.
+- أين توجد gaps تمنع follow-up questions.
+- أين يمكن إضافة deterministic intelligence بدون LLM.
+
+لا تنتظر مني قرارًا لكل implementation detail.
+
+اختر الحل الأبسط والأكثر اتساقًا مع architecture الحالية.
+
+---
+
+2. Relationship-aware Context Retrieval
+
+أنشئ طبقة deterministic مسؤولة عن بناء context مرتبط بالسؤال.
+
+Conceptually:
+
+User Request
+→ identify relevant entities
+→ retrieve bounded relationships
+→ retrieve relevant financial/activity records
+→ rank/filter context
+→ produce compact structured context
+→ LLM only if needed
+
+لا ترسل graph كامل إلى LLM.
+
+يجب أن يكون هناك حدود واضحة لـ:
+
+- maximum entities
+- maximum related records
+- maximum timeline events
+- maximum context size
+
+واستخدم pagination/limits الموجودة بدل تحميل كل البيانات.
+
+---
+
+3. Entity Resolution
+
+طوّر الـentity resolution الموجود حاليًا بحيث يستطيع ربط الإشارات الطبيعية بالكيانات الموجودة.
+
+أمثلة:
+
+"محمد"
+"محمد أحمد"
+"أبو أحمد"
+
+إذا كان هناك أكثر من candidate:
+
+لا تخمّن.
+
+استخدم ambiguity handling الموجود.
+
+إذا كان match واضحًا:
+
+استخدم entity ID داخليًا بدل إعادة تمرير الاسم فقط.
+
+يجب ألا يتم إرسال tenant/user IDs من الـLLM.
+
+---
+
+4. Context for Follow-up Questions
+
+هذه نقطة أساسية.
+
+اجعل النظام يستطيع الحفاظ على referents structured.
+
+مثال:
+
+User:
+"محمد عليه كام؟"
+
+System resolves:
+Person = محمد
+Financial Party = X
+
+ثم:
+
+User:
+"طب والمشروع التاني؟"
+
+يستطيع النظام فهم أن السؤال follow-up مرتبط بالسياق السابق.
+
+مثال آخر:
+
+User:
+"دفعت 5000 لمحمد في مشروع المحجر"
+
+ثم:
+
+"طب زود عليهم 2000"
+
+يجب أن يعرف النظام ما الذي يشير إليه "عليهم" إذا كان السياق واضحًا.
+
+إذا كان غير واضح:
+
+ask for clarification.
+
+لا تستخدم LLM إضافي فقط لحل حالة يمكن حلها من conversation state + graph.
+
+---
+
+5. Deterministic Financial Answers
+
+أنشئ/طوّر deterministic query paths للأسئلة المالية المتكررة.
+
+مثل:
+
+- محمد عليه كام؟
+- أنا ليا كام عند محمد؟
+- كام دفعت في مشروع X؟
+- كام لسه مستحق؟
+- إيه السلف المفتوحة؟
+- إيه الديون المفتوحة؟
+- إيه المدفوعات الأخيرة؟
+- كام دخل متوقع؟
+- كام تم تحصيله؟
+- إيه التبرعات المرتبطة بشخص/مشروع؟
+- إيه الالتزامات المتأخرة؟
+
+الحسابات يجب أن تتم من database/domain rules.
+
+لا تجعل LLM يقوم بالحساب المالي.
+
+إذا كان السؤال يحتاج مجرد lookup/calculation:
+
+لا تستدعِ LLM إضافيًا إذا كانت architecture الحالية تسمح بإجابة deterministic.
+
+إذا احتاجت الإجابة صياغة طبيعية، يمكن استخدام الـexisting LLM response path بعد تجهيز compact result.
+
+---
+
+6. Relationship-aware Tool Selection
+
+راجع tool selection الحالي.
+
+بدل عرض عدد كبير من الأدوات للـLLM، استخدم deterministic routing حيث يكون ذلك آمنًا.
+
+مثال:
+
+Question clearly about:
+
+- person financial status
+- project expenses
+- open obligations
+- recent payments
+
+يمكن توجيهها إلى narrow tool scope.
+
+لا تعيد بناء Context Budgeter أو Decision Cache rejected designs إلا إذا وجدت evidence جديدًا يثبت الحاجة.
+
+لا تعيد فتح أي token optimization audit تم رفضه سابقًا بدون دليل جديد.
+
+---
+
+7. Structured Context Contract
+
+صمّم contract واضح للسياق الذي يصل إلى reasoning/model layer.
+
+Conceptually:
+
+resolved_entities
+relevant_relationships
+relevant_records
+financial_summary
+recent_activity
+conversation_references
+uncertainties
+
+لكن لا تلتزم بهذا الشكل حرفيًا إذا كان هناك design أفضل في codebase.
+
+المهم أن يكون:
+
+- deterministic
+- bounded
+- typed
+- testable
+- compact
+- tenant-safe
+
+ولا يحتوي بيانات غير مرتبطة بالسؤال.
+
+---
+
+8. Memory Integration
+
+اربط conversation state بالـGraph بدون تحويل كل شيء إلى permanent memory.
+
+فرق واضح بين:
+
+Conversation Context
+Structured Memory
+Canonical Domain Data
+
+مثال:
+
+"محمد" في المحادثة الحالية يمكن أن يكون referent مؤقت.
+
+لكن relationship:
+
+محمد → مشروع المحجر
+
+يجب أن تكون في canonical domain data إذا تم تسجيلها فعليًا.
+
+لا تخزن كل كلام المستخدم كـmemory.
+
+---
+
+9. Activity-aware Context
+
+استخدم activity timeline عند الحاجة.
+
+مثال:
+
+"إيه آخر حاجة حصلت مع محمد؟"
+
+يمكن deterministic retrieval أن يجمع آخر relevant events.
+
+لكن لا تحمل timeline كامل.
+
+اعمل relevance + bounds.
+
+---
+
+10. Context Compression بدون LLM
+
+لا تستخدم LLM لتلخيص context إذا كان من الممكن تكوين compact structured representation deterministic.
+
+مثال:
+
+بدل:
+
+100 payment rows
+
+يمكن بناء:
+
+- count
+- totals by currency
+- latest N
+- open obligations
+- relevant projects
+
+مع الاحتفاظ بالـIDs اللازمة للتنقل أو follow-up.
+
+---
+
+11. No duplicate source of truth
+
+لا تنشئ database جديدة للسياق.
+
+استخدم:
+
+- existing domain tables
+- relationship tables
+- activity events
+- conversation state
+
+وأي derived cache يجب أن يكون disposable/rebuildable وليس source of truth.
+
+---
+
+12. Tenant & Security
+
+كل context retrieval يجب أن يطبق:
+
+tenant isolation
++
+owner authorization
+
+قبل traversal أو aggregation.
+
+اختبر:
+
+- cross-tenant person
+- cross-tenant project
+- cross-tenant financial party
+- cross-tenant relationship
+- cross-tenant activity
+
+يجب ألا يصل أي منها إلى model context.
+
+---
+
+13. Performance
+
+لا تجعل السؤال البسيط ينتج عشرات queries غير الضرورية.
+
+استخدم:
+
+- bounded queries
+- indexed relationships
+- aggregation
+- batching حيث يفيد
+- existing APIs/services
+
+راقب query count أثناء tests حيث يكون ذلك مفيدًا.
+
+لكن لا تضف complexity بلا حاجة.
+
+---
+
+14. Proactive Foundation
+
+جهّز architecture مستقبلية للـproactive secretary بدون بناء scheduler الآن.
+
+حدد events/signals التي يمكن أن تصبح لاحقًا proactive triggers، مثل:
+
+- obligation approaching due date
+- overdue obligation
+- expected income not received
+- commitment approaching
+- task overdue
+- payment expected
+- unusual financial activity إذا كانت rules deterministic
+
+لكن لا تبنِ 24/7 scheduler في هذه المرحلة.
+
+فقط اجعل domain/context layer قادرة على استخراج signals لاحقًا.
+
+---
+
+15. Frontend
+
+استفد من Entity Detail الموجود حاليًا.
+
+لا تعيد تصميم الواجهة بالكامل.
+
+أضف فقط ما يساعد المستخدم على فهم أن السكرتير أصبح relationship-aware، مثل:
+
+- related entity context
+- financial summary
+- recent relevant activity
+- links إلى العلاقات
+
+لا تجعل الصفحة مزدحمة.
+
+---
+
+16. Testing
+
+أضف tests حقيقية، وليس فقط unit tests سطحية.
+
+اختبر:
+
+Entity resolution
+
+- exact match
+- alias/variant
+- ambiguity
+- no match
+
+Follow-up
+
+- person referent
+- project referent
+- financial referent
+- correction referent
+
+Financial deterministic queries
+
+- obligations
+- balances
+- payments
+- settlements
+- income
+- donations
+- currencies
+
+Context
+
+- relevant data included
+- irrelevant data excluded
+- bounds enforced
+- compact representation
+
+Security
+
+- tenant isolation
+- authorization
+- no cross-tenant context leakage
+
+Performance
+
+- bounded query behavior
+
+Regression
+
+شغّل كل الاختبارات الموجودة.
+
+---
+
+17. LLM Call Constraint
+
+هذه قاعدة أساسية في هذه المرحلة:
+
+لا تضف LLM calls جديدة.
+
+الهدف هو أن يصبح النظام أذكى من خلال:
+
+Database
++
+Relationships
++
+Deterministic Intelligence
++
+Structured Context
++
+Conversation State
+
+وليس من خلال زيادة عدد model calls.
+
+إذا وجدت حالة لا يمكن حلها بشكل موثوق بدون LLM call إضافي، لا تضفها تلقائيًا؛ سجّلها في التقرير كـDecision Required.
+
+---
+
+18. Autonomous Implementation Rule
+
+لا تنتظر مني approval لكل implementation detail.
+
+أنت مسؤول عن:
+
+- اكتشاف bugs
+- اختيار implementation آمن
+- refactoring الضروري
+- إضافة tests
+- إصلاح regressions
+- تحديث OpenAPI/codegen عند الحاجة
+- تحسين UX عند الحاجة
+- الحفاظ على architecture
+
+إذا كان هناك أكثر من حل صحيح، اختر الأبسط والأكثر قابلية للصيانة.
+
+توقف فقط في الحالات التالية:
+
+- destructive migration
+- تغيير معنى بيانات مالية موجودة
+- data loss
+- تغيير جوهري في tenant/security model
+- إضافة LLM calls
+- تغيير business semantics غير محددة
+- architecture decision لا يمكن عكسها بسهولة
+
+في هذه الحالات فقط اكتب "DECISION REQUIRED" واشرح السبب.
+
+---
+
+19. Validation
+
+قبل إنهاء المرحلة:
+
+- full workspace typecheck
+- API build
+- frontend build
+- all existing tests
+- deterministic intelligence tests
+- financial tests
+- relationship tests
+- approval tests
+- tenant isolation tests
+- correction tests
+- context retrieval tests
+- entity resolution tests
+- follow-up tests
+- browser smoke tests
+- git diff --check
+
+---
+
+20. Final Report
+
+أعطني تقريرًا واضحًا:
+
+1. architecture التي تم تحليلها
+2. ما الذي تم تغييره
+3. deterministic intelligence الجديدة
+4. context retrieval behavior
+5. follow-up behavior
+6. financial deterministic paths
+7. entity resolution improvements
+8. security/tenant results
+9. query/performance observations
+10. LLM calls قبل وبعد — لا تدّعي توفيرًا provider-level إلا إذا تم قياسه فعليًا
+11. tests بالأرقام
+12. browser verification
+13. bugs التي تم إصلاحها
+14. limitations
+15. technical debt
+16. commit hash
+
+وفي النهاية:
+
+branch = "personal-information-graph"
+working tree clean
+no merge to main
+no push
+no deploy
+no new LLM calls
+
+نفّذ Phase 4 كاملة، واتخذ قرارات implementation بنفسك ضمن هذه الحدود.
+
+لا تبدأ Phase 5 بعد إكمال Phase 4.
