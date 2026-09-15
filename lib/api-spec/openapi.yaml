@@ -1350,6 +1350,8 @@ components:
           type: string
         notes:
           type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
         title:
           type: string
         text:
@@ -1382,6 +1384,8 @@ components:
         name:
           type: string
         notes:
+          type: ["string", "null"]
+        phone:
           type: ["string", "null"]
         title:
           type: string
@@ -1468,6 +1472,7 @@ components:
         id: { type: string }
         name: { type: string }
         notes: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
         createdAt: { type: string }
         updatedAt: { type: string }
       required: [id, name, createdAt, updatedAt]

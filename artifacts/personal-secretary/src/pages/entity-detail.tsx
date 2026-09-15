@@ -5,6 +5,7 @@ import {
   CircleAlert,
   FolderKanban,
   LoaderCircle,
+  Phone,
   Receipt,
   Scale,
   UserRound,
@@ -14,7 +15,7 @@ import { useGetEntityGraph, useGetFinancialParty } from "@workspace/api-client-r
 import { useLocation, useRoute } from "wouter";
 import type { ReactNode } from "react";
 import { ActivityTimeline, type ActivityTimelineEvent } from "../components/graph/activity-timeline";
-import { AskSecretaryLink, entityPath, recordPath } from "../components/graph/context-link";
+import { AskSecretaryLink, entityPath, financialRecordPath, recordPath } from "../components/graph/context-link";
 import { EmptyRelation, GraphSection, RelatedLink } from "../components/graph/graph-section";
 
 type EntityType = "person" | "project";
@@ -43,7 +44,7 @@ type Expense = {
   purposeName?: string | null;
 };
 type GraphData = {
-  entity: { id: string; name: string; notes?: string | null; status?: string };
+  entity: { id: string; name: string; notes?: string | null; phone?: string | null; status?: string };
   related: {
     projects?: RelatedItem[];
     people?: RelatedItem[];
@@ -127,6 +128,11 @@ export default function EntityDetail({ entityType }: { entityType: EntityType })
                 <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{entityType === "person" ? "شخص" : "مشروع"}</p>
                 <h1 className="mt-1 break-words font-serif text-3xl tracking-tight sm:text-4xl">{entity.name}</h1>
                 <p className="mt-2 text-sm text-muted-foreground">{entityType === "project" ? `الحالة: ${text(entity.status, "غير محددة")}` : text(entity.notes, "لا توجد ملاحظات محفوظة.")}</p>
+                {entityType === "person" && entity.phone && (
+                  <a href={`tel:${entity.phone}`} className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-xl border border-border bg-background px-3 py-2 text-sm font-medium text-muted-foreground hover:border-primary/40 hover:text-primary" data-testid={`link-profile-phone-${entity.id}`}>
+                    <Phone className="size-4" /> {entity.phone}
+                  </a>
+                )}
               </div>
             </div>
             <AskSecretaryLink entityType={entityType} entityId={entity.id} entityName={entity.name} />
@@ -209,6 +215,11 @@ function PartySnapshot({ party, setLocation }: { party: RelatedItem; setLocation
   const payments = asItems(related?.payments);
   const donations = asItems(related?.donations);
   const receivables = asItems(related?.receivables);
+  const linkedRecords = [
+    ...obligations.slice(0, 2).map((item) => ({ type: "obligation" as const, id: String(item.id), label: text(item.title, item.kind === "advance" ? "سلفة" : "دين") })),
+    ...payments.slice(0, 2).map((item) => ({ type: "payment" as const, id: String(item.id), label: text(item.description, "دفعة") })),
+    ...receivables.slice(0, 2).map((item) => ({ type: "receivable" as const, id: String(item.id), label: text(item.title, "مستحق") })),
+  ];
   return (
     <div className="rounded-xl border border-border bg-background p-4">
       <button type="button" onClick={() => setLocation(entityPath("financial_party", party.id))} className="flex min-h-11 w-full items-start justify-between gap-3 text-right transition hover:text-primary">
@@ -218,12 +229,23 @@ function PartySnapshot({ party, setLocation }: { party: RelatedItem; setLocation
       {query.isLoading ? <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground"><LoaderCircle className="size-4 animate-spin" /> جاري تحميل الملخص المالي…</div> : query.isError ? (
         <div className="mt-3 rounded-lg border border-amber-500/25 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-300"><p>تعذر تحميل ملخص هذا الطرف.</p><button type="button" onClick={() => void query.refetch()} className="mt-2 font-semibold underline underline-offset-4">حاول مرة أخرى</button></div>
       ) : (
-        <div className="mt-4 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-          <span>سلف/ديون: {obligations.length} · {groupedMoney(obligations, "principalAmountMinor") || "—"}</span>
-          <span>مدفوعات: {payments.length} · {groupedMoney(payments, "amountMinor") || "—"}</span>
-          <span>تبرعات: {donations.length} · {groupedMoney(donations, "amountMinor") || "—"}</span>
-          <span>مستحقات: {receivables.length} · {groupedMoney(receivables, "amountMinor") || "—"}</span>
-        </div>
+        <>
+          <div className="mt-4 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+            <span>سلف/ديون: {obligations.length} · {groupedMoney(obligations, "principalAmountMinor") || "—"}</span>
+            <span>مدفوعات: {payments.length} · {groupedMoney(payments, "amountMinor") || "—"}</span>
+            <span>تبرعات: {donations.length} · {groupedMoney(donations, "amountMinor") || "—"}</span>
+            <span>مستحقات: {receivables.length} · {groupedMoney(receivables, "amountMinor") || "—"}</span>
+          </div>
+          {linkedRecords.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2 border-t border-border/60 pt-3">
+              {linkedRecords.map((item) => (
+                <button type="button" key={`${item.type}-${item.id}`} onClick={() => setLocation(financialRecordPath(item.type, item.id))} className="min-h-9 rounded-lg border border-border bg-background px-2.5 text-xs text-muted-foreground hover:border-primary/40 hover:text-primary" data-testid={`link-financial-record-${item.id}`}>
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

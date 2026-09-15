@@ -242,6 +242,24 @@ test("HTTP approval is server-side on the first request and idempotent", async (
   ));
   assert.equal(eventsAfterDuplicate.filter((event) => event.sourceId === saved[0]?.id).length, 1);
 
+  const updatePending = await request(`/records/expense/${saved[0]?.id}`, "PATCH", {
+    amountMinor: 26000,
+    currency: "EGP",
+    description: "مصروف موافق عليه بعد تعديل",
+    occurredAt: new Date().toISOString(),
+  });
+  assert.equal(updatePending.status, 202);
+  const updateOperationId = updatePending.body?.approval?.operationId as string;
+  const updateApproved = await approve(updateOperationId);
+  assert.equal(updateApproved.status, 200);
+  assert.equal(updateApproved.body?.status, "completed");
+  const updatedSaved = await db.select().from(expensesTable).where(and(
+    eq(expensesTable.tenantId, tenantId),
+    eq(expensesTable.ownerUserId, userId),
+    eq(expensesTable.id, saved[0]?.id),
+  ));
+  assert.equal(updatedSaved[0]?.description, "مصروف موافق عليه بعد تعديل");
+
   const retryAfterCompletion = await request("/records", "POST", {
     recordType: "expense",
     amountMinor: 25000,

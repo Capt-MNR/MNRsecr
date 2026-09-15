@@ -21,11 +21,12 @@ type ApprovalFormProps = {
   initialArgs: ApprovalArgs;
   display: ApprovalDisplay;
   status?: ApprovalStatus;
+  allowArgsOverride?: boolean;
   busy?: boolean;
   error?: string | null;
   personCandidates?: Candidate[];
   projectCandidates?: Candidate[];
-  onConfirm: (args: ApprovalArgs) => void;
+  onConfirm: (args?: ApprovalArgs) => void;
   onReject: () => void;
 };
 
@@ -252,6 +253,7 @@ export default function ApprovalForm({
   initialArgs,
   display,
   status = 'pending',
+  allowArgsOverride = true,
   busy = false,
   error,
   personCandidates = [],
@@ -378,7 +380,7 @@ export default function ApprovalForm({
         ...(projectName ? { projectName } : {}),
       } : {}),
     };
-    onConfirm(nextArgs);
+    onConfirm(allowArgsOverride ? nextArgs : undefined);
   }
 
   function saveAsDraft() {

@@ -751,6 +751,7 @@ export const ListRecordsResponse = zod.object({
   "id": zod.string(),
   "name": zod.string(),
   "notes": zod.string().nullish(),
+  "phone": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })),
@@ -825,6 +826,7 @@ export const CreateRecordBody = zod.object({
   "occurredAt": zod.string().optional(),
   "name": zod.string().optional(),
   "notes": zod.string().nullish(),
+  "phone": zod.string().nullish(),
   "title": zod.string().optional(),
   "text": zod.string().optional(),
   "dueAt": zod.string().nullish(),
@@ -863,6 +865,7 @@ export const GetPersonGraphResponse = zod.object({
   "id": zod.string(),
   "name": zod.string(),
   "notes": zod.string().nullish(),
+  "phone": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 }),
@@ -1001,6 +1004,7 @@ export const UpdateRecordBody = zod.object({
   "occurredAt": zod.string().optional(),
   "name": zod.string().optional(),
   "notes": zod.string().nullish(),
+  "phone": zod.string().nullish(),
   "title": zod.string().optional(),
   "text": zod.string().optional(),
   "dueAt": zod.string().nullish(),

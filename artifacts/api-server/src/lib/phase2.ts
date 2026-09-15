@@ -612,11 +612,13 @@ export const phase2Tools: ToolDefinition[] = [
   tool("create_person", "Create a person only after an explicit request to add or create a person, and only after checking for matches. Do not use this just because a person name appears in a financial sentence such as 'دفعت لمحمد 7500'.", {
     name: { type: "STRING" },
     notes: { type: "STRING" },
+    phone: { type: "STRING", description: "Optional phone number" },
   }, ["name"]),
   tool("update_person", "Update only known fields on an accessible person.", {
     personId: { type: "STRING" },
     name: { type: "STRING" },
     notes: { type: "STRING" },
+    phone: { type: "STRING", description: "Optional phone number" },
   }, ["personId"]),
   tool("find_project", "Find accessible projects by name. Always call before using a project.", {
     name: { type: "STRING", description: "The known project name" },
@@ -1423,6 +1425,7 @@ async function executeTool(
         name,
         nameKey: normalize(name),
         notes: args.notes === null ? null : stringArg("notes") ?? null,
+        phone: args.phone === null ? null : stringArg("phone") ?? null,
       }).returning();
       result = { ok: true, created: true, person: created };
       break;
@@ -1471,6 +1474,8 @@ async function executeTool(
       }
       if (args.notes === null) updates.notes = null;
       else if (stringArg("notes")) updates.notes = stringArg("notes")!;
+      if (args.phone === null) updates.phone = null;
+      else if (stringArg("phone")) updates.phone = stringArg("phone")!;
       const [updated] = await db.update(peopleTable).set(updates).where(and(
         identityWhere(identity, peopleTable),
         eq(peopleTable.id, personId),

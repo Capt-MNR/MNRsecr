@@ -25,6 +25,8 @@ export interface RecordCreateInput {
   name?: string;
   /** @nullable */
   notes?: string | null;
+  /** @nullable */
+  phone?: string | null;
   title?: string;
   text?: string;
   /** @nullable */

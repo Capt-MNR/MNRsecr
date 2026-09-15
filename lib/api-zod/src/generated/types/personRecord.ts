@@ -11,6 +11,8 @@ export interface PersonRecord {
   name: string;
   /** @nullable */
   notes?: string | null;
+  /** @nullable */
+  phone?: string | null;
   createdAt: string;
   updatedAt: string;
   [key: string]: unknown;

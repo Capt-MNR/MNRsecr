@@ -64,6 +64,12 @@ const tabs: Array<{ id: Tab; label: string; icon: typeof WalletCards }> = [
   { id: 'financial', label: 'الماليات', icon: BadgeDollarSign },
 ];
 
+const tabGroups: Array<{ label: string; tabs: Tab[] }> = [
+  { label: 'الأساسيات', tabs: ['expenses', 'people', 'projects'] },
+  { label: 'المتابعة', tabs: ['tasks', 'reminders', 'commitments'] },
+  { label: 'الماليات', tabs: ['financial'] },
+];
+
 function formatDate(value: string | null | undefined) {
   if (!value) return 'بدون موعد';
   const date = new Date(value);
@@ -288,6 +294,7 @@ function EditModal({
     projectId: expense?.projectId ?? '',
     occurredAt: expense?.occurredAt?.slice(0, 16) ?? localDateTimeValue(new Date()),
     name: person?.name ?? project?.name ?? '',
+    phone: person?.phone ?? '',
     notes: person?.notes ?? '',
     title: task?.title ?? commitment?.title ?? '',
     text: reminder?.text ?? '',
@@ -319,6 +326,7 @@ function EditModal({
       data.occurredAt = new Date(form.occurredAt).toISOString();
     } else if (kind === 'person') {
       data.name = form.name;
+      data.phone = form.phone || null;
       data.notes = form.notes || null;
     } else if (kind === 'project') {
       data.name = form.name;
@@ -393,10 +401,13 @@ function EditModal({
           )}
           {(kind === 'person' || kind === 'project') && textInput('name', 'الاسم')}
           {kind === 'person' && (
-            <label className="block">
-              <span className="mb-1.5 block text-xs text-muted-foreground">ملاحظات</span>
-              <textarea value={form.notes} onChange={(event) => update('notes', event.target.value)} rows={3} className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary" />
-            </label>
+            <>
+              {textInput('phone', 'رقم الهاتف (اختياري)', 'tel')}
+              <label className="block">
+                <span className="mb-1.5 block text-xs text-muted-foreground">ملاحظات</span>
+                <textarea value={form.notes} onChange={(event) => update('notes', event.target.value)} rows={3} className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary" />
+              </label>
+            </>
           )}
           {kind === 'task' && textInput('title', 'عنوان المهمة')}
           {kind === 'commitment' && textInput('title', 'عنوان الالتزام')}
@@ -443,14 +454,19 @@ function RecordCard({
   const reminder = kind === 'reminder' ? record as ReminderRecord : undefined;
   const commitment = kind === 'commitment' ? record as CommitmentRecord : undefined;
   const project = kind === 'project' ? record as ProjectRecord : undefined;
+  const person = kind === 'person' ? record as PersonRecord : undefined;
+  const RecordIcon = kind === 'expense' ? WalletCards : kind === 'person' ? UserRound : kind === 'project' ? FolderKanban : kind === 'task' ? ListChecks : kind === 'reminder' ? Clock3 : Archive;
   return (
     <article className="group rounded-2xl border border-border/75 bg-card p-4 transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[0_18px_35px_-30px_hsl(var(--foreground)/.5)]">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-           {onOpen ? <button type="button" onClick={onOpen} className="truncate text-right text-[15px] font-semibold hover:text-primary">{labelForRecord(record)}</button> : <h3 className="truncate text-[15px] font-semibold">{labelForRecord(record)}</h3>}
-          <p className="mt-1 text-xs text-muted-foreground">
-            {expense ? `${expense.projectName ?? expense.personName ?? 'بدون ربط'} · ${formatDate(expense.occurredAt)}` : project ? `${project.status} · ${formatDate(project.updatedAt)}` : task ? `${task.status} · ${formatDate(task.dueAt)}` : reminder ? `${reminder.status} · ${formatDate(reminder.dueAt)}` : commitment ? `${commitment.status} · ${formatDate(commitment.dueAt)}` : formatDate(record.createdAt)}
-          </p>
+         <div className="flex min-w-0 items-start gap-3">
+           <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><RecordIcon className="size-4" /></span>
+           <div className="min-w-0">
+             {onOpen ? <button type="button" onClick={onOpen} className="truncate text-right text-[15px] font-semibold hover:text-primary" data-testid={`link-record-${record.id}`}>{labelForRecord(record)}</button> : <h3 className="truncate text-[15px] font-semibold">{labelForRecord(record)}</h3>}
+             <p className="mt-1 text-xs text-muted-foreground">
+               {expense ? `${expense.projectName ?? expense.personName ?? 'بدون ربط'} · ${formatDate(expense.occurredAt)}` : project ? `${project.status} · ${formatDate(project.updatedAt)}` : task ? `${task.status} · ${formatDate(task.dueAt)}` : reminder ? `${reminder.status} · ${formatDate(reminder.dueAt)}` : commitment ? `${commitment.status} · ${formatDate(commitment.dueAt)}` : formatDate(record.createdAt)}
+             </p>
+           </div>
         </div>
         <div className="flex shrink-0 gap-1 opacity-70 transition group-hover:opacity-100">
           <button type="button" onClick={onEdit} className="rounded-lg p-2 text-muted-foreground hover:bg-primary/10 hover:text-primary" aria-label="تعديل"><Edit3 className="size-3.5" /></button>
@@ -458,6 +474,7 @@ function RecordCard({
         </div>
       </div>
       {expense && <p className="mt-4 font-mono text-lg font-semibold">{money(expense.amountMinor, expense.currency)}</p>}
+       {person?.phone && <a href={`tel:${person.phone}`} className="mt-3 inline-flex min-h-9 items-center rounded-lg border border-border bg-background px-2.5 text-xs text-muted-foreground hover:border-primary/40 hover:text-primary" data-testid={`link-person-phone-${person.id}`}>هاتف: {person.phone}</a>}
       {expense && (expense.personId || expense.projectId) && (
         <div className="mt-3 flex flex-wrap gap-2 border-t border-border/60 pt-3">
           {expense.personId && <button type="button" onClick={() => setLocation(entityPath('person', expense.personId!))} className="min-h-9 rounded-lg border border-border bg-background px-2.5 text-xs text-muted-foreground hover:border-primary/40 hover:text-primary">الشخص: {expense.personName ?? 'فتح الشخص'}</button>}
@@ -617,9 +634,9 @@ export default function Records() {
   return (
     <div dir="rtl" lang="ar" className="grain min-h-[100dvh] bg-background text-foreground">
       <main className="mx-auto min-h-[100dvh] max-w-[1240px] px-4 py-6 sm:px-8 sm:py-10">
-        <header className="mb-8 flex items-start justify-between gap-4">
+         <header className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
           <div>
-             <button type="button" onClick={() => setLocation('/')} className="text-xs text-muted-foreground transition hover:text-primary">← العودة للمحادثة</button>
+             <button type="button" onClick={() => setLocation('/')} className="inline-flex min-h-10 items-center rounded-lg text-xs text-muted-foreground transition hover:text-primary" data-testid="link-records-conversation">← العودة للمحادثة</button>
             <p className="mt-6 text-xs uppercase tracking-[0.2em] text-muted-foreground">Structured Memory</p>
             <h1 className="mt-2 font-serif text-3xl tracking-tight sm:text-4xl">سجلاتك المحفوظة</h1>
             <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">المحادثة تساعدك على الفهم، لكن هذه السجلات هي المصدر الأساسي لبياناتك. عدّلها أو احذفها مع مراجعة واضحة.</p>
@@ -634,12 +651,23 @@ export default function Records() {
           </div>
         </header>
 
-        <nav className="scrollbar-thin mb-7 flex gap-2 overflow-x-auto pb-1" aria-label="أنواع السجلات">
-          {tabs.map(({ id, label, icon: Icon }) => (
-            <button key={id} type="button" onClick={() => setTab(id)} className={`flex shrink-0 items-center gap-2 rounded-full border px-4 py-2.5 text-sm transition ${tab === id ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-primary'}`}>
-              <Icon className="size-4" /> {label} {id !== 'financial' && <span className={tab === id ? 'text-primary-foreground/70' : 'text-muted-foreground/60'}>{data?.[id]?.length ?? 0}</span>}
-            </button>
-          ))}
+         <nav className="mb-7 grid gap-3 sm:grid-cols-3" aria-label="أنواع السجلات">
+           {tabGroups.map((group) => (
+             <div key={group.label} className="rounded-2xl border border-border/70 bg-card/45 p-2">
+               <p className="px-2 pb-1 text-[11px] font-semibold text-muted-foreground">{group.label}</p>
+               <div className="scrollbar-thin flex gap-1.5 overflow-x-auto">
+                 {group.tabs.map((id) => {
+                   const tabInfo = tabs.find((item) => item.id === id)!;
+                   const Icon = tabInfo.icon;
+                   return (
+                     <button key={id} type="button" onClick={() => setTab(id)} className={`flex min-h-10 shrink-0 items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-medium transition ${tab === id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-primary'}`} data-testid={`tab-records-${id}`}>
+                       <Icon className="size-3.5" /> {tabInfo.label} {id !== 'financial' && <span className={tab === id ? 'text-primary-foreground/70' : 'text-muted-foreground/60'}>{data?.[id]?.length ?? 0}</span>}
+                     </button>
+                   );
+                 })}
+               </div>
+             </div>
+           ))}
         </nav>
 
         {tab === 'financial' ? <FinancialRecords setLocation={setLocation} /> : <>
@@ -671,12 +699,13 @@ export default function Records() {
               initialArgs={{}}
               display={pendingApproval.approval.display}
               status={pendingApproval.approval.status}
+               allowArgsOverride={false}
               busy={approveMutation.isPending || rejectMutation.isPending}
               error={approvalError}
-              onConfirm={(args) => {
+               onConfirm={() => {
                 if (!pendingApproval || approveMutation.isPending || rejectMutation.isPending) return;
                 approveMutation.mutate(
-                  { operationId: pendingApproval.approval.operationId, data: { args } },
+                   { operationId: pendingApproval.approval.operationId },
                   { onSuccess: applyApprovalResponse, onError: (approvalErrorValue) => setApprovalError(classifySecretaryError(approvalErrorValue)?.message ?? 'تعذر تنفيذ الموافقة.') },
                 );
               }}

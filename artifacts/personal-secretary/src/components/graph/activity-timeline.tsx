@@ -196,6 +196,7 @@ export function ActivityTimeline({
             const target = targetForEvent(event, entityType, entityId);
             const content = (
               <>
+                <span className="absolute right-0 top-5 size-2.5 rounded-full border-2 border-card bg-primary" aria-hidden="true" />
                 <span className="min-w-0">
                   <span className="block text-sm leading-relaxed">{titleForEvent(event)}</span>
                   {stringValue(event.summary) && stringValue(event.summary) !== titleForEvent(event) && <span className="mt-1 block truncate text-xs text-muted-foreground">{event.summary}</span>}
@@ -205,11 +206,11 @@ export function ActivityTimeline({
               </>
             );
             return target ? (
-              <button type="button" key={event.id} onClick={() => setLocation(target)} className="flex min-h-14 w-full items-center justify-between gap-3 border-r-2 border-primary/25 pr-3 text-right transition hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+              <button type="button" key={event.id} onClick={() => setLocation(target)} className="relative flex min-h-14 w-full items-center justify-between gap-3 border-r-2 border-primary/25 pr-5 text-right transition hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
                 {content}
               </button>
             ) : (
-              <div key={event.id} className="flex min-h-14 items-center border-r-2 border-primary/25 pr-3">
+              <div key={event.id} className="relative flex min-h-14 items-center border-r-2 border-primary/25 pr-5">
                 {content}
               </div>
             );

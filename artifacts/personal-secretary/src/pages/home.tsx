@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
+  Archive,
   ArrowUp,
   CircleAlert,
   LoaderCircle,
@@ -29,7 +30,7 @@ import type { ConversationDetail } from '@workspace/api-client-react';
 import { classifySecretaryError } from '../lib/secretary-errors';
 import ConversationHistory from '../components/conversation-history';
 import ApprovalForm from '../components/approval-form';
-import { useLocation, useSearch } from 'wouter';
+import { Link, useLocation, useSearch } from 'wouter';
 import SecretaryDashboard from '../components/secretary-dashboard';
 
 type LocalMessage = {
@@ -296,11 +297,11 @@ function Home() {
     queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
   }
 
-  function approve(operationId: string, args: Record<string, unknown>) {
+  function approve(operationId: string, args?: Record<string, unknown>) {
     if (approveOperation.isPending || rejectOperation.isPending) return;
     setApprovalError(null);
     approveOperation.mutate(
-      { operationId, data: { args } },
+      args ? { operationId, data: { args } } : { operationId },
       {
         onSuccess: handleApprovalResponse,
         onError: (error) => {
@@ -404,6 +405,14 @@ function Home() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <Link
+                href="/records"
+                className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-border/70 bg-card px-3 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                data-testid="link-records-home"
+              >
+                <Archive className="size-4" />
+                <span className="hidden sm:inline">السجلات</span>
+              </Link>
               <div className="hidden items-center gap-2 rounded-full border border-border/70 bg-card/70 px-3 py-1.5 text-xs text-muted-foreground sm:flex">
                 <span className={`size-1.5 rounded-full ${healthQuery.isError ? 'bg-destructive' : 'bg-chart-3'}`} />
                 {healthLabel}
@@ -500,6 +509,7 @@ function Home() {
                                 details: message.approval.details,
                               }}
                               status={message.approval.status}
+                               allowArgsOverride={message.approval.toolName === 'record_expense' || message.approval.toolName === 'create_reminder'}
                               personCandidates={message.approval.personCandidates}
                               projectCandidates={message.approval.projectCandidates}
                               busy={approveOperation.isPending || rejectOperation.isPending}

@@ -25,6 +25,7 @@ export const peopleTable = pgTable(
     name: text("name").notNull(),
     nameKey: text("name_key").notNull(),
     notes: text("notes"),
+    phone: text("phone"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     rowVersion: integer("row_version").notNull().default(1),
