@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, Clock3, LoaderCircle, Save, X } from 'lucide-react';
+import { Check, CircleAlert, CircleCheck, CircleX, Clock3, LoaderCircle, Save, TriangleAlert, X, type LucideIcon } from 'lucide-react';
 import {
   useGetCandidates,
   useGetSecretaryOperation,
@@ -13,13 +13,14 @@ type ApprovalDisplay = {
 };
 
 type ApprovalArgs = Record<string, unknown>;
+type ApprovalStatus = 'pending' | 'executing' | 'completed' | 'rejected' | 'expired' | 'failed';
 
 type ApprovalFormProps = {
   operationId: string;
   toolName: string;
   initialArgs: ApprovalArgs;
   display: ApprovalDisplay;
-  status?: 'pending' | 'executing' | 'completed' | 'rejected' | 'expired' | 'failed';
+  status?: ApprovalStatus;
   busy?: boolean;
   error?: string | null;
   personCandidates?: Candidate[];
@@ -93,7 +94,11 @@ function saveDraft(operationId: string, args: ApprovalArgs): void {
 }
 
 function clearDraft(operationId: string): void {
-  localStorage.removeItem(draftKey(operationId));
+  try {
+    localStorage.removeItem(draftKey(operationId));
+  } catch {
+    // A blocked or unavailable localStorage must not prevent terminal status rendering.
+  }
 }
 
 function detailsFor(
@@ -104,9 +109,10 @@ function detailsFor(
 ): string[] {
   if (toolName === 'record_expense') {
     const currency = asString(args.currency, 'EGP');
+    const amount = asString(args.amount) || amountInputFromArgs(args);
     return [
-      `القيمة: ${formatAmount(asString(args.amount), currency)}`,
-      `الوصف: ${asString(args.description) || '—'}`,
+      ...(amount ? [`القيمة: ${formatAmount(amount, currency)}`] : []),
+      ...(asString(args.description) ? [`الوصف: ${asString(args.description)}`] : []),
       ...(personName ? [`الشخص: ${personName}`] : []),
       ...(projectName ? [`المشروع: ${projectName}`] : []),
     ];
@@ -119,10 +125,78 @@ function detailsFor(
           dateStyle: 'medium',
           timeStyle: 'short',
         }).format(new Date(dueAt))
-      : '—';
-    return [`${asString(args.text) || 'تذكير جديد'}`, `الموعد: ${dueLabel}`];
+      : '';
+    return [
+      ...(asString(args.text) ? [asString(args.text)] : []),
+      ...(dueLabel ? [`الموعد: ${dueLabel}`] : []),
+    ];
   }
   return [];
+}
+
+function localDateTimeValue(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = (part: number) => String(part).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function isoFromLocalDateTime(value: string): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function statusPresentation(status: ApprovalStatus): {
+  label: string;
+  message: string;
+  icon: LucideIcon;
+  className: string;
+} {
+  switch (status) {
+    case 'completed':
+      return {
+        label: 'اكتملت العملية',
+        message: 'تم حفظ التغيير وتسجيله مرة واحدة.',
+        icon: CircleCheck,
+        className: 'text-emerald-600 dark:text-emerald-400',
+      };
+    case 'rejected':
+      return {
+        label: 'تم رفض العملية',
+        message: 'تم إلغاء العملية، ولم يتم تنفيذ أي تغيير.',
+        icon: CircleX,
+        className: 'text-muted-foreground',
+      };
+    case 'expired':
+      return {
+        label: 'انتهت صلاحية العملية',
+        message: 'انتهت مهلة الموافقة، ولم يتم تنفيذ أي تغيير.',
+        icon: Clock3,
+        className: 'text-amber-600 dark:text-amber-400',
+      };
+    case 'failed':
+      return {
+        label: 'تعذر تنفيذ العملية',
+        message: 'لم يكتمل التغيير. راجع الخطأ أو اطلب العملية من جديد بدل إعادة المحاولة تلقائيًا.',
+        icon: TriangleAlert,
+        className: 'text-destructive',
+      };
+    case 'executing':
+      return {
+        label: 'العملية قيد التنفيذ',
+        message: 'جارٍ تنفيذ التغيير. لا ترسل موافقة أخرى.',
+        icon: LoaderCircle,
+        className: 'animate-spin text-primary',
+      };
+    default:
+      return {
+        label: 'في انتظار موافقتك',
+        message: 'لن يحدث أي تغيير قبل تأكيدك.',
+        icon: Clock3,
+        className: 'text-primary',
+      };
+  }
 }
 
 function CandidateSelect({
@@ -201,6 +275,7 @@ export default function ApprovalForm({
   const [personName, setPersonName] = useState(asString(sourceArgs.personName));
   const [projectName, setProjectName] = useState(asString(sourceArgs.projectName));
   const [draftSaved, setDraftSaved] = useState(false);
+  const [draftError, setDraftError] = useState<string | null>(null);
 
   const initialPersonCandidates = [...personCandidates, ...candidateArray(sourceArgs.personCandidates)];
   const initialProjectCandidates = [...projectCandidates, ...candidateArray(sourceArgs.projectCandidates)];
@@ -247,6 +322,7 @@ export default function ApprovalForm({
   }, [operation?.status, operationId]);
 
   const effectiveStatus = operation?.status ?? status;
+  const hasAuthoritativeOperation = Boolean(operation);
 
   useEffect(() => {
     if (effectiveStatus === 'completed' || effectiveStatus === 'rejected' || effectiveStatus === 'expired') {
@@ -269,7 +345,9 @@ export default function ApprovalForm({
     }
   }, [initialArgs, operation?.args, operationId, operationQuery.data]);
 
-  const details = detailsFor(toolName, { ...args, amount }, personName, projectName);
+  const editedDetails = detailsFor(toolName, { ...args, amount }, personName, projectName);
+  const hasEditedDetails = editedDetails.length > 0
+    && JSON.stringify(editedDetails) !== JSON.stringify(display.details);
   const amountError = toolName === 'record_expense' && parseAmountMinor(amount) === null
     ? 'أدخل مبلغًا صحيحًا أكبر من صفر.'
     : null;
@@ -289,7 +367,7 @@ export default function ApprovalForm({
   }
 
   function confirm() {
-    if (validationError || busy) return;
+    if (validationError || busy || !hasAuthoritativeOperation || operationQuery.isError) return;
     const nextArgs = {
       ...args,
       ...(toolName === 'record_expense' ? {
@@ -304,6 +382,7 @@ export default function ApprovalForm({
   }
 
   function saveAsDraft() {
+    if (!hasAuthoritativeOperation) return;
     const nextArgs = {
       ...args,
       ...(toolName === 'record_expense' ? {
@@ -314,16 +393,38 @@ export default function ApprovalForm({
         ...(projectName ? { projectName } : {}),
       } : {}),
     };
-    saveDraft(operationId, nextArgs);
+    setDraftError(null);
+    try {
+      saveDraft(operationId, nextArgs);
+    } catch {
+      setDraftError('تعذر حفظ المسودة على هذا الجهاز.');
+      return;
+    }
     setArgs(nextArgs);
     setDraftSaved(true);
   }
 
   if (effectiveStatus !== 'pending') {
+    const presentation = statusPresentation(effectiveStatus);
+    const StatusIcon = presentation.icon;
     return (
-      <p className="mt-2 text-xs font-medium text-muted-foreground">
-        {effectiveStatus === 'completed' ? 'تم التنفيذ.' : effectiveStatus === 'rejected' ? 'تم الإلغاء.' : 'هذه العملية لم تعد قابلة للتنفيذ.'}
-      </p>
+      <div
+        className="mt-3 rounded-xl border border-border/70 bg-background/60 p-3"
+        data-testid={`approval-status-${operationId}-${effectiveStatus}`}
+        role="status"
+        aria-live="polite"
+      >
+        <div className={`flex items-center gap-2 text-sm font-semibold ${presentation.className}`}>
+          <StatusIcon className="size-4" />
+          {presentation.label}
+        </div>
+        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{presentation.message}</p>
+        {effectiveStatus === 'failed' && operationQuery.data?.display.details?.length ? (
+          <ul className="mt-2 space-y-0.5 text-xs text-muted-foreground">
+            {operationQuery.data.display.details.map((detail) => <li key={detail}>{detail}</li>)}
+          </ul>
+        ) : null}
+      </div>
     );
   }
 
@@ -336,7 +437,10 @@ export default function ApprovalForm({
       )}
       {operationQuery.isError && (
         <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive" role="alert">
-          <p>تعذر تحميل النسخة المعتمدة من العملية.</p>
+          <div className="flex items-start gap-2">
+            <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
+            <p>تعذر تحميل النسخة المعتمدة من العملية. لن يتم إرسال الموافقة حتى يتم التحقق من العملية على الخادم.</p>
+          </div>
           <button type="button" onClick={() => void operationQuery.refetch()} className="mt-2 font-semibold underline underline-offset-4">حاول مرة أخرى</button>
         </div>
       )}
@@ -418,8 +522,8 @@ export default function ApprovalForm({
             <span className="mb-1.5 block text-xs font-medium text-muted-foreground">الموعد</span>
             <input
               type="datetime-local"
-              value={asString(args.dueAt).slice(0, 16)}
-              onChange={(event) => updateArg('dueAt', new Date(event.target.value).toISOString())}
+              value={localDateTimeValue(asString(args.dueAt))}
+              onChange={(event) => updateArg('dueAt', isoFromLocalDateTime(event.target.value) ?? '')}
               className={`w-full rounded-xl border bg-background px-3 py-2 text-sm outline-none focus:border-primary ${dueAtError ? 'border-destructive' : 'border-border'}`}
               data-testid="approval-reminder-due-at"
             />
@@ -428,16 +532,27 @@ export default function ApprovalForm({
         </div>
       )}
       <div className="rounded-xl border border-border/70 bg-background/60 px-3 py-2 text-xs text-muted-foreground">
-        <div className="mb-1 flex items-center gap-1.5 font-medium text-foreground"><Clock3 className="size-3.5" /> التفاصيل الحالية</div>
-        <ul className="space-y-0.5">{(details.length > 0 ? details : display.details).map((detail) => <li key={detail}>{detail}</li>)}</ul>
+        <div className="mb-1 flex items-center gap-1.5 font-medium text-foreground"><Clock3 className="size-3.5" /> التفاصيل المعتمدة من الخادم</div>
+        {display.details.length > 0 ? (
+          <ul className="space-y-0.5">{display.details.map((detail) => <li key={detail}>{detail}</li>)}</ul>
+        ) : (
+          <p>لا توجد تفاصيل إضافية.</p>
+        )}
+        {hasEditedDetails && (
+          <div className="mt-3 border-t border-border/60 pt-2">
+            <div className="mb-1 font-medium text-foreground">بعد التعديل الصريح</div>
+            <ul className="space-y-0.5">{editedDetails.map((detail) => <li key={detail}>{detail}</li>)}</ul>
+          </div>
+        )}
       </div>
       {error && <p className="text-xs text-destructive" role="alert">{error}</p>}
       {draftSaved && <p className="text-xs text-muted-foreground">تم حفظ المسودة على هذا الجهاز.</p>}
-      <div className="flex gap-2">
+      {draftError && <p className="text-xs text-destructive" role="alert">{draftError}</p>}
+      <div className="flex flex-wrap gap-2">
         <button
           type="button"
           onClick={confirm}
-          disabled={busy || Boolean(validationError) || operationQuery.isLoading}
+          disabled={busy || Boolean(validationError) || operationQuery.isLoading || !hasAuthoritativeOperation || operationQuery.isError}
           className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-colors hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
           data-testid={`button-confirm-approval-${operationId}`}
         >
@@ -456,7 +571,7 @@ export default function ApprovalForm({
         <button
           type="button"
           onClick={saveAsDraft}
-          disabled={busy}
+          disabled={busy || operationQuery.isLoading || !hasAuthoritativeOperation}
           className="flex items-center justify-center gap-1.5 rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
           title="حفظ التعديلات دون تنفيذ"
           data-testid={`button-save-draft-${operationId}`}

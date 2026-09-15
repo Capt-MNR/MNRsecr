@@ -49,6 +49,7 @@ import type {
 import { classifySecretaryError } from '../lib/secretary-errors';
 import { useLocation } from 'wouter';
 import ApprovalForm from '../components/approval-form';
+import { entityPath, financialRecordPath } from '../components/graph/context-link';
 
 type RecordItem = ExpenseRecord | PersonRecord | ProjectRecord | TaskRecord | ReminderRecord | CommitmentRecord;
 type Tab = 'expenses' | 'people' | 'projects' | 'tasks' | 'reminders' | 'commitments' | 'financial';
@@ -115,12 +116,23 @@ function FinancialRecords({ setLocation }: { setLocation: (path: string) => void
   const paymentItems = itemsFromFinancialQuery(payments.data);
   const donationItems = itemsFromFinancialQuery(donations.data);
   const receivableItems = itemsFromFinancialQuery(receivables.data);
+  const params = new URLSearchParams(location.search);
+  const selectedType = params.get('financialType') as 'obligation' | 'payment' | 'donation' | 'receivable' | null;
+  const selectedId = params.get('recordId');
+  const groups = [
+    { type: 'obligation' as const, label: 'السلف والديون', items: obligationItems },
+    { type: 'payment' as const, label: 'المدفوعات الفعلية', items: paymentItems },
+    { type: 'donation' as const, label: 'التبرعات', items: donationItems },
+    { type: 'receivable' as const, label: 'الدخل والمستحقات', items: receivableItems },
+  ];
+  const selectedGroup = groups.find((group) => group.type === selectedType);
+  const selectedRecord = selectedGroup?.items.find((item) => String(item.id) === selectedId);
 
   if (loading) {
     return <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{[1, 2, 3, 4, 5, 6].map((item) => <div key={item} className="h-32 animate-pulse rounded-2xl bg-muted" />)}</div>;
   }
   if (error) {
-    return <div className="rounded-2xl border border-destructive/25 bg-destructive/5 p-5 text-sm text-destructive" role="alert">تعذر تحميل السجلات المالية. حدّث الصفحة وحاول مرة أخرى.</div>;
+    return <div className="rounded-2xl border border-destructive/25 bg-destructive/5 p-5 text-sm text-destructive" role="alert"><p>تعذر تحميل السجلات المالية.</p><button type="button" onClick={() => { void parties.refetch(); void obligations.refetch(); void payments.refetch(); void donations.refetch(); void receivables.refetch(); }} className="mt-3 inline-flex min-h-10 items-center gap-2 font-semibold underline underline-offset-4"><RefreshCw className="size-4" /> حاول مرة أخرى</button></div>;
   }
   const total = partyItems.length + obligationItems.length + paymentItems.length + donationItems.length + receivableItems.length;
   if (total === 0) {
@@ -128,23 +140,31 @@ function FinancialRecords({ setLocation }: { setLocation: (path: string) => void
   }
 
   return (
-    <div className="grid gap-5 lg:grid-cols-2">
+    <div className="space-y-5">
+      {selectedId && !selectedRecord && <div className="rounded-2xl border border-amber-500/25 bg-amber-500/5 p-4 text-sm text-amber-700 dark:text-amber-300" role="status">السجل المالي المطلوب لم يعد موجودًا أو لا ينتمي إلى مساحتك الحالية. يمكنك العودة إلى القائمة لاختيار سجل آخر.</div>}
+      {selectedRecord && selectedGroup && <FinancialRecordFocus type={selectedGroup.type} item={selectedRecord} setLocation={setLocation} />}
+      <div className="grid gap-5 lg:grid-cols-2">
       <FinancialRecordGroup title="الأطراف المالية" items={partyItems} onOpen={(item) => setLocation(`/financial/parties/${String(item.id)}`)} render={(item) => <><span>{financialText(item.name, 'طرف مالي')}</span><span className="text-xs text-muted-foreground">{financialText(item.partyType, 'طرف')}</span></>} />
-      <FinancialRecordGroup title="السلف والديون" items={obligationItems} onOpen={() => setLocation('/records?tab=financial')} render={(item) => <><span>{financialText(item.title, item.kind === 'advance' ? 'سلفة' : 'دين')}</span><span className="font-mono">{financialMoney(item.principalAmountMinor, item.currency)}</span></>} />
-      <FinancialRecordGroup title="المدفوعات الفعلية" items={paymentItems} onOpen={() => setLocation('/records?tab=financial')} render={(item) => <><span>{financialText(item.paymentKind, 'دفعة')}</span><span className="font-mono">{financialMoney(item.amountMinor, item.currency)}</span></>} />
-      <FinancialRecordGroup title="التبرعات" items={donationItems} onOpen={() => setLocation('/records?tab=financial')} render={(item) => <><span>{item.status === 'pledged' ? 'تعهد' : 'تبرع مدفوع'}</span><span className="font-mono">{financialMoney(item.amountMinor, item.currency)}</span></>} />
-      <FinancialRecordGroup title="الدخل والمستحقات" items={receivableItems} onOpen={() => setLocation('/records?tab=financial')} render={(item) => <><span>{financialText(item.title, item.kind === 'income' ? 'دخل متوقع' : 'مستحق')}</span><span className="font-mono">{financialMoney(item.amountMinor, item.currency)}</span></>} />
+      <FinancialRecordGroup title="السلف والديون" type="obligation" selectedId={selectedId} items={obligationItems} onOpen={(item) => setLocation(financialRecordPath('obligation', String(item.id)))} render={(item) => <><span>{financialText(item.title, item.kind === 'advance' ? 'سلفة' : 'دين')}</span><span className="font-mono">{financialMoney(item.principalAmountMinor, item.currency)}</span></>} />
+      <FinancialRecordGroup title="المدفوعات الفعلية" type="payment" selectedId={selectedId} items={paymentItems} onOpen={(item) => setLocation(financialRecordPath('payment', String(item.id)))} render={(item) => <><span>{financialText(item.description, financialText(item.paymentKind, 'دفعة'))}</span><span className="font-mono">{financialMoney(item.amountMinor, item.currency)}</span></>} />
+      <FinancialRecordGroup title="التبرعات" type="donation" selectedId={selectedId} items={donationItems} onOpen={(item) => setLocation(financialRecordPath('donation', String(item.id)))} render={(item) => <><span>{item.status === 'pledged' ? 'تعهد' : 'تبرع مدفوع'}</span><span className="font-mono">{financialMoney(item.amountMinor, item.currency)}</span></>} />
+      <FinancialRecordGroup title="الدخل والمستحقات" type="receivable" selectedId={selectedId} items={receivableItems} onOpen={(item) => setLocation(financialRecordPath('receivable', String(item.id)))} render={(item) => <><span>{financialText(item.title, item.kind === 'income' ? 'دخل متوقع' : 'مستحق')}</span><span className="font-mono">{financialMoney(item.amountMinor, item.currency)}</span></>} />
+      </div>
     </div>
   );
 }
 
 function FinancialRecordGroup({
   title,
+  type,
+  selectedId,
   items,
   onOpen,
   render,
 }: {
   title: string;
+  type?: 'obligation' | 'payment' | 'donation' | 'receivable';
+  selectedId?: string | null;
   items: Array<Record<string, unknown>>;
   onOpen: (item: Record<string, unknown>) => void;
   render: (item: Record<string, unknown>) => ReactNode;
@@ -154,10 +174,55 @@ function FinancialRecordGroup({
       <h2 className="font-semibold">{title}</h2>
       <div className="mt-4 space-y-2">
         {items.map((item, index) => (
-          <button type="button" key={String(item.id ?? index)} onClick={() => onOpen(item)} className="flex w-full items-center justify-between gap-3 rounded-xl bg-muted/50 p-3 text-right text-sm transition hover:bg-primary/5">
+           <button type="button" key={String(item.id ?? index)} onClick={() => onOpen(item)} className={`flex w-full items-center justify-between gap-3 rounded-xl p-3 text-right text-sm transition hover:bg-primary/5 ${type && selectedId && String(item.id) === selectedId ? 'border border-primary/40 bg-primary/5' : 'bg-muted/50'}`} aria-current={type && selectedId && String(item.id) === selectedId ? 'true' : undefined}>
             {render(item)}
           </button>
         ))}
+      </div>
+    </section>
+  );
+}
+
+function FinancialRecordFocus({
+  type,
+  item,
+  setLocation,
+}: {
+  type: 'obligation' | 'payment' | 'donation' | 'receivable';
+  item: Record<string, unknown>;
+  setLocation: (path: string) => void;
+}) {
+  const labels = {
+    obligation: 'التزام مالي',
+    payment: 'دفعة مالية',
+    donation: 'تبرع',
+    receivable: 'مستحق مالي',
+  };
+  const parties: Array<[string, unknown]> = type === 'obligation'
+    ? [['المُقرض', item.lenderPartyId], ['المقترض', item.borrowerPartyId]]
+    : type === 'payment'
+      ? [['الدافع', item.payerPartyId], ['المستفيد', item.payeePartyId]]
+      : type === 'donation'
+        ? [['المتبرع', item.donorPartyId], ['المستفيد', item.recipientPartyId]]
+        : [['الدائن', item.creditorPartyId], ['المدين', item.debtorPartyId]];
+  const amountValue = type === 'obligation' ? item.principalAmountMinor : item.amountMinor;
+  const title = type === 'payment'
+    ? financialText(item.description, financialText(item.paymentKind, labels[type]))
+    : financialText(item.title, labels[type]);
+  return (
+    <section className="rounded-2xl border border-primary/25 bg-primary/5 p-5" aria-label="السجل المالي المحدد">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">السجل المحدد · {labels[type]}</p>
+          <h2 className="mt-1 font-serif text-xl">{title}</h2>
+          <p className="mt-2 font-mono text-lg font-semibold">{financialMoney(amountValue, item.currency)}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{financialText(item.status, '') || (item.occurredAt ? String(item.occurredAt) : item.pledgedAt ? String(item.pledgedAt) : 'سجل محفوظ')}</p>
+        </div>
+        <button type="button" onClick={() => setLocation('/records?tab=financial')} className="min-h-10 rounded-xl border border-border bg-background px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-primary">إظهار كل الماليات</button>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2 border-t border-border/60 pt-3">
+        {parties.map(([label, value]) => typeof value === 'string' && value ? <button type="button" key={`${label}-${value}`} onClick={() => setLocation(entityPath('financial_party', value))} className="min-h-10 rounded-xl border border-border bg-background px-3 py-2 text-xs text-muted-foreground hover:border-primary/40 hover:text-primary">{label}: فتح الطرف المالي</button> : null)}
+        {typeof item.projectId === 'string' && item.projectId && <button type="button" onClick={() => setLocation(entityPath('project', item.projectId as string))} className="min-h-10 rounded-xl border border-border bg-background px-3 py-2 text-xs text-muted-foreground hover:border-primary/40 hover:text-primary">فتح المشروع المرتبط</button>}
       </div>
     </section>
   );
@@ -364,12 +429,14 @@ function RecordCard({
   onEdit,
   onDelete,
   onOpen,
+  setLocation,
 }: {
   kind: RecordType;
   record: RecordItem;
   onEdit: () => void;
   onDelete: () => void;
   onOpen?: () => void;
+  setLocation: (path: string) => void;
 }) {
   const expense = kind === 'expense' ? record as ExpenseRecord : undefined;
   const task = kind === 'task' ? record as TaskRecord : undefined;
@@ -391,6 +458,15 @@ function RecordCard({
         </div>
       </div>
       {expense && <p className="mt-4 font-mono text-lg font-semibold">{money(expense.amountMinor, expense.currency)}</p>}
+      {expense && (expense.personId || expense.projectId) && (
+        <div className="mt-3 flex flex-wrap gap-2 border-t border-border/60 pt-3">
+          {expense.personId && <button type="button" onClick={() => setLocation(entityPath('person', expense.personId!))} className="min-h-9 rounded-lg border border-border bg-background px-2.5 text-xs text-muted-foreground hover:border-primary/40 hover:text-primary">الشخص: {expense.personName ?? 'فتح الشخص'}</button>}
+          {expense.projectId && <button type="button" onClick={() => setLocation(entityPath('project', expense.projectId!))} className="min-h-9 rounded-lg border border-border bg-background px-2.5 text-xs text-muted-foreground hover:border-primary/40 hover:text-primary">المشروع: {expense.projectName ?? 'فتح المشروع'}</button>}
+        </div>
+      )}
+      {commitment?.personId && (
+        <button type="button" onClick={() => setLocation(entityPath('person', commitment.personId!))} className="mt-3 min-h-9 rounded-lg border border-border bg-background px-2.5 text-xs text-muted-foreground hover:border-primary/40 hover:text-primary">الشخص المرتبط: {commitment.personName ?? 'فتح الشخص'}</button>
+      )}
       {('notes' in record && typeof record.notes === 'string' && record.notes) && <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-muted-foreground">{record.notes}</p>}
       {kind === 'reminder' && reminder && <p className="mt-3 text-xs text-muted-foreground">{reminder.timezone}</p>}
     </article>
@@ -571,7 +647,7 @@ export default function Records() {
           {staleRecordMessage && <div className="mb-5 flex items-center gap-2 rounded-2xl border border-amber-500/25 bg-amber-500/5 p-4 text-sm text-amber-700 dark:text-amber-300" role="status"><CircleAlert className="size-4" /> {staleRecordMessage}</div>}
            {error && <div className="mb-5 rounded-2xl border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive" role="alert"><div className="flex items-center gap-2"><CircleAlert className="size-4" /> {error.message}</div><button type="button" onClick={() => void recordsQuery.refetch()} className="mt-3 text-xs font-semibold underline underline-offset-4">حاول مرة أخرى</button></div>}
           {!recordsQuery.isLoading && !error && currentRecords.length === 0 && <div className="rounded-[24px] border border-dashed border-border bg-card/50 px-6 py-16 text-center"><Check className="mx-auto size-8 text-primary/60" /><h2 className="mt-4 font-serif text-xl">لا توجد سجلات هنا بعد</h2><p className="mt-2 text-sm text-muted-foreground">يمكنك إضافة أول سجل يدويًا أو من خلال المحادثة.</p><button type="button" onClick={openCreate} className="mx-auto mt-5 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"><Plus className="size-4" /> إضافة {labelForKind(kind)}</button></div>}
-          {!recordsQuery.isLoading && currentRecords.length > 0 && <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{currentRecords.map((record) => <RecordCard key={record.id} kind={kind} record={record} onEdit={() => void editItem(record)} onDelete={() => deleteItem(record)} onOpen={kind === 'person' ? () => setLocation(`/people/${record.id}`) : kind === 'project' ? () => setLocation(`/projects/${record.id}`) : undefined} />)}</div>}
+           {!recordsQuery.isLoading && currentRecords.length > 0 && <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{currentRecords.map((record) => <RecordCard key={record.id} kind={kind} record={record} setLocation={setLocation} onEdit={() => void editItem(record)} onDelete={() => deleteItem(record)} onOpen={kind === 'person' ? () => setLocation(entityPath('person', record.id)) : kind === 'project' ? () => setLocation(entityPath('project', record.id)) : undefined} />)}</div>}
         </>}
       </main>
       {creating && <EditModal kind={creating} record={null} isCreate people={data?.people ?? []} projects={data?.projects ?? []} onClose={() => setCreating(null)} isSaving={createMutation.isPending} onSave={(form) => createMutation.mutate({ data: form as RecordCreateInput }, { onSuccess: (response) => handleCreateResult(response, creating) })} />}

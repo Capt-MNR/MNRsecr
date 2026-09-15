@@ -143,6 +143,9 @@ test("HTTP approval is server-side on the first request and idempotent", async (
   assert.equal(typeof turn.body?.action?.operationId, "string");
   assert.equal(turn.body?.action?.status, "pending");
   assert.equal(turn.body?.action?.args?.amountMinor, 50000, JSON.stringify(turn.body));
+  assert.equal(turn.body?.action?.display?.title, "تسجيل مصروف");
+  assert.ok(Array.isArray(turn.body?.action?.display?.details));
+  assert.ok(turn.body?.action?.display?.details?.some((detail: unknown) => String(detail).includes("القيمة")));
 
   const operationId = turn.body.action.operationId as string;
   const stored = await db.select().from(secretaryOperationsTable).where(and(
@@ -157,6 +160,8 @@ test("HTTP approval is server-side on the first request and idempotent", async (
   assert.equal(refreshed.status, 200);
   assert.equal(refreshed.body?.status, "pending");
   assert.equal(refreshed.body?.args?.amountMinor, 50000);
+  assert.deepEqual(turn.body?.action?.args, refreshed.body?.args);
+  assert.deepEqual(turn.body?.action?.display, refreshed.body?.display);
 
   const retry = await request("/turns", "POST", {
     message: "دفعت لمحمد 500 جنيه في مشروع المحجر",
@@ -220,7 +225,7 @@ test("HTTP approval is server-side on the first request and idempotent", async (
     eq(activityEventsTable.tenantId, tenantId),
     eq(activityEventsTable.ownerUserId, userId),
   ));
-  assert.ok(events.some((event) => event.sourceId === saved[0]?.id));
+  assert.equal(events.filter((event) => event.sourceId === saved[0]?.id).length, 1);
 
   const duplicateApprove = await approve(approvedId);
   assert.equal(duplicateApprove.status, 200);
@@ -231,6 +236,11 @@ test("HTTP approval is server-side on the first request and idempotent", async (
     eq(expensesTable.description, "مصروف موافق عليه"),
   ));
   assert.equal(afterDuplicate.length, 1);
+  const eventsAfterDuplicate = await db.select().from(activityEventsTable).where(and(
+    eq(activityEventsTable.tenantId, tenantId),
+    eq(activityEventsTable.ownerUserId, userId),
+  ));
+  assert.equal(eventsAfterDuplicate.filter((event) => event.sourceId === saved[0]?.id).length, 1);
 
   const retryAfterCompletion = await request("/records", "POST", {
     recordType: "expense",

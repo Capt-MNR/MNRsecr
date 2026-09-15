@@ -1,23 +1,14 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   ArrowUp,
-  CalendarClock,
-  Check,
   CircleAlert,
-  Clock3,
-  DollarSign,
-  HandCoins,
-  ListChecks,
   LoaderCircle,
   Menu,
   PanelRight,
   Plus,
-  RefreshCw,
-  Scale,
   Sparkles,
-  UsersRound,
   X,
 } from 'lucide-react';
 import {
@@ -38,7 +29,8 @@ import type { ConversationDetail } from '@workspace/api-client-react';
 import { classifySecretaryError } from '../lib/secretary-errors';
 import ConversationHistory from '../components/conversation-history';
 import ApprovalForm from '../components/approval-form';
-import { useLocation } from 'wouter';
+import { useLocation, useSearch } from 'wouter';
+import SecretaryDashboard from '../components/secretary-dashboard';
 
 type LocalMessage = {
   id: string;
@@ -90,24 +82,6 @@ function money(amountMinor: number, currency: string) {
   return new Intl.NumberFormat('ar-EG', { style: 'currency', currency }).format(amountMinor / 100);
 }
 
-function ContextSkeleton() {
-  return (
-    <div className="space-y-4" data-testid="loading-context">
-      {[1, 2, 3].map((item) => (
-        <div key={item} className="animate-pulse rounded-2xl border border-border/70 bg-card/70 p-4">
-          <div className="mb-3 h-3 w-24 rounded-full bg-muted" />
-          <div className="h-4 w-4/5 rounded-full bg-muted" />
-          <div className="mt-2 h-3 w-2/5 rounded-full bg-muted" />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function EmptyLine({ children }: { children: string }) {
-  return <p className="py-2 text-sm text-muted-foreground" data-testid="empty-context">{children}</p>;
-}
-
 function approvalFromAction(action: Record<string, unknown> | undefined): LocalMessage['approval'] | undefined {
   if (!action || action.type !== 'approval_required' || typeof action.operationId !== 'string') return undefined;
   const display = action.display && typeof action.display === 'object'
@@ -131,19 +105,14 @@ function approvalFromAction(action: Record<string, unknown> | undefined): LocalM
   };
 }
 
-function financialItems(value: unknown): Array<Record<string, unknown>> {
-  if (!value || typeof value !== 'object') return [];
-  const items = (value as { items?: unknown }).items;
-  return Array.isArray(items)
-    ? items.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
-    : [];
-}
-
 function Home() {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
+  const searchString = useSearch();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState('');
+  const [askContext, setAskContext] = useState<{ entityType: string; entityId: string; entityName: string; } | null>(null);
   const [conversationId, setConversationId] = useState<string | undefined>();
+
   const [isContextOpen, setIsContextOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [selectedConversationId, setSelectedConversationId] = useState<string | undefined>();
@@ -198,6 +167,26 @@ function Home() {
     () => formatDate(context?.asOf ?? new Date().toISOString()),
     [context?.asOf],
   );
+  
+  useEffect(() => {
+    if (searchString) {
+      const searchParams = new URLSearchParams(searchString);
+      const askParam = searchParams.get('ask');
+      const entityTypeParam = searchParams.get('entityType');
+      const entityIdParam = searchParams.get('entityId');
+      const entityNameParam = searchParams.get('entityName');
+
+      if (askParam) {
+        setDraft(askParam);
+        if (entityTypeParam && entityIdParam && entityNameParam) {
+          setAskContext({ entityType: entityTypeParam, entityId: entityIdParam, entityName: entityNameParam });
+        }
+        // Remove from URL without page reload using wouter
+        setLocation(location, { replace: true });
+      }
+    }
+  }, [searchString]);
+
   const canSend = draft.trim().length > 0 && !createTurn.isPending;
   const healthLabel = healthQuery.isPending
     ? 'جاري فحص الاتصال'
@@ -243,6 +232,7 @@ function Home() {
     setSendError(null);
     const sentAt = new Date().toISOString();
     setDraft('');
+    setAskContext(null);
     setMessages((current) => [
       ...current,
       { id: `user-${sentAt}`, role: 'user', text: message, time: formatTime(sentAt) },
@@ -510,6 +500,7 @@ function Home() {
                                    title: message.approval.title,
                                    details: message.approval.details,
                                  }}
+                                 status={message.approval.status}
                                  personCandidates={message.approval.personCandidates}
                                  projectCandidates={message.approval.projectCandidates}
                                  busy={approveOperation.isPending || rejectOperation.isPending}
@@ -518,9 +509,18 @@ function Home() {
                                  onReject={() => reject(message.approval!.operationId)}
                                />
                              ) : (
-                              <p className="mt-2 text-xs font-medium text-muted-foreground">
-                                {message.approval.status === 'completed' ? 'تم التنفيذ.' : message.approval.status === 'rejected' ? 'تم الإلغاء.' : 'هذه العملية لم تعد قابلة للتنفيذ.'}
-                              </p>
+                               <ApprovalForm
+                                 operationId={message.approval.operationId}
+                                 toolName={message.approval.toolName}
+                                 initialArgs={message.approval.initialArgs}
+                                 display={{
+                                   title: message.approval.title,
+                                   details: message.approval.details,
+                                 }}
+                                 status={message.approval.status}
+                                 onConfirm={() => {}}
+                                 onReject={() => {}}
+                               />
                             )}
                             {approvalError && message.approval.status === 'pending' && (
                               <p className="mt-2 text-xs text-destructive" role="alert">{approvalError}</p>
@@ -572,6 +572,22 @@ function Home() {
                 </div>
 
                 <div className="rounded-[20px] border border-border bg-card p-2 shadow-[0_18px_44px_-35px_hsl(var(--foreground)/.45)]">
+                  {askContext && (
+                    <div className="mb-2 flex items-center justify-between rounded-lg bg-primary/5 px-3 py-1.5 text-xs text-primary">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="size-3.5" />
+                        <span>سؤال عن: <strong>{askContext.entityName}</strong></span>
+                      </div>
+                      <button 
+                        type="button" 
+                        onClick={() => setAskContext(null)} 
+                        className="rounded-full p-1 hover:bg-primary/10"
+                        aria-label="إلغاء السياق"
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    </div>
+                  )}
                   <textarea
                     value={draft}
                     onChange={(event) => setDraft(event.target.value)}
@@ -602,173 +618,28 @@ function Home() {
             </section>
 
             <aside className={`${isContextOpen ? 'flex' : 'hidden'} w-full shrink-0 flex-col border-t border-border/70 bg-sidebar/35 px-4 py-6 sm:px-8 lg:flex lg:w-[340px] lg:border-r lg:border-t-0 lg:px-6 xl:w-[375px]`}>
-              <div className="mb-6 flex items-start justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="flex size-7 items-center justify-center rounded-lg bg-accent/20 text-accent-foreground"><CalendarClock className="size-3.5" /></span>
-                    <h2 className="font-serif text-[22px]">اليوم</h2>
-                  </div>
-                  <p className="mt-1 pl-9 text-xs text-muted-foreground">{dateLabel}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => todayQuery.refetch()}
-                  disabled={todayQuery.isFetching}
-                  className="rounded-lg p-2 text-muted-foreground hover:bg-muted disabled:opacity-50"
-                  aria-label="تحديث سياق اليوم"
-                  data-testid="button-refresh-context"
-                >
-                  <RefreshCw className={`size-4 ${todayQuery.isFetching ? 'animate-spin' : ''}`} />
-                </button>
-              </div>
-
-              {todayQuery.isLoading && <ContextSkeleton />}
-              {todayQuery.isError && (
-                <div className="rounded-2xl border border-destructive/25 bg-destructive/5 p-4" data-testid="error-context">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-destructive"><CircleAlert className="size-4" /> سياق اليوم غير متاح</div>
-                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">المحادثة ما زالت تعمل. حاول تحميل بياناتك المحفوظة مرة أخرى.</p>
-                  <button type="button" onClick={() => todayQuery.refetch()} className="mt-3 text-xs font-semibold text-destructive underline underline-offset-4" data-testid="button-retry-context">حاول مرة أخرى</button>
-                </div>
-              )}
-              {!todayQuery.isLoading && !todayQuery.isError && context && (
-                <div className="scrollbar-thin space-y-7 overflow-y-auto pb-5">
-                  <ContextBlock icon={<Clock3 className="size-3.5" />} title="القادم" count={context.upcomingReminders.length}>
-                    {context.upcomingReminders.length === 0 ? <EmptyLine>لا توجد تذكيرات قادمة.</EmptyLine> : context.upcomingReminders.slice(0, 3).map((reminder) => (
-                       <button type="button" key={reminder.id} onClick={() => setLocation(`/records?tab=reminders&recordId=${reminder.id}`)} className="block w-full border-r-2 border-accent/65 pr-3 text-right hover:text-primary" data-testid={`reminder-${reminder.id}`}>
-                        <p className="text-sm leading-snug">{reminder.text}</p>
-                        <p className="mt-1 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">{formatTime(reminder.dueAt)} · {reminder.status}</p>
-                       </button>
-                    ))}
-                  </ContextBlock>
-
-                  <ContextBlock icon={<ListChecks className="size-3.5" />} title="المهام" count={context.pendingTasks.length}>
-                    {context.pendingTasks.length === 0 ? <EmptyLine>لا توجد مهام معلقة.</EmptyLine> : context.pendingTasks.slice(0, 4).map((task) => (
-                       <button type="button" key={task.id} onClick={() => setLocation(`/records?tab=tasks&recordId=${task.id}`)} className="flex w-full items-start gap-2.5 text-right hover:text-primary" data-testid={`task-${task.id}`}>
-                        <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border border-border bg-background"><Check className="size-2.5 text-muted-foreground" /></span>
-                        <div className="min-w-0"><p className="text-sm leading-snug">{task.title}</p><p className="mt-1 font-mono text-[10px] tracking-wide text-muted-foreground">{task.dueAt ? formatTime(task.dueAt) : 'بدون موعد'}</p></div>
-                       </button>
-                    ))}
-                  </ContextBlock>
-
-                  <ContextBlock icon={<DollarSign className="size-3.5" />} title="أحدث المصروفات" count={context.recentExpenses.length}>
-                    {context.recentExpenses.length === 0 ? <EmptyLine>لا توجد مصروفات محفوظة.</EmptyLine> : context.recentExpenses.slice(0, 3).map((expense) => (
-                       <button type="button" key={expense.id} onClick={() => setLocation(`/records?tab=expenses&recordId=${expense.id}`)} className="flex w-full items-center justify-between gap-3 text-right hover:text-primary" data-testid={`expense-${expense.id}`}>
-                        <div className="min-w-0"><p className="truncate text-sm">{expense.description}</p><p className="mt-1 text-xs text-muted-foreground">{expense.projectName ?? expense.personName ?? formatTime(expense.occurredAt)}</p></div>
-                        <p className="shrink-0 font-mono text-xs">{money(expense.amountMinor, expense.currency)}</p>
-                       </button>
-                    ))}
-                  </ContextBlock>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <MiniStat icon={<Sparkles className="size-3.5" />} label="المشاريع" value={context.activeProjects.length} testId="stat-projects" />
-                    <MiniStat icon={<UsersRound className="size-3.5" />} label="الأشخاص" value={context.relevantPeople.length} testId="stat-people" />
-                  </div>
-                   <ContextBlock icon={<Sparkles className="size-3.5" />} title="مشاريع نشطة" count={context.activeProjects.length}>
-                     {context.activeProjects.length === 0 ? <EmptyLine>لا توجد مشاريع نشطة.</EmptyLine> : context.activeProjects.slice(0, 4).map((project) => (
-                       <button type="button" key={project.id} onClick={() => setLocation(`/projects/${project.id}`)} className="flex w-full items-center justify-between rounded-xl bg-card/60 px-3 py-2 text-right text-sm hover:bg-primary/5 hover:text-primary">
-                         <span className="truncate">{project.name}</span><ArrowUp className="size-3 rotate-45 text-muted-foreground" />
-                       </button>
-                     ))}
-                   </ContextBlock>
-                   <ContextBlock icon={<UsersRound className="size-3.5" />} title="أشخاص مهمون" count={context.relevantPeople.length}>
-                     {context.relevantPeople.length === 0 ? <EmptyLine>لا يوجد أشخاص في السياق الحالي.</EmptyLine> : context.relevantPeople.slice(0, 4).map((person) => (
-                       <button type="button" key={person.id} onClick={() => setLocation(`/people/${person.id}`)} className="flex w-full items-center justify-between rounded-xl bg-card/60 px-3 py-2 text-right text-sm hover:bg-primary/5 hover:text-primary">
-                         <span className="truncate">{person.name}</span><ArrowUp className="size-3 rotate-45 text-muted-foreground" />
-                       </button>
-                     ))}
-                   </ContextBlock>
-                   <FinancialSnapshot
-                     obligations={financialItems(obligationsQuery.data)}
-                     payments={financialItems(paymentsQuery.data)}
-                     donations={financialItems(donationsQuery.data)}
-                     receivables={financialItems(receivablesQuery.data)}
-                     loading={[obligationsQuery, paymentsQuery, donationsQuery, receivablesQuery].some((query) => query.isLoading)}
-                     onRetry={() => {
-                       void obligationsQuery.refetch();
-                       void paymentsQuery.refetch();
-                       void donationsQuery.refetch();
-                       void receivablesQuery.refetch();
-                     }}
-                   />
-                </div>
-              )}
+              <SecretaryDashboard
+                todayQuery={todayQuery}
+                healthQuery={healthQuery}
+                obligationsQuery={obligationsQuery}
+                paymentsQuery={paymentsQuery}
+                receivablesQuery={receivablesQuery}
+                donationsQuery={donationsQuery}
+                pendingApprovals={messages
+                  .filter((m) => m.approval?.status === 'pending')
+                  .map((m) => ({
+                    operationId: m.approval!.operationId,
+                    title: m.approval!.title,
+                    toolName: m.approval!.toolName,
+                  }))}
+                onNavigate={(path) => setLocation(path)}
+              />
             </aside>
           </div>
         </main>
       </div>
     </div>
   );
-}
-
-function ContextBlock({ icon, title, count, children }: { icon: ReactNode; title: string; count: number; children: ReactNode }) {
-  return (
-    <section data-testid={`context-${title.toLowerCase().replaceAll(' ', '-')}`}>
-      <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2 text-muted-foreground">
-          {icon}
-          <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em]">{title}</h3>
-        </div>
-        <span className="font-mono text-[10px] text-muted-foreground/70">{String(count).padStart(2, '0')}</span>
-      </div>
-      <div className="space-y-3">{children}</div>
-    </section>
-  );
-}
-
-function MiniStat({ icon, label, value, testId }: { icon: ReactNode; label: string; value: number; testId: string }) {
-  return (
-    <div className="rounded-2xl border border-border/70 bg-card/60 p-3" data-testid={testId}>
-      <div className="flex items-center gap-2 text-muted-foreground">{icon}<span className="text-[10px] uppercase tracking-[0.14em]">{label}</span></div>
-      <p className="mt-2 font-mono text-xl">{value}</p>
-    </div>
-  );
-}
-
-function FinancialSnapshot({
-  obligations,
-  payments,
-  donations,
-  receivables,
-  loading,
-  onRetry,
-}: {
-  obligations: Array<Record<string, unknown>>;
-  payments: Array<Record<string, unknown>>;
-  donations: Array<Record<string, unknown>>;
-  receivables: Array<Record<string, unknown>>;
-  loading: boolean;
-  onRetry: () => void;
-}) {
-  if (loading) {
-    return <section className="space-y-3" aria-label="جاري تحميل الملخص المالي"><div className="h-4 w-28 animate-pulse rounded bg-muted" /><div className="h-20 animate-pulse rounded-2xl bg-muted" /></section>;
-  }
-  const formatTotal = (items: Array<Record<string, unknown>>, amountKey: string) => {
-    const totals = new Map<string, number>();
-    for (const item of items) {
-      const currency = typeof item.currency === 'string' ? item.currency : 'EGP';
-      const amount = typeof item[amountKey] === 'number' ? item[amountKey] as number : Number(item[amountKey] ?? 0);
-      totals.set(currency, (totals.get(currency) ?? 0) + amount);
-    }
-    return [...totals.entries()].map(([currency, total]) => money(total, currency)).join('، ') || 'لا شيء مسجل';
-  };
-  return (
-    <section className="border-t border-border/70 pt-5" aria-label="الملخص المالي">
-      <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2 text-muted-foreground"><Scale className="size-3.5" /><h3 className="text-[11px] font-semibold uppercase tracking-[0.16em]">الماليات</h3></div>
-        <button type="button" onClick={onRetry} className="rounded-md p-1 text-muted-foreground hover:bg-muted" aria-label="تحديث الملخص المالي"><RefreshCw className="size-3.5" /></button>
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        <FinancialMini label="التزامات" value={formatTotal(obligations, 'principalAmountMinor')} icon={<Scale className="size-3" />} />
-        <FinancialMini label="مدفوعات" value={formatTotal(payments, 'amountMinor')} icon={<DollarSign className="size-3" />} />
-        <FinancialMini label="تبرعات" value={formatTotal(donations, 'amountMinor')} icon={<HandCoins className="size-3" />} />
-        <FinancialMini label="دخل متوقع" value={formatTotal(receivables, 'amountMinor')} icon={<ArrowUp className="size-3" />} />
-      </div>
-    </section>
-  );
-}
-
-function FinancialMini({ label, value, icon }: { label: string; value: string; icon: ReactNode }) {
-  return <div className="rounded-xl border border-border/70 bg-card/55 p-2.5"><div className="flex items-center gap-1.5 text-muted-foreground">{icon}<span className="text-[10px]">{label}</span></div><p className="mt-1.5 truncate text-xs font-semibold">{value}</p></div>;
 }
 
 export default Home;
