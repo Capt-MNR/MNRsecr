@@ -15,3 +15,4 @@
 - [Financial mutation atomicity](financial-mutation-atomicity.md) — approved domain writes and their activity events must share one transaction; injected writer failures must roll back the write.
 - [Phase 3 typed relationships](phase3-typed-relationships.md) — use reviewed additive junction migrations and bounded, tenant-scoped graph traversal.
 - [Undo timestamp precision](undo-timestamp-precision.md) — compare database createdAt undo guards with a millisecond range because PostgreSQL may retain sub-millisecond precision.
+- [Bounded relationship context](bounded-relationship-context.md) — scoped financial context never falls back to global totals; preserve direction, explicit links, and currency-safe relative approvals.

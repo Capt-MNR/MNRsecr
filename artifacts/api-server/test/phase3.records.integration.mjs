@@ -131,6 +131,19 @@ async function jsonRequest(path, method, body, headers = {}) {
   });
 }
 
+async function approvePending(response) {
+  assert.equal(response.status, 202);
+  const pending = await response.json();
+  assert.equal(pending.pendingApproval, true);
+  assert.equal(typeof pending.approval?.operationId, "string");
+  const approved = await request(
+    `/approvals/${pending.approval.operationId}/approve`,
+    { method: "POST" },
+  );
+  const payload = await approved.json();
+  return { response: approved, payload, operationId: pending.approval.operationId };
+}
+
 async function assertUnauthorized(path, options = {}) {
   const response = await request(path, {
     ...options,
@@ -206,6 +219,7 @@ test.before(async () => {
 test.after(async () => {
   await stopServer();
   queryDb(`
+    DELETE FROM secretary_operations WHERE tenant_id IN ('${tenantId}', '${otherTenantId}');
     DELETE FROM conversation_memory WHERE tenant_id IN ('${tenantId}', '${otherTenantId}');
     DELETE FROM project_people WHERE tenant_id IN ('${tenantId}', '${otherTenantId}');
     DELETE FROM expenses WHERE tenant_id IN ('${tenantId}', '${otherTenantId}');
@@ -344,17 +358,17 @@ test("updates and deletes every owned record type without crossing tenant or use
         "PATCH",
         record.update,
       );
-      assert.equal(updateResponse.status, 404, `${record.kind} foreign update`);
-      const updatePayload = await updateResponse.json();
-      assert.equal(updatePayload.code, "RECORD_UPDATE_FAILED");
+      const updateApproval = await approvePending(updateResponse);
+      assert.equal(updateApproval.response.status, 500, `${record.kind} foreign update`);
+      assert.equal(updateApproval.payload.code, "APPROVED_OPERATION_FAILED");
 
       const deleteResponse = await request(
         `/records/${record.kind}/${foreignId}`,
         { method: "DELETE" },
       );
-      assert.equal(deleteResponse.status, 404, `${record.kind} foreign delete`);
-      const deletePayload = await deleteResponse.json();
-      assert.equal(deletePayload.code, "RECORD_DELETE_FAILED");
+      const deleteApproval = await approvePending(deleteResponse);
+      assert.equal(deleteApproval.response.status, 500, `${record.kind} foreign delete`);
+      assert.equal(deleteApproval.payload.code, "APPROVED_OPERATION_FAILED");
       assert.equal(rowCount(record.table, foreignId), 1);
     }
 
@@ -363,14 +377,9 @@ test("updates and deletes every owned record type without crossing tenant or use
       "PATCH",
       record.update,
     );
-    assert.equal(updateResponse.status, 200, `${record.kind} owned update`);
-    const updatePayload = await updateResponse.json();
-    assert.equal(updatePayload.ok, true);
-    assert.equal(updatePayload.recordId, record.ownerId);
-    assert.equal(
-      updatePayload.record[record.changedColumn],
-      record.changedValue,
-    );
+    const updateApproval = await approvePending(updateResponse);
+    assert.equal(updateApproval.response.status, 200, `${record.kind} owned update`);
+    assert.equal(updateApproval.payload.status, "completed");
     assert.equal(
       scalar(record.table, record.ownerId, record.changedColumn),
       record.changedValue,
@@ -380,10 +389,9 @@ test("updates and deletes every owned record type without crossing tenant or use
       `/records/${record.kind}/${record.ownerId}`,
       { method: "DELETE" },
     );
-    assert.equal(deleteResponse.status, 200, `${record.kind} owned delete`);
-    const deletePayload = await deleteResponse.json();
-    assert.equal(deletePayload.ok, true);
-    assert.equal(deletePayload.deleted, true);
+    const deleteApproval = await approvePending(deleteResponse);
+    assert.equal(deleteApproval.response.status, 200, `${record.kind} owned delete`);
+    assert.equal(deleteApproval.payload.status, "completed");
     assert.equal(rowCount(record.table, record.ownerId), 0);
   }
 });
@@ -392,8 +400,9 @@ test("refuses to delete people and projects with owned financial or linked recor
   const personResponse = await request(`/records/person/${ids.linkedPerson}`, {
     method: "DELETE",
   });
-  assert.equal(personResponse.status, 404);
-  assert.equal((await personResponse.json()).code, "RECORD_DELETE_FAILED");
+  const personApproval = await approvePending(personResponse);
+  assert.equal(personApproval.response.status, 500);
+  assert.equal(personApproval.payload.code, "APPROVED_OPERATION_FAILED");
   assert.equal(rowCount("people", ids.linkedPerson), 1);
   assert.equal(rowCount("expenses", ids.linkedExpense), 1);
   assert.equal(rowCount("commitments", ids.linkedCommitment), 1);
@@ -402,8 +411,9 @@ test("refuses to delete people and projects with owned financial or linked recor
     `/records/project/${ids.linkedProject}`,
     { method: "DELETE" },
   );
-  assert.equal(projectResponse.status, 404);
-  assert.equal((await projectResponse.json()).code, "RECORD_DELETE_FAILED");
+  const projectApproval = await approvePending(projectResponse);
+  assert.equal(projectApproval.response.status, 500);
+  assert.equal(projectApproval.payload.code, "APPROVED_OPERATION_FAILED");
   assert.equal(rowCount("projects", ids.linkedProject), 1);
   assert.equal(rowCount("expenses", ids.linkedExpense), 1);
   assert.equal(rowCount("project_people", ids.projectPersonLink), 1);
@@ -419,8 +429,9 @@ test("undo only deletes the exact owned record version and identity", async () =
     recordId: ids.undoChangedTask,
     createdAt: changedCreatedAt,
   });
-  assert.equal(changedUndo.status, 404);
-  assert.equal((await changedUndo.json()).code, "UNDO_NOT_APPLIED");
+  const changedApproval = await approvePending(changedUndo);
+  assert.equal(changedApproval.response.status, 500);
+  assert.equal(changedApproval.payload.code, "APPROVED_OPERATION_FAILED");
   assert.equal(rowCount("tasks", ids.undoChangedTask), 1);
 
   const foreignCreatedAt = scalar(
@@ -433,8 +444,9 @@ test("undo only deletes the exact owned record version and identity", async () =
     recordId: ids.foreignTaskSameTenant,
     createdAt: foreignCreatedAt,
   });
-  assert.equal(foreignUndo.status, 404);
-  assert.equal((await foreignUndo.json()).code, "UNDO_NOT_APPLIED");
+  const foreignApproval = await approvePending(foreignUndo);
+  assert.equal(foreignApproval.response.status, 500);
+  assert.equal(foreignApproval.payload.code, "APPROVED_OPERATION_FAILED");
   assert.equal(rowCount("tasks", ids.foreignTaskSameTenant), 1);
 
   const successCreatedAt = scalar("tasks", ids.undoSuccessTask, "created_at");
@@ -443,7 +455,8 @@ test("undo only deletes the exact owned record version and identity", async () =
     recordId: ids.undoSuccessTask,
     createdAt: successCreatedAt,
   });
-  assert.equal(successUndo.status, 200);
-  assert.equal((await successUndo.json()).deleted, true);
+  const successApproval = await approvePending(successUndo);
+  assert.equal(successApproval.response.status, 200);
+  assert.equal(successApproval.payload.status, "completed");
   assert.equal(rowCount("tasks", ids.undoSuccessTask), 0);
 });

@@ -107,7 +107,10 @@ export function displayForOperation(
   const amount = typeof args.amountMinor === "number"
     ? new Intl.NumberFormat("ar-EG").format(args.amountMinor / 100)
     : undefined;
-  const currency = stringArg("currency") ?? "EGP";
+  const amountDelta = typeof args.amountDeltaMinor === "number"
+    ? new Intl.NumberFormat("ar-EG").format(args.amountDeltaMinor / 100)
+    : undefined;
+  const currency = stringArg("currency") ?? stringArg("expectedCurrency") ?? "EGP";
   const description = stringArg("description") ?? stringArg("text") ?? stringArg("title");
 
   switch (toolName) {
@@ -152,6 +155,15 @@ export function displayForOperation(
       return { title: "حذف مشروع", details: [stringArg("projectName") ?? "السجل المحدد"] };
     case "delete_expense":
       return { title: "حذف مصروف", details: [stringArg("description") ?? "السجل المحدد"] };
+    case "update_expense":
+      return {
+        title: "تعديل مصروف",
+        details: [
+          ...(amount ? [`القيمة الجديدة: ${amount} ${currency}`] : []),
+          ...(amountDelta ? [`زيادة القيمة الحالية بمقدار: ${amountDelta} ${currency}`] : []),
+          ...(description ? [`الوصف: ${description}`] : []),
+        ],
+      };
     default:
       return {
         title: `تأكيد العملية: ${toolName}`,

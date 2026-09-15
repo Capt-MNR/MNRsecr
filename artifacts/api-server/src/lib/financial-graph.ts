@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
   db,
   donationsTable,
@@ -442,18 +442,38 @@ export async function getFinancialEntity(identity: Identity, kind: string, id: s
   if (kind === "party") {
     const [entity] = await db.select().from(financialPartiesTable).where(and(scoped(identity, financialPartiesTable), eq(financialPartiesTable.id, id)));
     if (!entity) return null;
-    const [obligations, payments, donations, receivables, settlements] = await Promise.all([
-      db.select().from(financialObligationsTable).where(and(scoped(identity, financialObligationsTable), sql`${financialObligationsTable.lenderPartyId} = ${id} OR ${financialObligationsTable.borrowerPartyId} = ${id}`)).orderBy(desc(financialObligationsTable.createdAt)),
-      db.select().from(financialPaymentsTable).where(and(scoped(identity, financialPaymentsTable), sql`${financialPaymentsTable.payerPartyId} = ${id} OR ${financialPaymentsTable.payeePartyId} = ${id}`)).orderBy(desc(financialPaymentsTable.occurredAt)),
-      db.select().from(donationsTable).where(and(scoped(identity, donationsTable), sql`${donationsTable.donorPartyId} = ${id} OR ${donationsTable.recipientPartyId} = ${id}`)).orderBy(desc(donationsTable.pledgedAt)),
-      db.select().from(incomeReceivablesTable).where(and(scoped(identity, incomeReceivablesTable), sql`${incomeReceivablesTable.creditorPartyId} = ${id} OR ${incomeReceivablesTable.debtorPartyId} = ${id}`)).orderBy(desc(incomeReceivablesTable.createdAt)),
-      db.select().from(obligationSettlementsTable).where(scoped(identity, obligationSettlementsTable)),
+    const detailLimit = 100;
+    const obligationsRaw = await db.select().from(financialObligationsTable)
+      .where(and(scoped(identity, financialObligationsTable), sql`${financialObligationsTable.lenderPartyId} = ${id} OR ${financialObligationsTable.borrowerPartyId} = ${id}`))
+      .orderBy(desc(financialObligationsTable.createdAt))
+      .limit(detailLimit + 1);
+    const obligations = obligationsRaw.slice(0, detailLimit);
+    const [paymentsRaw, donationsRaw, receivablesRaw, settlements] = await Promise.all([
+      db.select().from(financialPaymentsTable).where(and(scoped(identity, financialPaymentsTable), sql`${financialPaymentsTable.payerPartyId} = ${id} OR ${financialPaymentsTable.payeePartyId} = ${id}`)).orderBy(desc(financialPaymentsTable.occurredAt)).limit(detailLimit + 1),
+      db.select().from(donationsTable).where(and(scoped(identity, donationsTable), sql`${donationsTable.donorPartyId} = ${id} OR ${donationsTable.recipientPartyId} = ${id}`)).orderBy(desc(donationsTable.pledgedAt)).limit(detailLimit + 1),
+      db.select().from(incomeReceivablesTable).where(and(scoped(identity, incomeReceivablesTable), sql`${incomeReceivablesTable.creditorPartyId} = ${id} OR ${incomeReceivablesTable.debtorPartyId} = ${id}`)).orderBy(desc(incomeReceivablesTable.createdAt)).limit(detailLimit + 1),
+      obligations.length > 0
+        ? db.select({
+            obligationId: obligationSettlementsTable.obligationId,
+            amountMinor: sql<number>`coalesce(sum(${obligationSettlementsTable.amountMinor}), 0)::bigint`,
+          }).from(obligationSettlementsTable).where(and(
+          scoped(identity, obligationSettlementsTable),
+          inArray(obligationSettlementsTable.obligationId, obligations.map((obligation) => obligation.id)),
+        )).groupBy(obligationSettlementsTable.obligationId)
+        : Promise.resolve([]),
     ]);
+    const payments = paymentsRaw.slice(0, detailLimit);
+    const donations = donationsRaw.slice(0, detailLimit);
+    const receivables = receivablesRaw.slice(0, detailLimit);
     const settledByObligation = new Map<string, number>();
     for (const settlement of settlements) {
+      const settledAmountMinor = Number(settlement.amountMinor);
+      if (!Number.isFinite(settledAmountMinor)) {
+        throw new Error("Invalid settlement aggregate returned by the database.");
+      }
       settledByObligation.set(
         settlement.obligationId,
-        (settledByObligation.get(settlement.obligationId) ?? 0) + settlement.amountMinor,
+        settledAmountMinor,
       );
     }
     return {
@@ -467,6 +487,13 @@ export async function getFinancialEntity(identity: Identity, kind: string, id: s
         payments,
         donations,
         receivables,
+        bounds: {
+          limit: detailLimit,
+          obligationsTruncated: obligationsRaw.length > detailLimit,
+          paymentsTruncated: paymentsRaw.length > detailLimit,
+          donationsTruncated: donationsRaw.length > detailLimit,
+          receivablesTruncated: receivablesRaw.length > detailLimit,
+        },
       },
     };
   }

@@ -19,11 +19,17 @@ import {
   compactActionForMemory,
   conversationContextMessages,
   loadConversationMemory,
+  mergeConversationReferents,
   saveConversationTurn,
   updateConversationState,
   type ConversationState,
   type ConversationMemorySnapshot,
 } from "./conversation-memory";
+import {
+  parseFinancialFollowupAdjustment,
+  retrieveRelationshipContext,
+  serializeRelationshipContext,
+} from "./relationship-context";
 import {
   agentToolError,
   isTransientProviderFailure,
@@ -1632,7 +1638,14 @@ async function executeTool(
     case "update_expense": {
       const expenseId = stringArg("expenseId");
       const amountMinor = Number(args.amountMinor);
-      if (!expenseId || (args.amountMinor !== undefined && (!Number.isSafeInteger(amountMinor) || amountMinor <= 0))) {
+      const amountDeltaMinor = Number(args.amountDeltaMinor);
+      const expectedCurrency = stringArg("expectedCurrency")?.toUpperCase();
+      if (
+        !expenseId
+        || (args.amountMinor !== undefined && args.amountDeltaMinor !== undefined)
+        || (args.amountMinor !== undefined && (!Number.isSafeInteger(amountMinor) || amountMinor <= 0))
+        || (args.amountDeltaMinor !== undefined && (!Number.isSafeInteger(amountDeltaMinor) || amountDeltaMinor === 0))
+      ) {
         return { ok: false, error: "expenseId and a valid amountMinor are required when changing the amount." };
       }
       const [existing] = await db.select().from(expensesTable).where(and(
@@ -1640,11 +1653,20 @@ async function executeTool(
         eq(expensesTable.id, expenseId),
       )).limit(1);
       if (!existing) return { ok: false, error: "Expense not found." };
+      if (expectedCurrency && existing.currency !== expectedCurrency) {
+        return { ok: false, error: "Expense currency changed after approval was prepared." };
+      }
       const updates: Record<string, unknown> = {
         updatedAt: new Date(),
         rowVersion: sql`${expensesTable.rowVersion} + 1`,
       };
       if (args.amountMinor !== undefined) updates.amountMinor = amountMinor;
+      if (args.amountDeltaMinor !== undefined) {
+        if (existing.amountMinor + amountDeltaMinor <= 0) {
+          return { ok: false, error: "The expense amount cannot become zero or negative." };
+        }
+        updates.amountMinor = sql`${expensesTable.amountMinor} + ${amountDeltaMinor}`;
+      }
       const currency = stringArg("currency");
       const description = stringArg("description");
       if (currency) updates.currency = currency.toUpperCase();
@@ -1689,8 +1711,11 @@ async function executeTool(
       const [updated] = await db.update(expensesTable).set(updates).where(and(
         identityWhere(identity, expensesTable),
         eq(expensesTable.id, expenseId),
+        ...(expectedCurrency ? [eq(expensesTable.currency, expectedCurrency)] : []),
       )).returning();
-      result = updated ? { ok: true, corrected: true, expense: updated } : { ok: false, error: "Expense not found." };
+      result = updated
+        ? { ok: true, corrected: true, expense: updated }
+        : { ok: false, error: expectedCurrency ? "Expense currency changed after approval was prepared." : "Expense not found." };
       break;
     }
     case "update_task": {
@@ -4316,8 +4341,26 @@ export class Phase2AgentRuntime {
       deterministicMetrics.normalizationApplied = semanticParse.normalizedText !== input.message.trim();
       deterministicMetrics.semanticParsed = true;
     }
+    const relationshipContext = featureFlags.deterministicIntelligence()
+      ? await retrieveRelationshipContext(identity, input.message, conversationMemory.state).catch((error) => {
+          logger.warn({
+            requestId,
+            error: error instanceof Error ? error.message : "RELATIONSHIP_CONTEXT_FAILED",
+          }, "relationship-aware context retrieval failed");
+          return null;
+        })
+      : null;
+    const financialFollowupAdjustment = featureFlags.deterministicIntelligence()
+      ? parseFinancialFollowupAdjustment(input.message, conversationMemory.state)
+      : null;
     const messages: ConversationMessage[] = [
       ...conversationContextMessages(conversationMemory),
+      ...(relationshipContext && !relationshipContext.response
+        ? [{
+            role: "system" as const,
+            text: `[سياق علاقات منظم من البيانات القانونية، محدود بالسؤال]\n${serializeRelationshipContext(relationshipContext.context)}`,
+          }]
+        : []),
       { role: "user", text: input.message.trim() },
     ];
     let activeToolScope = classifyToolScope(semanticParse?.normalizedText ?? input.message);
@@ -4541,6 +4584,83 @@ export class Phase2AgentRuntime {
             error: error instanceof SecretaryError ? error.code : "DETERMINISTIC_PREFLIGHT_FAILED",
           }, "deterministic preflight failed; falling back to LLM");
         }
+      }
+    }
+
+    if (financialFollowupAdjustment) {
+      if (financialFollowupAdjustment.status !== "ready") {
+        deterministicMetrics.decision = "clarification";
+        deterministicMetrics.falsePositiveGuard = "blocked";
+        action = {
+          type: "clarification_needed",
+          source: "deterministic_intelligence",
+          reason: financialFollowupAdjustment.status,
+        };
+        return await persistResult({
+          kind: "clarification",
+          message: financialFollowupAdjustment.status === "currency_mismatch"
+            ? "العملة الجديدة مختلفة عن عملة المصروف السابق. حدّد المصروف والعملة المطلوبين."
+            : "لا يوجد مصروف منفذ وواضح في سياق المحادثة لأزيد عليه.",
+        });
+      }
+      deterministicMetrics.decision = "deterministic";
+      deterministicMetrics.falsePositiveGuard = "passed";
+      const result = await executeStructuredTool(identity, "update_expense", {
+        expenseId: financialFollowupAdjustment.expenseId,
+        amountDeltaMinor: financialFollowupAdjustment.deltaMinor,
+        expectedCurrency: financialFollowupAdjustment.currency,
+      }, {
+        requestId,
+        dryRun: options.dryRun,
+        conversationId,
+        idempotencyKey: input.idempotencyKey,
+      });
+      const preflight = deterministicApprovalResponse("update_expense", result);
+      action = {
+        ...(preflight?.action ?? {
+          type: "deterministic_write",
+          source: "deterministic_intelligence",
+          toolName: "update_expense",
+        }),
+        adjustment: {
+          previousAmountMinor: financialFollowupAdjustment.previousAmountMinor,
+          deltaMinor: financialFollowupAdjustment.deltaMinor,
+          amountMinor: financialFollowupAdjustment.amountMinor,
+          currency: financialFollowupAdjustment.currency,
+        },
+      };
+      deterministicMetrics.solvedWithoutLlm = true;
+      return await persistResult(preflight?.response ?? {
+        kind: result.ok ? "answer" : "error",
+        message: result.ok ? "جهزت تعديل المصروف للموافقة." : "لم أستطع تجهيز التعديل بأمان.",
+      });
+    }
+
+    if (relationshipContext?.response) {
+      deterministicMetrics.solvedWithoutLlm = true;
+      deterministicMetrics.decision = relationshipContext.response.kind === "clarification"
+        ? "clarification"
+        : "deterministic";
+      deterministicMetrics.falsePositiveGuard = relationshipContext.response.kind === "clarification"
+        ? "blocked"
+        : "passed";
+      deterministicMetrics.resolverUsed = relationshipContext.context.resolvedEntities.length > 0;
+      deterministicMetrics.entityMatches = relationshipContext.context.resolvedEntities.length;
+      conversationState = mergeConversationReferents(
+        conversationState,
+        relationshipContext.context.resolvedEntities,
+      );
+      action = {
+        type: "relationship_context",
+        source: "deterministic_intelligence",
+        intent: relationshipContext.context.intent,
+        context: relationshipContext.context,
+        conversationState,
+      };
+      try {
+        return await persistResult(relationshipContext.response);
+      } finally {
+        finishRequestInstrumentation();
       }
     }
 

@@ -27,7 +27,7 @@ const STATE_MARKER = "\n[حالة المحادثة المنظمة]\n";
 export type ConversationEntity = {
   id: string;
   name: string;
-  type: "person" | "project";
+  type: "person" | "project" | "financial_party";
   status?: string;
   ordinal?: number;
 };
@@ -37,6 +37,7 @@ export type ConversationState = {
   projects: ConversationEntity[];
   candidatePeople: ConversationEntity[];
   candidateProjects: ConversationEntity[];
+  financialParties: ConversationEntity[];
   facts: Array<{
     key: string;
     value: string;
@@ -58,6 +59,7 @@ export type ConversationState = {
   }>;
   lastPerson?: ConversationEntity;
   lastProject?: ConversationEntity;
+  lastFinancialParty?: ConversationEntity;
   lastExpense?: {
     id: string;
     amountMinor: number;
@@ -73,6 +75,7 @@ export const emptyConversationState = (): ConversationState => ({
   projects: [],
   candidatePeople: [],
   candidateProjects: [],
+  financialParties: [],
   facts: [],
   preferences: [],
   relationships: [],
@@ -134,6 +137,9 @@ function normalizeState(value: unknown): ConversationState {
   const candidateProjects = Array.isArray(input.candidateProjects)
     ? input.candidateProjects.map((item) => validEntity(item, "project")).filter((item): item is ConversationEntity => Boolean(item))
     : [];
+  const financialParties = Array.isArray(input.financialParties)
+    ? input.financialParties.map((item) => validEntity(item, "financial_party")).filter((item): item is ConversationEntity => Boolean(item))
+    : [];
   const facts = Array.isArray(input.facts)
     ? input.facts.filter(validFact)
     : [];
@@ -145,6 +151,7 @@ function normalizeState(value: unknown): ConversationState {
     : [];
   const lastPerson = validEntity(input.lastPerson, "person") ?? undefined;
   const lastProject = validEntity(input.lastProject, "project") ?? undefined;
+  const lastFinancialParty = validEntity(input.lastFinancialParty, "financial_party") ?? undefined;
   const lastExpenseValue = input.lastExpense;
   const lastExpense = lastExpenseValue && typeof lastExpenseValue === "object"
     ? (() => {
@@ -169,13 +176,36 @@ function normalizeState(value: unknown): ConversationState {
     projects: projects.slice(-10),
     candidatePeople: candidatePeople.slice(-10),
     candidateProjects: candidateProjects.slice(-10),
+    financialParties: financialParties.slice(-10),
     facts: facts.slice(-20),
     preferences: preferences.slice(-20),
     relationships: relationships.slice(-20),
     ...(lastPerson ? { lastPerson } : {}),
     ...(lastProject ? { lastProject } : {}),
+    ...(lastFinancialParty ? { lastFinancialParty } : {}),
     ...(lastExpense ? { lastExpense } : {}),
   };
+}
+
+export function mergeConversationReferents(
+  previous: ConversationState,
+  entities: Array<{ id: string; name: string; type: ConversationEntity["type"] }>,
+): ConversationState {
+  const state = normalizeState(previous);
+  for (const entity of entities) {
+    const value: ConversationEntity = { id: entity.id, name: entity.name, type: entity.type };
+    if (entity.type === "person") {
+      state.people = [...state.people.filter((item) => item.id !== entity.id), value].slice(-10);
+      state.lastPerson = value;
+    } else if (entity.type === "project") {
+      state.projects = [...state.projects.filter((item) => item.id !== entity.id), value].slice(-10);
+      state.lastProject = value;
+    } else {
+      state.financialParties = [...state.financialParties.filter((item) => item.id !== entity.id), value].slice(-10);
+      state.lastFinancialParty = value;
+    }
+  }
+  return normalizeState(state);
 }
 
 function stripStateMarker(summary: string | null): string | null {
@@ -632,8 +662,10 @@ export function conversationContextMessages(
     || state.projects.length > 0
     || state.candidatePeople.length > 0
     || state.candidateProjects.length > 0
+    || state.financialParties.length > 0
     || state.lastPerson
     || state.lastProject
+    || state.lastFinancialParty
     || state.lastExpense
     || state.facts.length > 0
     || state.preferences.length > 0

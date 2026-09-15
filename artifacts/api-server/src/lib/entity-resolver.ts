@@ -1,6 +1,7 @@
 import { and, asc, eq } from "drizzle-orm";
 import {
   db,
+  financialPartiesTable,
   peopleTable,
   pool,
   projectsTable,
@@ -11,7 +12,7 @@ import type { Identity } from "./secretary";
 import { logger } from "./logger";
 import { featureFlags } from "./feature-flags";
 
-export type EntityType = "person" | "project";
+export type EntityType = "person" | "project" | "financial_party";
 export type ResolverMatchType = "exact" | "alias" | "fuzzy" | "ambiguous" | "none";
 
 export type ResolverCandidate = {
@@ -97,7 +98,7 @@ export function resolveFromCandidates(
   query: string,
   candidates: ResolverCandidate[],
 ): ResolverResult {
-  const threshold = entityType === "person" ? PERSON_THRESHOLD : PROJECT_THRESHOLD;
+  const threshold = entityType === "project" ? PROJECT_THRESHOLD : PERSON_THRESHOLD;
   const ranked = candidates
     .map((candidate) => ({ candidate, ...candidateScore(query, candidate) }))
     .sort((left, right) => right.score - left.score);
@@ -141,6 +142,12 @@ async function queryCandidates(identity: Identity, entityType: EntityType, query
       eqOwnership(identity, peopleTable),
     )).orderBy(asc(peopleTable.createdAt)).limit(100);
     return rows.map((row: Person) => ({ id: row.id, name: row.name, nameKey: row.nameKey }));
+  }
+  if (entityType === "financial_party") {
+    const rows = await db.select().from(financialPartiesTable).where(and(
+      eqOwnership(identity, financialPartiesTable),
+    )).orderBy(asc(financialPartiesTable.createdAt)).limit(100);
+    return rows.map((row) => ({ id: row.id, name: row.name, nameKey: row.nameKey }));
   }
   const rows = await db.select().from(projectsTable).where(and(
     eqOwnership(identity, projectsTable),
