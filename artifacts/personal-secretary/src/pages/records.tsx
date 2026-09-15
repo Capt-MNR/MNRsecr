@@ -665,28 +665,23 @@ export default function Records() {
                 </ul>
               </div>
             </div>
-             {pendingApproval.approval.status === 'pending' ? (
-               <ApprovalForm
-                 operationId={pendingApproval.approval.operationId}
-                 toolName={pendingApproval.approval.toolName}
-                 initialArgs={{}}
-                 display={pendingApproval.approval.display}
-                 busy={approveMutation.isPending || rejectMutation.isPending}
-                 error={approvalError}
-                 onConfirm={(args) => {
-                   if (!pendingApproval || approveMutation.isPending || rejectMutation.isPending) return;
-                   approveMutation.mutate(
-                     { operationId: pendingApproval.approval.operationId, data: { args } },
-                     { onSuccess: applyApprovalResponse, onError: (approvalErrorValue) => setApprovalError(classifySecretaryError(approvalErrorValue)?.message ?? 'تعذر تنفيذ الموافقة.') },
-                   );
-                 }}
-                 onReject={rejectPending}
-               />
-            ) : (
-              <p className="mt-6 text-sm font-medium text-muted-foreground">
-                {pendingApproval.approval.status === 'completed' ? 'تم حفظ السجل.' : pendingApproval.approval.status === 'rejected' ? 'تم إلغاء العملية.' : 'هذه العملية لم تعد قابلة للتنفيذ.'}
-              </p>
-            )}
+            <ApprovalForm
+              operationId={pendingApproval.approval.operationId}
+              toolName={pendingApproval.approval.toolName}
+              initialArgs={{}}
+              display={pendingApproval.approval.display}
+              status={pendingApproval.approval.status}
+              busy={approveMutation.isPending || rejectMutation.isPending}
+              error={approvalError}
+              onConfirm={(args) => {
+                if (!pendingApproval || approveMutation.isPending || rejectMutation.isPending) return;
+                approveMutation.mutate(
+                  { operationId: pendingApproval.approval.operationId, data: { args } },
+                  { onSuccess: applyApprovalResponse, onError: (approvalErrorValue) => setApprovalError(classifySecretaryError(approvalErrorValue)?.message ?? 'تعذر تنفيذ الموافقة.') },
+                );
+              }}
+              onReject={rejectPending}
+            />
             {approvalError && <p className="mt-3 text-sm text-destructive" role="alert">{approvalError}</p>}
             <button type="button" onClick={() => setPendingApproval(null)} className="mt-5 w-full rounded-xl border border-border px-4 py-2.5 text-sm text-muted-foreground hover:bg-muted">
               إغلاق

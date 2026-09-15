@@ -491,37 +491,22 @@ function Home() {
                                 )}
                               </div>
                             </div>
-                             {message.approval.status === 'pending' ? (
-                               <ApprovalForm
-                                 operationId={message.approval.operationId}
-                                 toolName={message.approval.toolName}
-                                 initialArgs={message.approval.initialArgs}
-                                 display={{
-                                   title: message.approval.title,
-                                   details: message.approval.details,
-                                 }}
-                                 status={message.approval.status}
-                                 personCandidates={message.approval.personCandidates}
-                                 projectCandidates={message.approval.projectCandidates}
-                                 busy={approveOperation.isPending || rejectOperation.isPending}
-                                 error={approvalError}
-                                 onConfirm={(args) => approve(message.approval!.operationId, args)}
-                                 onReject={() => reject(message.approval!.operationId)}
-                               />
-                             ) : (
-                               <ApprovalForm
-                                 operationId={message.approval.operationId}
-                                 toolName={message.approval.toolName}
-                                 initialArgs={message.approval.initialArgs}
-                                 display={{
-                                   title: message.approval.title,
-                                   details: message.approval.details,
-                                 }}
-                                 status={message.approval.status}
-                                 onConfirm={() => {}}
-                                 onReject={() => {}}
-                               />
-                            )}
+                            <ApprovalForm
+                              operationId={message.approval.operationId}
+                              toolName={message.approval.toolName}
+                              initialArgs={message.approval.initialArgs}
+                              display={{
+                                title: message.approval.title,
+                                details: message.approval.details,
+                              }}
+                              status={message.approval.status}
+                              personCandidates={message.approval.personCandidates}
+                              projectCandidates={message.approval.projectCandidates}
+                              busy={approveOperation.isPending || rejectOperation.isPending}
+                              error={approvalError}
+                              onConfirm={(args) => approve(message.approval!.operationId, args)}
+                              onReject={() => reject(message.approval!.operationId)}
+                            />
                             {approvalError && message.approval.status === 'pending' && (
                               <p className="mt-2 text-xs text-destructive" role="alert">{approvalError}</p>
                             )}
