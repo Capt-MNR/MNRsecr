@@ -1376,6 +1376,14 @@ async function executeTool(
   const expectedCreatedAt = stringArg("expectedCreatedAt");
   const matchesExpectedVersion = (record: { createdAt: Date }) =>
     !expectedCreatedAt || record.createdAt.toISOString() === expectedCreatedAt;
+  const expectedCreatedAtWhere = (column: any) => {
+    if (!expectedCreatedAt) return undefined;
+    const expected = new Date(expectedCreatedAt);
+    return and(
+      gte(column, expected),
+      lt(column, new Date(expected.getTime() + 1)),
+    );
+  };
   const personId = stringArg("personId");
   const projectId = stringArg("projectId");
 
@@ -1778,11 +1786,12 @@ async function executeTool(
         result = { ok: false, error: "This record changed after it was created; undo was not applied." };
         break;
       }
-      await db.delete(expensesTable).where(and(
+      const [deleted] = await db.delete(expensesTable).where(and(
         identityWhere(identity, expensesTable),
         eq(expensesTable.id, expenseId),
-      ));
-      result = { ok: true, deleted: true, deletedExpense: existing };
+        expectedCreatedAtWhere(expensesTable.createdAt),
+      )).returning();
+      result = deleted ? { ok: true, deleted: true, deletedExpense: deleted } : { ok: false, error: "Expense not found." };
       break;
     }
     case "delete_person": {
@@ -1816,11 +1825,12 @@ async function executeTool(
         identityWhere(identity, projectPeopleTable),
         eq(projectPeopleTable.personId, targetId),
       ));
-      await db.delete(peopleTable).where(and(
+      const [deleted] = await db.delete(peopleTable).where(and(
         identityWhere(identity, peopleTable),
         eq(peopleTable.id, targetId),
-      ));
-      result = { ok: true, deleted: true, deletedPerson: existing };
+        expectedCreatedAtWhere(peopleTable.createdAt),
+      )).returning();
+      result = deleted ? { ok: true, deleted: true, deletedPerson: deleted } : { ok: false, error: "Person not found." };
       break;
     }
     case "delete_project": {
@@ -1850,11 +1860,12 @@ async function executeTool(
         result = { ok: false, error: "Project has saved records and cannot be deleted until those links are resolved." };
         break;
       }
-      await db.delete(projectsTable).where(and(
+      const [deleted] = await db.delete(projectsTable).where(and(
         identityWhere(identity, projectsTable),
         eq(projectsTable.id, targetId),
-      ));
-      result = { ok: true, deleted: true, deletedProject: existing };
+        expectedCreatedAtWhere(projectsTable.createdAt),
+      )).returning();
+      result = deleted ? { ok: true, deleted: true, deletedProject: deleted } : { ok: false, error: "Project not found." };
       break;
     }
     case "delete_task": {
@@ -1875,6 +1886,7 @@ async function executeTool(
       const [deleted] = await db.delete(tasksTable).where(and(
         identityWhere(identity, tasksTable),
         eq(tasksTable.id, targetId),
+        expectedCreatedAtWhere(tasksTable.createdAt),
       )).returning();
       result = deleted ? { ok: true, deleted: true, deletedTask: deleted } : { ok: false, error: "Task not found." };
       break;
@@ -1897,6 +1909,7 @@ async function executeTool(
       const [deleted] = await db.delete(commitmentsTable).where(and(
         identityWhere(identity, commitmentsTable),
         eq(commitmentsTable.id, targetId),
+        expectedCreatedAtWhere(commitmentsTable.createdAt),
       )).returning();
       result = deleted ? { ok: true, deleted: true, deletedCommitment: deleted } : { ok: false, error: "Commitment not found." };
       break;
@@ -1919,6 +1932,7 @@ async function executeTool(
       const [deleted] = await db.delete(remindersTable).where(and(
         identityWhere(identity, remindersTable),
         eq(remindersTable.id, targetId),
+        expectedCreatedAtWhere(remindersTable.createdAt),
       )).returning();
       result = deleted ? { ok: true, deleted: true, deletedReminder: deleted } : { ok: false, error: "Reminder not found." };
       break;

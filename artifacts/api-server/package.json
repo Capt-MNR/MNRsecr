@@ -9,10 +9,11 @@
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:phase2": "node --test test/phase2.integration.mjs",
-    "test:expense-report": "node --experimental-strip-types --test test/expense-report.test.ts",
     "test:intent-eval-dataset": "node --test test/intent-evaluation/dataset.test.mjs",
     "test:financial": "../../scripts/node_modules/.bin/tsx --test test/activity-atomicity.test.ts test/financial-graph.test.ts test/relationship-graph.test.ts",
     "test:http-phase3": "../../scripts/node_modules/.bin/tsx --test test/http-phase3.test.ts",
+    "test:phase3:records": "node --test test/phase3.records.integration.mjs",
+    "test:expense-report": "node --experimental-strip-types --test test/expense-report.test.ts",
     "test:intent-eval": "../../scripts/node_modules/.bin/tsx ./test/intent-evaluation/runner.ts"
   },
   "dependencies": {

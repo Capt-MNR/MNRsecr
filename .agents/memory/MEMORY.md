@@ -14,3 +14,4 @@
 - [Drizzle migration layout](drizzle-migrations.md) — keep the migration output path relative when using custom SQL against the legacy schema.
 - [Financial mutation atomicity](financial-mutation-atomicity.md) — approved domain writes and their activity events must share one transaction; injected writer failures must roll back the write.
 - [Phase 3 typed relationships](phase3-typed-relationships.md) — use reviewed additive junction migrations and bounded, tenant-scoped graph traversal.
+- [Undo timestamp precision](undo-timestamp-precision.md) — compare database createdAt undo guards with a millisecond range because PostgreSQL may retain sub-millisecond precision.
