@@ -8,12 +8,14 @@ import {
   CircleAlert,
   Clock3,
   DollarSign,
+  HandCoins,
   ListChecks,
   LoaderCircle,
   Menu,
   PanelRight,
   Plus,
   RefreshCw,
+  Scale,
   Sparkles,
   UsersRound,
   X,
@@ -26,12 +28,17 @@ import {
   useCreateTurn,
   useGetTodayContext,
   useHealthCheck,
+  useListDonations,
+  useListFinancialObligations,
+  useListFinancialPayments,
+  useListIncomeReceivables,
   useRejectSecretaryOperation,
 } from '@workspace/api-client-react';
 import type { ConversationDetail } from '@workspace/api-client-react';
 import { classifySecretaryError } from '../lib/secretary-errors';
 import ConversationHistory from '../components/conversation-history';
 import ApprovalForm from '../components/approval-form';
+import { useLocation } from 'wouter';
 
 type LocalMessage = {
   id: string;
@@ -39,6 +46,7 @@ type LocalMessage = {
   text: string;
   time: string;
   meta?: string;
+  facts?: Array<{ type: 'money' | 'count'; value: number; currency?: string; label?: string }>;
   approval?: {
     operationId: string;
     toolName: string;
@@ -117,11 +125,22 @@ function approvalFromAction(action: Record<string, unknown> | undefined): LocalM
       : [],
     ...(Array.isArray(action.personCandidates) ? { personCandidates: action.personCandidates as Array<{ id: string; name: string; status: string }> } : {}),
     ...(Array.isArray(action.projectCandidates) ? { projectCandidates: action.projectCandidates as Array<{ id: string; name: string; status: string }> } : {}),
-    status: action.status === 'pending' ? 'pending' : 'pending',
+    status: typeof action.status === 'string' && ['pending', 'executing', 'completed', 'rejected', 'expired', 'failed'].includes(action.status)
+      ? action.status as ApprovalStatus
+      : 'pending',
   };
 }
 
+function financialItems(value: unknown): Array<Record<string, unknown>> {
+  if (!value || typeof value !== 'object') return [];
+  const items = (value as { items?: unknown }).items;
+  return Array.isArray(items)
+    ? items.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
+    : [];
+}
+
 function Home() {
+  const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState('');
   const [conversationId, setConversationId] = useState<string | undefined>();
@@ -145,6 +164,18 @@ function Home() {
       staleTime: 60_000,
       retry: 1,
     },
+  });
+  const obligationsQuery = useListFinancialObligations({
+    query: { queryKey: ['/api/financial/obligations'], staleTime: 30_000 },
+  });
+  const paymentsQuery = useListFinancialPayments({
+    query: { queryKey: ['/api/financial/payments'], staleTime: 30_000 },
+  });
+  const donationsQuery = useListDonations({
+    query: { queryKey: ['/api/financial/donations'], staleTime: 30_000 },
+  });
+  const receivablesQuery = useListIncomeReceivables({
+    query: { queryKey: ['/api/financial/receivables'], staleTime: 30_000 },
   });
   const createTurn = useCreateTurn({
     request: { timeoutMs: 90_000 },
@@ -192,6 +223,7 @@ function Home() {
         text: turn.assistantMessage,
         time: formatTime(turn.createdAt),
         meta: 'من سجل المحادثة',
+        ...(turn.action ? { approval: approvalFromAction(turn.action as Record<string, unknown>) } : {}),
       });
     });
     setMessages(loadedMessages.length > 0 ? loadedMessages : [starterMessage]);
@@ -237,9 +269,10 @@ function Home() {
             {
               id: `assistant-${Date.now()}`,
               role: 'assistant',
-              text: response.assistantMessage,
+               text: response.response?.message ?? response.assistantMessage,
               time: formatTime(new Date().toISOString()),
               meta: response.provider ? `${response.provider} · ${response.model}` : 'سكرتيرك الخاص',
+               ...(response.response?.groundedFacts ? { facts: response.response.groundedFacts } : {}),
               ...(approval ? { approval } : {}),
             },
           ]);
@@ -436,7 +469,17 @@ function Home() {
                         <div className={message.role === 'user'
                           ? 'rounded-[18px] rounded-br-[5px] bg-primary px-4 py-3 text-[15px] leading-relaxed text-primary-foreground'
                           : 'rounded-[18px] rounded-tl-[5px] border border-border/70 bg-card px-4 py-3 text-[15px] leading-relaxed shadow-[0_8px_24px_-20px_hsl(var(--foreground)/.4)]'}>
-                          {message.text}
+                           {message.text}
+                           {message.facts && message.facts.length > 0 && (
+                             <div className="mt-3 flex flex-wrap gap-1.5 border-t border-border/60 pt-2" aria-label="حقائق مؤكدة">
+                               {message.facts.map((fact, factIndex) => (
+                                 <span key={`${fact.label ?? fact.type}-${factIndex}`} className="rounded-full bg-primary/8 px-2 py-1 text-[11px] text-primary">
+                                   {fact.type === 'money' ? money(fact.value, fact.currency ?? 'EGP') : fact.value}
+                                   {fact.label ? ` · ${fact.label}` : ''}
+                                 </span>
+                               ))}
+                             </div>
+                           )}
                         </div>
                         <div className={`mt-1.5 flex items-center gap-2 px-1 font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground/70 ${message.role === 'user' ? 'justify-end' : ''}`}>
                           <span>{message.time}</span>
@@ -591,28 +634,28 @@ function Home() {
                 <div className="scrollbar-thin space-y-7 overflow-y-auto pb-5">
                   <ContextBlock icon={<Clock3 className="size-3.5" />} title="القادم" count={context.upcomingReminders.length}>
                     {context.upcomingReminders.length === 0 ? <EmptyLine>لا توجد تذكيرات قادمة.</EmptyLine> : context.upcomingReminders.slice(0, 3).map((reminder) => (
-                      <div key={reminder.id} className="border-r-2 border-accent/65 pr-3" data-testid={`reminder-${reminder.id}`}>
+                       <button type="button" key={reminder.id} onClick={() => setLocation(`/records?tab=reminders&recordId=${reminder.id}`)} className="block w-full border-r-2 border-accent/65 pr-3 text-right hover:text-primary" data-testid={`reminder-${reminder.id}`}>
                         <p className="text-sm leading-snug">{reminder.text}</p>
                         <p className="mt-1 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">{formatTime(reminder.dueAt)} · {reminder.status}</p>
-                      </div>
+                       </button>
                     ))}
                   </ContextBlock>
 
                   <ContextBlock icon={<ListChecks className="size-3.5" />} title="المهام" count={context.pendingTasks.length}>
                     {context.pendingTasks.length === 0 ? <EmptyLine>لا توجد مهام معلقة.</EmptyLine> : context.pendingTasks.slice(0, 4).map((task) => (
-                      <div key={task.id} className="flex items-start gap-2.5" data-testid={`task-${task.id}`}>
+                       <button type="button" key={task.id} onClick={() => setLocation(`/records?tab=tasks&recordId=${task.id}`)} className="flex w-full items-start gap-2.5 text-right hover:text-primary" data-testid={`task-${task.id}`}>
                         <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border border-border bg-background"><Check className="size-2.5 text-muted-foreground" /></span>
                         <div className="min-w-0"><p className="text-sm leading-snug">{task.title}</p><p className="mt-1 font-mono text-[10px] tracking-wide text-muted-foreground">{task.dueAt ? formatTime(task.dueAt) : 'بدون موعد'}</p></div>
-                      </div>
+                       </button>
                     ))}
                   </ContextBlock>
 
                   <ContextBlock icon={<DollarSign className="size-3.5" />} title="أحدث المصروفات" count={context.recentExpenses.length}>
                     {context.recentExpenses.length === 0 ? <EmptyLine>لا توجد مصروفات محفوظة.</EmptyLine> : context.recentExpenses.slice(0, 3).map((expense) => (
-                      <div key={expense.id} className="flex items-center justify-between gap-3" data-testid={`expense-${expense.id}`}>
+                       <button type="button" key={expense.id} onClick={() => setLocation(`/records?tab=expenses&recordId=${expense.id}`)} className="flex w-full items-center justify-between gap-3 text-right hover:text-primary" data-testid={`expense-${expense.id}`}>
                         <div className="min-w-0"><p className="truncate text-sm">{expense.description}</p><p className="mt-1 text-xs text-muted-foreground">{expense.projectName ?? expense.personName ?? formatTime(expense.occurredAt)}</p></div>
                         <p className="shrink-0 font-mono text-xs">{money(expense.amountMinor, expense.currency)}</p>
-                      </div>
+                       </button>
                     ))}
                   </ContextBlock>
 
@@ -620,6 +663,33 @@ function Home() {
                     <MiniStat icon={<Sparkles className="size-3.5" />} label="المشاريع" value={context.activeProjects.length} testId="stat-projects" />
                     <MiniStat icon={<UsersRound className="size-3.5" />} label="الأشخاص" value={context.relevantPeople.length} testId="stat-people" />
                   </div>
+                   <ContextBlock icon={<Sparkles className="size-3.5" />} title="مشاريع نشطة" count={context.activeProjects.length}>
+                     {context.activeProjects.length === 0 ? <EmptyLine>لا توجد مشاريع نشطة.</EmptyLine> : context.activeProjects.slice(0, 4).map((project) => (
+                       <button type="button" key={project.id} onClick={() => setLocation(`/projects/${project.id}`)} className="flex w-full items-center justify-between rounded-xl bg-card/60 px-3 py-2 text-right text-sm hover:bg-primary/5 hover:text-primary">
+                         <span className="truncate">{project.name}</span><ArrowUp className="size-3 rotate-45 text-muted-foreground" />
+                       </button>
+                     ))}
+                   </ContextBlock>
+                   <ContextBlock icon={<UsersRound className="size-3.5" />} title="أشخاص مهمون" count={context.relevantPeople.length}>
+                     {context.relevantPeople.length === 0 ? <EmptyLine>لا يوجد أشخاص في السياق الحالي.</EmptyLine> : context.relevantPeople.slice(0, 4).map((person) => (
+                       <button type="button" key={person.id} onClick={() => setLocation(`/people/${person.id}`)} className="flex w-full items-center justify-between rounded-xl bg-card/60 px-3 py-2 text-right text-sm hover:bg-primary/5 hover:text-primary">
+                         <span className="truncate">{person.name}</span><ArrowUp className="size-3 rotate-45 text-muted-foreground" />
+                       </button>
+                     ))}
+                   </ContextBlock>
+                   <FinancialSnapshot
+                     obligations={financialItems(obligationsQuery.data)}
+                     payments={financialItems(paymentsQuery.data)}
+                     donations={financialItems(donationsQuery.data)}
+                     receivables={financialItems(receivablesQuery.data)}
+                     loading={[obligationsQuery, paymentsQuery, donationsQuery, receivablesQuery].some((query) => query.isLoading)}
+                     onRetry={() => {
+                       void obligationsQuery.refetch();
+                       void paymentsQuery.refetch();
+                       void donationsQuery.refetch();
+                       void receivablesQuery.refetch();
+                     }}
+                   />
                 </div>
               )}
             </aside>
@@ -652,6 +722,53 @@ function MiniStat({ icon, label, value, testId }: { icon: ReactNode; label: stri
       <p className="mt-2 font-mono text-xl">{value}</p>
     </div>
   );
+}
+
+function FinancialSnapshot({
+  obligations,
+  payments,
+  donations,
+  receivables,
+  loading,
+  onRetry,
+}: {
+  obligations: Array<Record<string, unknown>>;
+  payments: Array<Record<string, unknown>>;
+  donations: Array<Record<string, unknown>>;
+  receivables: Array<Record<string, unknown>>;
+  loading: boolean;
+  onRetry: () => void;
+}) {
+  if (loading) {
+    return <section className="space-y-3" aria-label="جاري تحميل الملخص المالي"><div className="h-4 w-28 animate-pulse rounded bg-muted" /><div className="h-20 animate-pulse rounded-2xl bg-muted" /></section>;
+  }
+  const formatTotal = (items: Array<Record<string, unknown>>, amountKey: string) => {
+    const totals = new Map<string, number>();
+    for (const item of items) {
+      const currency = typeof item.currency === 'string' ? item.currency : 'EGP';
+      const amount = typeof item[amountKey] === 'number' ? item[amountKey] as number : Number(item[amountKey] ?? 0);
+      totals.set(currency, (totals.get(currency) ?? 0) + amount);
+    }
+    return [...totals.entries()].map(([currency, total]) => money(total, currency)).join('، ') || 'لا شيء مسجل';
+  };
+  return (
+    <section className="border-t border-border/70 pt-5" aria-label="الملخص المالي">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2 text-muted-foreground"><Scale className="size-3.5" /><h3 className="text-[11px] font-semibold uppercase tracking-[0.16em]">الماليات</h3></div>
+        <button type="button" onClick={onRetry} className="rounded-md p-1 text-muted-foreground hover:bg-muted" aria-label="تحديث الملخص المالي"><RefreshCw className="size-3.5" /></button>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <FinancialMini label="التزامات" value={formatTotal(obligations, 'principalAmountMinor')} icon={<Scale className="size-3" />} />
+        <FinancialMini label="مدفوعات" value={formatTotal(payments, 'amountMinor')} icon={<DollarSign className="size-3" />} />
+        <FinancialMini label="تبرعات" value={formatTotal(donations, 'amountMinor')} icon={<HandCoins className="size-3" />} />
+        <FinancialMini label="دخل متوقع" value={formatTotal(receivables, 'amountMinor')} icon={<ArrowUp className="size-3" />} />
+      </div>
+    </section>
+  );
+}
+
+function FinancialMini({ label, value, icon }: { label: string; value: string; icon: ReactNode }) {
+  return <div className="rounded-xl border border-border/70 bg-card/55 p-2.5"><div className="flex items-center gap-1.5 text-muted-foreground">{icon}<span className="text-[10px]">{label}</span></div><p className="mt-1.5 truncate text-xs font-semibold">{value}</p></div>;
 }
 
 export default Home;

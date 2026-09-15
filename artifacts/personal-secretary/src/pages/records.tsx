@@ -48,6 +48,7 @@ import type {
 } from '@workspace/api-client-react';
 import { classifySecretaryError } from '../lib/secretary-errors';
 import { useLocation } from 'wouter';
+import ApprovalForm from '../components/approval-form';
 
 type RecordItem = ExpenseRecord | PersonRecord | ProjectRecord | TaskRecord | ReminderRecord | CommitmentRecord;
 type Tab = 'expenses' | 'people' | 'projects' | 'tasks' | 'reminders' | 'commitments' | 'financial';
@@ -426,9 +427,24 @@ export default function Records() {
   const kind = recordTypeForTab(tab === 'financial' ? 'expenses' : tab);
 
   useEffect(() => {
-    const nextTab = new URLSearchParams(location.split('?')[1] ?? '').get('tab');
+    const nextTab = new URLSearchParams(window.location.search).get('tab');
     if (nextTab && tabs.some((item) => item.id === nextTab)) setTab(nextTab as Tab);
   }, [location]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const recordId = params.get('recordId');
+    if (!recordId || tab === 'financial' || recordsQuery.isLoading || !data) return;
+    const target = (data[tab] ?? []).find((record) => record.id === recordId) as RecordItem | undefined;
+    params.delete('recordId');
+    setLocation(`${params.toString() ? `/records?${params.toString()}` : '/records'}`);
+    if (target) {
+      setStaleRecordMessage(null);
+      setEditing({ kind, record: target });
+    } else {
+      setStaleRecordMessage('السجل المطلوب لم يعد موجودًا أو لا ينتمي إلى مساحتك الحالية.');
+    }
+  }, [data, kind, location, recordsQuery.isLoading, setLocation, tab]);
 
   function refresh() {
     queryClient.invalidateQueries({ queryKey: getListRecordsQueryKey() });
@@ -527,7 +543,7 @@ export default function Records() {
       <main className="mx-auto min-h-[100dvh] max-w-[1240px] px-4 py-6 sm:px-8 sm:py-10">
         <header className="mb-8 flex items-start justify-between gap-4">
           <div>
-            <a href={import.meta.env.BASE_URL} className="text-xs text-muted-foreground transition hover:text-primary">← العودة للمحادثة</a>
+             <button type="button" onClick={() => setLocation('/')} className="text-xs text-muted-foreground transition hover:text-primary">← العودة للمحادثة</button>
             <p className="mt-6 text-xs uppercase tracking-[0.2em] text-muted-foreground">Structured Memory</p>
             <h1 className="mt-2 font-serif text-3xl tracking-tight sm:text-4xl">سجلاتك المحفوظة</h1>
             <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">المحادثة تساعدك على الفهم، لكن هذه السجلات هي المصدر الأساسي لبياناتك. عدّلها أو احذفها مع مراجعة واضحة.</p>
@@ -553,7 +569,7 @@ export default function Records() {
         {tab === 'financial' ? <FinancialRecords setLocation={setLocation} /> : <>
           {recordsQuery.isLoading && <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{[1, 2, 3, 4, 5, 6].map((item) => <div key={item} className="h-32 animate-pulse rounded-2xl bg-muted" />)}</div>}
           {staleRecordMessage && <div className="mb-5 flex items-center gap-2 rounded-2xl border border-amber-500/25 bg-amber-500/5 p-4 text-sm text-amber-700 dark:text-amber-300" role="status"><CircleAlert className="size-4" /> {staleRecordMessage}</div>}
-          {error && <div className="mb-5 flex items-center gap-2 rounded-2xl border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive" role="alert"><CircleAlert className="size-4" /> {error.message}</div>}
+           {error && <div className="mb-5 rounded-2xl border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive" role="alert"><div className="flex items-center gap-2"><CircleAlert className="size-4" /> {error.message}</div><button type="button" onClick={() => void recordsQuery.refetch()} className="mt-3 text-xs font-semibold underline underline-offset-4">حاول مرة أخرى</button></div>}
           {!recordsQuery.isLoading && !error && currentRecords.length === 0 && <div className="rounded-[24px] border border-dashed border-border bg-card/50 px-6 py-16 text-center"><Check className="mx-auto size-8 text-primary/60" /><h2 className="mt-4 font-serif text-xl">لا توجد سجلات هنا بعد</h2><p className="mt-2 text-sm text-muted-foreground">يمكنك إضافة أول سجل يدويًا أو من خلال المحادثة.</p><button type="button" onClick={openCreate} className="mx-auto mt-5 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"><Plus className="size-4" /> إضافة {labelForKind(kind)}</button></div>}
           {!recordsQuery.isLoading && currentRecords.length > 0 && <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{currentRecords.map((record) => <RecordCard key={record.id} kind={kind} record={record} onEdit={() => void editItem(record)} onDelete={() => deleteItem(record)} onOpen={kind === 'person' ? () => setLocation(`/people/${record.id}`) : kind === 'project' ? () => setLocation(`/projects/${record.id}`) : undefined} />)}</div>}
         </>}
@@ -573,15 +589,23 @@ export default function Records() {
                 </ul>
               </div>
             </div>
-            {pendingApproval.approval.status === 'pending' ? (
-              <div className="mt-7 flex gap-2">
-                <button type="button" onClick={approvePending} disabled={approveMutation.isPending || rejectMutation.isPending} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50">
-                  {approveMutation.isPending && <LoaderCircle className="size-4 animate-spin" />} موافق، احفظ
-                </button>
-                <button type="button" onClick={rejectPending} disabled={approveMutation.isPending || rejectMutation.isPending} className="flex-1 rounded-xl border border-border px-4 py-3 text-sm text-muted-foreground hover:bg-muted disabled:opacity-50">
-                  {rejectMutation.isPending ? <LoaderCircle className="mx-auto size-4 animate-spin" /> : 'إلغاء'}
-                </button>
-              </div>
+             {pendingApproval.approval.status === 'pending' ? (
+               <ApprovalForm
+                 operationId={pendingApproval.approval.operationId}
+                 toolName={pendingApproval.approval.toolName}
+                 initialArgs={{}}
+                 display={pendingApproval.approval.display}
+                 busy={approveMutation.isPending || rejectMutation.isPending}
+                 error={approvalError}
+                 onConfirm={(args) => {
+                   if (!pendingApproval || approveMutation.isPending || rejectMutation.isPending) return;
+                   approveMutation.mutate(
+                     { operationId: pendingApproval.approval.operationId, data: { args } },
+                     { onSuccess: applyApprovalResponse, onError: (approvalErrorValue) => setApprovalError(classifySecretaryError(approvalErrorValue)?.message ?? 'تعذر تنفيذ الموافقة.') },
+                   );
+                 }}
+                 onReject={rejectPending}
+               />
             ) : (
               <p className="mt-6 text-sm font-medium text-muted-foreground">
                 {pendingApproval.approval.status === 'completed' ? 'تم حفظ السجل.' : pendingApproval.approval.status === 'rejected' ? 'تم إلغاء العملية.' : 'هذه العملية لم تعد قابلة للتنفيذ.'}

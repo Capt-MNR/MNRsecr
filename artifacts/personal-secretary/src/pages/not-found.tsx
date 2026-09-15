@@ -1,23 +1,20 @@
-import { Card, CardContent } from '@/components/ui/card';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, ArrowRight, Home, List } from 'lucide-react';
+import { useLocation } from 'wouter';
 
 export default function NotFound() {
+  const [, setLocation] = useLocation();
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gray-50">
-      <Card className="w-full max-w-md mx-4">
-        <CardContent className="pt-6">
-          <div className="flex mb-4 gap-2">
-            <AlertCircle className="h-8 w-8 text-red-500" />
-            <h1 className="text-2xl font-bold text-gray-900">
-              404 Page Not Found
-            </h1>
-          </div>
-
-          <p className="mt-4 text-sm text-gray-600">
-            Did you forget to add the page to the router?
-          </p>
-        </CardContent>
-      </Card>
+    <div dir="rtl" lang="ar" className="grain flex min-h-[100dvh] w-full items-center justify-center bg-background p-6 text-foreground">
+      <div className="w-full max-w-md rounded-[24px] border border-border bg-card p-7 text-center shadow-sm">
+        <AlertCircle className="mx-auto size-9 text-destructive" />
+        <h1 className="mt-4 font-serif text-2xl">الصفحة غير موجودة</h1>
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">الرابط الذي فتحته غير متاح، لكن يمكنك العودة إلى السكرتير أو السجلات.</p>
+        <div className="mt-6 flex flex-col gap-2 sm:flex-row">
+          <button type="button" onClick={() => setLocation('/')} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground"><Home className="size-4" /> المحادثة</button>
+          <button type="button" onClick={() => setLocation('/records')} className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-border px-4 py-3 text-sm font-semibold text-muted-foreground hover:bg-muted"><List className="size-4" /> السجلات</button>
+        </div>
+        <button type="button" onClick={() => window.history.back()} className="mt-4 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"><ArrowRight className="size-3.5" /> العودة</button>
+      </div>
     </div>
   );
 }

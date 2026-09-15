@@ -186,7 +186,11 @@ export default function ApprovalForm({
   onReject,
 }: ApprovalFormProps) {
   const operationQuery = useGetSecretaryOperation(operationId, {
-    query: { queryKey: [`/api/approvals/${operationId}`], staleTime: 0 },
+    query: {
+      queryKey: [`/api/approvals/${operationId}`],
+      staleTime: 0,
+      refetchInterval: (query) => query.state.data?.status === 'executing' ? 1_500 : false,
+    },
   });
   const operation = operationQuery.data as ApprovalOperation | undefined;
   const sourceArgs = operation?.args ?? initialArgs;
@@ -328,6 +332,12 @@ export default function ApprovalForm({
       {operationQuery.isLoading && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <LoaderCircle className="size-3.5 animate-spin" /> جاري تحميل تفاصيل العملية…
+        </div>
+      )}
+      {operationQuery.isError && (
+        <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive" role="alert">
+          <p>تعذر تحميل النسخة المعتمدة من العملية.</p>
+          <button type="button" onClick={() => void operationQuery.refetch()} className="mt-2 font-semibold underline underline-offset-4">حاول مرة أخرى</button>
         </div>
       )}
       {toolName === 'record_expense' && (

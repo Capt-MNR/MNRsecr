@@ -6,6 +6,7 @@ import {
   Search,
   X,
 } from 'lucide-react';
+import { useLocation } from 'wouter';
 import {
   getGetConversationQueryKey,
   getListConversationsQueryKey,
@@ -41,6 +42,7 @@ export default function ConversationHistory({
   onSelect: (id: string) => void;
   onLoaded: (detail: ConversationDetail) => void;
 }) {
+  const [, setLocation] = useLocation();
   const [search, setSearch] = useState('');
   const conversationsQuery = useListConversations(
     { search: search.trim() || undefined },
@@ -52,11 +54,21 @@ export default function ConversationHistory({
     },
   );
   const detailQuery = useGetConversation(selectedId ?? '', {
-    query: {
+      query: {
       queryKey: getGetConversationQueryKey(selectedId ?? ''),
       enabled: Boolean(selectedId),
+        refetchInterval: (query) => query.state.data?.recentTurns.some((turn) => turn.action?.type === 'approval_required') ? 5_000 : false,
     },
   });
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onOpenChange(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isOpen, onOpenChange]);
 
   useEffect(() => {
     if (detailQuery.data && detailQuery.data.conversationId === selectedId) {
@@ -76,6 +88,7 @@ export default function ConversationHistory({
       </label>
       <div className="scrollbar-thin min-h-0 flex-1 space-y-1 overflow-y-auto">
         {conversationsQuery.isLoading && [1, 2, 3].map((item) => <div key={item} className="h-14 animate-pulse rounded-xl bg-muted/70" />)}
+        {conversationsQuery.isError && <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive" role="alert"><p>تعذر تحميل سجل المحادثات.</p><button type="button" onClick={() => void conversationsQuery.refetch()} className="mt-2 font-semibold underline underline-offset-4">حاول مرة أخرى</button></div>}
         {!conversationsQuery.isLoading && conversationsQuery.data?.conversations.length === 0 && <p className="px-2 py-4 text-xs leading-relaxed text-muted-foreground">لا توجد محادثات محفوظة بعد.</p>}
         {conversationsQuery.data?.conversations.map((conversation) => (
           <button key={conversation.conversationId} type="button" onClick={() => { onSelect(conversation.conversationId); onOpenChange(false); }} className={`w-full rounded-xl px-3 py-2.5 text-right transition ${selectedId === conversation.conversationId ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-muted/70'}`}>
@@ -102,7 +115,7 @@ export default function ConversationHistory({
               <button type="button" onClick={() => onOpenChange(false)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted" aria-label="إغلاق"><X className="size-4" /></button>
             </div>
             <button type="button" onClick={onNew} className="mb-3 flex items-center gap-2 rounded-xl bg-primary/10 px-3 py-3 text-sm font-semibold text-primary"><Plus className="size-4" /> محادثة جديدة</button>
-            <a href={`${import.meta.env.BASE_URL}records`} className="mb-5 flex items-center gap-2 rounded-xl px-3 py-3 text-sm text-muted-foreground hover:bg-muted"><Archive className="size-4" /> السجلات المحفوظة</a>
+            <button type="button" onClick={() => { setLocation('/records'); onOpenChange(false); }} className="mb-5 flex items-center gap-2 rounded-xl px-3 py-3 text-sm text-muted-foreground hover:bg-muted"><Archive className="size-4" /> السجلات المحفوظة</button>
             <div className="flex min-h-0 flex-1 flex-col">{content}</div>
           </aside>
         </div>

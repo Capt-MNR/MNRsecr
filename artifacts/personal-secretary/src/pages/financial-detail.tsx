@@ -45,11 +45,11 @@ export default function FinancialDetail() {
   const financialQuery = useGetFinancialParty(id, { query: { queryKey: [`/api/financial/parties/${id}`], enabled: Boolean(id), staleTime: 20_000 } });
   const graphQuery = useGetEntityGraph("financial_party", id, { query: { queryKey: [`/api/entities/financial_party/${id}`], enabled: Boolean(id), staleTime: 20_000 } });
 
-  if (financialQuery.isLoading || graphQuery.isLoading) {
+  if (financialQuery.isLoading) {
     return <div className="flex min-h-[100dvh] items-center justify-center bg-background"><LoaderCircle className="size-6 animate-spin text-primary" /></div>;
   }
   if (financialQuery.isError || !financialQuery.data) {
-    return <div dir="rtl" lang="ar" className="flex min-h-[100dvh] items-center justify-center bg-background p-6"><div className="rounded-2xl border border-destructive/25 bg-card p-6 text-center"><CircleAlert className="mx-auto size-8 text-destructive" /><p className="mt-3 text-sm">تعذر تحميل الطرف المالي.</p><button type="button" onClick={() => setLocation("/records")} className="mt-5 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground">العودة للسجلات</button></div></div>;
+    return <div dir="rtl" lang="ar" className="flex min-h-[100dvh] items-center justify-center bg-background p-6"><div className="rounded-2xl border border-destructive/25 bg-card p-6 text-center"><CircleAlert className="mx-auto size-8 text-destructive" /><p className="mt-3 text-sm">تعذر تحميل الطرف المالي.</p><div className="mt-5 flex justify-center gap-2"><button type="button" onClick={() => void financialQuery.refetch()} className="rounded-xl border border-border px-4 py-2.5 text-sm font-semibold">حاول مرة أخرى</button><button type="button" onClick={() => setLocation("/records")} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground">العودة للسجلات</button></div></div></div>;
   }
 
   const data = financialQuery.data as { entity?: Item; related?: Record<string, unknown> };
@@ -59,6 +59,7 @@ export default function FinancialDetail() {
   const payments = items(related.payments);
   const donations = items(related.donations);
   const receivables = items(related.receivables);
+  const bounds = (related.bounds && typeof related.bounds === "object" ? related.bounds : {}) as Record<string, unknown>;
   const graph = graphQuery.data as { related?: Record<string, unknown>; timeline?: Item[] } | undefined;
   const graphRelated = graph?.related ?? {};
   const people = items(graphRelated.people);
@@ -80,6 +81,11 @@ export default function FinancialDetail() {
           <SummaryCard label="التبرعات" value={groupedMoney(donations, "amountMinor") || "—"} detail={`${donations.length} سجل`} />
           <SummaryCard label="المستحقات" value={groupedMoney(receivables, "amountMinor") || "—"} detail={`${receivables.length} سجل`} />
         </div>
+        {Object.entries(bounds).some(([key, value]) => key.endsWith("Truncated") && value === true) && (
+          <p className="mt-4 rounded-xl border border-amber-500/25 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-300" role="status">
+            بعض القوائم معروضة ضمن الحد المسموح للتفاصيل؛ هذه الأرقام ليست إجماليًا غير محدود.
+          </p>
+        )}
 
         <div className="mt-5 grid gap-5 lg:grid-cols-2">
           <FinancialSection title="السلف والديون" icon={<Scale className="size-4 text-primary" />} items={obligations} render={(item) => <><span>{text(item.title, item.kind === "advance" ? "سلفة" : "دين")}<small className="mt-1 block text-xs text-muted-foreground">{item.outstandingAmountMinor !== undefined ? `المتبقي: ${money(item.outstandingAmountMinor, item.currency)}` : text(item.status, "")}</small></span><span className="font-mono">{money(item.principalAmountMinor, item.currency)}</span></>} onOpen={() => setLocation("/records?tab=financial")} />
@@ -88,7 +94,8 @@ export default function FinancialDetail() {
           <FinancialSection title="الدخل والمستحقات" icon={<Receipt className="size-4 text-primary" />} items={receivables} render={(item) => <><span>{text(item.title, item.kind === "income" ? "دخل متوقع" : "مستحق")}<small className="mt-1 block text-xs text-muted-foreground">{text(item.status, "")}</small></span><span className="font-mono">{money(item.amountMinor, item.currency)}</span></>} onOpen={() => setLocation("/records?tab=financial")} />
         </div>
 
-        {graphQuery.isError ? <p className="mt-5 rounded-xl border border-amber-500/25 bg-amber-500/5 p-4 text-sm text-amber-700 dark:text-amber-300">تم تحميل السجلات المالية، لكن تعذر تحميل العلاقات العامة لهذا الطرف.</p> : <div className="mt-5 grid gap-5 lg:grid-cols-3">
+         {graphQuery.isLoading && <div className="mt-5 rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground"><LoaderCircle className="me-2 inline size-4 animate-spin" /> جاري تحميل العلاقات المرتبطة…</div>}
+         {graphQuery.isError ? <div className="mt-5 rounded-xl border border-amber-500/25 bg-amber-500/5 p-4 text-sm text-amber-700 dark:text-amber-300"><p>تم تحميل السجلات المالية، لكن تعذر تحميل العلاقات العامة لهذا الطرف.</p><button type="button" onClick={() => void graphQuery.refetch()} className="mt-2 font-semibold underline underline-offset-4">حاول مرة أخرى</button></div> : <div className="mt-5 grid gap-5 lg:grid-cols-3">
           <LinkSection title="الأشخاص المرتبطون" icon={<UserRound className="size-4 text-primary" />} items={people} onOpen={(item) => setLocation(`/people/${String(item.id)}`)} />
           <LinkSection title="المشاريع المرتبطة" icon={<FolderKanban className="size-4 text-primary" />} items={projects} onOpen={(item) => setLocation(`/projects/${String(item.id)}`)} />
           <LinkSection title="الأغراض" icon={<Receipt className="size-4 text-primary" />} items={purposes} onOpen={() => setLocation("/records?tab=expenses")} />

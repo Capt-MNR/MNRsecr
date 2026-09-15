@@ -68,7 +68,10 @@ export default function EntityDetail({ entityType }: { entityType: EntityType })
         <div className="rounded-2xl border border-destructive/25 bg-card p-6 text-center">
           <CircleAlert className="mx-auto size-8 text-destructive" />
           <p className="mt-3 text-sm">تعذر تحميل تفاصيل الكيان.</p>
-          <button type="button" onClick={() => setLocation("/records")} className="mt-5 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground">العودة للسجلات</button>
+          <div className="mt-5 flex justify-center gap-2">
+            <button type="button" onClick={() => void query.refetch()} className="rounded-xl border border-border px-4 py-2.5 text-sm font-semibold">حاول مرة أخرى</button>
+            <button type="button" onClick={() => setLocation("/records")} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground">العودة للسجلات</button>
+          </div>
         </div>
       </div>
     );
