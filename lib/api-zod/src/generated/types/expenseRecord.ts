@@ -19,6 +19,10 @@ export interface ExpenseRecord {
   projectId?: string | null;
   /** @nullable */
   projectName?: string | null;
+  /** @nullable */
+  purposeId?: string | null;
+  /** @nullable */
+  purposeName?: string | null;
   occurredAt: string;
   createdAt: string;
   [key: string]: unknown;

@@ -11,3 +11,4 @@
 - [Editable approval execution](editable-approval-execution.md) — edited expense approvals must execute and record scoped IDs, not display labels.
 - [Arabic schedule queries](arabic-schedule-queries.md) — normalize Arabic punctuation before matching date words; deterministic read paths must stay separate from write intent.
 - [Phase 1 instrumentation baseline](phase1-instrumentation-baseline.md) — measure each provider attempt separately; missing usage stays null and is reported as N/A, never estimated.
+- [Drizzle migration layout](drizzle-migrations.md) — keep the migration output path relative when using custom SQL against the legacy schema.

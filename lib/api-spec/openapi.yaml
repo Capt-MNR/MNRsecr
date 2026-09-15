@@ -364,6 +364,111 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /people/{personId}:
+    get:
+      operationId: getPersonGraph
+      tags: [entities]
+      summary: Get a person with related projects, expenses, commitments, and activity
+      parameters:
+        - name: personId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Person graph
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PersonGraphResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Person not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /projects/{projectId}:
+    get:
+      operationId: getProjectGraph
+      tags: [entities]
+      summary: Get a project with related people, expenses, and activity
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Project graph
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectGraphResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /entities/{entityType}/{entityId}/timeline:
+    get:
+      operationId: getEntityTimeline
+      tags: [entities]
+      summary: Get the activity timeline for a person or project
+      parameters:
+        - name: entityType
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [person, project]
+        - name: entityId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Entity activity timeline
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntityTimelineResponse"
+        "400":
+          description: Invalid entity type
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Entity not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /records/{recordType}/{recordId}:
     patch:
       operationId: updateRecord
@@ -798,6 +903,139 @@ components:
           type: object
           additionalProperties: true
       required: [conversationId, title, lastActivityAt, turnCount, recentTurns, summary, state]
+    ActivityEvent:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string, format: uuid }
+        eventType: { type: string }
+        sourceType: { type: string }
+        sourceId: { type: ["string", "null"], format: uuid }
+        actorType: { type: string }
+        summary: { type: string }
+        metadata:
+          type: object
+          additionalProperties: true
+        occurredAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+      required: [id, eventType, sourceType, sourceId, actorType, summary, metadata, occurredAt, createdAt]
+    PersonGraphResponse:
+      type: object
+      properties:
+        entity:
+          $ref: "#/components/schemas/PersonRecord"
+        related:
+          type: object
+          properties:
+            projects:
+              type: array
+              items:
+                $ref: "#/components/schemas/PersonProjectRelation"
+            expenses:
+              type: array
+              items:
+                $ref: "#/components/schemas/PersonExpenseRelation"
+            commitments:
+              type: array
+              items:
+                $ref: "#/components/schemas/PersonCommitmentRelation"
+          required: [projects, expenses, commitments]
+        timeline:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActivityEvent"
+      required: [entity, related, timeline]
+    ProjectGraphResponse:
+      type: object
+      properties:
+        entity:
+          $ref: "#/components/schemas/ProjectRecord"
+        related:
+          type: object
+          properties:
+            people:
+              type: array
+              items:
+                $ref: "#/components/schemas/ProjectPersonRelation"
+            expenses:
+              type: array
+              items:
+                $ref: "#/components/schemas/ProjectExpenseRelation"
+          required: [people, expenses]
+        timeline:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActivityEvent"
+      required: [entity, related, timeline]
+    EntityTimelineResponse:
+      type: object
+      properties:
+        entityType:
+          type: string
+          enum: [person, project]
+        entityId:
+          type: string
+          format: uuid
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActivityEvent"
+      required: [entityType, entityId, events]
+    PersonProjectRelation:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        status: { type: string }
+        relationship: { type: ["string", "null"] }
+        relationshipId: { type: string, format: uuid }
+        updatedAt: { type: string, format: date-time }
+      required: [id, name, status, relationship, relationshipId, updatedAt]
+    PersonExpenseRelation:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        amountMinor: { type: integer }
+        currency: { type: string }
+        description: { type: string }
+        personId: { type: string, format: uuid }
+        projectId: { type: ["string", "null"], format: uuid }
+        projectName: { type: ["string", "null"] }
+        purposeId: { type: ["string", "null"], format: uuid }
+        purposeName: { type: ["string", "null"] }
+        occurredAt: { type: string, format: date-time }
+      required: [id, amountMinor, currency, description, personId, projectId, projectName, purposeId, purposeName, occurredAt]
+    PersonCommitmentRelation:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        personId: { type: string, format: uuid }
+        dueAt: { type: ["string", "null"], format: date-time }
+        status: { type: string }
+      required: [id, title, personId, dueAt, status]
+    ProjectPersonRelation:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        notes: { type: ["string", "null"] }
+        relationship: { type: ["string", "null"] }
+        relationshipId: { type: string, format: uuid }
+        updatedAt: { type: string, format: date-time }
+      required: [id, name, notes, relationship, relationshipId, updatedAt]
+    ProjectExpenseRelation:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        amountMinor: { type: integer }
+        currency: { type: string }
+        description: { type: string }
+        personId: { type: ["string", "null"], format: uuid }
+        personName: { type: ["string", "null"] }
+        projectId: { type: string, format: uuid }
+        occurredAt: { type: string, format: date-time }
+      required: [id, amountMinor, currency, description, personId, personName, projectId, occurredAt]
     RecordType:
       type: string
       enum: [expense, person, project, task, reminder, commitment]
@@ -819,6 +1057,8 @@ components:
         personId:
           type: ["string", "null"]
         projectId:
+          type: ["string", "null"]
+        purposeId:
           type: ["string", "null"]
         occurredAt:
           type: string
@@ -850,6 +1090,8 @@ components:
         personId:
           type: ["string", "null"]
         projectId:
+          type: ["string", "null"]
+        purposeId:
           type: ["string", "null"]
         occurredAt:
           type: string
@@ -930,6 +1172,8 @@ components:
         personName: { type: ["string", "null"] }
         projectId: { type: ["string", "null"] }
         projectName: { type: ["string", "null"] }
+        purposeId: { type: ["string", "null"] }
+        purposeName: { type: ["string", "null"] }
         occurredAt: { type: string }
         createdAt: { type: string }
       required: [id, amountMinor, currency, description, occurredAt, createdAt]

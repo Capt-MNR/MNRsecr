@@ -3,6 +3,7 @@ import healthRouter from "./health";
 import secretaryRouter from "./secretary";
 import conversationsRouter from "./conversations";
 import recordsRouter from "./records";
+import entitiesRouter from "./entities";
 
 const router: IRouter = Router();
 
@@ -10,5 +11,6 @@ router.use(healthRouter);
 router.use(secretaryRouter);
 router.use(conversationsRouter);
 router.use(recordsRouter);
+router.use(entitiesRouter);
 
 export default router;

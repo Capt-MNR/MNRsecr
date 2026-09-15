@@ -223,6 +223,8 @@ export const ListRecordsResponse = zod.object({
   "personName": zod.string().nullish(),
   "projectId": zod.string().nullish(),
   "projectName": zod.string().nullish(),
+  "purposeId": zod.string().nullish(),
+  "purposeName": zod.string().nullish(),
   "occurredAt": zod.string(),
   "createdAt": zod.string()
 })),
@@ -300,6 +302,7 @@ export const CreateRecordBody = zod.object({
   "description": zod.string().optional(),
   "personId": zod.string().nullish(),
   "projectId": zod.string().nullish(),
+  "purposeId": zod.string().nullish(),
   "occurredAt": zod.string().optional(),
   "name": zod.string().optional(),
   "notes": zod.string().nullish(),
@@ -330,6 +333,138 @@ export const CreateRecordResponse = zod.object({
 
 
 /**
+ * @summary Get a person with related projects, expenses, commitments, and activity
+ */
+export const GetPersonGraphParams = zod.object({
+  "personId": zod.coerce.string().uuid()
+})
+
+export const GetPersonGraphResponse = zod.object({
+  "entity": zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+}),
+  "related": zod.object({
+  "projects": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "name": zod.string(),
+  "status": zod.string(),
+  "relationship": zod.string().nullable(),
+  "relationshipId": zod.string().uuid(),
+  "updatedAt": zod.coerce.date()
+})),
+  "expenses": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "amountMinor": zod.number().int(),
+  "currency": zod.string(),
+  "description": zod.string(),
+  "personId": zod.string().uuid(),
+  "projectId": zod.string().uuid().nullable(),
+  "projectName": zod.string().nullable(),
+  "purposeId": zod.string().uuid().nullable(),
+  "purposeName": zod.string().nullable(),
+  "occurredAt": zod.coerce.date()
+})),
+  "commitments": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "title": zod.string(),
+  "personId": zod.string().uuid(),
+  "dueAt": zod.coerce.date().nullable(),
+  "status": zod.string()
+}))
+}),
+  "timeline": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "eventType": zod.string(),
+  "sourceType": zod.string(),
+  "sourceId": zod.string().uuid().nullable(),
+  "actorType": zod.string(),
+  "summary": zod.string(),
+  "metadata": zod.record(zod.string(), zod.unknown()),
+  "occurredAt": zod.coerce.date(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Get a project with related people, expenses, and activity
+ */
+export const GetProjectGraphParams = zod.object({
+  "projectId": zod.coerce.string().uuid()
+})
+
+export const GetProjectGraphResponse = zod.object({
+  "entity": zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "status": zod.string(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+}),
+  "related": zod.object({
+  "people": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "name": zod.string(),
+  "notes": zod.string().nullable(),
+  "relationship": zod.string().nullable(),
+  "relationshipId": zod.string().uuid(),
+  "updatedAt": zod.coerce.date()
+})),
+  "expenses": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "amountMinor": zod.number().int(),
+  "currency": zod.string(),
+  "description": zod.string(),
+  "personId": zod.string().uuid().nullable(),
+  "personName": zod.string().nullable(),
+  "projectId": zod.string().uuid(),
+  "occurredAt": zod.coerce.date()
+}))
+}),
+  "timeline": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "eventType": zod.string(),
+  "sourceType": zod.string(),
+  "sourceId": zod.string().uuid().nullable(),
+  "actorType": zod.string(),
+  "summary": zod.string(),
+  "metadata": zod.record(zod.string(), zod.unknown()),
+  "occurredAt": zod.coerce.date(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Get the activity timeline for a person or project
+ */
+export const GetEntityTimelineParams = zod.object({
+  "entityType": zod.enum(['person', 'project']),
+  "entityId": zod.coerce.string().uuid()
+})
+
+export const GetEntityTimelineResponse = zod.object({
+  "entityType": zod.enum(['person', 'project']),
+  "entityId": zod.string().uuid(),
+  "events": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "eventType": zod.string(),
+  "sourceType": zod.string(),
+  "sourceId": zod.string().uuid().nullable(),
+  "actorType": zod.string(),
+  "summary": zod.string(),
+  "metadata": zod.record(zod.string(), zod.unknown()),
+  "occurredAt": zod.coerce.date(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+/**
  * @summary Update one structured memory record
  */
 export const UpdateRecordParams = zod.object({
@@ -343,6 +478,7 @@ export const UpdateRecordBody = zod.object({
   "description": zod.string().optional(),
   "personId": zod.string().nullish(),
   "projectId": zod.string().nullish(),
+  "purposeId": zod.string().nullish(),
   "occurredAt": zod.string().optional(),
   "name": zod.string().optional(),
   "notes": zod.string().nullish(),

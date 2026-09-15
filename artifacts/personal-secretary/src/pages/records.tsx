@@ -41,6 +41,7 @@ import type {
   TaskRecord,
 } from '@workspace/api-client-react';
 import { classifySecretaryError } from '../lib/secretary-errors';
+import { useLocation } from 'wouter';
 
 type RecordItem = ExpenseRecord | PersonRecord | ProjectRecord | TaskRecord | ReminderRecord | CommitmentRecord;
 type Tab = 'expenses' | 'people' | 'projects' | 'tasks' | 'reminders' | 'commitments';
@@ -274,11 +275,13 @@ function RecordCard({
   record,
   onEdit,
   onDelete,
+  onOpen,
 }: {
   kind: RecordType;
   record: RecordItem;
   onEdit: () => void;
   onDelete: () => void;
+  onOpen?: () => void;
 }) {
   const expense = kind === 'expense' ? record as ExpenseRecord : undefined;
   const task = kind === 'task' ? record as TaskRecord : undefined;
@@ -289,7 +292,7 @@ function RecordCard({
     <article className="group rounded-2xl border border-border/75 bg-card p-4 transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[0_18px_35px_-30px_hsl(var(--foreground)/.5)]">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="truncate text-[15px] font-semibold">{labelForRecord(record)}</h3>
+           {onOpen ? <button type="button" onClick={onOpen} className="truncate text-right text-[15px] font-semibold hover:text-primary">{labelForRecord(record)}</button> : <h3 className="truncate text-[15px] font-semibold">{labelForRecord(record)}</h3>}
           <p className="mt-1 text-xs text-muted-foreground">
             {expense ? `${expense.projectName ?? expense.personName ?? 'بدون ربط'} · ${formatDate(expense.occurredAt)}` : project ? `${project.status} · ${formatDate(project.updatedAt)}` : task ? `${task.status} · ${formatDate(task.dueAt)}` : reminder ? `${reminder.status} · ${formatDate(reminder.dueAt)}` : commitment ? `${commitment.status} · ${formatDate(commitment.dueAt)}` : formatDate(record.createdAt)}
           </p>
@@ -307,6 +310,7 @@ function RecordCard({
 }
 
 export default function Records() {
+  const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>('expenses');
   const [editing, setEditing] = useState<{ kind: RecordType; record: RecordItem } | null>(null);
@@ -452,7 +456,7 @@ export default function Records() {
         {staleRecordMessage && <div className="mb-5 flex items-center gap-2 rounded-2xl border border-amber-500/25 bg-amber-500/5 p-4 text-sm text-amber-700 dark:text-amber-300" role="status"><CircleAlert className="size-4" /> {staleRecordMessage}</div>}
         {error && <div className="mb-5 flex items-center gap-2 rounded-2xl border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive" role="alert"><CircleAlert className="size-4" /> {error.message}</div>}
          {!recordsQuery.isLoading && !error && currentRecords.length === 0 && <div className="rounded-[24px] border border-dashed border-border bg-card/50 px-6 py-16 text-center"><Check className="mx-auto size-8 text-primary/60" /><h2 className="mt-4 font-serif text-xl">لا توجد سجلات هنا بعد</h2><p className="mt-2 text-sm text-muted-foreground">يمكنك إضافة أول سجل يدويًا أو من خلال المحادثة.</p><button type="button" onClick={openCreate} className="mx-auto mt-5 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"><Plus className="size-4" /> إضافة {labelForKind(kind)}</button></div>}
-        {!recordsQuery.isLoading && currentRecords.length > 0 && <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{currentRecords.map((record) => <RecordCard key={record.id} kind={kind} record={record} onEdit={() => void editItem(record)} onDelete={() => deleteItem(record)} />)}</div>}
+         {!recordsQuery.isLoading && currentRecords.length > 0 && <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{currentRecords.map((record) => <RecordCard key={record.id} kind={kind} record={record} onEdit={() => void editItem(record)} onDelete={() => deleteItem(record)} onOpen={kind === 'person' ? () => setLocation(`/people/${record.id}`) : kind === 'project' ? () => setLocation(`/projects/${record.id}`) : undefined} />)}</div>}
       </main>
       {creating && <EditModal kind={creating} record={null} isCreate people={data?.people ?? []} projects={data?.projects ?? []} onClose={() => setCreating(null)} isSaving={createMutation.isPending} onSave={(form) => createMutation.mutate({ data: form as RecordCreateInput }, { onSuccess: (response) => handleCreateResult(response, creating) })} />}
       {editing && <EditModal kind={editing.kind} record={editing.record} isCreate={false} people={data?.people ?? []} projects={data?.projects ?? []} onClose={() => setEditing(null)} isSaving={updateMutation.isPending} onSave={(form) => updateMutation.mutate({ recordType: editing.kind, recordId: editing.record.id, data: form as RecordUpdateInput }, { onSuccess: (response) => handleMutationResult(response, editing.kind, editing.record.id) })} />}

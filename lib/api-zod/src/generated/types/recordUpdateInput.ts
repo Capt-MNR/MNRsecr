@@ -14,6 +14,8 @@ export interface RecordUpdateInput {
   personId?: string | null;
   /** @nullable */
   projectId?: string | null;
+  /** @nullable */
+  purposeId?: string | null;
   occurredAt?: string;
   name?: string;
   /** @nullable */

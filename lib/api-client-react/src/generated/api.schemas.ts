@@ -235,6 +235,138 @@ export interface ConversationDetail {
   state: ConversationDetailState;
 }
 
+export type ActivityEventMetadata = { [key: string]: unknown };
+
+export interface ActivityEvent {
+  id: string;
+  eventType: string;
+  sourceType: string;
+  /** @nullable */
+  sourceId: string | null;
+  actorType: string;
+  summary: string;
+  metadata: ActivityEventMetadata;
+  occurredAt: string;
+  createdAt: string;
+  [key: string]: unknown;
+ }
+
+export interface PersonProjectRelation {
+  id: string;
+  name: string;
+  status: string;
+  /** @nullable */
+  relationship: string | null;
+  relationshipId: string;
+  updatedAt: string;
+}
+
+export interface PersonExpenseRelation {
+  id: string;
+  amountMinor: number;
+  currency: string;
+  description: string;
+  personId: string;
+  /** @nullable */
+  projectId: string | null;
+  /** @nullable */
+  projectName: string | null;
+  /** @nullable */
+  purposeId: string | null;
+  /** @nullable */
+  purposeName: string | null;
+  occurredAt: string;
+}
+
+export interface PersonCommitmentRelation {
+  id: string;
+  title: string;
+  personId: string;
+  /** @nullable */
+  dueAt: string | null;
+  status: string;
+}
+
+export type PersonGraphResponseRelated = {
+  projects: PersonProjectRelation[];
+  expenses: PersonExpenseRelation[];
+  commitments: PersonCommitmentRelation[];
+};
+
+export interface PersonRecord {
+  id: string;
+  name: string;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  [key: string]: unknown;
+ }
+
+export interface PersonGraphResponse {
+  entity: PersonRecord;
+  related: PersonGraphResponseRelated;
+  timeline: ActivityEvent[];
+}
+
+export interface ProjectPersonRelation {
+  id: string;
+  name: string;
+  /** @nullable */
+  notes: string | null;
+  /** @nullable */
+  relationship: string | null;
+  relationshipId: string;
+  updatedAt: string;
+}
+
+export interface ProjectExpenseRelation {
+  id: string;
+  amountMinor: number;
+  currency: string;
+  description: string;
+  /** @nullable */
+  personId: string | null;
+  /** @nullable */
+  personName: string | null;
+  projectId: string;
+  occurredAt: string;
+}
+
+export type ProjectGraphResponseRelated = {
+  people: ProjectPersonRelation[];
+  expenses: ProjectExpenseRelation[];
+};
+
+export interface ProjectRecord {
+  id: string;
+  name: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  [key: string]: unknown;
+ }
+
+export interface ProjectGraphResponse {
+  entity: ProjectRecord;
+  related: ProjectGraphResponseRelated;
+  timeline: ActivityEvent[];
+}
+
+export type EntityTimelineResponseEntityType = typeof EntityTimelineResponseEntityType[keyof typeof EntityTimelineResponseEntityType];
+
+
+export const EntityTimelineResponseEntityType = {
+  person: 'person',
+  project: 'project',
+} as const;
+
+export interface EntityTimelineResponse {
+  entityType: EntityTimelineResponseEntityType;
+  entityId: string;
+  events: ActivityEvent[];
+}
+
 export type RecordType = typeof RecordType[keyof typeof RecordType];
 
 
@@ -259,6 +391,8 @@ export interface RecordCreateInput {
   personId?: string | null;
   /** @nullable */
   projectId?: string | null;
+  /** @nullable */
+  purposeId?: string | null;
   occurredAt?: string;
   name?: string;
   /** @nullable */
@@ -279,6 +413,8 @@ export interface RecordUpdateInput {
   personId?: string | null;
   /** @nullable */
   projectId?: string | null;
+  /** @nullable */
+  purposeId?: string | null;
   occurredAt?: string;
   name?: string;
   /** @nullable */
@@ -346,27 +482,12 @@ export interface ExpenseRecord {
   projectId?: string | null;
   /** @nullable */
   projectName?: string | null;
+  /** @nullable */
+  purposeId?: string | null;
+  /** @nullable */
+  purposeName?: string | null;
   occurredAt: string;
   createdAt: string;
-  [key: string]: unknown;
- }
-
-export interface PersonRecord {
-  id: string;
-  name: string;
-  /** @nullable */
-  notes?: string | null;
-  createdAt: string;
-  updatedAt: string;
-  [key: string]: unknown;
- }
-
-export interface ProjectRecord {
-  id: string;
-  name: string;
-  status: string;
-  createdAt: string;
-  updatedAt: string;
   [key: string]: unknown;
  }
 

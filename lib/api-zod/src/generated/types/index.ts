@@ -7,6 +7,8 @@
  */
 
 export * from './actionResult';
+export * from './activityEvent';
+export * from './activityEventMetadata';
 export * from './approvalInput';
 export * from './approvalInputArgs';
 export * from './approvalOperation';
@@ -26,6 +28,8 @@ export * from './conversationListResponse';
 export * from './conversationSummary';
 export * from './conversationTurn';
 export * from './conversationTurnAction';
+export * from './entityTimelineResponse';
+export * from './entityTimelineResponseEntityType';
 export * from './errorResponse';
 export * from './errorResponseCategory';
 export * from './expenseRecord';
@@ -40,7 +44,16 @@ export * from './healthStatus';
 export * from './listConversationsParams';
 export * from './namedItem';
 export * from './pendingTask';
+export * from './personCommitmentRelation';
+export * from './personExpenseRelation';
+export * from './personGraphResponse';
+export * from './personGraphResponseRelated';
+export * from './personProjectRelation';
 export * from './personRecord';
+export * from './projectExpenseRelation';
+export * from './projectGraphResponse';
+export * from './projectGraphResponseRelated';
+export * from './projectPersonRelation';
 export * from './projectRecord';
 export * from './recordCreateInput';
 export * from './recordMutationResponse';

@@ -26,10 +26,13 @@ import type {
   Candidate,
   ConversationDetail,
   ConversationListResponse,
+  EntityTimelineResponse,
   ErrorResponse,
   GetCandidatesParams,
   HealthStatus,
   ListConversationsParams,
+  PersonGraphResponse,
+  ProjectGraphResponse,
   RecordCreateInput,
   RecordMutationResponse,
   RecordType,
@@ -959,6 +962,242 @@ export const useCreateRecord = <TError = ErrorType<ErrorResponse>,
       > => {
       return useMutation(getCreateRecordMutationOptions(options));
     }
+
+export const getGetPersonGraphUrl = (personId: string,) => {
+
+
+
+
+  return `/api/people/${personId}`
+}
+
+/**
+ * @summary Get a person with related projects, expenses, commitments, and activity
+ */
+export const getPersonGraph = async (personId: string, options?: Parameters<typeof customFetch>[1]): Promise<PersonGraphResponse> => {
+
+  return customFetch<PersonGraphResponse>(getGetPersonGraphUrl(personId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPersonGraphQueryKey = (personId: string,) => {
+    return [
+    `/api/people/${personId}`
+    ] as const;
+    }
+
+
+export const getGetPersonGraphQueryOptions = <TData = Awaited<ReturnType<typeof getPersonGraph>>, TError = ErrorType<ErrorResponse>>(personId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPersonGraph>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPersonGraphQueryKey(personId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPersonGraph>>> = ({ signal }) => getPersonGraph(personId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: personId !== null && personId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPersonGraph>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPersonGraphQueryResult = NonNullable<Awaited<ReturnType<typeof getPersonGraph>>>
+export type GetPersonGraphQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Get a person with related projects, expenses, commitments, and activity
+ */
+
+export function useGetPersonGraph<TData = Awaited<ReturnType<typeof getPersonGraph>>, TError = ErrorType<ErrorResponse>>(
+ personId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPersonGraph>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPersonGraphQueryOptions(personId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetProjectGraphUrl = (projectId: string,) => {
+
+
+
+
+  return `/api/projects/${projectId}`
+}
+
+/**
+ * @summary Get a project with related people, expenses, and activity
+ */
+export const getProjectGraph = async (projectId: string, options?: Parameters<typeof customFetch>[1]): Promise<ProjectGraphResponse> => {
+
+  return customFetch<ProjectGraphResponse>(getGetProjectGraphUrl(projectId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetProjectGraphQueryKey = (projectId: string,) => {
+    return [
+    `/api/projects/${projectId}`
+    ] as const;
+    }
+
+
+export const getGetProjectGraphQueryOptions = <TData = Awaited<ReturnType<typeof getProjectGraph>>, TError = ErrorType<ErrorResponse>>(projectId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectGraph>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetProjectGraphQueryKey(projectId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProjectGraph>>> = ({ signal }) => getProjectGraph(projectId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: projectId !== null && projectId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getProjectGraph>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetProjectGraphQueryResult = NonNullable<Awaited<ReturnType<typeof getProjectGraph>>>
+export type GetProjectGraphQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Get a project with related people, expenses, and activity
+ */
+
+export function useGetProjectGraph<TData = Awaited<ReturnType<typeof getProjectGraph>>, TError = ErrorType<ErrorResponse>>(
+ projectId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectGraph>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetProjectGraphQueryOptions(projectId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetEntityTimelineUrl = (entityType: 'person' | 'project',
+    entityId: string,) => {
+
+
+
+
+  return `/api/entities/${entityType}/${entityId}/timeline`
+}
+
+/**
+ * @summary Get the activity timeline for a person or project
+ */
+export const getEntityTimeline = async (entityType: 'person' | 'project',
+    entityId: string, options?: Parameters<typeof customFetch>[1]): Promise<EntityTimelineResponse> => {
+
+  return customFetch<EntityTimelineResponse>(getGetEntityTimelineUrl(entityType,entityId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetEntityTimelineQueryKey = (entityType: 'person' | 'project',
+    entityId: string,) => {
+    return [
+    `/api/entities/${entityType}/${entityId}/timeline`
+    ] as const;
+    }
+
+
+export const getGetEntityTimelineQueryOptions = <TData = Awaited<ReturnType<typeof getEntityTimeline>>, TError = ErrorType<ErrorResponse>>(entityType: 'person' | 'project',
+    entityId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEntityTimeline>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetEntityTimelineQueryKey(entityType,entityId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getEntityTimeline>>> = ({ signal }) => getEntityTimeline(entityType,entityId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: entityType !== null && entityType !== undefined && entityId !== null && entityId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getEntityTimeline>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetEntityTimelineQueryResult = NonNullable<Awaited<ReturnType<typeof getEntityTimeline>>>
+export type GetEntityTimelineQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Get the activity timeline for a person or project
+ */
+
+export function useGetEntityTimeline<TData = Awaited<ReturnType<typeof getEntityTimeline>>, TError = ErrorType<ErrorResponse>>(
+ entityType: 'person' | 'project',
+    entityId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEntityTimeline>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetEntityTimelineQueryOptions(entityType,entityId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getUpdateRecordUrl = (recordType: RecordType,
     recordId: string,) => {

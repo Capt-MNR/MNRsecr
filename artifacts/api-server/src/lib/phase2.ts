@@ -8,6 +8,7 @@ import {
   peopleTable,
   projectPeopleTable,
   projectsTable,
+  purposesTable,
   remindersTable,
   tasksTable,
   type Person,
@@ -55,6 +56,7 @@ import {
   type SemanticParse,
 } from "./deterministic-intelligence";
 import { resolveEntity, type ResolverResult } from "./entity-resolver";
+import { recordToolActivity } from "./entity-graph";
 
 export type Phase2TurnInput = {
   message: string;
@@ -605,7 +607,8 @@ export const phase2Tools: ToolDefinition[] = [
     currency: { type: "STRING", description: "ISO currency code" },
     description: { type: "STRING" },
     personId: { type: ["STRING", "NULL"], description: "Optional recipient person ID after resolving a name" },
-    projectId: { type: ["STRING", "NULL"], description: "Optional confirmed project ID" },
+     projectId: { type: ["STRING", "NULL"], description: "Optional confirmed project ID" },
+     purposeId: { type: ["STRING", "NULL"], description: "Optional saved purpose ID" },
     occurredAt: { type: "STRING", description: "ISO timestamp if explicitly known" },
   }, ["amountMinor", "description"]),
   tool("update_expense", "Correct an existing saved expense; never create a second expense for a correction.", {
@@ -615,6 +618,7 @@ export const phase2Tools: ToolDefinition[] = [
     description: { type: "STRING" },
     personId: { type: "STRING" },
     projectId: { type: "STRING" },
+     purposeId: { type: ["STRING", "NULL"] },
     occurredAt: { type: "STRING", description: "Optional ISO timestamp" },
   }, ["expenseId", "amountMinor"]),
   tool("query_expenses", "Query saved expenses for a person or project.", {
@@ -1268,7 +1272,10 @@ async function executeTool(
     }
     case "update_person": {
       if (!personId) return { ok: false, error: "personId is required." };
-      const updates: Record<string, unknown> = { updatedAt: new Date() };
+      const updates: Record<string, unknown> = {
+        updatedAt: new Date(),
+        rowVersion: sql`${peopleTable.rowVersion} + 1`,
+      };
       const name = stringArg("name");
       if (name) {
         updates.name = name;
@@ -1317,7 +1324,10 @@ async function executeTool(
     }
     case "update_project": {
       if (!projectId) return { ok: false, error: "projectId is required." };
-      const updates: Record<string, unknown> = { updatedAt: new Date() };
+      const updates: Record<string, unknown> = {
+        updatedAt: new Date(),
+        rowVersion: sql`${projectsTable.rowVersion} + 1`,
+      };
       const name = stringArg("name");
       if (name) {
         updates.name = name;
@@ -1353,7 +1363,11 @@ async function executeTool(
           projectPeopleTable.projectId,
           projectPeopleTable.personId,
         ],
-        set: { relationship: stringArg("relationship") ?? null, updatedAt: new Date() },
+        set: {
+          relationship: stringArg("relationship") ?? null,
+          updatedAt: new Date(),
+          rowVersion: sql`${projectPeopleTable.rowVersion} + 1`,
+        },
       }).returning();
       result = { ok: true, relationship };
       break;
@@ -1362,7 +1376,11 @@ async function executeTool(
       const relationshipId = stringArg("relationshipId");
       const relationship = stringArg("relationship");
       if (!relationshipId || !relationship) return { ok: false, error: "Relationship ID and value are required." };
-      const [updated] = await db.update(projectPeopleTable).set({ relationship, updatedAt: new Date() }).where(and(
+      const [updated] = await db.update(projectPeopleTable).set({
+        relationship,
+        updatedAt: new Date(),
+        rowVersion: sql`${projectPeopleTable.rowVersion} + 1`,
+      }).where(and(
         identityWhere(identity, projectPeopleTable),
         eq(projectPeopleTable.id, relationshipId),
       )).returning();
@@ -1388,6 +1406,14 @@ async function executeTool(
         ));
         if (!project) return { ok: false, error: "Project is not accessible." };
       }
+      const purposeId = stringArg("purposeId");
+      if (purposeId) {
+        const [purpose] = await db.select({ id: purposesTable.id }).from(purposesTable).where(and(
+          identityWhere(identity, purposesTable),
+          eq(purposesTable.id, purposeId),
+        ));
+        if (!purpose) return { ok: false, error: "Purpose is not accessible." };
+      }
       const rawOccurredAt = stringArg("occurredAt");
       const occurredAt = rawOccurredAt ? new Date(rawOccurredAt) : new Date();
       if (Number.isNaN(occurredAt.getTime())) return { ok: false, error: "occurredAt must be a valid ISO timestamp." };
@@ -1399,6 +1425,7 @@ async function executeTool(
         description,
         personId: personId ?? null,
         projectId: projectId ?? null,
+        purposeId: purposeId ?? null,
         occurredAt,
       }).returning();
       result = { ok: true, expense };
@@ -1415,7 +1442,11 @@ async function executeTool(
         eq(expensesTable.id, expenseId),
       )).limit(1);
       if (!existing) return { ok: false, error: "Expense not found." };
-      const updates: Record<string, unknown> = { amountMinor };
+      const updates: Record<string, unknown> = {
+        amountMinor,
+        updatedAt: new Date(),
+        rowVersion: sql`${expensesTable.rowVersion} + 1`,
+      };
       const currency = stringArg("currency");
       const description = stringArg("description");
       if (currency) updates.currency = currency.toUpperCase();
@@ -1440,6 +1471,17 @@ async function executeTool(
       } else if (args.projectId === null) {
         updates.projectId = null;
       }
+      const purposeId = stringArg("purposeId");
+      if (purposeId) {
+        const [purpose] = await db.select({ id: purposesTable.id }).from(purposesTable).where(and(
+          identityWhere(identity, purposesTable),
+          eq(purposesTable.id, purposeId),
+        ));
+        if (!purpose) return { ok: false, error: "Purpose is not accessible." };
+        updates.purposeId = purposeId;
+      } else if (args.purposeId === null) {
+        updates.purposeId = null;
+      }
       const occurredAtValue = stringArg("occurredAt");
       if (occurredAtValue) {
         const occurredAt = new Date(occurredAtValue);
@@ -1456,7 +1498,10 @@ async function executeTool(
     case "update_task": {
       const taskId = stringArg("taskId");
       if (!taskId) return { ok: false, error: "taskId is required." };
-      const updates: Record<string, unknown> = {};
+       const updates: Record<string, unknown> = {
+         updatedAt: new Date(),
+         rowVersion: sql`${tasksTable.rowVersion} + 1`,
+       };
       if (stringArg("title")) updates.title = stringArg("title");
       if (typeof args.dueAt === "string" && args.dueAt.trim()) {
         const dueAt = new Date(args.dueAt);
@@ -1476,7 +1521,10 @@ async function executeTool(
     case "update_commitment": {
       const commitmentId = stringArg("commitmentId");
       if (!commitmentId) return { ok: false, error: "commitmentId is required." };
-      const updates: Record<string, unknown> = {};
+       const updates: Record<string, unknown> = {
+         updatedAt: new Date(),
+         rowVersion: sql`${commitmentsTable.rowVersion} + 1`,
+       };
       if (stringArg("title")) updates.title = stringArg("title");
       if (typeof args.personId === "string" && args.personId.trim()) {
         const targetPersonId = args.personId.trim();
@@ -1506,7 +1554,10 @@ async function executeTool(
     case "update_reminder": {
       const reminderId = stringArg("reminderId");
       if (!reminderId) return { ok: false, error: "reminderId is required." };
-      const updates: Record<string, unknown> = {};
+       const updates: Record<string, unknown> = {
+         updatedAt: new Date(),
+         rowVersion: sql`${remindersTable.rowVersion} + 1`,
+       };
       if (stringArg("text")) updates.text = stringArg("text");
       if (stringArg("timezone")) updates.timezone = stringArg("timezone");
       if (stringArg("status")) updates.status = stringArg("status");
@@ -1864,6 +1915,18 @@ async function executeTool(
     }
     default:
       result = { ok: false, error: `Tool ${name} is not available.` };
+  }
+
+  if (result.ok && WRITE_TOOLS.has(name)) {
+    try {
+      await recordToolActivity(identity, name, args, result);
+    } catch (error) {
+      logger.warn({
+        requestId: options.requestId,
+        tool: name,
+        error,
+      }, "Activity event recording failed after a successful mutation");
+    }
   }
 
   logger.info({

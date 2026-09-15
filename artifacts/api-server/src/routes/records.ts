@@ -6,6 +6,7 @@ import {
   expensesTable,
   peopleTable,
   projectsTable,
+  purposesTable,
   remindersTable,
   tasksTable,
 } from "@workspace/db";
@@ -52,6 +53,8 @@ async function listRecords(identity: Identity) {
       personName: peopleTable.name,
       projectId: expensesTable.projectId,
       projectName: projectsTable.name,
+      purposeId: expensesTable.purposeId,
+      purposeName: purposesTable.name,
       occurredAt: expensesTable.occurredAt,
       createdAt: expensesTable.createdAt,
     }).from(expensesTable)
@@ -64,6 +67,11 @@ async function listRecords(identity: Identity) {
         eq(expensesTable.projectId, projectsTable.id),
         eq(projectsTable.tenantId, identity.tenantId),
         eq(projectsTable.ownerUserId, identity.userId),
+      ))
+      .leftJoin(purposesTable, and(
+        eq(expensesTable.purposeId, purposesTable.id),
+        eq(purposesTable.tenantId, identity.tenantId),
+        eq(purposesTable.ownerUserId, identity.userId),
       ))
       .where(and(eq(expensesTable.tenantId, identity.tenantId), eq(expensesTable.ownerUserId, identity.userId)))
       .orderBy(desc(expensesTable.occurredAt)).limit(100),
