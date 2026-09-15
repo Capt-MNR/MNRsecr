@@ -560,6 +560,61 @@ export interface FinancialEntityResponse {
   [key: string]: unknown;
  }
 
+export interface RelationshipMutationInput {
+  leftId: string;
+  rightId: string;
+  relationship?: string;
+  idempotencyKey?: string;
+  [key: string]: unknown;
+ }
+
+export type RelationshipListResponseRelationshipsItem = { [key: string]: unknown };
+
+export interface RelationshipListResponse {
+  relation: string;
+  side: string;
+  entityId: string;
+  relationships: RelationshipListResponseRelationshipsItem[];
+  [key: string]: unknown;
+ }
+
+export type EntityGraphResponseEntity = { [key: string]: unknown };
+
+export type EntityGraphResponseRelated = { [key: string]: unknown };
+
+export type EntityGraphResponseRelationships = { [key: string]: unknown };
+
+export type EntityGraphResponseTimelineItem = { [key: string]: unknown };
+
+export type EntityGraphResponseCapabilities = { [key: string]: unknown };
+
+export interface EntityGraphResponse {
+  entity: EntityGraphResponseEntity;
+  related: EntityGraphResponseRelated;
+  relationships?: EntityGraphResponseRelationships;
+  timeline: EntityGraphResponseTimelineItem[];
+  capabilities?: EntityGraphResponseCapabilities;
+  [key: string]: unknown;
+ }
+
+export type ListTypedRelationshipsParams = {
+relation: string;
+side?: ListTypedRelationshipsSide;
+entityId: string;
+};
+
+export type ListTypedRelationshipsSide = typeof ListTypedRelationshipsSide[keyof typeof ListTypedRelationshipsSide];
+
+
+export const ListTypedRelationshipsSide = {
+  left: 'left',
+  right: 'right',
+} as const;
+
+export type CreateTypedRelationshipParams = {
+relation: string;
+};
+
 export type ListConversationsParams = {
 search?: string;
 };

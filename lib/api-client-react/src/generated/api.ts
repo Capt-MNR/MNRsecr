@@ -26,6 +26,8 @@ import type {
   Candidate,
   ConversationDetail,
   ConversationListResponse,
+  CreateTypedRelationshipParams,
+  EntityGraphResponse,
   EntityTimelineResponse,
   ErrorResponse,
   FinancialEntityResponse,
@@ -35,6 +37,7 @@ import type {
   GetCandidatesParams,
   HealthStatus,
   ListConversationsParams,
+  ListTypedRelationshipsParams,
   PersonGraphResponse,
   ProjectGraphResponse,
   RecordCreateInput,
@@ -42,6 +45,8 @@ import type {
   RecordType,
   RecordUpdateInput,
   RecordsResponse,
+  RelationshipListResponse,
+  RelationshipMutationInput,
   TodayContextResponse,
   TurnInput,
   TurnResponse,
@@ -74,6 +79,344 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetEntityGraphUrl = (entityType: 'person' | 'project' | 'financial_party',
+    entityId: string,) => {
+
+
+
+
+  return `/api/entities/${entityType}/${entityId}`
+}
+
+/**
+ * @summary Get a bounded entity detail graph
+ */
+export const getEntityGraph = async (entityType: 'person' | 'project' | 'financial_party',
+    entityId: string, options?: Parameters<typeof customFetch>[1]): Promise<EntityGraphResponse> => {
+
+  return customFetch<EntityGraphResponse>(getGetEntityGraphUrl(entityType,entityId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetEntityGraphQueryKey = (entityType: 'person' | 'project' | 'financial_party',
+    entityId: string,) => {
+    return [
+    `/api/entities/${entityType}/${entityId}`
+    ] as const;
+    }
+
+
+export const getGetEntityGraphQueryOptions = <TData = Awaited<ReturnType<typeof getEntityGraph>>, TError = ErrorType<ErrorResponse>>(entityType: 'person' | 'project' | 'financial_party',
+    entityId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEntityGraph>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetEntityGraphQueryKey(entityType,entityId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getEntityGraph>>> = ({ signal }) => getEntityGraph(entityType,entityId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: entityType !== null && entityType !== undefined && entityId !== null && entityId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getEntityGraph>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetEntityGraphQueryResult = NonNullable<Awaited<ReturnType<typeof getEntityGraph>>>
+export type GetEntityGraphQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Get a bounded entity detail graph
+ */
+
+export function useGetEntityGraph<TData = Awaited<ReturnType<typeof getEntityGraph>>, TError = ErrorType<ErrorResponse>>(
+ entityType: 'person' | 'project' | 'financial_party',
+    entityId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEntityGraph>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetEntityGraphQueryOptions(entityType,entityId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListTypedRelationshipsUrl = (params: ListTypedRelationshipsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/relationships?${stringifiedParams}` : `/api/relationships`
+}
+
+/**
+ * @summary List bounded typed relationships for an entity
+ */
+export const listTypedRelationships = async (params: ListTypedRelationshipsParams, options?: Parameters<typeof customFetch>[1]): Promise<RelationshipListResponse> => {
+
+  return customFetch<RelationshipListResponse>(getListTypedRelationshipsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListTypedRelationshipsQueryKey = (params?: ListTypedRelationshipsParams,) => {
+    return [
+    `/api/relationships`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListTypedRelationshipsQueryOptions = <TData = Awaited<ReturnType<typeof listTypedRelationships>>, TError = ErrorType<unknown>>(params: ListTypedRelationshipsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTypedRelationships>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListTypedRelationshipsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listTypedRelationships>>> = ({ signal }) => listTypedRelationships(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listTypedRelationships>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListTypedRelationshipsQueryResult = NonNullable<Awaited<ReturnType<typeof listTypedRelationships>>>
+export type ListTypedRelationshipsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List bounded typed relationships for an entity
+ */
+
+export function useListTypedRelationships<TData = Awaited<ReturnType<typeof listTypedRelationships>>, TError = ErrorType<unknown>>(
+ params: ListTypedRelationshipsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTypedRelationships>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListTypedRelationshipsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateTypedRelationshipUrl = (params: CreateTypedRelationshipParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/relationships?${stringifiedParams}` : `/api/relationships`
+}
+
+/**
+ * @summary Create a typed relationship through approval
+ */
+export const createTypedRelationship = async (relationshipMutationInput: RelationshipMutationInput,
+    params: CreateTypedRelationshipParams, options?: Parameters<typeof customFetch>[1]): Promise<FinancialMutationResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<FinancialMutationResponse>(getCreateTypedRelationshipUrl(params),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(relationshipMutationInput)
+  }
+);}
+
+
+
+
+
+export const getCreateTypedRelationshipMutationKey = () => ['createTypedRelationship'] as const;
+
+export const getCreateTypedRelationshipMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTypedRelationship>>, TError,CreateTypedRelationshipMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createTypedRelationship>>, TError,CreateTypedRelationshipMutationVariables, TContext> => {
+
+const mutationKey = getCreateTypedRelationshipMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createTypedRelationship>>, CreateTypedRelationshipMutationVariables> = (props) => {
+          const {data,params} = props ?? {};
+
+          return  createTypedRelationship(data,params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateTypedRelationshipMutationResult = NonNullable<Awaited<ReturnType<typeof createTypedRelationship>>>
+    export type CreateTypedRelationshipMutationBody = BodyType<RelationshipMutationInput>
+    export type CreateTypedRelationshipMutationError = ErrorType<unknown>
+    export type CreateTypedRelationshipMutationVariables = {data: BodyType<RelationshipMutationInput>;params: CreateTypedRelationshipParams}
+
+    /**
+ * @summary Create a typed relationship through approval
+ */
+export const useCreateTypedRelationship = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTypedRelationship>>, TError,CreateTypedRelationshipMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createTypedRelationship>>,
+        TError,
+        CreateTypedRelationshipMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateTypedRelationshipMutationOptions(options));
+    }
+
+export const getDeleteTypedRelationshipUrl = (relation: string,
+    relationshipId: string,) => {
+
+
+
+
+  return `/api/relationships/${relation}/${relationshipId}`
+}
+
+/**
+ * @summary Delete one typed relationship through approval
+ */
+export const deleteTypedRelationship = async (relation: string,
+    relationshipId: string, options?: Parameters<typeof customFetch>[1]): Promise<FinancialMutationResponse> => {
+
+  return customFetch<FinancialMutationResponse>(getDeleteTypedRelationshipUrl(relation,relationshipId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteTypedRelationshipMutationKey = () => ['deleteTypedRelationship'] as const;
+
+export const getDeleteTypedRelationshipMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteTypedRelationship>>, TError,DeleteTypedRelationshipMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteTypedRelationship>>, TError,DeleteTypedRelationshipMutationVariables, TContext> => {
+
+const mutationKey = getDeleteTypedRelationshipMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteTypedRelationship>>, DeleteTypedRelationshipMutationVariables> = (props) => {
+          const {relation,relationshipId} = props ?? {};
+
+          return  deleteTypedRelationship(relation,relationshipId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteTypedRelationshipMutationResult = NonNullable<Awaited<ReturnType<typeof deleteTypedRelationship>>>
+
+    export type DeleteTypedRelationshipMutationError = ErrorType<unknown>
+    export type DeleteTypedRelationshipMutationVariables = {relation: string;relationshipId: string}
+
+    /**
+ * @summary Delete one typed relationship through approval
+ */
+export const useDeleteTypedRelationship = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteTypedRelationship>>, TError,DeleteTypedRelationshipMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteTypedRelationship>>,
+        TError,
+        DeleteTypedRelationshipMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteTypedRelationshipMutationOptions(options));
+    }
 
 export const getListFinancialPartiesUrl = () => {
 

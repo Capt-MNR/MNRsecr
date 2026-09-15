@@ -9,6 +9,114 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Get a bounded entity detail graph
+ */
+export const GetEntityGraphParams = zod.object({
+  "entityType": zod.enum(['person', 'project', 'financial_party']),
+  "entityId": zod.coerce.string().uuid()
+})
+
+export const GetEntityGraphResponse = zod.object({
+  "entity": zod.record(zod.string(), zod.unknown()),
+  "related": zod.record(zod.string(), zod.unknown()),
+  "relationships": zod.record(zod.string(), zod.unknown()).optional(),
+  "timeline": zod.array(zod.record(zod.string(), zod.unknown())),
+  "capabilities": zod.record(zod.string(), zod.unknown()).optional()
+})
+
+
+/**
+ * @summary List bounded typed relationships for an entity
+ */
+export const listTypedRelationshipsQuerySideDefault = `left`;
+
+export const ListTypedRelationshipsQueryParams = zod.object({
+  "relation": zod.coerce.string(),
+  "side": zod.enum(['left', 'right']).default(listTypedRelationshipsQuerySideDefault),
+  "entityId": zod.coerce.string().uuid()
+})
+
+export const ListTypedRelationshipsResponse = zod.object({
+  "relation": zod.string(),
+  "side": zod.string(),
+  "entityId": zod.string().uuid(),
+  "relationships": zod.array(zod.record(zod.string(), zod.unknown()))
+})
+
+
+/**
+ * @summary Create a typed relationship through approval
+ */
+export const CreateTypedRelationshipQueryParams = zod.object({
+  "relation": zod.coerce.string()
+})
+
+export const CreateTypedRelationshipBody = zod.object({
+  "leftId": zod.string().uuid(),
+  "rightId": zod.string().uuid(),
+  "relationship": zod.string().optional(),
+  "idempotencyKey": zod.string().optional()
+})
+
+export const CreateTypedRelationshipResponse = zod.object({
+  "ok": zod.boolean().optional(),
+  "pendingApproval": zod.boolean().optional(),
+  "approval": zod.object({
+  "operationId": zod.string().uuid(),
+  "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
+  "conversationId": zod.string(),
+  "assistantMessage": zod.string(),
+  "action": zod.record(zod.string(), zod.unknown()).optional(),
+  "response": zod.object({
+  "kind": zod.enum(['answer', 'clarification', 'not_found', 'error']),
+  "message": zod.string(),
+  "groundedFacts": zod.array(zod.object({
+  "type": zod.enum(['money', 'count']),
+  "value": zod.number().int(),
+  "currency": zod.string().optional(),
+  "label": zod.string().optional()
+})).optional()
+}).optional(),
+  "provider": zod.string(),
+  "model": zod.string()
+}).optional()
+})
+
+
+/**
+ * @summary Delete one typed relationship through approval
+ */
+export const DeleteTypedRelationshipParams = zod.object({
+  "relation": zod.coerce.string(),
+  "relationshipId": zod.coerce.string().uuid()
+})
+
+export const DeleteTypedRelationshipResponse = zod.object({
+  "ok": zod.boolean().optional(),
+  "pendingApproval": zod.boolean().optional(),
+  "approval": zod.object({
+  "operationId": zod.string().uuid(),
+  "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
+  "conversationId": zod.string(),
+  "assistantMessage": zod.string(),
+  "action": zod.record(zod.string(), zod.unknown()).optional(),
+  "response": zod.object({
+  "kind": zod.enum(['answer', 'clarification', 'not_found', 'error']),
+  "message": zod.string(),
+  "groundedFacts": zod.array(zod.object({
+  "type": zod.enum(['money', 'count']),
+  "value": zod.number().int(),
+  "currency": zod.string().optional(),
+  "label": zod.string().optional()
+})).optional()
+}).optional(),
+  "provider": zod.string(),
+  "model": zod.string()
+}).optional()
+})
+
+
+/**
  * @summary List scoped financial parties
  */
 export const ListFinancialPartiesResponse = zod.object({

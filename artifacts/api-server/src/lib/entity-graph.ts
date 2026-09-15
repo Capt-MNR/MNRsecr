@@ -3,17 +3,28 @@ import {
   activityEventEntitiesTable,
   activityEventsTable,
   commitmentsTable,
+  commitmentPeopleTable,
+  financialPartiesTable,
+  financialPartyPeopleTable,
+  financialPartyProjectsTable,
+  financialPartyPurposesTable,
   db,
   expensesTable,
   peopleTable,
   projectPeopleTable,
   projectsTable,
   purposesTable,
+  reminderPeopleTable,
+  reminderProjectsTable,
+  taskPeopleTable,
+  taskProjectsTable,
+  tasksTable,
+  remindersTable,
   type ActivityEvent,
 } from "@workspace/db";
 
 export type DbExecutor = Pick<typeof db, "select" | "insert" | "update" | "delete">;
-export type GraphEntityType = "person" | "project";
+export type GraphEntityType = "person" | "project" | "financial_party";
 export type Identity = { tenantId: string; userId: string };
 
 type ActivityEntityRef = {
@@ -74,6 +85,8 @@ function recordFromResult(result: Record<string, unknown>, toolName: string): Re
       ? "expense"
       : toolName === "link_person_to_project" || toolName === "update_person_project_relationship"
         ? "relationship"
+        : toolName === "create_typed_relationship" || toolName === "delete_typed_relationship"
+          ? "relationship"
         : toolName === "settle_financial_obligation"
           ? "obligation_settlement"
         : toolName.replace(/^(create_|update_)/, "");
@@ -163,9 +176,31 @@ export async function recordToolActivity(
     }
   }
 
+  if (toolName === "create_typed_relationship" || toolName === "delete_typed_relationship") {
+    const relationTypes: Record<string, [string, string]> = {
+      project_people: ["project", "person"],
+      task_people: ["task", "person"],
+      task_projects: ["task", "project"],
+      task_purposes: ["task", "purpose"],
+      reminder_people: ["reminder", "person"],
+      reminder_projects: ["reminder", "project"],
+      reminder_tasks: ["reminder", "task"],
+      commitment_people: ["commitment", "person"],
+      commitment_projects: ["commitment", "project"],
+      commitment_purposes: ["commitment", "purpose"],
+    };
+    const [leftType, rightType] = relationTypes[String(args.relation)] ?? [];
+    const left = leftType ? entityRef(leftType, args.leftId, "left") : null;
+    const right = rightType ? entityRef(rightType, args.rightId, "right") : null;
+    if (left) entities.push(left);
+    if (right) entities.push(right);
+  }
+
   if (entities.length === 0) return;
   const sourceType = toolName === "link_person_to_project" || toolName === "update_person_project_relationship"
     ? "project_person"
+    : toolName === "create_typed_relationship" || toolName === "delete_typed_relationship"
+      ? "typed_relationship"
     : primaryType ?? "record";
   await recordActivityEvent(identity, {
     eventType: `${toolName}.completed`,
@@ -199,7 +234,7 @@ function serializeEvent(event: ActivityEvent) {
   };
 }
 
-async function timelineFor(identity: Identity, entityType: GraphEntityType, entityId: string) {
+async function timelineFor(identity: Identity, entityType: string, entityId: string, limit = 50, offset = 0) {
   const rows = await db.select({ event: activityEventsTable })
     .from(activityEventEntitiesTable)
     .innerJoin(activityEventsTable, eq(activityEventEntitiesTable.eventId, activityEventsTable.id))
@@ -212,7 +247,8 @@ async function timelineFor(identity: Identity, entityType: GraphEntityType, enti
       eq(activityEventsTable.ownerUserId, identity.userId),
     ))
     .orderBy(desc(activityEventsTable.occurredAt))
-    .limit(100);
+    .limit(Math.min(Math.max(limit, 1), 100))
+    .offset(Math.max(offset, 0));
   return rows.map(({ event }) => serializeEvent(event));
 }
 
@@ -224,7 +260,7 @@ export async function getPersonGraph(identity: Identity, personId: string) {
   ));
   if (!person) return null;
 
-  const [projects, expenses, commitments, timeline] = await Promise.all([
+  const [projects, expenses, commitments, linkedCommitments, tasks, reminders, financialParties, timeline] = await Promise.all([
     db.select({
       id: projectsTable.id,
       name: projectsTable.name,
@@ -281,6 +317,64 @@ export async function getPersonGraph(identity: Identity, personId: string) {
       eq(commitmentsTable.ownerUserId, identity.userId),
       eq(commitmentsTable.personId, personId),
     )).orderBy(desc(commitmentsTable.createdAt)),
+    db.select({
+      id: commitmentsTable.id,
+      title: commitmentsTable.title,
+      personId: commitmentsTable.personId,
+      dueAt: commitmentsTable.dueAt,
+      status: commitmentsTable.status,
+      relationship: commitmentPeopleTable.relationship,
+    }).from(commitmentPeopleTable)
+      .innerJoin(commitmentsTable, eq(commitmentPeopleTable.commitmentId, commitmentsTable.id))
+      .where(and(
+        eq(commitmentPeopleTable.tenantId, identity.tenantId),
+        eq(commitmentPeopleTable.ownerUserId, identity.userId),
+        eq((commitmentPeopleTable as any).personId, personId),
+        eq(commitmentsTable.tenantId, identity.tenantId),
+        eq(commitmentsTable.ownerUserId, identity.userId),
+      )).orderBy(desc(commitmentsTable.createdAt)),
+    db.select({
+      id: tasksTable.id,
+      title: tasksTable.title,
+      dueAt: tasksTable.dueAt,
+      status: tasksTable.status,
+      relationship: taskPeopleTable.relationship,
+      relationshipId: taskPeopleTable.id,
+    }).from(taskPeopleTable)
+      .innerJoin(tasksTable, eq(taskPeopleTable.taskId, tasksTable.id))
+      .where(and(
+        eq(taskPeopleTable.tenantId, identity.tenantId),
+        eq(taskPeopleTable.ownerUserId, identity.userId),
+        eq(taskPeopleTable.personId, personId),
+        eq(tasksTable.tenantId, identity.tenantId),
+        eq(tasksTable.ownerUserId, identity.userId),
+      )).orderBy(desc(tasksTable.updatedAt)),
+    db.select({
+      id: remindersTable.id,
+      text: remindersTable.text,
+      dueAt: remindersTable.dueAt,
+      status: remindersTable.status,
+      relationship: reminderPeopleTable.relationship,
+      relationshipId: reminderPeopleTable.id,
+    }).from(reminderPeopleTable)
+      .innerJoin(remindersTable, eq(reminderPeopleTable.reminderId, remindersTable.id))
+      .where(and(
+        eq(reminderPeopleTable.tenantId, identity.tenantId),
+        eq(reminderPeopleTable.ownerUserId, identity.userId),
+        eq((reminderPeopleTable as any).personId, personId),
+        eq(remindersTable.tenantId, identity.tenantId),
+        eq(remindersTable.ownerUserId, identity.userId),
+      )).orderBy(desc(remindersTable.dueAt)),
+    db.select({ id: financialPartiesTable.id, name: financialPartiesTable.name, partyType: financialPartiesTable.partyType, relationship: financialPartyPeopleTable.relationship })
+      .from(financialPartyPeopleTable)
+      .innerJoin(financialPartiesTable, eq(financialPartyPeopleTable.partyId, financialPartiesTable.id))
+      .where(and(
+        eq(financialPartyPeopleTable.tenantId, identity.tenantId),
+        eq(financialPartyPeopleTable.ownerUserId, identity.userId),
+        eq(financialPartyPeopleTable.personId, personId),
+        eq(financialPartiesTable.tenantId, identity.tenantId),
+        eq(financialPartiesTable.ownerUserId, identity.userId),
+      )),
     timelineFor(identity, "person", personId),
   ]);
 
@@ -289,7 +383,11 @@ export async function getPersonGraph(identity: Identity, personId: string) {
     related: {
       projects: projects.map((row) => ({ ...row, updatedAt: row.updatedAt.toISOString() })),
       expenses: expenses.map((row) => ({ ...row, occurredAt: row.occurredAt.toISOString() })),
-      commitments: commitments.map((row) => ({ ...row, dueAt: iso(row.dueAt) })),
+      commitments: [...commitments, ...linkedCommitments.filter((linked) => !commitments.some((item) => item.id === linked.id))]
+        .map((row) => ({ ...row, dueAt: iso(row.dueAt) })),
+      tasks: tasks.map((row) => ({ ...row, dueAt: iso(row.dueAt) })),
+      reminders: reminders.map((row) => ({ ...row, dueAt: iso(row.dueAt) })),
+      financialParties,
     },
     timeline,
   };
@@ -303,7 +401,7 @@ export async function getProjectGraph(identity: Identity, projectId: string) {
   ));
   if (!project) return null;
 
-  const [people, expenses, timeline] = await Promise.all([
+  const [people, expenses, tasks, reminders, financialParties, timeline] = await Promise.all([
     db.select({
       id: peopleTable.id,
       name: peopleTable.name,
@@ -342,6 +440,48 @@ export async function getProjectGraph(identity: Identity, projectId: string) {
         eq(expensesTable.projectId, projectId),
       ))
       .orderBy(desc(expensesTable.occurredAt)),
+    db.select({
+      id: tasksTable.id,
+      title: tasksTable.title,
+      dueAt: tasksTable.dueAt,
+      status: tasksTable.status,
+      relationship: taskProjectsTable.relationship,
+      relationshipId: taskProjectsTable.id,
+    }).from(taskProjectsTable)
+      .innerJoin(tasksTable, eq(taskProjectsTable.taskId, tasksTable.id))
+      .where(and(
+        eq(taskProjectsTable.tenantId, identity.tenantId),
+        eq(taskProjectsTable.ownerUserId, identity.userId),
+        eq(taskProjectsTable.projectId, projectId),
+        eq(tasksTable.tenantId, identity.tenantId),
+        eq(tasksTable.ownerUserId, identity.userId),
+      )).orderBy(desc(tasksTable.updatedAt)),
+    db.select({
+      id: remindersTable.id,
+      text: remindersTable.text,
+      dueAt: remindersTable.dueAt,
+      status: remindersTable.status,
+      relationship: reminderProjectsTable.relationship,
+      relationshipId: reminderProjectsTable.id,
+    }).from(reminderProjectsTable)
+      .innerJoin(remindersTable, eq(reminderProjectsTable.reminderId, remindersTable.id))
+      .where(and(
+        eq(reminderProjectsTable.tenantId, identity.tenantId),
+        eq(reminderProjectsTable.ownerUserId, identity.userId),
+        eq((reminderProjectsTable as any).projectId, projectId),
+        eq(remindersTable.tenantId, identity.tenantId),
+        eq(remindersTable.ownerUserId, identity.userId),
+      )).orderBy(desc(remindersTable.dueAt)),
+    db.select({ id: financialPartiesTable.id, name: financialPartiesTable.name, partyType: financialPartiesTable.partyType, relationship: financialPartyProjectsTable.relationship })
+      .from(financialPartyProjectsTable)
+      .innerJoin(financialPartiesTable, eq(financialPartyProjectsTable.partyId, financialPartiesTable.id))
+      .where(and(
+        eq(financialPartyProjectsTable.tenantId, identity.tenantId),
+        eq(financialPartyProjectsTable.ownerUserId, identity.userId),
+        eq(financialPartyProjectsTable.projectId, projectId),
+        eq(financialPartiesTable.tenantId, identity.tenantId),
+        eq(financialPartiesTable.ownerUserId, identity.userId),
+      )),
     timelineFor(identity, "project", projectId),
   ]);
 
@@ -350,23 +490,89 @@ export async function getProjectGraph(identity: Identity, projectId: string) {
     related: {
       people: people.map((row) => ({ ...row, updatedAt: row.updatedAt.toISOString() })),
       expenses: expenses.map((row) => ({ ...row, occurredAt: row.occurredAt.toISOString() })),
+      tasks: tasks.map((row) => ({ ...row, dueAt: iso(row.dueAt) })),
+      reminders: reminders.map((row) => ({ ...row, dueAt: iso(row.dueAt) })),
+      financialParties,
     },
     timeline,
   };
 }
 
-export async function getEntityTimeline(identity: Identity, entityType: GraphEntityType, entityId: string) {
+export async function getEntityTimeline(
+  identity: Identity,
+  entityType: GraphEntityType,
+  entityId: string,
+  limit = 50,
+  offset = 0,
+) {
   const entity = entityType === "person"
     ? await db.select({ id: peopleTable.id }).from(peopleTable).where(and(
       eq(peopleTable.id, entityId),
       eq(peopleTable.tenantId, identity.tenantId),
       eq(peopleTable.ownerUserId, identity.userId),
     ))
-    : await db.select({ id: projectsTable.id }).from(projectsTable).where(and(
+    : entityType === "project"
+      ? await db.select({ id: projectsTable.id }).from(projectsTable).where(and(
       eq(projectsTable.id, entityId),
       eq(projectsTable.tenantId, identity.tenantId),
       eq(projectsTable.ownerUserId, identity.userId),
-    ));
+      ))
+      : await db.select({ id: financialPartiesTable.id }).from(financialPartiesTable).where(and(
+        eq(financialPartiesTable.id, entityId),
+        eq(financialPartiesTable.tenantId, identity.tenantId),
+        eq(financialPartiesTable.ownerUserId, identity.userId),
+      ));
   if (!entity[0]) return null;
-  return timelineFor(identity, entityType, entityId);
+  return timelineFor(identity, entityType, entityId, limit, offset);
+}
+
+export async function getEntityGraph(identity: Identity, entityType: GraphEntityType, entityId: string) {
+  if (entityType === "person") return getPersonGraph(identity, entityId);
+  if (entityType === "project") return getProjectGraph(identity, entityId);
+  const [party] = await db.select().from(financialPartiesTable).where(and(
+    eq(financialPartiesTable.id, entityId),
+    eq(financialPartiesTable.tenantId, identity.tenantId),
+    eq(financialPartiesTable.ownerUserId, identity.userId),
+  ));
+  if (!party) return null;
+  const [people, projects, purposes, timeline] = await Promise.all([
+    db.select({ id: peopleTable.id, name: peopleTable.name, relationship: financialPartyPeopleTable.relationship })
+      .from(financialPartyPeopleTable)
+      .innerJoin(peopleTable, eq(financialPartyPeopleTable.personId, peopleTable.id))
+      .where(and(
+        eq(financialPartyPeopleTable.partyId, entityId),
+        eq(financialPartyPeopleTable.tenantId, identity.tenantId),
+        eq(financialPartyPeopleTable.ownerUserId, identity.userId),
+        eq(peopleTable.tenantId, identity.tenantId),
+        eq(peopleTable.ownerUserId, identity.userId),
+      )),
+    db.select({ id: projectsTable.id, name: projectsTable.name, relationship: financialPartyProjectsTable.relationship })
+      .from(financialPartyProjectsTable)
+      .innerJoin(projectsTable, eq(financialPartyProjectsTable.projectId, projectsTable.id))
+      .where(and(
+        eq(financialPartyProjectsTable.partyId, entityId),
+        eq(financialPartyProjectsTable.tenantId, identity.tenantId),
+        eq(financialPartyProjectsTable.ownerUserId, identity.userId),
+        eq(projectsTable.tenantId, identity.tenantId),
+        eq(projectsTable.ownerUserId, identity.userId),
+      )),
+    db.select({ id: purposesTable.id, name: purposesTable.name })
+      .from(financialPartyPurposesTable)
+      .innerJoin(purposesTable, eq(financialPartyPurposesTable.purposeId, purposesTable.id))
+      .where(and(
+        eq(financialPartyPurposesTable.partyId, entityId),
+        eq(financialPartyPurposesTable.tenantId, identity.tenantId),
+        eq(financialPartyPurposesTable.ownerUserId, identity.userId),
+        eq(purposesTable.tenantId, identity.tenantId),
+        eq(purposesTable.ownerUserId, identity.userId),
+      )),
+    timelineFor(identity, "financial_party", entityId),
+  ]);
+  return {
+    entity: party,
+    related: { people, projects, purposes },
+    relationships: { people, projects, purposes },
+    timeline,
+    capabilities: { canEdit: true, canDelete: false },
+  };
 }

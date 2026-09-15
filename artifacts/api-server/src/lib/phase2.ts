@@ -70,6 +70,7 @@ import {
   updateFinancialPayment,
   updateIncomeReceivable,
 } from "./financial-graph";
+import { createTypedRelationship, deleteTypedRelationship } from "./relationship-graph";
 
 const db = database;
 
@@ -450,6 +451,8 @@ const WRITE_TOOLS = new Set([
   "update_project",
   "link_person_to_project",
   "update_person_project_relationship",
+  "create_typed_relationship",
+  "delete_typed_relationship",
   "record_expense",
   "update_expense",
   "create_task",
@@ -629,6 +632,16 @@ export const phase2Tools: ToolDefinition[] = [
     relationshipId: { type: "STRING" },
     relationship: { type: "STRING" },
   }, ["relationshipId", "relationship"]),
+  tool("create_typed_relationship", "Create one tenant-scoped typed relationship between two accessible entities.", {
+    relation: { type: "STRING", enum: ["project_people", "task_people", "task_projects", "task_purposes", "reminder_people", "reminder_projects", "reminder_tasks", "commitment_people", "commitment_projects", "commitment_purposes"] },
+    leftId: { type: "STRING" },
+    rightId: { type: "STRING" },
+    relationship: { type: "STRING" },
+  }, ["relation", "leftId", "rightId"]),
+  tool("delete_typed_relationship", "Delete one exact tenant-scoped typed relationship.", {
+    relation: { type: "STRING" },
+    relationshipId: { type: "STRING" },
+  }, ["relation", "relationshipId"]),
   tool("record_expense", "Record a financial transaction using integer minor units. Use this when the user says they paid, gave, received, or asks to record an amount, even if the word 'expense' is absent. Resolve a mentioned person first; the recipient person and project are optional, and use description for the purpose when no project is confirmed. Never use create_person merely because the recipient name is new or unresolved.", {
     amountMinor: { type: "INTEGER", description: "Money in minor units, e.g. 1150000 for 11500.00" },
     currency: { type: "STRING", description: "ISO currency code" },
@@ -2057,6 +2070,20 @@ async function executeTool(
         result = { ok: true, payment_link: await createPaymentLink(identity, args, db) };
       } catch (error) {
         result = { ok: false, error: error instanceof Error ? error.message : "Could not create payment link." };
+      }
+      break;
+    case "create_typed_relationship":
+      try {
+        result = { ok: true, ...(await createTypedRelationship(identity, args, db)) };
+      } catch (error) {
+        result = { ok: false, error: error instanceof Error ? error.message : "Could not create relationship." };
+      }
+      break;
+    case "delete_typed_relationship":
+      try {
+        result = { ok: true, ...(await deleteTypedRelationship(identity, args, db)) };
+      } catch (error) {
+        result = { ok: false, error: error instanceof Error ? error.message : "Could not delete relationship." };
       }
       break;
     case "update_financial_obligation":

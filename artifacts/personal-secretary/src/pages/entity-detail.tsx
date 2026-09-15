@@ -1,9 +1,22 @@
-import { ArrowRight, CircleAlert, Clock3, FolderKanban, LoaderCircle, Receipt, UserRound } from "lucide-react";
-import { useGetPersonGraph, useGetProjectGraph } from "@workspace/api-client-react";
-import type { PersonGraphResponse, ProjectGraphResponse } from "@workspace/api-client-react";
+import { ArrowRight, CircleAlert, Clock3, FolderKanban, LoaderCircle, Receipt, UserRound, Bell, CheckSquare2, WalletCards } from "lucide-react";
+import { useGetEntityGraph } from "@workspace/api-client-react";
 import { useLocation, useRoute } from "wouter";
 
 type EntityType = "person" | "project";
+type RelatedItem = { id: string; relationshipId?: string; name?: string; title?: string; text?: string; relationship?: string | null; status?: string; dueAt?: string | null };
+type GraphData = {
+  entity: { id: string; name: string; notes?: string | null; status?: string };
+  related: {
+    projects: RelatedItem[];
+    people: RelatedItem[];
+    expenses: Array<{ id: string; amountMinor: number; currency: string; description: string; occurredAt: string }>;
+    commitments: RelatedItem[];
+    tasks?: RelatedItem[];
+    reminders?: RelatedItem[];
+    financialParties?: RelatedItem[];
+  };
+  timeline: Array<{ id: string; eventType: string; summary: string; occurredAt: string }>;
+};
 
 function formatDate(value: string | null | undefined) {
   if (!value) return "بدون موعد";
@@ -26,9 +39,7 @@ export default function EntityDetail({ entityType }: { entityType: EntityType })
   const [, params] = useRoute(`/${entityType === "person" ? "people" : "projects"}/:id`);
   const [, setLocation] = useLocation();
   const id = params?.id ?? "";
-  const personQuery = useGetPersonGraph(id, { query: { queryKey: [`/api/people/${id}`], enabled: entityType === "person" && Boolean(id) } });
-  const projectQuery = useGetProjectGraph(id, { query: { queryKey: [`/api/projects/${id}`], enabled: entityType === "project" && Boolean(id) } });
-  const query = entityType === "person" ? personQuery : projectQuery;
+  const query = useGetEntityGraph(entityType, id, { query: { queryKey: [`/api/entities/${entityType}/${id}`], enabled: Boolean(id) } });
   const Icon = entityType === "person" ? UserRound : FolderKanban;
 
   if (query.isLoading) {
@@ -46,7 +57,7 @@ export default function EntityDetail({ entityType }: { entityType: EntityType })
     );
   }
 
-  const data = query.data as PersonGraphResponse | ProjectGraphResponse;
+  const data = query.data as unknown as GraphData;
   const entity = data.entity;
   return (
     <div dir="rtl" lang="ar" className="grain min-h-[100dvh] bg-background text-foreground">
@@ -60,22 +71,22 @@ export default function EntityDetail({ entityType }: { entityType: EntityType })
             <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{entityType === "person" ? "Person" : "Project"}</p>
             <h1 className="mt-1 font-serif text-3xl tracking-tight sm:text-4xl">{entity.name}</h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              {entityType === "project" ? `الحالة: ${(entity as ProjectGraphResponse["entity"]).status}` : (entity as PersonGraphResponse["entity"]).notes || "لا توجد ملاحظات محفوظة."}
+              {entityType === "project" ? `الحالة: ${entity.status}` : entity.notes || "لا توجد ملاحظات محفوظة."}
             </p>
           </div>
         </header>
 
         {entityType === "person" ? (
-          <PersonSections data={data as PersonGraphResponse} setLocation={setLocation} />
+          <PersonSections data={data} setLocation={setLocation} />
         ) : (
-          <ProjectSections data={data as ProjectGraphResponse} setLocation={setLocation} />
+          <ProjectSections data={data} setLocation={setLocation} />
         )}
       </main>
     </div>
   );
 }
 
-function PersonSections({ data, setLocation }: { data: PersonGraphResponse; setLocation: (path: string) => void }) {
+function PersonSections({ data, setLocation }: { data: GraphData; setLocation: (path: string) => void }) {
   return (
           <div className="mt-10 grid gap-5 lg:grid-cols-3">
             <section className="rounded-2xl border border-border bg-card p-5 lg:col-span-2">
@@ -90,6 +101,9 @@ function PersonSections({ data, setLocation }: { data: PersonGraphResponse; setL
                 ))}
               </div>
             </section>
+            <RelatedCards title="المهام المرتبطة" icon={<CheckSquare2 className="size-4 text-primary" />} items={data.related.tasks ?? []} />
+            <RelatedCards title="التذكيرات المرتبطة" icon={<Bell className="size-4 text-primary" />} items={data.related.reminders ?? []} />
+            <RelatedCards title="الأطراف المالية" icon={<WalletCards className="size-4 text-primary" />} items={data.related.financialParties ?? []} />
             <section className="rounded-2xl border border-border bg-card p-5">
               <h2 className="flex items-center gap-2 font-semibold"><Clock3 className="size-4 text-primary" /> النشاط</h2>
               <Timeline events={data.timeline} />
@@ -106,7 +120,7 @@ function PersonSections({ data, setLocation }: { data: PersonGraphResponse; setL
   );
 }
 
-function ProjectSections({ data, setLocation }: { data: ProjectGraphResponse; setLocation: (path: string) => void }) {
+function ProjectSections({ data, setLocation }: { data: GraphData; setLocation: (path: string) => void }) {
   return (
           <div className="mt-10 grid gap-5 lg:grid-cols-3">
             <section className="rounded-2xl border border-border bg-card p-5 lg:col-span-2">
@@ -121,12 +135,27 @@ function ProjectSections({ data, setLocation }: { data: ProjectGraphResponse; se
                 ))}
               </div>
             </section>
+            <RelatedCards title="المهام المرتبطة" icon={<CheckSquare2 className="size-4 text-primary" />} items={data.related.tasks ?? []} />
+            <RelatedCards title="التذكيرات المرتبطة" icon={<Bell className="size-4 text-primary" />} items={data.related.reminders ?? []} />
+            <RelatedCards title="الأطراف المالية" icon={<WalletCards className="size-4 text-primary" />} items={data.related.financialParties ?? []} />
             <section className="rounded-2xl border border-border bg-card p-5">
               <h2 className="flex items-center gap-2 font-semibold"><Clock3 className="size-4 text-primary" /> النشاط</h2>
               <Timeline events={data.timeline} />
             </section>
             <ExpenseList expenses={data.related.expenses} />
           </div>
+  );
+}
+
+function RelatedCards({ title, icon, items }: { title: string; icon: React.ReactNode; items: RelatedItem[] }) {
+  return (
+    <section className="rounded-2xl border border-border bg-card p-5">
+      <h2 className="flex items-center gap-2 font-semibold">{icon}{title}</h2>
+      <div className="mt-4 space-y-2">
+        {items.length === 0 && <p className="text-sm text-muted-foreground">لا توجد سجلات مرتبطة.</p>}
+        {items.map((item) => <div key={item.id} className="rounded-xl bg-muted/50 p-3 text-sm"><p className="font-medium">{item.name ?? item.title ?? item.text}</p><p className="mt-1 text-xs text-muted-foreground">{item.relationship || item.status || formatDate(item.dueAt)}</p></div>)}
+      </div>
+    </section>
   );
 }
 

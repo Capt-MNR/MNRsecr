@@ -15,6 +15,13 @@
       "when": 1789474516990,
       "tag": "0001_smooth_inhumans",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789475546562,
+      "tag": "0002_military_lady_deathstrike",
+      "breakpoints": true
     }
   ]
 }

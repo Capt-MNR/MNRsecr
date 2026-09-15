@@ -19,6 +19,65 @@ tags:
   - name: financial
     description: Financial graph operations
 paths:
+  /entities/{entityType}/{entityId}:
+    get:
+      operationId: getEntityGraph
+      tags: [entities]
+      summary: Get a bounded entity detail graph
+      parameters:
+        - { name: entityType, in: path, required: true, schema: { type: string, enum: [person, project, financial_party] } }
+        - { name: entityId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Entity detail with related records and timeline
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EntityGraphResponse" }
+        "404":
+          description: Entity not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /relationships:
+    get:
+      operationId: listTypedRelationships
+      tags: [entities]
+      summary: List bounded typed relationships for an entity
+      parameters:
+        - { name: relation, in: query, required: true, schema: { type: string } }
+        - { name: side, in: query, required: false, schema: { type: string, enum: [left, right], default: left } }
+        - { name: entityId, in: query, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Typed relationships
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RelationshipListResponse" }
+    post:
+      operationId: createTypedRelationship
+      tags: [entities]
+      summary: Create a typed relationship through approval
+      parameters:
+        - { name: relation, in: query, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RelationshipMutationInput" }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/FinancialMutationResponse" } } } }
+        "202": { description: Approval required, content: { application/json: { schema: { $ref: "#/components/schemas/FinancialMutationResponse" } } } }
+  /relationships/{relation}/{relationshipId}:
+    delete:
+      operationId: deleteTypedRelationship
+      tags: [entities]
+      summary: Delete one typed relationship through approval
+      parameters:
+        - { name: relation, in: path, required: true, schema: { type: string } }
+        - { name: relationshipId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Deleted, content: { application/json: { schema: { $ref: "#/components/schemas/FinancialMutationResponse" } } } }
+        "202": { description: Approval required, content: { application/json: { schema: { $ref: "#/components/schemas/FinancialMutationResponse" } } } }
   /financial/parties:
     get:
       operationId: listFinancialParties
@@ -1508,3 +1567,35 @@ components:
           type: object
           additionalProperties: true
       required: [entity, related]
+    RelationshipMutationInput:
+      type: object
+      additionalProperties: true
+      properties:
+        leftId: { type: string, format: uuid }
+        rightId: { type: string, format: uuid }
+        relationship: { type: string }
+        idempotencyKey: { type: string }
+      required: [leftId, rightId]
+    RelationshipListResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        relation: { type: string }
+        side: { type: string }
+        entityId: { type: string, format: uuid }
+        relationships:
+          type: array
+          items: { type: object, additionalProperties: true }
+      required: [relation, side, entityId, relationships]
+    EntityGraphResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        entity: { type: object, additionalProperties: true }
+        related: { type: object, additionalProperties: true }
+        relationships: { type: object, additionalProperties: true }
+        timeline:
+          type: array
+          items: { type: object, additionalProperties: true }
+        capabilities: { type: object, additionalProperties: true }
+      required: [entity, related, timeline]

@@ -64,6 +64,54 @@ test("keeps explicit directions, partial settlements, donations, and receivables
     eq(obligationSettlementsTable.obligationId, obligation.id),
   ));
   assert.deepEqual(settlements.map((item) => item.amountMinor).sort((a, b) => a - b), [3000, 4000]);
+  const [settledObligation] = await db.select().from(financialObligationsTable).where(eq(financialObligationsTable.id, obligation.id));
+  assert.equal(settledObligation?.status, "open");
+  assert.equal((settledObligation?.principalAmountMinor ?? 0) - settlements.reduce((sum, item) => sum + item.amountMinor, 0), 3000);
+  await assert.rejects(settleObligation(identity, {
+    obligationId: obligation.id,
+    paymentId: secondPayment.id,
+    amountMinor: 1,
+  }), /already applied|settled/);
+  await assert.rejects(createFinancialPayment(identity, {
+    payerPartyId: borrower.id,
+    payeePartyId: lender.id,
+    amountMinor: 100,
+    currency: "USD",
+  }).then((paymentInWrongCurrency) => settleObligation(identity, {
+    obligationId: obligation.id,
+    paymentId: paymentInWrongCurrency.id,
+    amountMinor: 100,
+  })), /currency/);
+  await assert.rejects(settleObligation(identity, {
+    obligationId: obligation.id,
+    paymentId: payment.id,
+    amountMinor: 1,
+  }), /already applied/);
+  const finalPayment = await createFinancialPayment(identity, {
+    payerPartyId: borrower.id,
+    payeePartyId: lender.id,
+    amountMinor: 3000,
+    currency: "EGP",
+    paymentKind: "settlement",
+  });
+  await settleObligation(identity, { obligationId: obligation.id, paymentId: finalPayment.id, amountMinor: 3000 });
+  const [fullySettled] = await db.select().from(financialObligationsTable).where(eq(financialObligationsTable.id, obligation.id));
+  assert.equal(fullySettled?.status, "settled");
+  const settledTotal = await db.select().from(obligationSettlementsTable).where(eq(obligationSettlementsTable.obligationId, obligation.id));
+  assert.equal(fullySettled?.principalAmountMinor - settledTotal.reduce((sum, item) => sum + item.amountMinor, 0), 0);
+  const secondObligation = await createFinancialObligation(identity, {
+    kind: "debt",
+    title: "التزام آخر",
+    lenderPartyId: lender.id,
+    borrowerPartyId: borrower.id,
+    principalAmountMinor: 4000,
+    currency: "EGP",
+  });
+  await assert.rejects(settleObligation(identity, {
+    obligationId: secondObligation.id,
+    paymentId: payment.id,
+    amountMinor: 4000,
+  }), /payment amount/);
 
   const donation = await createDonation(identity, {
     donorPartyId: lender.id,
@@ -90,6 +138,11 @@ test("keeps explicit directions, partial settlements, donations, and receivables
     expectedRowVersion: payment.rowVersion,
   });
   assert.equal(corrected.amountMinor, 6500);
+  await assert.rejects(updateFinancialPayment(identity, {
+    paymentId: payment.id,
+    amountMinor: 3999,
+    expectedRowVersion: corrected.rowVersion,
+  }), /settled amount/);
   await assert.rejects(updateFinancialPayment(identity, {
     paymentId: payment.id,
     amountMinor: 6000,

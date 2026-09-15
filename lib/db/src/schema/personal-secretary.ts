@@ -425,6 +425,136 @@ export const projectPeopleTable = pgTable(
   ],
 );
 
+export const taskPeopleTable = pgTable(
+  "task_people",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    taskId: uuid("task_id").notNull().references(() => tasksTable.id),
+    personId: uuid("person_id").notNull().references(() => peopleTable.id),
+    relationship: text("relationship"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    rowVersion: integer("row_version").notNull().default(1),
+  },
+  (table) => [
+    uniqueIndex("task_people_owner_pair_unique").on(
+      table.tenantId, table.ownerUserId, table.taskId, table.personId,
+    ),
+    index("task_people_owner_person_idx").on(table.tenantId, table.ownerUserId, table.personId),
+  ],
+);
+
+export const taskProjectsTable = pgTable(
+  "task_projects",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    taskId: uuid("task_id").notNull().references(() => tasksTable.id),
+    projectId: uuid("project_id").notNull().references(() => projectsTable.id),
+    relationship: text("relationship"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    rowVersion: integer("row_version").notNull().default(1),
+  },
+  (table) => [
+    uniqueIndex("task_projects_owner_pair_unique").on(
+      table.tenantId, table.ownerUserId, table.taskId, table.projectId,
+    ),
+    index("task_projects_owner_project_idx").on(table.tenantId, table.ownerUserId, table.projectId),
+  ],
+);
+
+export const taskPurposesTable = pgTable(
+  "task_purposes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    taskId: uuid("task_id").notNull().references(() => tasksTable.id),
+    purposeId: uuid("purpose_id").notNull().references(() => purposesTable.id),
+    relationship: text("relationship"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    rowVersion: integer("row_version").notNull().default(1),
+  },
+  (table) => [
+    uniqueIndex("task_purposes_owner_pair_unique").on(
+      table.tenantId, table.ownerUserId, table.taskId, table.purposeId,
+    ),
+    index("task_purposes_owner_purpose_idx").on(table.tenantId, table.ownerUserId, table.purposeId),
+  ],
+);
+
+function reminderRelationshipTable(
+  name: string,
+  targetColumn: string,
+  target: () => any,
+) {
+  return pgTable(
+    name,
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      ...ownershipColumns,
+      reminderId: uuid("reminder_id").notNull().references(() => remindersTable.id),
+      [targetColumn]: uuid(targetColumn).notNull().references(target),
+      relationship: text("relationship"),
+      createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+      updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+      rowVersion: integer("row_version").notNull().default(1),
+    },
+    (table: any) => [
+      uniqueIndex(`${name}_owner_pair_unique`).on(
+        table.tenantId, table.ownerUserId, table.reminderId, table[targetColumn],
+      ),
+    ],
+  );
+}
+
+export const reminderPeopleTable = reminderRelationshipTable(
+  "reminder_people", "person_id", () => peopleTable.id,
+);
+export const reminderProjectsTable = reminderRelationshipTable(
+  "reminder_projects", "project_id", () => projectsTable.id,
+);
+export const reminderTasksTable = reminderRelationshipTable(
+  "reminder_tasks", "task_id", () => tasksTable.id,
+);
+
+function commitmentRelationshipTable(
+  name: string,
+  targetColumn: string,
+  target: () => any,
+) {
+  return pgTable(
+    name,
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      ...ownershipColumns,
+      commitmentId: uuid("commitment_id").notNull().references(() => commitmentsTable.id),
+      [targetColumn]: uuid(targetColumn).notNull().references(target),
+      relationship: text("relationship"),
+      createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+      updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+      rowVersion: integer("row_version").notNull().default(1),
+    },
+    (table: any) => [
+      uniqueIndex(`${name}_owner_pair_unique`).on(
+        table.tenantId, table.ownerUserId, table.commitmentId, table[targetColumn],
+      ),
+    ],
+  );
+}
+
+export const commitmentPeopleTable = commitmentRelationshipTable(
+  "commitment_people", "person_id", () => peopleTable.id,
+);
+export const commitmentProjectsTable = commitmentRelationshipTable(
+  "commitment_projects", "project_id", () => projectsTable.id,
+);
+export const commitmentPurposesTable = commitmentRelationshipTable(
+  "commitment_purposes", "purpose_id", () => purposesTable.id,
+);
+
 export const commitmentsTable = pgTable(
   "commitments",
   {
