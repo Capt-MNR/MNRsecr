@@ -28,6 +28,7 @@ export type OperationExecutionResult = {
 export type PendingOperation = {
   operationId: string;
   conversationId: string | null;
+  sourceTurnId: string | null;
   toolName: string;
   args: Record<string, unknown>;
   display: OperationDisplay;
@@ -88,6 +89,7 @@ function toOperation(row: SecretaryOperation): PendingOperation {
   return {
     operationId: row.id,
     conversationId: row.conversationId,
+    sourceTurnId: row.sourceTurnId,
     toolName: row.toolName,
     args,
     display: parseDisplay(row.displayJson),
@@ -176,6 +178,7 @@ export async function createPendingOperation(
   identity: Identity,
   input: {
     conversationId?: string | null;
+    sourceTurnId?: string | null;
     idempotencyKey?: string | null;
     toolName: string;
     args: Record<string, unknown>;
@@ -196,6 +199,7 @@ export async function createPendingOperation(
     tenantId: identity.tenantId,
     ownerUserId: identity.userId,
     conversationId: input.conversationId ?? null,
+    sourceTurnId: input.sourceTurnId ?? null,
     idempotencyKey: input.idempotencyKey ?? null,
     toolName: input.toolName,
     argumentsJson: JSON.stringify(input.args),

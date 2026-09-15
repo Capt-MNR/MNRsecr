@@ -719,6 +719,7 @@ export const GetConversationResponse = zod.object({
   "lastActivityAt": zod.string(),
   "turnCount": zod.number().int(),
   "recentTurns": zod.array(zod.object({
+  "turnId": zod.string().optional(),
   "userMessage": zod.string(),
   "assistantMessage": zod.string(),
   "createdAt": zod.string(),
@@ -745,7 +746,12 @@ export const ListRecordsResponse = zod.object({
   "purposeId": zod.string().nullish(),
   "purposeName": zod.string().nullish(),
   "occurredAt": zod.string(),
-  "createdAt": zod.string()
+  "createdAt": zod.string(),
+  "origin": zod.union([zod.object({
+  "conversationId": zod.string(),
+  "turnId": zod.string().nullable(),
+  "operationId": zod.string().nullable()
+}),zod.null()])
 })),
   "people": zod.array(zod.object({
   "id": zod.string(),
@@ -767,7 +773,12 @@ export const ListRecordsResponse = zod.object({
   "title": zod.string(),
   "dueAt": zod.string().nullish(),
   "status": zod.string(),
-  "createdAt": zod.string()
+  "createdAt": zod.string(),
+  "origin": zod.union([zod.object({
+  "conversationId": zod.string(),
+  "turnId": zod.string().nullable(),
+  "operationId": zod.string().nullable()
+}),zod.null()])
 })),
   "reminders": zod.array(zod.object({
   "id": zod.string(),
@@ -775,7 +786,12 @@ export const ListRecordsResponse = zod.object({
   "dueAt": zod.string(),
   "timezone": zod.string(),
   "status": zod.string(),
-  "createdAt": zod.string()
+  "createdAt": zod.string(),
+  "origin": zod.union([zod.object({
+  "conversationId": zod.string(),
+  "turnId": zod.string().nullable(),
+  "operationId": zod.string().nullable()
+}),zod.null()])
 })),
   "commitments": zod.array(zod.object({
   "id": zod.string(),

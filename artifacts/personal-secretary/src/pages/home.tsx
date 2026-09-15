@@ -7,6 +7,7 @@ import {
   CircleAlert,
   LoaderCircle,
   Menu,
+  MessageSquareText,
   PanelRight,
   Plus,
   Sparkles,
@@ -39,6 +40,7 @@ type LocalMessage = {
   text: string;
   time: string;
   meta?: string;
+  turnId?: string;
   facts?: Array<{ type: 'money' | 'count'; value: number; currency?: string; label?: string }>;
   approval?: {
     operationId: string;
@@ -117,6 +119,7 @@ function Home() {
   const [isContextOpen, setIsContextOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [selectedConversationId, setSelectedConversationId] = useState<string | undefined>();
+  const [highlightedTurnId, setHighlightedTurnId] = useState<string | undefined>();
   const [messages, setMessages] = useState<LocalMessage[]>([starterMessage]);
   const [approvalError, setApprovalError] = useState<string | null>(null);
   const [sendError, setSendError] = useState<ReturnType<typeof classifySecretaryError> | null>(null);
@@ -172,6 +175,12 @@ function Home() {
   useEffect(() => {
     if (searchString) {
       const searchParams = new URLSearchParams(searchString);
+      const linkedConversationId = searchParams.get('conversationId');
+      const linkedTurnId = searchParams.get('turnId');
+      if (linkedConversationId) {
+        setSelectedConversationId(linkedConversationId);
+        setHighlightedTurnId(linkedTurnId ?? undefined);
+      }
       const askParam = searchParams.get('ask');
       const entityTypeParam = searchParams.get('entityType');
       const entityIdParam = searchParams.get('entityId');
@@ -187,6 +196,14 @@ function Home() {
       }
     }
   }, [searchString]);
+
+  useEffect(() => {
+    if (!highlightedTurnId) return;
+    const target = [...document.querySelectorAll<HTMLElement>('[data-turn-id]')]
+      .find((element) => element.dataset.turnId === highlightedTurnId);
+    if (!target) return;
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [highlightedTurnId, messages]);
 
   const canSend = draft.trim().length > 0 && !createTurn.isPending;
   const healthLabel = healthQuery.isPending
@@ -206,6 +223,7 @@ function Home() {
         role: 'user',
         text: turn.userMessage,
         time: formatTime(turn.createdAt),
+          ...(turn.turnId ? { turnId: turn.turnId } : {}),
       });
       loadedMessages.push({
         id: `${detail.conversationId}-assistant-${index}`,
@@ -213,6 +231,7 @@ function Home() {
         text: turn.assistantMessage,
         time: formatTime(turn.createdAt),
         meta: 'من سجل المحادثة',
+          ...(turn.turnId ? { turnId: turn.turnId } : {}),
         ...(turn.action ? { approval: approvalFromAction(turn.action as Record<string, unknown>) } : {}),
       });
     });
@@ -222,6 +241,7 @@ function Home() {
   function startNewConversation() {
     setConversationId(undefined);
     setSelectedConversationId(undefined);
+    setHighlightedTurnId(undefined);
     setMessages([starterMessage]);
     setIsHistoryOpen(false);
   }
@@ -455,9 +475,11 @@ function Home() {
                   {messages.map((message, index) => (
                     <article
                       key={message.id}
-                      className={`animate-rise-in flex gap-3.5 ${message.role === 'user' ? 'justify-start' : 'justify-end'}`}
                       style={{ animationDelay: `${Math.min(index * 70, 350)}ms` }}
                       data-testid={`message-${message.role}-${message.id}`}
+                      data-turn-id={message.turnId}
+                      data-highlighted={message.turnId === highlightedTurnId ? 'true' : undefined}
+                      className={`animate-rise-in flex gap-3.5 ${message.role === 'user' ? 'justify-start' : 'justify-end'} ${message.turnId === highlightedTurnId ? 'rounded-2xl ring-2 ring-primary/40 ring-offset-4 ring-offset-background' : ''}`}
                     >
                       {message.role === 'assistant' && (
                         <div className="mt-1 flex size-8 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
@@ -483,6 +505,7 @@ function Home() {
                         <div className={`mt-1.5 flex items-center gap-2 px-1 font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground/70 ${message.role === 'user' ? 'justify-end' : ''}`}>
                           <span>{message.time}</span>
                           {message.meta && <><span>·</span><span>{message.meta}</span></>}
+                          {message.turnId === highlightedTurnId && <><span>·</span><MessageSquareText className="size-3 text-primary" /><span className="text-primary">السياق المرتبط</span></>}
                         </div>
                          {message.approval && (
                           <div

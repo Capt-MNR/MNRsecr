@@ -78,6 +78,7 @@ type TodayContext = {
 
 type TurnResult = {
   conversationId: string;
+  turnId?: string;
   assistantMessage: string;
   action?: Record<string, unknown>;
   provider: string;
@@ -983,9 +984,11 @@ async function saveDeterministicExpense(
     projectId?: string;
     projectCandidates?: Array<{ id: string; name: string }>;
   },
+  sourceTurnId?: string,
 ): Promise<TurnResult> {
   const pending = await createPendingOperation(identity, {
     conversationId,
+    sourceTurnId,
     idempotencyKey,
     toolName: "record_expense",
     args: input,
@@ -1011,9 +1014,11 @@ async function pendingDeterministicAction(
   idempotencyKey: string | null | undefined,
   toolName: string,
   args: Record<string, unknown>,
+  sourceTurnId?: string,
 ): Promise<TurnResult> {
   const pending = await createPendingOperation(identity, {
     conversationId,
+    sourceTurnId,
     idempotencyKey,
     toolName,
     args,
@@ -1056,6 +1061,7 @@ export class DeterministicAgentRuntime {
     }
 
     const conversationId = input.conversationId || randomUUID();
+    const turnId = input.requestId ?? randomUUID();
     const conversationMemory = await loadConversationMemory(identity, conversationId);
     const message = input.message.trim();
     let result: TurnResult;
@@ -1078,6 +1084,7 @@ export class DeterministicAgentRuntime {
         await this.persistence.saveIdempotentResponse(identity, input.idempotencyKey, result);
       }
       await saveConversationTurn(identity, conversationMemory, {
+        turnId,
         userMessage: message,
         assistantMessage: result.assistantMessage,
         action: result.action,
@@ -1106,7 +1113,7 @@ export class DeterministicAgentRuntime {
         text: pendingReminderReply.text,
         dueAt: pendingReminderReply.dueAt.toISOString(),
         timezone: "Africa/Cairo",
-      });
+      }, turnId);
     } else if (pendingReminderReply?.needsTime) {
       result = {
         conversationId,
@@ -1123,7 +1130,7 @@ export class DeterministicAgentRuntime {
     } else if (projectMatch) {
       result = await pendingDeterministicAction(identity, conversationId, input.idempotencyKey, "create_project", {
         name: projectMatch[1].trim(),
-      });
+      }, turnId);
     } else if (personRelationshipMatch) {
       const projectId = recentActionValue(conversationMemory, "projectId");
       const projectName = recentActionValue(conversationMemory, "projectName");
@@ -1141,12 +1148,12 @@ export class DeterministicAgentRuntime {
           projectId,
           projectName,
           relationship: personRelationshipMatch[2].trim(),
-        });
+        }, turnId);
       }
     } else if (projectCorrection) {
-      result = await pendingDeterministicAction(identity, conversationId, input.idempotencyKey, "update_expense", projectCorrection);
+      result = await pendingDeterministicAction(identity, conversationId, input.idempotencyKey, "update_expense", projectCorrection, turnId);
     } else if (correction) {
-      result = await pendingDeterministicAction(identity, conversationId, input.idempotencyKey, "update_expense", correction);
+      result = await pendingDeterministicAction(identity, conversationId, input.idempotencyKey, "update_expense", correction, turnId);
     } else if (contextualExpense) {
       result = await saveDeterministicExpense(
         this.persistence,
@@ -1154,6 +1161,7 @@ export class DeterministicAgentRuntime {
         conversationId,
         input.idempotencyKey,
         contextualExpense,
+        turnId,
       );
     } else if (pendingProjectSelection) {
       const pending = pendingProjectSelection as Record<string, unknown>;
@@ -1172,7 +1180,7 @@ export class DeterministicAgentRuntime {
                 && typeof (candidate as Record<string, unknown>).id === "string"
                 && typeof (candidate as Record<string, unknown>).name === "string"))
             : undefined,
-        });
+         }, turnId);
       } else {
         result = {
           conversationId,
@@ -1264,7 +1272,7 @@ export class DeterministicAgentRuntime {
             model: "deterministic-ar-v1",
           };
         } else {
-          result = await saveDeterministicExpense(this.persistence, identity, conversationId, input.idempotencyKey, resolvedExpense);
+          result = await saveDeterministicExpense(this.persistence, identity, conversationId, input.idempotencyKey, resolvedExpense, turnId);
         }
       }
     } else {
@@ -1285,7 +1293,7 @@ export class DeterministicAgentRuntime {
             text,
             dueAt: dueAt.toISOString(),
             timezone: "Africa/Cairo",
-          });
+          }, turnId);
         } else {
           result = {
             conversationId,
@@ -1373,6 +1381,7 @@ export class DeterministicAgentRuntime {
       );
     }
     await saveConversationTurn(identity, conversationMemory, {
+      turnId,
       userMessage: message,
       assistantMessage: result.assistantMessage,
       action: result.action,
@@ -1402,6 +1411,7 @@ export async function executeApprovedOperation(
   const toolResult = await executeStructuredTool(identity, operation.toolName, operation.args, {
     requestId: `approval-${operation.operationId}`,
     conversationId,
+    sourceTurnId: operation.sourceTurnId ?? undefined,
     approvedOperationId: operation.operationId,
   });
   if (!toolResult.ok || toolResult.pendingApproval) {
@@ -1503,6 +1513,7 @@ export async function saveApprovedOperationTurn(
   if (!operation.conversationId) return;
   const memory = await loadConversationMemory(identity, operation.conversationId);
   await saveConversationTurn(identity, memory, {
+    turnId: crypto.randomUUID(),
     userMessage: "موافقة على العملية",
     assistantMessage: result.assistantMessage,
     action: result.action,

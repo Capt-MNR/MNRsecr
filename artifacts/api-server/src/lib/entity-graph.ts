@@ -290,6 +290,8 @@ export async function getPersonGraph(identity: Identity, personId: string) {
       projectName: projectsTable.name,
       purposeId: expensesTable.purposeId,
       purposeName: purposesTable.name,
+      sourceConversationId: expensesTable.sourceConversationId,
+      sourceTurnId: expensesTable.sourceTurnId,
       occurredAt: expensesTable.occurredAt,
     }).from(expensesTable)
       .leftJoin(projectsTable, and(
@@ -385,7 +387,16 @@ export async function getPersonGraph(identity: Identity, personId: string) {
     entity: { ...person, createdAt: person.createdAt.toISOString(), updatedAt: person.updatedAt.toISOString() },
     related: {
       projects: projects.map((row) => ({ ...row, updatedAt: row.updatedAt.toISOString() })),
-      expenses: expenses.map((row) => ({ ...row, occurredAt: row.occurredAt.toISOString() })),
+      expenses: expenses.map((row) => ({
+        ...row,
+        origin: row.sourceConversationId
+          ? {
+              conversationId: row.sourceConversationId,
+              turnId: row.sourceTurnId ?? null,
+            }
+          : null,
+        occurredAt: row.occurredAt.toISOString(),
+      })),
       commitments: [...commitments, ...linkedCommitments.filter((linked) => !commitments.some((item) => item.id === linked.id))]
         .map((row) => ({ ...row, dueAt: iso(row.dueAt) })),
       tasks: tasks.map((row) => ({ ...row, dueAt: iso(row.dueAt) })),
@@ -431,6 +442,8 @@ export async function getProjectGraph(identity: Identity, projectId: string) {
       personId: expensesTable.personId,
       personName: peopleTable.name,
       projectId: expensesTable.projectId,
+      sourceConversationId: expensesTable.sourceConversationId,
+      sourceTurnId: expensesTable.sourceTurnId,
       occurredAt: expensesTable.occurredAt,
     }).from(expensesTable)
       .leftJoin(peopleTable, and(
@@ -494,7 +507,16 @@ export async function getProjectGraph(identity: Identity, projectId: string) {
     entity: { ...project, createdAt: project.createdAt.toISOString(), updatedAt: project.updatedAt.toISOString() },
     related: {
       people: people.map((row) => ({ ...row, updatedAt: row.updatedAt.toISOString() })),
-      expenses: expenses.map((row) => ({ ...row, occurredAt: row.occurredAt.toISOString() })),
+      expenses: expenses.map((row) => ({
+        ...row,
+        origin: row.sourceConversationId
+          ? {
+              conversationId: row.sourceConversationId,
+              turnId: row.sourceTurnId ?? null,
+            }
+          : null,
+        occurredAt: row.occurredAt.toISOString(),
+      })),
       tasks: tasks.map((row) => ({ ...row, dueAt: iso(row.dueAt) })),
       reminders: reminders.map((row) => ({ ...row, dueAt: iso(row.dueAt) })),
       financialParties,

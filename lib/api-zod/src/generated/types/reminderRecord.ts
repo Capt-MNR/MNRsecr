@@ -5,6 +5,7 @@
  * Personal Secretary API
  * OpenAPI spec version: 0.1.0
  */
+import type { RecordConversationOrigin } from './recordConversationOrigin';
 
 export interface ReminderRecord {
   id: string;
@@ -13,5 +14,6 @@ export interface ReminderRecord {
   timezone: string;
   status: string;
   createdAt: string;
+  origin: RecordConversationOrigin | null;
   [key: string]: unknown;
  }

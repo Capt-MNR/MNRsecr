@@ -1134,6 +1134,8 @@ components:
       type: object
       additionalProperties: true
       properties:
+        turnId:
+          type: string
         userMessage:
           type: string
         assistantMessage:
@@ -1144,6 +1146,16 @@ components:
           type: object
           additionalProperties: true
       required: [userMessage, assistantMessage, createdAt]
+    RecordConversationOrigin:
+      type: object
+      properties:
+        conversationId:
+          type: string
+        turnId:
+          type: ["string", "null"]
+        operationId:
+          type: ["string", "null"]
+      required: [conversationId, turnId, operationId]
     ConversationSummary:
       type: object
       properties:
@@ -1464,7 +1476,11 @@ components:
         purposeName: { type: ["string", "null"] }
         occurredAt: { type: string }
         createdAt: { type: string }
-      required: [id, amountMinor, currency, description, occurredAt, createdAt]
+        origin:
+          oneOf:
+            - $ref: "#/components/schemas/RecordConversationOrigin"
+            - type: "null"
+      required: [id, amountMinor, currency, description, occurredAt, createdAt, origin]
     PersonRecord:
       type: object
       additionalProperties: true
@@ -1495,7 +1511,11 @@ components:
         dueAt: { type: ["string", "null"] }
         status: { type: string }
         createdAt: { type: string }
-      required: [id, title, status, createdAt]
+        origin:
+          oneOf:
+            - $ref: "#/components/schemas/RecordConversationOrigin"
+            - type: "null"
+      required: [id, title, status, createdAt, origin]
     ReminderRecord:
       type: object
       additionalProperties: true
@@ -1506,7 +1526,11 @@ components:
         timezone: { type: string }
         status: { type: string }
         createdAt: { type: string }
-      required: [id, text, dueAt, timezone, status, createdAt]
+        origin:
+          oneOf:
+            - $ref: "#/components/schemas/RecordConversationOrigin"
+            - type: "null"
+      required: [id, text, dueAt, timezone, status, createdAt, origin]
     CommitmentRecord:
       type: object
       additionalProperties: true

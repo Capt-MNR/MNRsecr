@@ -203,12 +203,21 @@ export interface TodayContextResponse {
 export type ConversationTurnAction = { [key: string]: unknown };
 
 export interface ConversationTurn {
+  turnId?: string;
   userMessage: string;
   assistantMessage: string;
   createdAt: string;
   action?: ConversationTurnAction;
   [key: string]: unknown;
  }
+
+export interface RecordConversationOrigin {
+  conversationId: string;
+  /** @nullable */
+  turnId: string | null;
+  /** @nullable */
+  operationId: string | null;
+}
 
 export interface ConversationSummary {
   conversationId: string;
@@ -494,6 +503,7 @@ export interface ExpenseRecord {
   purposeName?: string | null;
   occurredAt: string;
   createdAt: string;
+  origin: RecordConversationOrigin | null;
   [key: string]: unknown;
  }
 
@@ -504,6 +514,7 @@ export interface TaskRecord {
   dueAt?: string | null;
   status: string;
   createdAt: string;
+  origin: RecordConversationOrigin | null;
   [key: string]: unknown;
  }
 
@@ -514,6 +525,7 @@ export interface ReminderRecord {
   timezone: string;
   status: string;
   createdAt: string;
+  origin: RecordConversationOrigin | null;
   [key: string]: unknown;
  }
 

@@ -5,6 +5,7 @@
  * Personal Secretary API
  * OpenAPI spec version: 0.1.0
  */
+import type { RecordConversationOrigin } from './recordConversationOrigin';
 
 export interface TaskRecord {
   id: string;
@@ -13,5 +14,6 @@ export interface TaskRecord {
   dueAt?: string | null;
   status: string;
   createdAt: string;
+  origin: RecordConversationOrigin | null;
   [key: string]: unknown;
  }

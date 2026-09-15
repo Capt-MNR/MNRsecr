@@ -93,6 +93,7 @@ export type Phase2RunOptions = {
 
 export type Phase2TurnResult = {
   conversationId: string;
+  turnId?: string;
   assistantMessage: string;
   action?: Record<string, unknown>;
   response?: FinalResponse;
@@ -1313,6 +1314,7 @@ async function executeTool(
     callId?: string;
     dryRun?: boolean;
     conversationId?: string | null;
+    sourceTurnId?: string | null;
     idempotencyKey?: string | null;
     approvedOperationId?: string;
     transactionExecutor?: DbExecutor;
@@ -1355,6 +1357,7 @@ async function executeTool(
   if (WRITE_TOOLS.has(name) && !options.approvedOperationId) {
     const pending = await createPendingOperation(identity, {
       conversationId: options.conversationId,
+      sourceTurnId: options.sourceTurnId ?? options.requestId,
       idempotencyKey: options.idempotencyKey,
       toolName: name,
       args,
@@ -1635,6 +1638,9 @@ async function executeTool(
         personId: resolvedPersonId ?? null,
         projectId: resolvedProjectId ?? null,
         purposeId: purposeId ?? null,
+        sourceConversationId: options.conversationId ?? null,
+        sourceTurnId: options.sourceTurnId ?? options.requestId,
+        sourceOperationId: options.approvedOperationId ?? null,
         occurredAt,
       }).returning();
       result = { ok: true, expense };
@@ -2171,6 +2177,9 @@ async function executeTool(
         title,
         dueAt,
         status: stringArg("status") ?? "pending",
+        sourceConversationId: options.conversationId ?? null,
+        sourceTurnId: options.sourceTurnId ?? options.requestId,
+        sourceOperationId: options.approvedOperationId ?? null,
       }).returning();
       result = { ok: true, task };
       break;
@@ -2204,6 +2213,9 @@ async function executeTool(
         tenantId: identity.tenantId, ownerUserId: identity.userId, text, dueAt,
         timezone: stringArg("timezone") ?? "Africa/Cairo",
         status: stringArg("status") ?? "scheduled",
+        sourceConversationId: options.conversationId ?? null,
+        sourceTurnId: options.sourceTurnId ?? options.requestId,
+        sourceOperationId: options.approvedOperationId ?? null,
       }).returning();
       result = { ok: true, reminder };
       break;
@@ -2265,6 +2277,7 @@ export async function executeStructuredTool(
     requestId: string;
     dryRun?: boolean;
     conversationId?: string | null;
+    sourceTurnId?: string | null;
     idempotencyKey?: string | null;
     approvedOperationId?: string;
     activityWriter?: typeof recordToolActivity;
@@ -4457,6 +4470,7 @@ export class Phase2AgentRuntime {
       };
       const result: Phase2TurnResult = {
         conversationId,
+        turnId: requestId,
         assistantMessage: finalResponse.message,
         response: finalResponse,
         action: finalAction,
@@ -4465,6 +4479,7 @@ export class Phase2AgentRuntime {
       };
       if (!options.dryRun) {
         await saveConversationTurn(identity, conversationMemory, {
+          turnId: requestId,
           userMessage: input.message.trim(),
           assistantMessage: result.assistantMessage,
           action: result.action,

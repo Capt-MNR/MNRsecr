@@ -10,6 +10,7 @@ import {
   FolderKanban,
   ListChecks,
   LoaderCircle,
+  MessageSquareText,
   Plus,
   RefreshCw,
   Trash2,
@@ -52,6 +53,7 @@ import ApprovalForm from '../components/approval-form';
 import { entityPath, financialRecordPath } from '../components/graph/context-link';
 
 type RecordItem = ExpenseRecord | PersonRecord | ProjectRecord | TaskRecord | ReminderRecord | CommitmentRecord;
+type RecordOrigin = { conversationId: string; turnId?: string | null; operationId?: string | null };
 type Tab = 'expenses' | 'people' | 'projects' | 'tasks' | 'reminders' | 'commitments' | 'financial';
 
 const tabs: Array<{ id: Tab; label: string; icon: typeof WalletCards }> = [
@@ -243,6 +245,22 @@ function labelForRecord(record: RecordItem): string {
 
 function recordId(record: RecordItem) {
   return record.id;
+}
+
+function recordOrigin(record: RecordItem): RecordOrigin | null {
+  if (!('origin' in record) || !record.origin || typeof record.origin !== 'object') return null;
+  const origin = record.origin as Record<string, unknown>;
+  return typeof origin.conversationId === 'string' ? {
+    conversationId: origin.conversationId,
+    turnId: typeof origin.turnId === 'string' ? origin.turnId : null,
+    operationId: typeof origin.operationId === 'string' ? origin.operationId : null,
+  } : null;
+}
+
+function conversationPath(origin: RecordOrigin) {
+  const params = new URLSearchParams({ conversationId: origin.conversationId });
+  if (origin.turnId) params.set('turnId', origin.turnId);
+  return `/?${params.toString()}`;
 }
 
 function localDateTimeValue(value: Date) {
@@ -455,6 +473,8 @@ function RecordCard({
   const commitment = kind === 'commitment' ? record as CommitmentRecord : undefined;
   const project = kind === 'project' ? record as ProjectRecord : undefined;
   const person = kind === 'person' ? record as PersonRecord : undefined;
+  const origin = recordOrigin(record);
+  const supportsConversationOrigin = kind === 'expense' || kind === 'task' || kind === 'reminder';
   const RecordIcon = kind === 'expense' ? WalletCards : kind === 'person' ? UserRound : kind === 'project' ? FolderKanban : kind === 'task' ? ListChecks : kind === 'reminder' ? Clock3 : Archive;
   return (
     <article className="group rounded-2xl border border-border/75 bg-card p-4 transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[0_18px_35px_-30px_hsl(var(--foreground)/.5)]">
@@ -486,6 +506,13 @@ function RecordCard({
       )}
       {('notes' in record && typeof record.notes === 'string' && record.notes) && <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-muted-foreground">{record.notes}</p>}
       {kind === 'reminder' && reminder && <p className="mt-3 text-xs text-muted-foreground">{reminder.timezone}</p>}
+      {origin ? (
+        <button type="button" onClick={() => setLocation(conversationPath(origin))} className="mt-3 inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/5 px-2.5 text-xs font-medium text-primary hover:border-primary/40 hover:bg-primary/10" data-testid={`link-record-origin-${record.id}`}>
+          <MessageSquareText className="size-3.5" /> فتح المحادثة الأصلية
+        </button>
+      ) : supportsConversationOrigin ? (
+        <p className="mt-3 text-[11px] text-muted-foreground/75">أضيف يدويًا أو قبل تفعيل ربط المحادثات</p>
+      ) : null}
     </article>
   );
 }

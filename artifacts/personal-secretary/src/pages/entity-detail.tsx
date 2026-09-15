@@ -5,6 +5,7 @@ import {
   CircleAlert,
   FolderKanban,
   LoaderCircle,
+  MessageSquareText,
   Phone,
   Receipt,
   Scale,
@@ -42,6 +43,7 @@ type Expense = {
   personName?: string | null;
   purposeId?: string | null;
   purposeName?: string | null;
+  origin?: { conversationId: string; turnId?: string | null } | null;
 };
 type GraphData = {
   entity: { id: string; name: string; notes?: string | null; phone?: string | null; status?: string };
@@ -264,6 +266,13 @@ function ExpenseList({ expenses, setLocation, className = "" }: { expenses: Expe
             <div className="mt-2 flex flex-wrap gap-2 border-t border-border/60 pt-2">
               {expense.projectId && <button type="button" onClick={() => setLocation(entityPath("project", expense.projectId!))} className="min-h-9 rounded-lg border border-border bg-background px-2.5 text-xs text-muted-foreground hover:border-primary/40 hover:text-primary">المشروع: {expense.projectName ?? "فتح المشروع"}</button>}
               {expense.personId && <button type="button" onClick={() => setLocation(entityPath("person", expense.personId!))} className="min-h-9 rounded-lg border border-border bg-background px-2.5 text-xs text-muted-foreground hover:border-primary/40 hover:text-primary">الشخص: {expense.personName ?? "فتح الشخص"}</button>}
+              {expense.origin?.conversationId && <button type="button" onClick={() => {
+                const params = new URLSearchParams({ conversationId: expense.origin!.conversationId });
+                if (expense.origin?.turnId) params.set("turnId", expense.origin.turnId);
+                setLocation(`/?${params.toString()}`);
+              }} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/5 px-2.5 text-xs font-medium text-primary hover:border-primary/40 hover:bg-primary/10">
+                <MessageSquareText className="size-3.5" /> فتح المحادثة الأصلية
+              </button>}
             </div>
           </div>
         ))}

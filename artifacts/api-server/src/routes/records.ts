@@ -42,6 +42,20 @@ function iso(value: Date | null): string | null {
   return value ? value.toISOString() : null;
 }
 
+function recordOrigin(row: {
+  sourceConversationId?: string | null;
+  sourceTurnId?: string | null;
+  sourceOperationId?: string | null;
+}) {
+  return row.sourceConversationId
+    ? {
+        conversationId: row.sourceConversationId,
+        turnId: row.sourceTurnId ?? null,
+        operationId: row.sourceOperationId ?? null,
+      }
+    : null;
+}
+
 async function listRecords(identity: Identity) {
   const [expenses, people, projects, tasks, reminders, commitments] = await Promise.all([
     db.select({
@@ -55,6 +69,9 @@ async function listRecords(identity: Identity) {
       projectName: projectsTable.name,
       purposeId: expensesTable.purposeId,
       purposeName: purposesTable.name,
+      sourceConversationId: expensesTable.sourceConversationId,
+      sourceTurnId: expensesTable.sourceTurnId,
+      sourceOperationId: expensesTable.sourceOperationId,
       occurredAt: expensesTable.occurredAt,
       createdAt: expensesTable.createdAt,
     }).from(expensesTable)
@@ -97,11 +114,11 @@ async function listRecords(identity: Identity) {
       .orderBy(desc(commitmentsTable.createdAt)).limit(100),
   ]);
   return {
-    expenses: expenses.map((row) => ({ ...row, occurredAt: row.occurredAt.toISOString(), createdAt: row.createdAt.toISOString() })),
+    expenses: expenses.map((row) => ({ ...row, origin: recordOrigin(row), occurredAt: row.occurredAt.toISOString(), createdAt: row.createdAt.toISOString() })),
     people: people.map((row) => ({ ...row, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() })),
     projects: projects.map((row) => ({ ...row, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() })),
-    tasks: tasks.map((row) => ({ ...row, dueAt: iso(row.dueAt), createdAt: row.createdAt.toISOString() })),
-    reminders: reminders.map((row) => ({ ...row, dueAt: row.dueAt.toISOString(), createdAt: row.createdAt.toISOString() })),
+    tasks: tasks.map((row) => ({ ...row, origin: recordOrigin(row), dueAt: iso(row.dueAt), createdAt: row.createdAt.toISOString() })),
+    reminders: reminders.map((row) => ({ ...row, origin: recordOrigin(row), dueAt: row.dueAt.toISOString(), createdAt: row.createdAt.toISOString() })),
     commitments: commitments.map((row) => ({ ...row, dueAt: iso(row.dueAt), createdAt: row.createdAt.toISOString() })),
   };
 }

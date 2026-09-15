@@ -5,6 +5,7 @@
  * Personal Secretary API
  * OpenAPI spec version: 0.1.0
  */
+import type { RecordConversationOrigin } from './recordConversationOrigin';
 
 export interface ExpenseRecord {
   id: string;
@@ -25,5 +26,6 @@ export interface ExpenseRecord {
   purposeName?: string | null;
   occurredAt: string;
   createdAt: string;
+  origin: RecordConversationOrigin | null;
   [key: string]: unknown;
  }

@@ -71,6 +71,7 @@ export * from './projectGraphResponse';
 export * from './projectGraphResponseRelated';
 export * from './projectPersonRelation';
 export * from './projectRecord';
+export * from './recordConversationOrigin';
 export * from './recordCreateInput';
 export * from './recordMutationResponse';
 export * from './recordMutationResponseRecord';

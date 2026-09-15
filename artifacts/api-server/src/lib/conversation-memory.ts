@@ -4,6 +4,7 @@ import type { Identity } from "./secretary";
 import { featureFlags } from "./feature-flags";
 
 export type ConversationTurn = {
+  turnId?: string;
   userMessage: string;
   assistantMessage: string;
   action?: Record<string, unknown>;
@@ -589,7 +590,12 @@ export async function saveConversationTurn(
   const createdAt = new Date().toISOString();
   const expandedTurns = [
     ...snapshot.recentTurns,
-    { ...turn, action: compactActionForMemory(turn.action), createdAt },
+    {
+      ...turn,
+      turnId: turn.turnId ?? crypto.randomUUID(),
+      action: compactActionForMemory(turn.action),
+      createdAt,
+    },
   ];
   const nextState = normalizeState(
     turn.action?.conversationState
