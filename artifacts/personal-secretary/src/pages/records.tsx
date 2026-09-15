@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Archive,
+  BadgeDollarSign,
   Check,
   CircleAlert,
   Clock3,
@@ -23,6 +24,11 @@ import {
   useCreateRecord,
   useDeleteRecord,
   useListRecords,
+  useListFinancialParties,
+  useListFinancialObligations,
+  useListFinancialPayments,
+  useListDonations,
+  useListIncomeReceivables,
   useRejectSecretaryOperation,
   useUpdateRecord,
 } from '@workspace/api-client-react';
@@ -44,7 +50,7 @@ import { classifySecretaryError } from '../lib/secretary-errors';
 import { useLocation } from 'wouter';
 
 type RecordItem = ExpenseRecord | PersonRecord | ProjectRecord | TaskRecord | ReminderRecord | CommitmentRecord;
-type Tab = 'expenses' | 'people' | 'projects' | 'tasks' | 'reminders' | 'commitments';
+type Tab = 'expenses' | 'people' | 'projects' | 'tasks' | 'reminders' | 'commitments' | 'financial';
 
 const tabs: Array<{ id: Tab; label: string; icon: typeof WalletCards }> = [
   { id: 'expenses', label: 'المصروفات', icon: WalletCards },
@@ -53,6 +59,7 @@ const tabs: Array<{ id: Tab; label: string; icon: typeof WalletCards }> = [
   { id: 'tasks', label: 'المهام', icon: ListChecks },
   { id: 'reminders', label: 'التذكيرات', icon: Clock3 },
   { id: 'commitments', label: 'الالتزامات', icon: Archive },
+  { id: 'financial', label: 'الماليات', icon: BadgeDollarSign },
 ];
 
 function formatDate(value: string | null | undefined) {
@@ -73,6 +80,86 @@ function recordTypeForTab(tab: Tab): RecordType {
         : tab === 'tasks' ? 'task'
           : tab === 'reminders' ? 'reminder'
             : 'commitment';
+}
+
+function itemsFromFinancialQuery(value: unknown): Array<Record<string, unknown>> {
+  if (!value || typeof value !== 'object') return [];
+  const items = (value as { items?: unknown }).items;
+  return Array.isArray(items)
+    ? items.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
+    : [];
+}
+
+function financialText(value: unknown, fallback: string) {
+  return typeof value === 'string' && value.trim() ? value : fallback;
+}
+
+function financialMoney(value: unknown, currency: unknown) {
+  const amount = typeof value === 'number' ? value : Number(value ?? 0);
+  const code = typeof currency === 'string' && currency ? currency : 'EGP';
+  return new Intl.NumberFormat('ar-EG', { style: 'currency', currency: code }).format(amount / 100);
+}
+
+function FinancialRecords({ setLocation }: { setLocation: (path: string) => void }) {
+  const parties = useListFinancialParties({ query: { queryKey: ['/api/financial/parties'], staleTime: 20_000 } });
+  const obligations = useListFinancialObligations({ query: { queryKey: ['/api/financial/obligations'], staleTime: 20_000 } });
+  const payments = useListFinancialPayments({ query: { queryKey: ['/api/financial/payments'], staleTime: 20_000 } });
+  const donations = useListDonations({ query: { queryKey: ['/api/financial/donations'], staleTime: 20_000 } });
+  const receivables = useListIncomeReceivables({ query: { queryKey: ['/api/financial/receivables'], staleTime: 20_000 } });
+  const queries = [parties, obligations, payments, donations, receivables];
+  const error = queries.find((query) => query.isError)?.error;
+  const loading = queries.some((query) => query.isLoading);
+  const partyItems = itemsFromFinancialQuery(parties.data);
+  const obligationItems = itemsFromFinancialQuery(obligations.data);
+  const paymentItems = itemsFromFinancialQuery(payments.data);
+  const donationItems = itemsFromFinancialQuery(donations.data);
+  const receivableItems = itemsFromFinancialQuery(receivables.data);
+
+  if (loading) {
+    return <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{[1, 2, 3, 4, 5, 6].map((item) => <div key={item} className="h-32 animate-pulse rounded-2xl bg-muted" />)}</div>;
+  }
+  if (error) {
+    return <div className="rounded-2xl border border-destructive/25 bg-destructive/5 p-5 text-sm text-destructive" role="alert">تعذر تحميل السجلات المالية. حدّث الصفحة وحاول مرة أخرى.</div>;
+  }
+  const total = partyItems.length + obligationItems.length + paymentItems.length + donationItems.length + receivableItems.length;
+  if (total === 0) {
+    return <div className="rounded-[24px] border border-dashed border-border bg-card/50 px-6 py-16 text-center"><BadgeDollarSign className="mx-auto size-8 text-primary/60" /><h2 className="mt-4 font-serif text-xl">لا توجد سجلات مالية بعد</h2><p className="mt-2 text-sm text-muted-foreground">ستظهر الأطراف والسلف والمدفوعات والتبرعات والمستحقات هنا عند حفظها.</p></div>;
+  }
+
+  return (
+    <div className="grid gap-5 lg:grid-cols-2">
+      <FinancialRecordGroup title="الأطراف المالية" items={partyItems} onOpen={(item) => setLocation(`/financial/parties/${String(item.id)}`)} render={(item) => <><span>{financialText(item.name, 'طرف مالي')}</span><span className="text-xs text-muted-foreground">{financialText(item.partyType, 'طرف')}</span></>} />
+      <FinancialRecordGroup title="السلف والديون" items={obligationItems} onOpen={() => setLocation('/records?tab=financial')} render={(item) => <><span>{financialText(item.title, item.kind === 'advance' ? 'سلفة' : 'دين')}</span><span className="font-mono">{financialMoney(item.principalAmountMinor, item.currency)}</span></>} />
+      <FinancialRecordGroup title="المدفوعات الفعلية" items={paymentItems} onOpen={() => setLocation('/records?tab=financial')} render={(item) => <><span>{financialText(item.paymentKind, 'دفعة')}</span><span className="font-mono">{financialMoney(item.amountMinor, item.currency)}</span></>} />
+      <FinancialRecordGroup title="التبرعات" items={donationItems} onOpen={() => setLocation('/records?tab=financial')} render={(item) => <><span>{item.status === 'pledged' ? 'تعهد' : 'تبرع مدفوع'}</span><span className="font-mono">{financialMoney(item.amountMinor, item.currency)}</span></>} />
+      <FinancialRecordGroup title="الدخل والمستحقات" items={receivableItems} onOpen={() => setLocation('/records?tab=financial')} render={(item) => <><span>{financialText(item.title, item.kind === 'income' ? 'دخل متوقع' : 'مستحق')}</span><span className="font-mono">{financialMoney(item.amountMinor, item.currency)}</span></>} />
+    </div>
+  );
+}
+
+function FinancialRecordGroup({
+  title,
+  items,
+  onOpen,
+  render,
+}: {
+  title: string;
+  items: Array<Record<string, unknown>>;
+  onOpen: (item: Record<string, unknown>) => void;
+  render: (item: Record<string, unknown>) => ReactNode;
+}) {
+  return (
+    <section className="rounded-2xl border border-border bg-card p-5">
+      <h2 className="font-semibold">{title}</h2>
+      <div className="mt-4 space-y-2">
+        {items.map((item, index) => (
+          <button type="button" key={String(item.id ?? index)} onClick={() => onOpen(item)} className="flex w-full items-center justify-between gap-3 rounded-xl bg-muted/50 p-3 text-right text-sm transition hover:bg-primary/5">
+            {render(item)}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
 }
 
 function labelForRecord(record: RecordItem): string {
@@ -310,9 +397,10 @@ function RecordCard({
 }
 
 export default function Records() {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<Tab>('expenses');
+  const initialTab = new URLSearchParams(window.location.search).get('tab');
+  const [tab, setTab] = useState<Tab>(tabs.some((item) => item.id === initialTab) ? initialTab as Tab : 'expenses');
   const [editing, setEditing] = useState<{ kind: RecordType; record: RecordItem } | null>(null);
   const [creating, setCreating] = useState<RecordType | null>(null);
   const [pendingApproval, setPendingApproval] = useState<{ kind: RecordType; recordId: string; approval: ApprovalRequest } | null>(null);
@@ -334,8 +422,13 @@ export default function Records() {
           ? classifySecretaryError(deleteMutation.error)
           : null;
   const data = recordsQuery.data;
-  const currentRecords = useMemo(() => data?.[tab] ?? [], [data, tab]) as RecordItem[];
-  const kind = recordTypeForTab(tab);
+  const currentRecords = useMemo(() => tab === 'financial' ? [] : data?.[tab] ?? [], [data, tab]) as RecordItem[];
+  const kind = recordTypeForTab(tab === 'financial' ? 'expenses' : tab);
+
+  useEffect(() => {
+    const nextTab = new URLSearchParams(location.split('?')[1] ?? '').get('tab');
+    if (nextTab && tabs.some((item) => item.id === nextTab)) setTab(nextTab as Tab);
+  }, [location]);
 
   function refresh() {
     queryClient.invalidateQueries({ queryKey: getListRecordsQueryKey() });
@@ -409,7 +502,8 @@ export default function Records() {
     updateMutation.reset();
     deleteMutation.reset();
     const latest = await recordsQuery.refetch();
-    const current = latest.data?.[tab]?.find((candidate) => candidate.id === record.id);
+    const latestRecords = tab === 'financial' ? [] : latest.data?.[tab] ?? [];
+    const current = latestRecords.find((candidate: RecordItem) => candidate.id === record.id);
     if (!current) {
       setStaleRecordMessage('تم تحديث القائمة لأن هذا السجل لم يعد متاحًا للتعديل.');
       return;
@@ -418,6 +512,10 @@ export default function Records() {
   }
 
   function openCreate() {
+    if (tab === 'financial') {
+      setTab('expenses');
+      return;
+    }
     createMutation.reset();
     updateMutation.reset();
     deleteMutation.reset();
@@ -447,16 +545,18 @@ export default function Records() {
         <nav className="scrollbar-thin mb-7 flex gap-2 overflow-x-auto pb-1" aria-label="أنواع السجلات">
           {tabs.map(({ id, label, icon: Icon }) => (
             <button key={id} type="button" onClick={() => setTab(id)} className={`flex shrink-0 items-center gap-2 rounded-full border px-4 py-2.5 text-sm transition ${tab === id ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-primary'}`}>
-              <Icon className="size-4" /> {label} <span className={tab === id ? 'text-primary-foreground/70' : 'text-muted-foreground/60'}>{data?.[id]?.length ?? 0}</span>
+              <Icon className="size-4" /> {label} {id !== 'financial' && <span className={tab === id ? 'text-primary-foreground/70' : 'text-muted-foreground/60'}>{data?.[id]?.length ?? 0}</span>}
             </button>
           ))}
         </nav>
 
-        {recordsQuery.isLoading && <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{[1, 2, 3, 4, 5, 6].map((item) => <div key={item} className="h-32 animate-pulse rounded-2xl bg-muted" />)}</div>}
-        {staleRecordMessage && <div className="mb-5 flex items-center gap-2 rounded-2xl border border-amber-500/25 bg-amber-500/5 p-4 text-sm text-amber-700 dark:text-amber-300" role="status"><CircleAlert className="size-4" /> {staleRecordMessage}</div>}
-        {error && <div className="mb-5 flex items-center gap-2 rounded-2xl border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive" role="alert"><CircleAlert className="size-4" /> {error.message}</div>}
-         {!recordsQuery.isLoading && !error && currentRecords.length === 0 && <div className="rounded-[24px] border border-dashed border-border bg-card/50 px-6 py-16 text-center"><Check className="mx-auto size-8 text-primary/60" /><h2 className="mt-4 font-serif text-xl">لا توجد سجلات هنا بعد</h2><p className="mt-2 text-sm text-muted-foreground">يمكنك إضافة أول سجل يدويًا أو من خلال المحادثة.</p><button type="button" onClick={openCreate} className="mx-auto mt-5 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"><Plus className="size-4" /> إضافة {labelForKind(kind)}</button></div>}
-         {!recordsQuery.isLoading && currentRecords.length > 0 && <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{currentRecords.map((record) => <RecordCard key={record.id} kind={kind} record={record} onEdit={() => void editItem(record)} onDelete={() => deleteItem(record)} onOpen={kind === 'person' ? () => setLocation(`/people/${record.id}`) : kind === 'project' ? () => setLocation(`/projects/${record.id}`) : undefined} />)}</div>}
+        {tab === 'financial' ? <FinancialRecords setLocation={setLocation} /> : <>
+          {recordsQuery.isLoading && <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{[1, 2, 3, 4, 5, 6].map((item) => <div key={item} className="h-32 animate-pulse rounded-2xl bg-muted" />)}</div>}
+          {staleRecordMessage && <div className="mb-5 flex items-center gap-2 rounded-2xl border border-amber-500/25 bg-amber-500/5 p-4 text-sm text-amber-700 dark:text-amber-300" role="status"><CircleAlert className="size-4" /> {staleRecordMessage}</div>}
+          {error && <div className="mb-5 flex items-center gap-2 rounded-2xl border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive" role="alert"><CircleAlert className="size-4" /> {error.message}</div>}
+          {!recordsQuery.isLoading && !error && currentRecords.length === 0 && <div className="rounded-[24px] border border-dashed border-border bg-card/50 px-6 py-16 text-center"><Check className="mx-auto size-8 text-primary/60" /><h2 className="mt-4 font-serif text-xl">لا توجد سجلات هنا بعد</h2><p className="mt-2 text-sm text-muted-foreground">يمكنك إضافة أول سجل يدويًا أو من خلال المحادثة.</p><button type="button" onClick={openCreate} className="mx-auto mt-5 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"><Plus className="size-4" /> إضافة {labelForKind(kind)}</button></div>}
+          {!recordsQuery.isLoading && currentRecords.length > 0 && <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{currentRecords.map((record) => <RecordCard key={record.id} kind={kind} record={record} onEdit={() => void editItem(record)} onDelete={() => deleteItem(record)} onOpen={kind === 'person' ? () => setLocation(`/people/${record.id}`) : kind === 'project' ? () => setLocation(`/projects/${record.id}`) : undefined} />)}</div>}
+        </>}
       </main>
       {creating && <EditModal kind={creating} record={null} isCreate people={data?.people ?? []} projects={data?.projects ?? []} onClose={() => setCreating(null)} isSaving={createMutation.isPending} onSave={(form) => createMutation.mutate({ data: form as RecordCreateInput }, { onSuccess: (response) => handleCreateResult(response, creating) })} />}
       {editing && <EditModal kind={editing.kind} record={editing.record} isCreate={false} people={data?.people ?? []} projects={data?.projects ?? []} onClose={() => setEditing(null)} isSaving={updateMutation.isPending} onSave={(form) => updateMutation.mutate({ recordType: editing.kind, recordId: editing.record.id, data: form as RecordUpdateInput }, { onSuccess: (response) => handleMutationResult(response, editing.kind, editing.record.id) })} />}
