@@ -1,10 +1,10 @@
 ---
 name: Mobile two-surface architecture
-description: The web app is the main full workspace; the mobile app is a lightweight quick companion.
+description: The mobile app opens on a lightweight quick surface and contains the full main records surface.
 ---
 
-The web app remains the primary full workspace for records, dashboards, and detailed management. The mobile app is a lightweight quick companion for short secretary requests, replies, notifications, and approvals; it should not duplicate the web records interface.
+The mobile app should stay as one product with two directly switchable surfaces: a lightweight quick secretary that opens by default for short requests, replies, notifications, and approvals; and a full main surface for the user's structured records and data. The web app remains available as the broader desktop workspace, but mobile is not just a quick-only companion.
 
-**Why:** The user wants the existing web app to remain the complete product and the mobile app to stay fast and low-consumption.
+**Why:** The user wants mobile to feel fast at launch while still being the primary mobile place to inspect the data and records.
 
-**How to apply:** Keep mobile focused on quick interactions and future native push/background extensions. Put record browsing and editing work in the web app unless the user explicitly asks for a mobile workflow.
+**How to apply:** Default to quick, keep a one-tap "الرئيسية" entry in the same app, reuse tenant-scoped record APIs, and reserve deeper editing for a follow-up without removing the main mobile surface.
