@@ -33,6 +33,7 @@ import {
   retrieveRelationshipContext,
   serializeRelationshipContext,
 } from "./relationship-context";
+import { detectLearningSignal } from "./learning-signals";
 import {
   agentToolError,
   isTransientProviderFailure,
@@ -4415,6 +4416,7 @@ export class Phase2AgentRuntime {
 
     const conversationId = input.conversationId || crypto.randomUUID();
     const conversationMemory = await loadConversationMemory(identity, conversationId);
+    const learningSignal = detectLearningSignal(input.message, conversationMemory.recentTurns);
     const semanticParse = featureFlags.deterministicIntelligence()
       ? parseSemanticRequest(input.message)
       : null;
@@ -4527,6 +4529,7 @@ export class Phase2AgentRuntime {
           conversationState,
         }),
         deterministicIntelligence: deterministicMetrics,
+        ...(learningSignal ? { learningSignal } : {}),
         ...(patternInsights.length > 0 ? { patternInsights } : {}),
         llmCalls,
         toolCalls,
@@ -4567,6 +4570,7 @@ export class Phase2AgentRuntime {
         requestId,
         conversationId,
         ...deterministicMetrics,
+        learningSignal: learningSignal?.kind,
       }, "agent deterministic intelligence summary");
       return result;
     };
