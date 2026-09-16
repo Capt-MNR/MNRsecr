@@ -9,6 +9,7 @@ import type {
   ApprovalResponse,
   ConversationListResponse,
   ConversationDetail,
+  ListConversationsParams,
   TurnResponse,
 } from '@workspace/api-client-react';
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -41,7 +42,7 @@ export type SecretaryChatTurnInput = {
 
 export interface SecretaryChatTransport {
   sendTurn(input: { message: string; conversationId?: string | null }): Promise<TurnResponse>;
-  listConversations(): Promise<ConversationListResponse>;
+  listConversations(params?: ListConversationsParams): Promise<ConversationListResponse>;
   loadConversation(conversationId: string): Promise<ConversationDetail>;
   approveOperation(operationId: string): Promise<ApprovalResponse>;
   rejectOperation(operationId: string): Promise<ApprovalResponse>;
@@ -49,7 +50,7 @@ export interface SecretaryChatTransport {
 
 export interface SecretaryChatService {
   sendTurn(input: SecretaryChatTurnInput): Promise<TurnResponse>;
-  listConversations(): Promise<ConversationListResponse>;
+  listConversations(params?: ListConversationsParams): Promise<ConversationListResponse>;
   loadConversation(conversationId: string): Promise<ConversationDetail>;
   approveOperation(operationId: string): Promise<ApprovalResponse>;
   rejectOperation(operationId: string): Promise<ApprovalResponse>;
@@ -57,7 +58,7 @@ export interface SecretaryChatService {
 
 const apiTransport: SecretaryChatTransport = {
   sendTurn: ({ message, conversationId }) => createTurn({ message, conversationId: conversationId ?? null }),
-  listConversations: () => listConversations(),
+  listConversations: (params) => listConversations(params),
   loadConversation: (conversationId) => getConversation(conversationId),
   approveOperation: (operationId) => approveSecretaryOperation(operationId),
   rejectOperation: (operationId) => rejectSecretaryOperation(operationId),
@@ -76,8 +77,8 @@ class ApiSecretaryChatService implements SecretaryChatService {
     });
   }
 
-  listConversations() {
-    return this.transport.listConversations();
+  listConversations(params?: ListConversationsParams) {
+    return this.transport.listConversations(params);
   }
 
   loadConversation(conversationId: string) {
@@ -95,7 +96,7 @@ class ApiSecretaryChatService implements SecretaryChatService {
 
 export const secretaryChatService: SecretaryChatService = new ApiSecretaryChatService(apiTransport);
 
-export function useSecretaryChatService(conversationId: string | null) {
+export function useSecretaryChatService(conversationId: string | null, conversationSearch = '') {
   const turnMutation = useMutation({
     mutationFn: (input: SecretaryChatTurnInput) => secretaryChatService.sendTurn(input),
   });
@@ -112,8 +113,10 @@ export function useSecretaryChatService(conversationId: string | null) {
     staleTime: 20_000,
   });
   const conversationsQuery = useQuery({
-    queryKey: ['secretary-chat-conversations'],
-    queryFn: () => secretaryChatService.listConversations(),
+    queryKey: ['secretary-chat-conversations', conversationSearch],
+    queryFn: () => secretaryChatService.listConversations(
+      conversationSearch ? { search: conversationSearch } : undefined,
+    ),
     staleTime: 20_000,
   });
 

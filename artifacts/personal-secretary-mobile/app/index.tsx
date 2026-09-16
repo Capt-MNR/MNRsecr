@@ -821,6 +821,9 @@ function MainOffice({
   recordOrigins,
   chatContext,
   recentConversations,
+  conversationSearch,
+  onChangeConversationSearch,
+  conversationsLoading,
 }: {
   colors: ReturnType<typeof useColors>;
   language: AppLanguage;
@@ -842,6 +845,9 @@ function MainOffice({
   recordOrigins: Record<string, RecordOrigin>;
   chatContext: MobileRecordRow | null;
   recentConversations: ConversationSummary[];
+  conversationSearch: string;
+  onChangeConversationSearch: (value: string) => void;
+  conversationsLoading: boolean;
 }) {
   const todayQuery = useGetTodayContext({
     query: {
@@ -929,6 +935,16 @@ function MainOffice({
       meta: localized(language, 'تذكير محدث', 'Reminder updated'),
     })),
   ].slice(0, 5) : [];
+  const normalizedSearch = conversationSearch.trim().toLocaleLowerCase();
+  const filteredLatestEdits = normalizedSearch
+    ? latestEdits.filter((edit) => [
+      edit.record.title,
+      edit.record.subtitle,
+      edit.meta,
+      edit.record.trailing ?? '',
+    ].join(' ').toLocaleLowerCase().includes(normalizedSearch))
+    : latestEdits;
+  const hasRecentActivity = recentConversations.length > 0 || filteredLatestEdits.length > 0;
 
   return (
     <ScrollView
@@ -990,27 +1006,40 @@ function MainOffice({
         context={chatContext}
       />
 
-      <View testID="recent-conversations" style={styles.officeSection}>
+      <View testID="recent-activity" style={styles.officeSection}>
         <View style={styles.officeSectionHeading}>
           <View>
             <Text style={[styles.officeSectionTitle, { color: colors.foreground }]}>
-              {localized(language, 'آخر المحادثات', 'Recent conversations')}
+              {localized(language, 'آخر المحادثات والتعديلات', 'Recent conversations and updates')}
             </Text>
             <Text style={[styles.officeSectionHint, { color: colors.mutedForeground }]}>
-              {localized(language, 'ارجع إلى أي محادثة من نفس السكرتير', 'Return to any conversation with the same secretary')}
+              {localized(language, 'اسحب القائمة وابحث داخل نصوص المحادثات', 'Swipe the list and search across conversation text')}
             </Text>
           </View>
-          <Feather name="message-square" size={18} color={colors.primary} />
+          <Feather name="search" size={18} color={colors.primary} />
         </View>
-        {recentConversations.length === 0 ? (
-          <View style={[styles.officeEmptyPanel, { backgroundColor: colors.muted, borderColor: colors.border }]}>
-            <Text style={[styles.officeEmptyLine, { color: colors.mutedForeground }]}>
-              {localized(language, 'لا توجد محادثات محفوظة بعد.', 'No saved conversations yet.')}
-            </Text>
-          </View>
-        ) : (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.officeConversationRail}>
-            {recentConversations.slice(0, 5).map((conversation) => (
+        <View style={[styles.officeSearchBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Feather name="search" size={16} color={colors.mutedForeground} />
+          <TextInput
+            testID="recent-conversations-search"
+            value={conversationSearch}
+            onChangeText={onChangeConversationSearch}
+            placeholder={localized(language, 'ابحث في أي كلمة داخل المحادثة…', 'Search any word in a conversation…')}
+            placeholderTextColor={colors.mutedForeground}
+            returnKeyType="search"
+            clearButtonMode="while-editing"
+            style={[styles.officeSearchInput, { color: colors.foreground }]}
+          />
+          {conversationsLoading && <ActivityIndicator size="small" color={colors.primary} />}
+        </View>
+        <ScrollView
+          testID="recent-activity-list"
+          style={styles.officeRecentActivityScroll}
+          contentContainerStyle={styles.officeRecentActivityContent}
+          nestedScrollEnabled
+          showsVerticalScrollIndicator
+        >
+          {recentConversations.slice(0, 20).map((conversation) => (
               <Pressable
                 key={conversation.conversationId}
                 testID={`recent-conversation-${conversation.conversationId}`}
@@ -1018,49 +1047,28 @@ function MainOffice({
                 accessibilityLabel={`${localized(language, 'فتح المحادثة', 'Open conversation')} ${conversation.title}`}
                 onPress={() => onOpenConversation(conversation.conversationId)}
                 style={({ pressed }) => [
-                  styles.officeConversationCard,
+                  styles.officeRecentActivityRow,
                   { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.65 : 1 },
                 ]}
               >
-                <View style={[styles.officeConversationIcon, { backgroundColor: colors.muted }]}>
+                <View style={[styles.officeRecentActivityIcon, { backgroundColor: colors.muted }]}>
                   <Feather name="message-circle" size={15} color={colors.primary} />
                 </View>
-                <Text style={[styles.officeConversationTitle, { color: colors.foreground }]} numberOfLines={2}>
-                  {conversation.title}
-                </Text>
-                <Text style={[styles.officeConversationPreview, { color: colors.mutedForeground }]} numberOfLines={2}>
-                  {conversation.preview}
-                </Text>
-                <Text style={[styles.officeConversationMeta, { color: colors.primary }]}>
-                  {conversation.turnCount} {localized(language, 'رسائل', 'turns')}
-                </Text>
+                <View style={styles.officeRecentActivityCopy}>
+                  <Text style={[styles.officeRecentActivityTitle, { color: colors.foreground }]} numberOfLines={1}>
+                    {conversation.title}
+                  </Text>
+                  <Text style={[styles.officeRecentActivityPreview, { color: colors.mutedForeground }]} numberOfLines={2}>
+                    {conversation.preview}
+                  </Text>
+                  <Text style={[styles.officeRecentActivityMeta, { color: colors.primary }]}>
+                    {localized(language, 'محادثة', 'Conversation')} · {conversation.turnCount} {localized(language, 'رسائل', 'turns')}
+                  </Text>
+                </View>
+                <Feather name="chevron-left" size={15} color={colors.mutedForeground} />
               </Pressable>
             ))}
-          </ScrollView>
-        )}
-      </View>
-
-      <View testID="recent-edits" style={styles.officeSection}>
-        <View style={styles.officeSectionHeading}>
-          <View>
-            <Text style={[styles.officeSectionTitle, { color: colors.foreground }]}>
-              {localized(language, 'آخر التعديلات', 'Recent updates')}
-            </Text>
-            <Text style={[styles.officeSectionHint, { color: colors.mutedForeground }]}>
-              {localized(language, 'اضغط على أي بطاقة لفتح محتوى السجل', 'Tap any card to open the record details')}
-            </Text>
-          </View>
-          <Feather name="edit-3" size={18} color={colors.primary} />
-        </View>
-        {latestEdits.length === 0 ? (
-          <View style={[styles.officeEmptyPanel, { backgroundColor: colors.muted, borderColor: colors.border }]}>
-            <Text style={[styles.officeEmptyLine, { color: colors.mutedForeground }]}>
-              {localized(language, 'لا توجد تعديلات حديثة.', 'No recent updates.')}
-            </Text>
-          </View>
-        ) : (
-          <View style={styles.officeRecentEditList}>
-            {latestEdits.map((edit) => (
+          {filteredLatestEdits.map((edit) => (
               <Pressable
                 key={edit.id}
                 testID={`recent-edit-${edit.record.id}`}
@@ -1068,31 +1076,38 @@ function MainOffice({
                 accessibilityLabel={`${localized(language, 'فتح', 'Open')} ${edit.record.title}`}
                 onPress={() => onOpenRecord(edit.record)}
                 style={({ pressed }) => [
-                  styles.officeRecentEditRow,
+                  styles.officeRecentActivityRow,
                   { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.65 : 1 },
                 ]}
               >
-                <View style={[styles.officeRecentEditIcon, { backgroundColor: colors.muted }]}>
+                <View style={[styles.officeRecentActivityIcon, { backgroundColor: colors.muted }]}>
                   <Feather name={edit.icon} size={15} color={colors.primary} />
                 </View>
-                <View style={styles.officeRecentEditCopy}>
-                  <Text style={[styles.officeRecentEditTitle, { color: colors.foreground }]} numberOfLines={1}>
+                <View style={styles.officeRecentActivityCopy}>
+                  <Text style={[styles.officeRecentActivityTitle, { color: colors.foreground }]} numberOfLines={1}>
                     {edit.record.title}
                   </Text>
-                  <Text style={[styles.officeRecentEditMeta, { color: colors.mutedForeground }]} numberOfLines={1}>
+                  <Text style={[styles.officeRecentActivityPreview, { color: colors.mutedForeground }]} numberOfLines={2}>
                     {edit.meta} · {edit.record.subtitle}
                   </Text>
                 </View>
-                {edit.record.trailing && (
-                  <Text style={[styles.officeRecentEditTrailing, { color: colors.primary }]} numberOfLines={1}>
-                    {edit.record.trailing}
-                  </Text>
-                )}
+                <Text style={[styles.officeRecentActivityMeta, { color: colors.primary }]} numberOfLines={1}>
+                  {localized(language, 'تعديل', 'Update')}
+                  {edit.record.trailing ? ` · ${edit.record.trailing}` : ''}
+                </Text>
                 <Feather name="chevron-left" size={15} color={colors.mutedForeground} />
               </Pressable>
             ))}
-          </View>
-        )}
+          {!hasRecentActivity && (
+            <View style={[styles.officeEmptyPanel, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+              <Text style={[styles.officeEmptyLine, { color: colors.mutedForeground }]}>
+                {conversationSearch.trim()
+                  ? localized(language, 'لا توجد نتائج مطابقة.', 'No matching results.')
+                  : localized(language, 'لا توجد محادثات أو تعديلات بعد.', 'No conversations or updates yet.')}
+              </Text>
+            </View>
+          )}
+        </ScrollView>
       </View>
 
       {todayQuery.isError && (
@@ -2264,8 +2279,9 @@ export default function QuickSecretaryScreen() {
   const [localError, setLocalError] = useState<string | null>(null);
   const [conversationToLoad, setConversationToLoad] = useState<string | null>(null);
   const [loadedConversationId, setLoadedConversationId] = useState<string | null>(null);
+  const [conversationSearch, setConversationSearch] = useState('');
   const queryClient = useQueryClient();
-  const secretaryChat = useSecretaryChatService(conversationToLoad);
+  const secretaryChat = useSecretaryChatService(conversationToLoad, conversationSearch.trim());
   const conversationQuery = secretaryChat.conversationQuery;
   const recentConversations = secretaryChat.conversationsQuery.data?.conversations ?? [];
   const visibleSuggestions = language === 'en'
@@ -2687,6 +2703,9 @@ export default function QuickSecretaryScreen() {
                   recordOrigins={recordOrigins}
                   chatContext={chatContext}
                   recentConversations={recentConversations}
+                  conversationSearch={conversationSearch}
+                  onChangeConversationSearch={setConversationSearch}
+                  conversationsLoading={secretaryChat.conversationsQuery.isFetching}
                   pendingApprovals={messages.flatMap((message) => (
                     message.approval && message.approval.status === 'pending' ? [message.approval] : []
                   ))}
@@ -3663,6 +3682,71 @@ const styles = StyleSheet.create({
     marginTop: 3,
     fontSize: 11,
     textAlign: 'right',
+  },
+  officeSearchBox: {
+    minHeight: 44,
+    marginTop: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+  },
+  officeSearchInput: {
+    flex: 1,
+    minHeight: 42,
+    fontSize: 12,
+    textAlign: 'right',
+  },
+  officeRecentActivityScroll: {
+    maxHeight: 300,
+    marginTop: 10,
+    borderRadius: 15,
+  },
+  officeRecentActivityContent: {
+    gap: 8,
+    paddingBottom: 2,
+  },
+  officeRecentActivityRow: {
+    minHeight: 68,
+    borderRadius: 15,
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 9,
+  },
+  officeRecentActivityIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  officeRecentActivityCopy: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  officeRecentActivityTitle: {
+    width: '100%',
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  officeRecentActivityPreview: {
+    width: '100%',
+    marginTop: 3,
+    fontSize: 10,
+    lineHeight: 15,
+    textAlign: 'right',
+  },
+  officeRecentActivityMeta: {
+    maxWidth: 100,
+    fontSize: 10,
+    fontWeight: '700',
+    textAlign: 'left',
   },
   officeEmptyPanel: {
     minHeight: 52,
