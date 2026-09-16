@@ -463,6 +463,7 @@ function messageTime(value: string) {
 function RecordsView({
   colors,
   onOpenRecord,
+  onOpenSection,
   onBack,
   sectionKeys,
   title = 'السجلات',
@@ -472,6 +473,7 @@ function RecordsView({
 }: {
   colors: ReturnType<typeof useColors>;
   onOpenRecord: (record: MobileRecordRow) => void;
+  onOpenSection?: (sectionKey: string) => void;
   onBack?: () => void;
   sectionKeys?: string[];
   title?: string;
@@ -491,6 +493,7 @@ function RecordsView({
 
   return (
     <SectionList
+      style={styles.recordsView}
       sections={sections}
       keyExtractor={(item) => item.id}
       renderItem={({ item }) => (
@@ -587,6 +590,10 @@ function RecordsView({
                 accessibilityLabel={`فتح ${section.title}`}
                 disabled={section.data.length === 0}
                 onPress={() => {
+                  if (onOpenSection) {
+                    onOpenSection(section.key);
+                    return;
+                  }
                   const firstRecord = section.data[0];
                   if (firstRecord) onOpenRecord(firstRecord);
                 }}
@@ -1467,6 +1474,9 @@ const detailStyles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 24,
   },
+  detailContent: {
+    paddingBottom: 24,
+  },
   detailHeader: {
     minHeight: 42,
     flexDirection: 'row-reverse',
@@ -1752,7 +1762,13 @@ function RecordDetailView({
   const timelineRows = arrayValue(entityData.timeline).slice(0, 8);
 
   return (
-    <View style={detailStyles.detailScreen}>
+    <ScrollView
+      style={detailStyles.detailScreen}
+      contentContainerStyle={detailStyles.detailContent}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      nestedScrollEnabled
+    >
       <View style={detailStyles.detailHeader}>
         <Pressable
           testID="record-detail-back"
@@ -1926,7 +1942,7 @@ function RecordDetailView({
           compact
         />
       )}
-    </View>
+    </ScrollView>
   );
 }
 
@@ -2092,7 +2108,12 @@ function MainDrawer({
         onPress={onClose}
         style={styles.drawerBackdrop}
       />
-      <View style={[styles.drawerPanel, { backgroundColor: colors.card, borderLeftColor: colors.border }]}>
+      <ScrollView
+        style={[styles.drawerPanel, { backgroundColor: colors.card, borderLeftColor: colors.border }]}
+        contentContainerStyle={styles.drawerScrollContent}
+        showsVerticalScrollIndicator
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.drawerHeading}>
           <View style={[styles.drawerMark, { backgroundColor: colors.primary }]}>
             <Feather name="grid" size={16} color={colors.primaryForeground} />
@@ -2215,7 +2236,7 @@ function MainDrawer({
             ))}
           </View>
         </View>
-      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -2420,6 +2441,21 @@ export default function QuickSecretaryScreen() {
     setDrawerOpen(false);
     setActiveView('home');
     void Haptics.selectionAsync();
+  }
+
+  function openRecordSection(sectionKey: string) {
+    const targetSection: MainSection = sectionKey === 'people'
+      ? 'people'
+      : sectionKey === 'projects'
+        ? 'projects'
+        : sectionKey === 'tasks'
+          ? 'tasks'
+          : sectionKey === 'reminders'
+            ? 'reminders'
+            : sectionKey === 'activity'
+              ? 'activity'
+              : 'financial';
+    openMainSection(targetSection);
   }
 
   function openQuick() {
@@ -2659,6 +2695,7 @@ export default function QuickSecretaryScreen() {
               {mainSection === 'records' && (
                 <RecordsView
                   colors={colors}
+                  onOpenSection={openRecordSection}
                   title="السجلات"
                   subtitle="كل ما حفظه السكرتير في مكان واحد"
                   onOpenRecord={openRecordFromRecords}
@@ -2668,6 +2705,7 @@ export default function QuickSecretaryScreen() {
               {mainSection === 'people' && (
                 <RecordsView
                   colors={colors}
+                  onOpenSection={openRecordSection}
                   title="الأشخاص"
                   subtitle="الأشخاص وعلاقاتهم بالسجلات والمشاريع"
                   sectionKeys={['people']}
@@ -2678,6 +2716,7 @@ export default function QuickSecretaryScreen() {
               {mainSection === 'projects' && (
                 <RecordsView
                   colors={colors}
+                  onOpenSection={openRecordSection}
                   title="المشاريع"
                   subtitle="المشاريع النشطة وسياقها المرتبط"
                   sectionKeys={['projects']}
@@ -2688,6 +2727,7 @@ export default function QuickSecretaryScreen() {
               {mainSection === 'financial' && (
                 <RecordsView
                   colors={colors}
+                  onOpenSection={openRecordSection}
                   title="الماليات"
                   subtitle="المصروفات والالتزامات والعلاقات المالية"
                   sectionKeys={['expenses', 'commitments']}
@@ -2698,6 +2738,7 @@ export default function QuickSecretaryScreen() {
               {mainSection === 'tasks' && (
                 <RecordsView
                   colors={colors}
+                  onOpenSection={openRecordSection}
                   title="المهام"
                   subtitle="المهام المفتوحة والمكتملة المرتبطة بسياقك"
                   sectionKeys={['tasks']}
@@ -2708,6 +2749,7 @@ export default function QuickSecretaryScreen() {
               {mainSection === 'reminders' && (
                 <RecordsView
                   colors={colors}
+                  onOpenSection={openRecordSection}
                   title="التذكيرات"
                   subtitle="كل المواعيد والتنبيهات التي يتابعها السكرتير"
                   sectionKeys={['reminders']}
@@ -2718,6 +2760,7 @@ export default function QuickSecretaryScreen() {
               {mainSection === 'activity' && (
                 <RecordsView
                   colors={colors}
+                  onOpenSection={openRecordSection}
                   title="النشاط / Timeline"
                   subtitle="آخر السجلات والحركة التي تستحق المراجعة"
                   onOpenRecord={openRecordFromRecords}
@@ -2964,6 +3007,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: -4, height: 0 },
     elevation: 8,
   },
+  drawerScrollContent: {
+    flexGrow: 1,
+    paddingBottom: 28,
+  },
   drawerHeading: {
     minHeight: 48,
     flexDirection: 'row-reverse',
@@ -3155,6 +3202,9 @@ const styles = StyleSheet.create({
   recordsList: {
     paddingHorizontal: 16,
     paddingBottom: 24,
+  },
+  recordsView: {
+    flex: 1,
   },
   recordsIntro: {
     paddingTop: 18,
