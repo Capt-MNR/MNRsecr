@@ -4,13 +4,18 @@
     "slug": "personal-secretary-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/icon_2.png",
     "scheme": "personal-secretary-mobile",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": false
     },
-    "android": {},
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/icon_2.png",
+        "backgroundColor": "#f3f0e9"
+      }
+    },
     "web": {
       "favicon": "./assets/images/icon.png"
     },
