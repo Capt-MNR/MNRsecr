@@ -81,6 +81,7 @@ type MobileRecordRow = {
   subtitle: string;
   trailing?: string;
   origin?: RecordOrigin | null;
+  related?: MobileRecordRow[];
 };
 
 type MobileRecordSection = {
@@ -89,6 +90,8 @@ type MobileRecordSection = {
   icon: FeatherName;
   data: MobileRecordRow[];
 };
+
+type MainSection = 'office' | 'records' | 'people' | 'projects' | 'financial' | 'tasks' | 'reminders' | 'activity';
 
 type TodayContextReminder = TodayContext['upcomingReminders'][number];
 type TodayContextTask = TodayContext['pendingTasks'][number];
@@ -133,6 +136,11 @@ const relatedLabels: Record<string, string> = {
   tasks: 'المهام',
   reminders: 'التذكيرات',
   financialParties: 'العلاقات المالية',
+  purposes: 'الأغراض',
+  payments: 'المدفوعات',
+  obligations: 'الالتزامات المالية',
+  advances: 'السلف',
+  debts: 'الديون',
 };
 
 function statusLabel(status?: string | null) {
@@ -165,6 +173,17 @@ function recordSections(records: RecordsResponse | undefined): MobileRecordSecti
           .join(' · '),
         trailing: money(expense.amountMinor, expense.currency),
         origin: expense.origin,
+        related: [
+          expense.personId && expense.personName
+            ? { id: expense.personId, recordType: 'person', title: expense.personName, subtitle: 'الشخص المرتبط' }
+            : null,
+          expense.projectId && expense.projectName
+            ? { id: expense.projectId, recordType: 'project', title: expense.projectName, subtitle: 'المشروع المرتبط' }
+            : null,
+          expense.purposeId && expense.purposeName
+            ? { id: expense.purposeId, recordType: 'purpose', title: expense.purposeName, subtitle: 'الغرض المرتبط' }
+            : null,
+        ].filter((item): item is MobileRecordRow => Boolean(item)),
       })),
     },
     {
@@ -230,6 +249,51 @@ function recordSections(records: RecordsResponse | undefined): MobileRecordSecti
       })),
     },
   ];
+}
+
+function relatedRow(key: string, value: unknown): MobileRecordRow | null {
+  const item = objectValue(value);
+  const id = typeof item.id === 'string' ? item.id : '';
+  if (!id) return null;
+  const typeByKey: Record<string, string> = {
+    projects: 'project',
+    people: 'person',
+    expenses: 'expense',
+    commitments: 'commitment',
+    tasks: 'task',
+    reminders: 'reminder',
+    financialParties: 'financial_party',
+    purposes: 'purpose',
+    payments: 'payment',
+    obligations: 'obligation',
+    advances: 'obligation',
+    debts: 'obligation',
+  };
+  const recordType = typeByKey[key];
+  if (!recordType) return null;
+  const title = stringValue(
+    item.name,
+    stringValue(item.title, stringValue(item.description, stringValue(item.text, relatedLabels[key] ?? 'سجل مرتبط'))),
+  );
+  const date = typeof item.dueAt === 'string'
+    ? recordDate(item.dueAt)
+    : typeof item.occurredAt === 'string'
+      ? recordDate(item.occurredAt)
+      : '';
+  const detail = stringValue(item.relationship, stringValue(item.status, date || (relatedLabels[key] ?? 'فتح التفاصيل')));
+  const amountMinor = typeof item.amountMinor === 'number'
+    ? item.amountMinor
+    : typeof item.principalAmountMinor === 'number'
+      ? item.principalAmountMinor
+      : null;
+  const currency = stringValue(item.currency, 'EGP');
+  return {
+    id,
+    recordType,
+    title,
+    subtitle: detail,
+    ...(amountMinor !== null ? { trailing: money(amountMinor, currency) } : {}),
+  };
 }
 
 function approvalFromAction(action: TurnResponse['action']): Approval | undefined {
@@ -366,10 +430,16 @@ function RecordsView({
   colors,
   onOpenRecord,
   onBack,
+  sectionKeys,
+  title = 'السجلات',
+  subtitle = 'استكشف معلوماتك المرتبطة',
 }: {
   colors: ReturnType<typeof useColors>;
   onOpenRecord: (record: MobileRecordRow) => void;
   onBack?: () => void;
+  sectionKeys?: string[];
+  title?: string;
+  subtitle?: string;
 }) {
   const recordsQuery = useListRecords({
     query: {
@@ -377,7 +447,7 @@ function RecordsView({
       staleTime: 20_000,
     },
   });
-  const sections = recordSections(recordsQuery.data);
+  const sections = recordSections(recordsQuery.data).filter((section) => !sectionKeys || sectionKeys.includes(section.key));
   const totalRecords = sections.reduce((total, section) => total + section.data.length, 0);
 
   return (
@@ -426,9 +496,9 @@ function RecordsView({
         <View>
           <View style={styles.recordsIntro}>
             <View>
-              <Text style={[styles.recordsTitle, { color: colors.foreground }]}>الرئيسية</Text>
+              <Text style={[styles.recordsTitle, { color: colors.foreground }]}>{title}</Text>
               <Text style={[styles.recordsSubtitle, { color: colors.mutedForeground }]}>
-                بياناتك المهمة في مكان واحد
+                {subtitle}
               </Text>
             </View>
             <View style={styles.recordsHeaderActions}>
@@ -521,14 +591,137 @@ function RecordsView({
   );
 }
 
+type SecretaryChatProps = {
+  colors: ReturnType<typeof useColors>;
+  messages: LocalMessage[];
+  draft: string;
+  onChangeDraft: (value: string) => void;
+  onSend: () => void;
+  isSending: boolean;
+  onApprove: (approval: Approval) => void;
+  onReject: (approval: Approval) => void;
+  busyOperationId: string | null;
+  onOpenRecord: (record: MobileRecordRow) => void;
+  context?: MobileRecordRow | null;
+  compact?: boolean;
+};
+
+function CentralSecretaryChat({
+  colors,
+  messages,
+  draft,
+  onChangeDraft,
+  onSend,
+  isSending,
+  onApprove,
+  onReject,
+  busyOperationId,
+  onOpenRecord,
+  context,
+  compact = false,
+}: SecretaryChatProps) {
+  return (
+    <View
+      testID={compact ? 'record-context-chat' : 'main-central-chat'}
+      style={[
+        compact ? styles.recordChatPanel : styles.centralChatPanel,
+        { backgroundColor: colors.card, borderColor: colors.border },
+      ]}
+    >
+      <View style={styles.centralChatHeading}>
+        <View style={[styles.centralChatIcon, { backgroundColor: colors.muted }]}>
+          <Feather name="message-circle" size={compact ? 15 : 17} color={colors.primary} />
+        </View>
+        <View style={styles.centralChatHeadingCopy}>
+          <Text style={[styles.centralChatTitle, { color: colors.foreground }]}>
+            {context ? `السكرتير · ${context.title}` : 'السكرتير الشخصي'}
+          </Text>
+          <Text style={[styles.centralChatHint, { color: colors.mutedForeground }]}>
+            {context ? 'اسأل عن هذا السياق أو علاقاته' : 'تحدث، راجع، أو ابدأ إجراءً من داخل البرنامج'}
+          </Text>
+        </View>
+      </View>
+
+      {context && (
+        <View style={[styles.chatContextChip, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+          <Feather name="crosshair" size={13} color={colors.primary} />
+          <Text style={[styles.chatContextText, { color: colors.mutedForeground }]} numberOfLines={1}>
+            السياق الحالي: {context.recordType} · {context.title}
+          </Text>
+        </View>
+      )}
+
+      <ScrollView
+        testID={compact ? 'record-context-transcript' : 'main-chat-transcript'}
+        style={[styles.centralChatTranscript, compact && styles.recordChatTranscript]}
+        contentContainerStyle={styles.centralChatTranscriptContent}
+        keyboardShouldPersistTaps="handled"
+        nestedScrollEnabled
+        showsVerticalScrollIndicator={false}
+      >
+        {messages.map((message) => (
+          <MessageBubble
+            key={message.id}
+            message={message}
+            colors={colors}
+            onApprove={onApprove}
+            onReject={onReject}
+            onOpenRecord={onOpenRecord}
+            busyOperationId={busyOperationId}
+          />
+        ))}
+        {isSending && (
+          <View style={[styles.centralChatTyping, { backgroundColor: colors.muted }]}>
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={[styles.centralChatTypingText, { color: colors.mutedForeground }]}>السكرتير يفكر…</Text>
+          </View>
+        )}
+      </ScrollView>
+
+      <View style={[styles.centralChatComposer, { backgroundColor: colors.background, borderColor: colors.input }]}>
+        <TextInput
+          testID={compact ? 'record-context-input' : 'main-message-input'}
+          value={draft}
+          onChangeText={onChangeDraft}
+          onSubmitEditing={onSend}
+          placeholder={context ? 'اكتب سؤالك عن هذا السياق…' : 'اكتب للسكرتير…'}
+          placeholderTextColor={colors.mutedForeground}
+          multiline
+          maxLength={1000}
+          returnKeyType="send"
+          blurOnSubmit={false}
+          textAlign="right"
+          style={[styles.centralChatInput, { color: colors.foreground }]}
+        />
+        <Pressable
+          testID={compact ? 'record-context-send' : 'main-send-message'}
+          accessibilityRole="button"
+          accessibilityLabel={context ? 'إرسال سؤال عن السجل' : 'إرسال طلب إلى السكرتير'}
+          onPress={onSend}
+          disabled={!draft.trim() || isSending}
+          style={({ pressed }) => [
+            styles.centralChatSend,
+            { backgroundColor: colors.primary, opacity: !draft.trim() || isSending ? 0.4 : pressed ? 0.7 : 1 },
+          ]}
+        >
+          <Feather name="arrow-up" size={17} color={colors.primaryForeground} />
+        </Pressable>
+      </View>
+      <Text style={[styles.centralChatFooter, { color: colors.mutedForeground }]}>
+        نفس Conversation والعمليات والموافقات · لا يتم الإرسال تلقائيًا
+      </Text>
+    </View>
+  );
+}
+
 function MainOffice({
   colors,
   onOpenRecord,
   onOpenRecords,
-  onOpenQuick,
+  onFocusChat,
   onAskSecretary,
   pendingApprovals,
-  lastAssistantMessage,
+  messages,
   draft,
   onChangeDraft,
   onSend,
@@ -538,14 +731,15 @@ function MainOffice({
   onReject,
   busyOperationId,
   recordOrigins,
+  chatContext,
 }: {
   colors: ReturnType<typeof useColors>;
   onOpenRecord: (record: MobileRecordRow) => void;
   onOpenRecords: () => void;
-  onOpenQuick: () => void;
+  onFocusChat: (record?: MobileRecordRow) => void;
   onAskSecretary: (draft: string) => void;
   pendingApprovals: Approval[];
-  lastAssistantMessage: LocalMessage | null;
+  messages: LocalMessage[];
   draft: string;
   onChangeDraft: (value: string) => void;
   onSend: () => void;
@@ -555,6 +749,7 @@ function MainOffice({
   onReject: (approval: Approval) => void;
   busyOperationId: string | null;
   recordOrigins: Record<string, RecordOrigin>;
+  chatContext: MobileRecordRow | null;
 }) {
   const todayQuery = useGetTodayContext({
     query: {
@@ -644,66 +839,19 @@ function MainOffice({
         </Pressable>
       </View>
 
-      <View style={[styles.officeChatPanel, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <View style={styles.officeChatHeading}>
-          <View style={[styles.officeChatIcon, { backgroundColor: colors.muted }]}>
-            <Feather name="message-circle" size={16} color={colors.primary} />
-          </View>
-          <View style={styles.officeChatHeadingCopy}>
-            <Text style={[styles.officeChatTitle, { color: colors.foreground }]}>تحدث مع السكرتير</Text>
-            <Text style={[styles.officeChatHint, { color: colors.mutedForeground }]}>اسأل، اطلب، أو ابدأ إجراءً من داخل المكتب</Text>
-          </View>
-        </View>
-        {lastAssistantMessage && (
-          <View style={styles.officeChatReply}>
-            <MessageBubble
-              message={lastAssistantMessage}
-              colors={colors}
-              onApprove={onApprove}
-              onReject={onReject}
-              onOpenRecord={onOpenRecord}
-              busyOperationId={busyOperationId}
-            />
-          </View>
-        )}
-        {isSending && (
-          <View style={[styles.officeChatTyping, { backgroundColor: colors.muted }]}>
-            <ActivityIndicator size="small" color={colors.primary} />
-            <Text style={[styles.officeChatTypingText, { color: colors.mutedForeground }]}>السكرتير يفكر…</Text>
-          </View>
-        )}
-        <View style={[styles.officeChatComposer, { backgroundColor: colors.background, borderColor: colors.input }]}>
-          <TextInput
-            ref={inputRef}
-            testID="main-message-input"
-            value={draft}
-            onChangeText={onChangeDraft}
-            onSubmitEditing={onSend}
-            placeholder="اكتب طلبًا للسكرتير…"
-            placeholderTextColor={colors.mutedForeground}
-            multiline
-            maxLength={1000}
-            returnKeyType="send"
-            blurOnSubmit={false}
-            textAlign="right"
-            style={[styles.officeChatInput, { color: colors.foreground }]}
-          />
-          <Pressable
-            testID="main-send-message"
-            accessibilityRole="button"
-            accessibilityLabel="إرسال طلب من المكتب"
-            onPress={onSend}
-            disabled={!draft.trim() || isSending}
-            style={({ pressed }) => [
-              styles.officeChatSend,
-              { backgroundColor: colors.primary, opacity: !draft.trim() || isSending ? 0.4 : pressed ? 0.7 : 1 },
-            ]}
-          >
-            <Feather name="arrow-up" size={17} color={colors.primaryForeground} />
-          </Pressable>
-        </View>
-        <Text style={[styles.officeChatFooter, { color: colors.mutedForeground }]}>نفس محادثتك في السريع · التغييرات الحساسة تحتاج موافقتك</Text>
-      </View>
+      <CentralSecretaryChat
+        colors={colors}
+        messages={messages}
+        draft={draft}
+        onChangeDraft={onChangeDraft}
+        onSend={onSend}
+        isSending={isSending}
+        onApprove={onApprove}
+        onReject={onReject}
+        busyOperationId={busyOperationId}
+        onOpenRecord={onOpenRecord}
+        context={chatContext}
+      />
 
       {todayQuery.isError && (
         <View style={[styles.officeError, { backgroundColor: colors.destructive, borderColor: colors.destructive }]}>
@@ -766,7 +914,7 @@ function MainOffice({
                     key={approval.operationId}
                     testID={`office-approval-${approval.operationId}`}
                     accessibilityRole="button"
-                    onPress={onOpenQuick}
+                     onPress={() => onFocusChat()}
                     style={({ pressed }) => [
                       styles.officeActionRow,
                       { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.65 : 1 },
@@ -1144,6 +1292,13 @@ const detailStyles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'right',
   },
+  relatedHint: {
+    marginTop: 4,
+    marginBottom: 5,
+    fontSize: 11,
+    lineHeight: 17,
+    textAlign: 'right',
+  },
   relatedRow: {
     minHeight: 42,
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -1151,13 +1306,65 @@ const detailStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  relatedRowCopy: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
   relatedLabel: {
     fontSize: 12,
+    textAlign: 'right',
+  },
+  relatedSubtext: {
+    marginTop: 2,
+    fontSize: 10,
     textAlign: 'right',
   },
   relatedCount: {
     fontSize: 13,
     fontWeight: '700',
+  },
+  timelineCard: {
+    marginTop: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingTop: 13,
+  },
+  timelineHeading: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  timelineRow: {
+    minHeight: 48,
+    paddingVertical: 9,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row-reverse',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  timelineDot: {
+    width: 7,
+    height: 7,
+    marginTop: 5,
+    borderRadius: 4,
+    backgroundColor: '#6b8f71',
+  },
+  timelineCopy: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  timelineTitle: {
+    width: '100%',
+    fontSize: 11,
+    lineHeight: 17,
+    textAlign: 'right',
+  },
+  timelineMeta: {
+    width: '100%',
+    marginTop: 2,
+    fontSize: 10,
+    textAlign: 'right',
   },
   detailContext: {
     marginTop: 14,
@@ -1222,15 +1429,41 @@ function RecordDetailView({
   onBack,
   onAskSecretary,
   onOpenConversation,
+  onOpenRelatedRecord,
+  chatMessages,
+  chatDraft,
+  onChangeChatDraft,
+  onSendChat,
+  chatBusy,
+  onApprove,
+  onReject,
+  busyOperationId,
+  chatContext,
 }: {
   record: MobileRecordRow;
   colors: ReturnType<typeof useColors>;
   onBack: () => void;
   onAskSecretary: () => void;
   onOpenConversation?: (origin: RecordOrigin) => void;
+  onOpenRelatedRecord: (record: MobileRecordRow) => void;
+  chatMessages: LocalMessage[];
+  chatDraft: string;
+  onChangeChatDraft: (value: string) => void;
+  onSendChat: () => void;
+  chatBusy: boolean;
+  onApprove: (approval: Approval) => void;
+  onReject: (approval: Approval) => void;
+  busyOperationId: string | null;
+  chatContext: MobileRecordRow | null;
 }) {
-  const isEntity = record.recordType === 'person' || record.recordType === 'project';
-  const entityType = record.recordType === 'person' ? 'person' : 'project';
+  const isEntity = record.recordType === 'person'
+    || record.recordType === 'project'
+    || record.recordType === 'financial_party';
+  const entityType = record.recordType === 'project'
+    ? 'project'
+    : record.recordType === 'financial_party'
+      ? 'financial_party'
+      : 'person';
   const entityQuery = useGetEntityGraph(entityType, record.id, {
     query: {
       enabled: isEntity,
@@ -1244,10 +1477,20 @@ function RecordDetailView({
   const entityName = stringValue(entity.name, record.title);
   const entitySubtitle = record.recordType === 'person'
     ? stringValue(entity.notes, stringValue(entity.phone, record.subtitle))
-    : `الحالة: ${stringValue(entity.status, record.trailing ?? 'غير محددة')}`;
+    : record.recordType === 'project'
+      ? `الحالة: ${stringValue(entity.status, record.trailing ?? 'غير محددة')}`
+      : 'فتح مركز الطرف المالي';
   const relatedGroups = Object.entries(related)
     .map(([key, value]) => ({ key, count: arrayValue(value).length }))
     .filter((group) => group.count > 0);
+  const graphRelatedRows = Object.entries(related).flatMap(([key, value]) =>
+    arrayValue(value)
+      .map((item) => relatedRow(key, item))
+      .filter((item): item is MobileRecordRow => Boolean(item)),
+  );
+  const allRelatedRows = [...(record.related ?? []), ...graphRelatedRows]
+    .filter((item, index, rows) => rows.findIndex((candidate) => candidate.recordType === item.recordType && candidate.id === item.id) === index);
+  const timelineRows = arrayValue(entityData.timeline).slice(0, 8);
 
   return (
     <View style={detailStyles.detailScreen}>
@@ -1264,7 +1507,9 @@ function RecordDetailView({
         >
           <Feather name="arrow-right" size={17} color={colors.foreground} />
         </Pressable>
-        <Text style={[detailStyles.detailEyebrow, { color: colors.mutedForeground }]}>تفاصيل السجل</Text>
+          <Text style={[detailStyles.detailEyebrow, { color: colors.mutedForeground }]}>
+            {isEntity ? 'مركز الكيان' : 'تفاصيل السجل'}
+          </Text>
       </View>
 
       <View style={[detailStyles.detailCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -1304,17 +1549,64 @@ function RecordDetailView({
         </View>
       )}
 
-      {isEntity && !entityQuery.isLoading && !entityQuery.isError && relatedGroups.length > 0 && (
+      {!entityQuery.isLoading && !entityQuery.isError && allRelatedRows.length > 0 && (
         <View style={[detailStyles.relatedCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[detailStyles.relatedTitle, { color: colors.foreground }]}>مرتبط بهذا الكيان</Text>
-          {relatedGroups.map((group) => (
-            <View key={group.key} style={[detailStyles.relatedRow, { borderBottomColor: colors.border }]}>
-              <Text style={[detailStyles.relatedLabel, { color: colors.mutedForeground }]}>
-                {relatedLabels[group.key] ?? group.key}
-              </Text>
-              <Text style={[detailStyles.relatedCount, { color: colors.primary }]}>{group.count}</Text>
-            </View>
+          <Text style={[detailStyles.relatedTitle, { color: colors.foreground }]}>استكشف المعلومات المرتبطة</Text>
+          <Text style={[detailStyles.relatedHint, { color: colors.mutedForeground }]}>
+            افتح علاقة واتبعها إلى الكيان أو السجل التالي.
+          </Text>
+          {allRelatedRows.map((relatedRecord) => (
+            <Pressable
+              key={`${relatedRecord.recordType}-${relatedRecord.id}`}
+              accessibilityRole="button"
+              accessibilityLabel={`فتح ${relatedRecord.title}`}
+              onPress={() => onOpenRelatedRecord(relatedRecord)}
+              style={({ pressed }) => [
+                detailStyles.relatedRow,
+                { borderBottomColor: colors.border, opacity: pressed ? 0.65 : 1 },
+              ]}
+            >
+              <View style={detailStyles.relatedRowCopy}>
+                <Text style={[detailStyles.relatedLabel, { color: colors.foreground }]} numberOfLines={1}>
+                  {relatedRecord.title}
+                </Text>
+                <Text style={[detailStyles.relatedSubtext, { color: colors.mutedForeground }]} numberOfLines={1}>
+                  {relatedRecord.subtitle}
+                </Text>
+              </View>
+              {relatedRecord.trailing && (
+                <Text style={[detailStyles.relatedCount, { color: colors.primary }]} numberOfLines={1}>
+                  {relatedRecord.trailing}
+                </Text>
+              )}
+              <Feather name="chevron-left" size={15} color={colors.mutedForeground} />
+            </Pressable>
           ))}
+        </View>
+      )}
+
+      {isEntity && !entityQuery.isLoading && !entityQuery.isError && timelineRows.length > 0 && (
+        <View style={[detailStyles.timelineCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={detailStyles.timelineHeading}>
+            <Text style={[detailStyles.relatedTitle, { color: colors.foreground }]}>النشاط المرتبط</Text>
+            <Feather name="activity" size={16} color={colors.primary} />
+          </View>
+          {timelineRows.map((item, index) => {
+            const event = objectValue(item);
+            return (
+              <View key={`${String(event.id ?? 'event')}-${index}`} style={[detailStyles.timelineRow, { borderBottomColor: colors.border }]}>
+                <View style={detailStyles.timelineDot} />
+                <View style={detailStyles.timelineCopy}>
+                  <Text style={[detailStyles.timelineTitle, { color: colors.foreground }]} numberOfLines={2}>
+                    {stringValue(event.summary, stringValue(event.description, stringValue(event.type, 'نشاط مرتبط')))}
+                  </Text>
+                  <Text style={[detailStyles.timelineMeta, { color: colors.mutedForeground }]}>
+                    {recordDate(typeof event.occurredAt === 'string' ? event.occurredAt : null)}
+                  </Text>
+                </View>
+              </View>
+            );
+          })}
         </View>
       )}
 
@@ -1359,6 +1651,22 @@ function RecordDetailView({
         <Feather name="message-circle" size={16} color={colors.primaryForeground} />
         <Text style={[detailStyles.detailPrimaryActionText, { color: colors.primaryForeground }]}>اسأل السكرتير عن هذا</Text>
       </Pressable>
+      {chatContext?.id === record.id && (
+        <CentralSecretaryChat
+          colors={colors}
+          messages={chatMessages}
+          draft={chatDraft}
+          onChangeDraft={onChangeChatDraft}
+          onSend={onSendChat}
+          isSending={chatBusy}
+          onApprove={onApprove}
+          onReject={onReject}
+          busyOperationId={busyOperationId}
+          onOpenRecord={onOpenRelatedRecord}
+          context={record}
+          compact
+        />
+      )}
     </View>
   );
 }
@@ -1481,13 +1789,116 @@ function MessageBubble({
   );
 }
 
+const mainNavigation: Array<{ key: MainSection; label: string; icon: FeatherName }> = [
+  { key: 'office', label: 'الرئيسية', icon: 'home' },
+  { key: 'records', label: 'السجلات', icon: 'archive' },
+  { key: 'people', label: 'الأشخاص', icon: 'users' },
+  { key: 'projects', label: 'المشاريع', icon: 'briefcase' },
+  { key: 'financial', label: 'الماليات', icon: 'dollar-sign' },
+  { key: 'tasks', label: 'المهام', icon: 'check-square' },
+  { key: 'reminders', label: 'التذكيرات', icon: 'bell' },
+  { key: 'activity', label: 'النشاط', icon: 'activity' },
+];
+
+function MainDrawer({
+  colors,
+  open,
+  activeSection,
+  onClose,
+  onSelect,
+  onOpenQuick,
+}: {
+  colors: ReturnType<typeof useColors>;
+  open: boolean;
+  activeSection: MainSection;
+  onClose: () => void;
+  onSelect: (section: MainSection) => void;
+  onOpenQuick: () => void;
+}) {
+  if (!open) return null;
+  return (
+    <View style={styles.drawerLayer}>
+      <Pressable
+        testID="main-drawer-backdrop"
+        accessibilityRole="button"
+        accessibilityLabel="إغلاق القائمة"
+        onPress={onClose}
+        style={styles.drawerBackdrop}
+      />
+      <View style={[styles.drawerPanel, { backgroundColor: colors.card, borderLeftColor: colors.border }]}>
+        <View style={styles.drawerHeading}>
+          <View style={[styles.drawerMark, { backgroundColor: colors.primary }]}>
+            <Feather name="grid" size={16} color={colors.primaryForeground} />
+          </View>
+          <View style={styles.drawerHeadingCopy}>
+            <Text style={[styles.drawerTitle, { color: colors.foreground }]}>Personal Secretary</Text>
+            <Text style={[styles.drawerSubtitle, { color: colors.mutedForeground }]}>إدارة واستكشاف معلوماتك</Text>
+          </View>
+          <Pressable
+            testID="close-main-drawer"
+            accessibilityRole="button"
+            accessibilityLabel="إغلاق القائمة"
+            onPress={onClose}
+            style={({ pressed }) => [styles.drawerClose, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}
+          >
+            <Feather name="x" size={17} color={colors.foreground} />
+          </Pressable>
+        </View>
+        <View style={styles.drawerNav}>
+          {mainNavigation.map((item) => (
+            <Pressable
+              key={item.key}
+              testID={`main-nav-${item.key}`}
+              accessibilityRole="button"
+              accessibilityState={{ selected: activeSection === item.key }}
+              onPress={() => onSelect(item.key)}
+              style={({ pressed }) => [
+                styles.drawerNavItem,
+                activeSection === item.key && { backgroundColor: colors.muted },
+                { opacity: pressed ? 0.65 : 1 },
+              ]}
+            >
+              <Feather name={item.icon} size={17} color={activeSection === item.key ? colors.primary : colors.mutedForeground} />
+              <Text style={[styles.drawerNavText, { color: activeSection === item.key ? colors.foreground : colors.mutedForeground }]}>
+                {item.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+        <View style={[styles.drawerQuickSeparator, { borderTopColor: colors.border }]} />
+        <Pressable
+          testID="drawer-open-quick"
+          accessibilityRole="button"
+          accessibilityLabel="فتح السكرتير بسرعة"
+          onPress={onOpenQuick}
+          style={({ pressed }) => [styles.drawerQuick, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}
+        >
+          <View style={[styles.drawerQuickBubble, { backgroundColor: colors.primary }]}>
+            <Feather name="message-circle" size={16} color={colors.primaryForeground} />
+          </View>
+          <View style={styles.drawerQuickCopy}>
+            <Text style={[styles.drawerQuickTitle, { color: colors.foreground }]}>فتح السكرتير بسرعة</Text>
+            <Text style={[styles.drawerQuickText, { color: colors.mutedForeground }]}>وصول خفيف إلى نفس السكرتير</Text>
+          </View>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+// Drawer styles stay in the screen stylesheet so the shell can remain a single
+// mobile entry point while the larger sections are split out later.
+
 export default function QuickSecretaryScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
   const [activeView, setActiveView] = useState<'quick' | 'home'>('quick');
-  const [mainSection, setMainSection] = useState<'office' | 'records'>('office');
+  const [mainSection, setMainSection] = useState<MainSection>('office');
   const [selectedRecord, setSelectedRecord] = useState<MobileRecordRow | null>(null);
+  const [recordReturnView, setRecordReturnView] = useState<'main' | 'quick'>('main');
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [chatContext, setChatContext] = useState<MobileRecordRow | null>(null);
   const [messages, setMessages] = useState<LocalMessage[]>([starterMessage]);
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [draft, setDraft] = useState('');
@@ -1662,25 +2073,32 @@ export default function QuickSecretaryScreen() {
   function openHome() {
     setSelectedRecord(null);
     setMainSection('office');
+    setChatContext(null);
+    setDrawerOpen(false);
     setActiveView('home');
     void Haptics.selectionAsync();
   }
 
-  function openRecords() {
+  function openMainSection(section: MainSection) {
     setSelectedRecord(null);
-    setMainSection('records');
+    setMainSection(section);
+    setChatContext(null);
+    setDrawerOpen(false);
     setActiveView('home');
     void Haptics.selectionAsync();
   }
 
   function openQuick() {
     setSelectedRecord(null);
+    setDrawerOpen(false);
     setActiveView('quick');
     void Haptics.selectionAsync();
   }
 
   function openRecordFromRecords(record: MobileRecordRow) {
     setSelectedRecord(record);
+    setRecordReturnView('main');
+    setChatContext(null);
     setMainSection('records');
     setActiveView('home');
     void Haptics.selectionAsync();
@@ -1688,22 +2106,19 @@ export default function QuickSecretaryScreen() {
 
   function openRecordFromQuick(record: MobileRecordRow) {
     setSelectedRecord(record);
-    setMainSection('office');
+    setRecordReturnView('quick');
+    setChatContext(null);
+    setMainSection('records');
     setActiveView('home');
     void Haptics.selectionAsync();
   }
 
   function openOfficeRecord(record: MobileRecordRow) {
     setSelectedRecord(record);
+    setRecordReturnView('main');
+    setChatContext(null);
     setMainSection('office');
     setActiveView('home');
-    void Haptics.selectionAsync();
-  }
-
-  function openQuickWithDraft(value: string) {
-    setDraft(value);
-    setSelectedRecord(null);
-    setActiveView('quick');
     void Haptics.selectionAsync();
   }
 
@@ -1711,6 +2126,7 @@ export default function QuickSecretaryScreen() {
     setDraft(value);
     setSelectedRecord(null);
     setMainSection('office');
+    setChatContext(null);
     setActiveView('home');
     setTimeout(() => inputRef.current?.focus(), 0);
     void Haptics.selectionAsync();
@@ -1718,7 +2134,9 @@ export default function QuickSecretaryScreen() {
 
   function openOriginalConversation(origin: RecordOrigin) {
     setSelectedRecord(null);
-    setActiveView('quick');
+    setMainSection('office');
+    setChatContext(null);
+    setActiveView(recordReturnView === 'quick' ? 'quick' : 'home');
     if (origin.conversationId === conversationId) {
       void Haptics.selectionAsync();
       return;
@@ -1732,13 +2150,16 @@ export default function QuickSecretaryScreen() {
   function askSecretaryAboutRecord() {
     if (!selectedRecord) return;
     setDraft(`اسألني عن ${selectedRecord.title}`);
+    setChatContext(selectedRecord);
+    setRecordReturnView('main');
     setSelectedRecord(null);
-    setActiveView('quick');
+    setMainSection('office');
+    setActiveView('home');
+    setTimeout(() => inputRef.current?.focus(), 0);
     void Haptics.selectionAsync();
   }
 
   const reversedMessages = [...messages].reverse();
-  const lastAssistantMessage = [...messages].reverse().find((message) => message.role === 'assistant') ?? null;
   const recordOrigins = messages.reduce<Record<string, RecordOrigin>>((origins, message) => {
     if (message.recordLink?.origin) origins[message.recordLink.id] = message.recordLink.origin;
     return origins;
@@ -1760,62 +2181,79 @@ export default function QuickSecretaryScreen() {
             </View>
             <View>
                <Text style={[styles.brandName, { color: colors.foreground }]}>
-                 {activeView === 'quick' ? 'السكرتير' : 'مكتب السكرتير'}
+                  {activeView === 'quick' ? 'السكرتير السريع' : 'Personal Secretary'}
               </Text>
               <View style={styles.availability}>
                 <View style={[styles.statusDot, { backgroundColor: colors.accent }]} />
                 <Text style={[styles.availabilityText, { color: colors.mutedForeground }]}>
-                   {activeView === 'quick' ? 'جاهز للرد السريع' : 'استكشف، راجع، وافهم'}
+                    {activeView === 'quick' ? 'فتحت السكرتير بسرعة' : 'إدارة، استكشاف، ومراجعة'}
                 </Text>
               </View>
             </View>
           </View>
-          {activeView === 'quick' && (
-            <Pressable
-              testID="new-conversation"
-              accessibilityRole="button"
-              accessibilityLabel="محادثة جديدة"
-              onPress={startNewConversation}
-              style={({ pressed }) => [styles.iconButton, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}
-            >
-              <Feather name="edit-3" size={17} color={colors.foreground} />
-            </Pressable>
-          )}
-        </View>
-        <View style={[styles.viewSwitcher, { backgroundColor: colors.muted }]}>
-          <Pressable
-            testID="quick-view-tab"
-            accessibilityRole="button"
-            accessibilityState={{ selected: activeView === 'quick' }}
-            onPress={openQuick}
-            style={({ pressed }) => [
-              styles.viewTab,
-              activeView === 'quick' && { backgroundColor: colors.card },
-              { opacity: pressed ? 0.7 : 1 },
-            ]}
-          >
-            <Feather name="message-circle" size={14} color={activeView === 'quick' ? colors.primary : colors.mutedForeground} />
-            <Text style={[styles.viewTabText, { color: activeView === 'quick' ? colors.foreground : colors.mutedForeground }]}>السريع</Text>
-          </Pressable>
-          <Pressable
-            testID="home-view-tab"
-            accessibilityRole="button"
-            accessibilityLabel="فتح الواجهة الرئيسية"
-            accessibilityState={{ selected: activeView === 'home' }}
-            onPress={openHome}
-            style={({ pressed }) => [
-              styles.viewTab,
-              activeView === 'home' && { backgroundColor: colors.card },
-              { opacity: pressed ? 0.7 : 1 },
-            ]}
-          >
-           <Feather name="briefcase" size={14} color={activeView === 'home' ? colors.primary : colors.mutedForeground} />
-           <Text style={[styles.viewTabText, { color: activeView === 'home' ? colors.foreground : colors.mutedForeground }]}>المكتب</Text>
-          </Pressable>
+          <View style={styles.headerActions}>
+            {activeView === 'home' ? (
+              <>
+                <Pressable
+                  testID="open-main-drawer"
+                  accessibilityRole="button"
+                  accessibilityLabel="فتح قائمة البرنامج"
+                  onPress={() => setDrawerOpen(true)}
+                  style={({ pressed }) => [styles.iconButton, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}
+                >
+                  <Feather name="menu" size={18} color={colors.foreground} />
+                </Pressable>
+                <Pressable
+                  testID="main-quick-bubble"
+                  accessibilityRole="button"
+                  accessibilityLabel="فتح السكرتير بسرعة"
+                  onPress={openQuick}
+                  style={({ pressed }) => [
+                    styles.quickAccessBubble,
+                    { backgroundColor: colors.primary, opacity: pressed ? 0.7 : 1 },
+                  ]}
+                >
+                  <Feather name="message-circle" size={17} color={colors.primaryForeground} />
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Pressable
+                  testID="quick-open-main"
+                  accessibilityRole="button"
+                  accessibilityLabel="فتح البرنامج الكامل"
+                  onPress={openHome}
+                  style={({ pressed }) => [styles.iconButton, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}
+                >
+                  <Feather name="grid" size={17} color={colors.foreground} />
+                </Pressable>
+                <Pressable
+                  testID="new-conversation"
+                  accessibilityRole="button"
+                  accessibilityLabel="محادثة جديدة"
+                  onPress={startNewConversation}
+                  style={({ pressed }) => [styles.iconButton, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}
+                >
+                  <Feather name="edit-3" size={17} color={colors.foreground} />
+                </Pressable>
+              </>
+            )}
+          </View>
         </View>
       </View>
 
-       {activeView === 'home' ? (
+      {activeView === 'home' && (
+        <MainDrawer
+          colors={colors}
+          open={drawerOpen}
+          activeSection={mainSection}
+          onClose={() => setDrawerOpen(false)}
+          onSelect={openMainSection}
+          onOpenQuick={openQuick}
+        />
+      )}
+
+      {activeView === 'home' ? (
         selectedRecord ? (
           <RecordDetailView
             record={selectedRecord}
@@ -1823,32 +2261,111 @@ export default function QuickSecretaryScreen() {
             onBack={() => setSelectedRecord(null)}
             onAskSecretary={askSecretaryAboutRecord}
             onOpenConversation={openOriginalConversation}
+              onOpenRelatedRecord={openOfficeRecord}
+              chatMessages={messages}
+              chatDraft={draft}
+              onChangeChatDraft={setDraft}
+              onSendChat={() => void sendMessage()}
+              chatBusy={createTurn.isPending || conversationQuery.isFetching}
+              onApprove={(approval) => void updateApproval(approval, 'completed')}
+              onReject={(approval) => void updateApproval(approval, 'rejected')}
+              busyOperationId={busyOperationId}
+              chatContext={chatContext}
           />
         ) : (
-           mainSection === 'office' ? (
-             <MainOffice
-               colors={colors}
-               onOpenRecord={openOfficeRecord}
-               onOpenRecords={openRecords}
-               onOpenQuick={openQuick}
-               onAskSecretary={openOfficeWithDraft}
-               lastAssistantMessage={lastAssistantMessage}
-               draft={draft}
-               onChangeDraft={setDraft}
-               onSend={() => void sendMessage()}
-               inputRef={inputRef}
-               isSending={createTurn.isPending || conversationQuery.isFetching}
-               onApprove={(approval) => void updateApproval(approval, 'completed')}
-               onReject={(approval) => void updateApproval(approval, 'rejected')}
-               busyOperationId={busyOperationId}
-               recordOrigins={recordOrigins}
-               pendingApprovals={messages.flatMap((message) => (
-                 message.approval && message.approval.status === 'pending' ? [message.approval] : []
-               ))}
-             />
-           ) : (
-             <RecordsView colors={colors} onOpenRecord={openRecordFromRecords} onBack={openHome} />
-           )
+            <>
+              {mainSection === 'office' && (
+                <MainOffice
+                  colors={colors}
+                  onOpenRecord={openOfficeRecord}
+                  onOpenRecords={() => openMainSection('records')}
+                  onFocusChat={() => setChatContext(null)}
+                  onAskSecretary={openOfficeWithDraft}
+                  messages={messages}
+                  draft={draft}
+                  onChangeDraft={setDraft}
+                  onSend={() => void sendMessage()}
+                  inputRef={inputRef}
+                  isSending={createTurn.isPending || conversationQuery.isFetching}
+                  onApprove={(approval) => void updateApproval(approval, 'completed')}
+                  onReject={(approval) => void updateApproval(approval, 'rejected')}
+                  busyOperationId={busyOperationId}
+                  recordOrigins={recordOrigins}
+                  chatContext={chatContext}
+                  pendingApprovals={messages.flatMap((message) => (
+                    message.approval && message.approval.status === 'pending' ? [message.approval] : []
+                  ))}
+                />
+              )}
+              {mainSection === 'records' && (
+                <RecordsView
+                  colors={colors}
+                  title="السجلات"
+                  subtitle="كل ما حفظه السكرتير في مكان واحد"
+                  onOpenRecord={openRecordFromRecords}
+                  onBack={openHome}
+                />
+              )}
+              {mainSection === 'people' && (
+                <RecordsView
+                  colors={colors}
+                  title="الأشخاص"
+                  subtitle="الأشخاص وعلاقاتهم بالسجلات والمشاريع"
+                  sectionKeys={['people']}
+                  onOpenRecord={openRecordFromRecords}
+                  onBack={openHome}
+                />
+              )}
+              {mainSection === 'projects' && (
+                <RecordsView
+                  colors={colors}
+                  title="المشاريع"
+                  subtitle="المشاريع النشطة وسياقها المرتبط"
+                  sectionKeys={['projects']}
+                  onOpenRecord={openRecordFromRecords}
+                  onBack={openHome}
+                />
+              )}
+              {mainSection === 'financial' && (
+                <RecordsView
+                  colors={colors}
+                  title="الماليات"
+                  subtitle="المصروفات والالتزامات والعلاقات المالية"
+                  sectionKeys={['expenses', 'commitments']}
+                  onOpenRecord={openRecordFromRecords}
+                  onBack={openHome}
+                />
+              )}
+              {mainSection === 'tasks' && (
+                <RecordsView
+                  colors={colors}
+                  title="المهام"
+                  subtitle="المهام المفتوحة والمكتملة المرتبطة بسياقك"
+                  sectionKeys={['tasks']}
+                  onOpenRecord={openRecordFromRecords}
+                  onBack={openHome}
+                />
+              )}
+              {mainSection === 'reminders' && (
+                <RecordsView
+                  colors={colors}
+                  title="التذكيرات"
+                  subtitle="كل المواعيد والتنبيهات التي يتابعها السكرتير"
+                  sectionKeys={['reminders']}
+                  onOpenRecord={openRecordFromRecords}
+                  onBack={openHome}
+                />
+              )}
+              {mainSection === 'activity' && (
+                <RecordsView
+                  colors={colors}
+                  title="النشاط / Timeline"
+                  subtitle="آخر السجلات والحركة التي تستحق المراجعة"
+                  onOpenRecord={openRecordFromRecords}
+                  onBack={openHome}
+                />
+              )}
+            </>
         )
       ) : !hydrated ? (
         <View style={styles.loadingState}>
@@ -2028,6 +2545,132 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  headerActions: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+  },
+  quickAccessBubble: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  drawerLayer: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 20,
+    flexDirection: 'row-reverse',
+  },
+  drawerBackdrop: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(15, 23, 42, 0.32)',
+  },
+  drawerPanel: {
+    width: '82%',
+    maxWidth: 340,
+    height: '100%',
+    paddingTop: 78,
+    paddingHorizontal: 16,
+    borderLeftWidth: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: -4, height: 0 },
+    elevation: 8,
+  },
+  drawerHeading: {
+    minHeight: 48,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 9,
+  },
+  drawerMark: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  drawerHeadingCopy: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  drawerTitle: {
+    width: '100%',
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  drawerSubtitle: {
+    width: '100%',
+    marginTop: 2,
+    fontSize: 10,
+    textAlign: 'right',
+  },
+  drawerClose: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  drawerNav: {
+    marginTop: 22,
+    gap: 5,
+  },
+  drawerNavItem: {
+    minHeight: 46,
+    borderRadius: 13,
+    paddingHorizontal: 12,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 10,
+  },
+  drawerNavText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'right',
+  },
+  drawerQuickSeparator: {
+    marginTop: 22,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  drawerQuick: {
+    minHeight: 62,
+    marginTop: 15,
+    borderRadius: 15,
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 9,
+  },
+  drawerQuickBubble: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  drawerQuickCopy: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  drawerQuickTitle: {
+    width: '100%',
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  drawerQuickText: {
+    width: '100%',
+    marginTop: 2,
+    fontSize: 10,
+    textAlign: 'right',
   },
   viewSwitcher: {
     marginTop: 10,
@@ -2216,6 +2859,115 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontSize: 12,
     lineHeight: 19,
+    textAlign: 'center',
+  },
+  centralChatPanel: {
+    marginTop: 18,
+    borderRadius: 19,
+    borderWidth: 1,
+    padding: 12,
+  },
+  recordChatPanel: {
+    marginTop: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 12,
+  },
+  centralChatHeading: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 9,
+  },
+  centralChatIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  centralChatHeadingCopy: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  centralChatTitle: {
+    width: '100%',
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  centralChatHint: {
+    width: '100%',
+    marginTop: 2,
+    fontSize: 10,
+    textAlign: 'right',
+  },
+  chatContextChip: {
+    marginTop: 9,
+    borderRadius: 11,
+    borderWidth: 1,
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 6,
+  },
+  chatContextText: {
+    flex: 1,
+    fontSize: 10,
+    textAlign: 'right',
+  },
+  centralChatTranscript: {
+    maxHeight: 245,
+    marginTop: 8,
+  },
+  recordChatTranscript: {
+    maxHeight: 220,
+  },
+  centralChatTranscriptContent: {
+    paddingVertical: 3,
+    gap: 7,
+  },
+  centralChatTyping: {
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 7,
+  },
+  centralChatTypingText: {
+    fontSize: 11,
+  },
+  centralChatComposer: {
+    minHeight: 48,
+    marginTop: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingLeft: 6,
+    paddingRight: 10,
+    flexDirection: 'row-reverse',
+    alignItems: 'flex-end',
+  },
+  centralChatInput: {
+    flex: 1,
+    maxHeight: 76,
+    paddingTop: 10,
+    paddingBottom: 9,
+    paddingHorizontal: 4,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  centralChatSend: {
+    width: 32,
+    height: 32,
+    marginBottom: 6,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  centralChatFooter: {
+    paddingTop: 6,
+    fontSize: 9,
     textAlign: 'center',
   },
   officeList: {
