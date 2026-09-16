@@ -144,3 +144,35 @@ test("Phase2 resolves high-signal reminder and clarification before any provider
   assert.equal(missing.response?.kind, "clarification");
   assert.equal(missing.action?.type, "clarification_needed");
 });
+
+test("Phase2 asks for missing context without calling a provider", async () => {
+  class UnreachableGateway implements ModelGateway {
+    readonly provider = "gemini" as const;
+    readonly modelName = "unreachable";
+    calls = 0;
+
+    async generate(): Promise<never> {
+      this.calls += 1;
+      throw new Error("provider should not be called");
+    }
+  }
+
+  const gateway = new UnreachableGateway();
+  const runtime = new Phase2AgentRuntime(gateway);
+  const identity: Identity = {
+    tenantId: `deterministic-context-${process.pid}-${Date.now()}`,
+    userId: "deterministic-user",
+  };
+  const result = await runtime.run(identity, {
+    message: "وكان ده الأسبوع اللي فات",
+    conversationId: `deterministic-context-missing-${Date.now()}`,
+  }, { dryRun: true });
+
+  assert.equal(gateway.calls, 0);
+  assert.equal(result.response?.kind, "clarification");
+  assert.equal(result.action?.type, "clarification_needed");
+  assert.equal(
+    (result.action?.deterministicIntelligence as { solvedWithoutLlm?: boolean } | undefined)?.solvedWithoutLlm,
+    true,
+  );
+});

@@ -26,6 +26,7 @@ import {
   type ConversationMemorySnapshot,
 } from "./conversation-memory";
 import {
+  isUnanchoredRelativeDateFollowup,
   parseFinancialFollowupAdjustment,
   retrieveRelationshipContext,
   serializeRelationshipContext,
@@ -4654,6 +4655,29 @@ export class Phase2AgentRuntime {
         kind: result.ok ? "answer" : "error",
         message: result.ok ? "جهزت تعديل المصروف للموافقة." : "لم أستطع تجهيز التعديل بأمان.",
       });
+    }
+
+    if (
+      conversationMemory.recentTurns.length === 0
+      && !conversationMemory.summary
+      && isUnanchoredRelativeDateFollowup(input.message, conversationMemory.state)
+    ) {
+      deterministicMetrics.decision = "clarification";
+      deterministicMetrics.falsePositiveGuard = "blocked";
+      deterministicMetrics.solvedWithoutLlm = true;
+      action = {
+        type: "clarification_needed",
+        source: "deterministic_intelligence",
+        reason: "missing_conversation_context",
+      };
+      try {
+        return await persistResult({
+          kind: "clarification",
+          message: "محتاج تفاصيل العملية السابقة أو رسالة تسجيلها الأول عشان أحدد المصروف المقصود وأعدّل تاريخه بأمان.",
+        });
+      } finally {
+        finishRequestInstrumentation();
+      }
     }
 
     if (relationshipContext?.response) {

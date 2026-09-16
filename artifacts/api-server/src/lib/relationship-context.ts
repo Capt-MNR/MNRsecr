@@ -216,6 +216,17 @@ export function parseFinancialFollowupAdjustment(
   };
 }
 
+export function isUnanchoredRelativeDateFollowup(
+  message: string,
+  state: ConversationState,
+): boolean {
+  if (state.lastExpense) return false;
+  const normalized = normalizeEntityText(message);
+  const relativeDate = /(?:الاسبوع\s+اللي\s+فات|الشهر\s+اللي\s+فات|امس|امبارح|قبل\s+كده|من\s+يومين|من\s+اسبوع)/u;
+  const correctionReference = /(?:وكان|وكانت|وده|ودي|ده|دي|المبلغ|المصروف|الدفعة|العملية)/u;
+  return relativeDate.test(normalized) && correctionReference.test(normalized);
+}
+
 function emptyContext(intent: RelationshipIntent): RelationshipContext {
   return {
     version: 1,

@@ -26,6 +26,7 @@ import {
   type ConversationState,
 } from "../src/lib/conversation-memory.ts";
 import {
+  isUnanchoredRelativeDateFollowup,
   parseFinancialFollowupAdjustment,
   parseRelationshipRequest,
   RELATIONSHIP_CONTEXT_LIMITS,
@@ -213,6 +214,14 @@ test("relationship parser recognizes bounded deterministic reads and safe follow
   assert.deepEqual(
     parseFinancialFollowupAdjustment("زود عليهم 50 دولار", state),
     { status: "currency_mismatch" },
+  );
+  assert.equal(
+    isUnanchoredRelativeDateFollowup("وكان ده الأسبوع اللي فات", emptyConversationState()),
+    true,
+  );
+  assert.equal(
+    isUnanchoredRelativeDateFollowup("وكان ده الأسبوع اللي فات", state),
+    false,
   );
 });
 
