@@ -3,6 +3,7 @@ import type { AppLanguage } from '@/hooks/useLanguage';
 import type { SecretaryChatContext } from '../services/secretary-chat';
 
 export type ApprovalStatus = 'pending' | 'executing' | 'completed' | 'rejected' | 'expired' | 'failed';
+export type ConfirmationMode = 'immediate_approval' | 'deferred_confirmation';
 export type ApprovalCandidate = { id: string; name: string; status?: string };
 export type ApprovalArgs = Record<string, unknown>;
 export type Approval = {
@@ -10,6 +11,8 @@ export type Approval = {
   title: string;
   details: string[];
   status: ApprovalStatus;
+  confirmationMode?: ConfirmationMode;
+  quickApprove?: boolean;
   toolName?: string;
   initialArgs?: ApprovalArgs;
   personCandidates?: ApprovalCandidate[];
@@ -75,7 +78,11 @@ function statusLabel(status?: string | null) {
 
 type Action = Record<string, unknown> | null | undefined;
 export function approvalFromAction(action: Action): Approval | undefined {
-  if (!action || action.type !== 'approval_required' || typeof action.operationId !== 'string') return undefined;
+  if (
+    !action
+    || !['approval_required', 'pending_confirmation'].includes(String(action.type))
+    || typeof action.operationId !== 'string'
+  ) return undefined;
   const display = objectValue(action.display);
   const status = typeof action.status === 'string' && ['pending', 'executing', 'completed', 'rejected', 'expired', 'failed'].includes(action.status)
     ? action.status as ApprovalStatus : 'pending';
@@ -84,6 +91,10 @@ export function approvalFromAction(action: Action): Approval | undefined {
     title: typeof display.title === 'string' ? display.title : 'تأكيد العملية',
     details: Array.isArray(display.details) ? display.details.filter((item): item is string => typeof item === 'string') : [],
     status,
+    ...(action.confirmationMode === 'immediate_approval' || action.confirmationMode === 'deferred_confirmation'
+      ? { confirmationMode: action.confirmationMode }
+      : {}),
+    ...(action.quickApprove === true ? { quickApprove: true } : {}),
     ...(typeof action.toolName === 'string' ? { toolName: action.toolName } : {}),
     ...(objectValue(action.args) && Object.keys(objectValue(action.args)).length > 0
       ? { initialArgs: objectValue(action.args) }

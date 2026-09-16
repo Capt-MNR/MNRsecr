@@ -614,23 +614,25 @@ export default function QuickSecretaryScreen() {
         <QuickScreen>
           <FlatList
             inverted
-          data={reversedMessages}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <MessageBubble
-              message={item}
-              colors={colors}
-              onApprove={(approval) => void updateApproval(approval, 'completed')}
-              onReject={(approval) => void updateApproval(approval, 'rejected')}
-               onOpenRecord={openRecordFromQuick}
-              busyOperationId={busyOperationId}
-            />
-          )}
-          contentContainerStyle={styles.messageList}
-          keyboardDismissMode="interactive"
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          ListHeaderComponent={secretaryChat.isSending || conversationQuery.isFetching ? (
+            data={reversedMessages}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <MessageBubble
+                message={item}
+                colors={colors}
+                onApprove={(approval) => void updateApproval(approval, 'completed')}
+                onReject={(approval) => void updateApproval(approval, 'rejected')}
+                onOpenMain={openHome}
+                onOpenRecord={openRecordFromQuick}
+                busyOperationId={busyOperationId}
+                compact
+              />
+            )}
+            contentContainerStyle={styles.messageList}
+            keyboardDismissMode="interactive"
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            ListHeaderComponent={secretaryChat.isSending || conversationQuery.isFetching ? (
             <View style={styles.typingRow}>
               <View style={[styles.typingBubble, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <ActivityIndicator size="small" color={colors.primary} />

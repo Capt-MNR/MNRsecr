@@ -25,6 +25,7 @@ export { default as MainWorkspace } from './MainWorkspace';
 export { MessageBubble };
 
 export type ApprovalStatus = 'pending' | 'executing' | 'completed' | 'rejected' | 'expired' | 'failed';
+type ConfirmationMode = 'immediate_approval' | 'deferred_confirmation';
 type ApprovalCandidate = { id: string; name: string; status?: string };
 
 export type Approval = {
@@ -32,6 +33,8 @@ export type Approval = {
   title: string;
   details: string[];
   status: ApprovalStatus;
+  confirmationMode?: ConfirmationMode;
+  quickApprove?: boolean;
   toolName?: string;
   initialArgs?: Record<string, unknown>;
   personCandidates?: ApprovalCandidate[];
@@ -312,7 +315,11 @@ function relatedRow(key: string, value: unknown): MobileRecordRow | null {
 }
 
 export function approvalFromAction(action: TurnResponse['action']): Approval | undefined {
-  if (!action || action.type !== 'approval_required' || typeof action.operationId !== 'string') {
+  if (
+    !action
+    || !['approval_required', 'pending_confirmation'].includes(String(action.type))
+    || typeof action.operationId !== 'string'
+  ) {
     return undefined;
   }
   const display = action.display && typeof action.display === 'object'
@@ -329,6 +336,10 @@ export function approvalFromAction(action: TurnResponse['action']): Approval | u
       ? display.details.filter((detail): detail is string => typeof detail === 'string')
       : [],
     status,
+    ...(action.confirmationMode === 'immediate_approval' || action.confirmationMode === 'deferred_confirmation'
+      ? { confirmationMode: action.confirmationMode }
+      : {}),
+    ...(action.quickApprove === true ? { quickApprove: true } : {}),
     ...(typeof action.toolName === 'string' ? { toolName: action.toolName } : {}),
     ...(action.args && typeof action.args === 'object' ? { initialArgs: action.args as Record<string, unknown> } : {}),
     ...(Array.isArray(action.personCandidates)

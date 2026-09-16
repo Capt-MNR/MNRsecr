@@ -274,15 +274,19 @@ export function MessageBubble({
   colors,
   onApprove,
   onReject,
+  onOpenMain,
   onOpenRecord,
   busyOperationId,
+  compact = false,
 }: {
   message: LocalMessage;
   colors: ReturnType<typeof useColors>;
   onApprove: (approval: Approval, args?: ApprovalArgs) => void;
   onReject: (approval: Approval) => void;
+  onOpenMain?: () => void;
   onOpenRecord: (record: MobileRecordRow) => void;
   busyOperationId: string | null;
+  compact?: boolean;
 }) {
   const isUser = message.role === 'user';
   const approvalBusy = message.approval && busyOperationId === message.approval.operationId;
@@ -290,8 +294,11 @@ export function MessageBubble({
     || message.approval?.status === 'rejected'
     || message.approval?.status === 'expired'
     || message.approval?.status === 'failed';
-  const canEdit = message.approval?.status === 'pending'
+  const canEdit = !compact && message.approval?.status === 'pending'
     && (message.approval.toolName === 'record_expense' || message.approval.toolName === 'create_reminder');
+  const canQuickApprove = compact
+    && message.approval?.status === 'pending'
+    && message.approval.quickApprove === true;
 
   return (
     <View style={[styles.messageRow, isUser ? styles.userRow : styles.assistantRow]}>
@@ -335,7 +342,19 @@ export function MessageBubble({
                 />
               )}
               <View style={styles.approvalActions}>
-                {!canEdit && <Pressable
+                {canQuickApprove ? (
+                  <Pressable
+                    testID={`quick-approve-${message.approval.operationId}`}
+                    accessibilityRole="button"
+                    accessibilityLabel="اعتماد العملية سريعًا"
+                    onPress={() => onApprove(message.approval as Approval)}
+                    disabled={Boolean(approvalBusy)}
+                    style={({ pressed }) => [styles.approveButton, { backgroundColor: colors.primary, opacity: pressed || approvalBusy ? 0.65 : 1 }]}
+                  >
+                    {approvalBusy ? <ActivityIndicator size="small" color={colors.primaryForeground} /> : <Feather name="check" size={16} color={colors.primaryForeground} />}
+                    <Text style={[styles.approveText, { color: colors.primaryForeground }]}>اعتماد</Text>
+                  </Pressable>
+                ) : !compact ? <Pressable
                   testID={`approve-${message.approval.operationId}`}
                   accessibilityRole="button"
                   accessibilityLabel="اعتماد العملية"
@@ -345,7 +364,20 @@ export function MessageBubble({
                 >
                   {approvalBusy ? <ActivityIndicator size="small" color={colors.primaryForeground} /> : <Feather name="check" size={16} color={colors.primaryForeground} />}
                   <Text style={[styles.approveText, { color: colors.primaryForeground }]}>اعتماد</Text>
-                </Pressable>}
+                </Pressable> : null}
+                {compact && !canQuickApprove && onOpenMain && (
+                  <Pressable
+                    testID={`open-main-review-${message.approval.operationId}`}
+                    accessibilityRole="button"
+                    accessibilityLabel="مراجعة العملية في البرنامج الرئيسي"
+                    onPress={onOpenMain}
+                    disabled={Boolean(approvalBusy)}
+                    style={({ pressed }) => [styles.approveButton, { backgroundColor: colors.primary, opacity: pressed || approvalBusy ? 0.65 : 1 }]}
+                  >
+                    <Feather name="arrow-up-left" size={16} color={colors.primaryForeground} />
+                    <Text style={[styles.approveText, { color: colors.primaryForeground }]}>مراجعة في Main</Text>
+                  </Pressable>
+                )}
                 <Pressable
                   testID={`reject-${message.approval.operationId}`}
                   accessibilityRole="button"

@@ -36,6 +36,7 @@ import {
   type OperationExecutionResult,
   type PendingOperation,
 } from "./secretary-operations";
+import { annotateApprovalAction, approvalMessage } from "./secretary-confirmation";
 import {
   loadConversationMemory,
   saveConversationTurn,
@@ -1003,6 +1004,7 @@ async function saveDeterministicExpense(
       status: pending.status,
       toolName: pending.toolName,
       display: pending.display,
+      args: pending.args,
     },
     provider: "development",
     model: "deterministic-ar-v1",
@@ -1035,6 +1037,7 @@ async function pendingDeterministicAction(
       status: pending.status,
       toolName: pending.toolName,
       display: pending.display,
+      args: pending.args,
     },
     provider: "development",
     model: "deterministic-ar-v1",
@@ -1378,7 +1381,15 @@ export class DeterministicAgentRuntime {
       }
     }
 
-    result = { ...result, turnId };
+    result = {
+      ...result,
+      turnId,
+      action: annotateApprovalAction(result.action, input.channel),
+    };
+    result = {
+      ...result,
+      assistantMessage: approvalMessage(result.action, result.assistantMessage, input.channel),
+    };
     if (input.idempotencyKey) {
       await this.persistence.saveIdempotentResponse(
         identity,

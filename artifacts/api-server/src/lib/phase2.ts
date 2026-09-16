@@ -45,6 +45,7 @@ import {
 import {
   createPendingOperation,
 } from "./secretary-operations";
+import { annotateApprovalAction, approvalMessage } from "./secretary-confirmation";
 import {
   deterministicExpensePeriod,
   isBroadExpenseReportRequest,
@@ -5063,17 +5064,21 @@ export class Phase2AgentRuntime {
               nextCallKind: null,
               nextScope: activeToolScope.name,
             });
-            action = {
+            action = annotateApprovalAction({
               type: "approval_required",
               operationId: approval.operationId,
               status: approval.status,
               toolName: approval.toolName,
               display: { title, details },
               args: approval.args,
-            };
+            }, input.channel);
             return persistResult({
               kind: "clarification",
-              message: `قبل ما أنفذ ${title}${details.length > 0 ? ` (${details.join(" — ")})` : ""}، هل توافق؟`,
+              message: approvalMessage(
+                action,
+                `قبل ما أنفذ ${title}${details.length > 0 ? ` (${details.join(" — ")})` : ""}، هل توافق؟`,
+                input.channel,
+              ),
             });
           }
           messages.push({
