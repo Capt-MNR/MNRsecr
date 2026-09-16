@@ -383,6 +383,74 @@ test("HTTP record edits reject a stale approval instead of overwriting a newer e
   assert.equal(stored?.rowVersion, expense.rowVersion + 1);
 });
 
+test("HTTP concurrent person deletion and financial linking preserve referential integrity", async () => {
+  const [person] = await db.insert(peopleTable).values({
+    tenantId,
+    ownerUserId: userId,
+    name: "شخص حذف وربط",
+    nameKey: "شخص حذف وربط",
+  }).returning();
+  const [project] = await db.insert(projectsTable).values({
+    tenantId,
+    ownerUserId: userId,
+    name: "مشروع يبقى مع الشخص",
+    nameKey: "مشروع يبقى مع الشخص",
+  }).returning();
+  await db.insert(projectPeopleTable).values({
+    tenantId,
+    ownerUserId: userId,
+    projectId: project.id,
+    personId: person.id,
+    relationship: "existing",
+  });
+
+  const linkPending = await request("/financial/parties", "POST", {
+    partyType: "person",
+    name: "طرف ربط متزامن",
+    personId: person.id,
+    idempotencyKey: `concurrent-financial-link-${Date.now()}`,
+  });
+  const deletePending = await request(`/records/person/${person.id}`, "DELETE");
+  assert.equal(linkPending.status, 202);
+  assert.equal(deletePending.status, 202);
+
+  const linkOperationId = linkPending.body?.approval?.operationId as string;
+  const deleteOperationId = deletePending.body?.approval?.operationId as string;
+  const [linkResult, deleteResult] = await Promise.all([
+    approve(linkOperationId),
+    approve(deleteOperationId),
+  ]);
+  assert.deepEqual(
+    [linkResult.status, deleteResult.status].sort((a, b) => a - b),
+    [200, 500],
+  );
+
+  const [remainingPerson] = await db.select().from(peopleTable).where(and(
+    eq(peopleTable.tenantId, tenantId),
+    eq(peopleTable.ownerUserId, userId),
+    eq(peopleTable.id, person.id),
+  ));
+  const partyLinks = await db.select().from(financialPartyPeopleTable).where(and(
+    eq(financialPartyPeopleTable.tenantId, tenantId),
+    eq(financialPartyPeopleTable.ownerUserId, userId),
+    eq(financialPartyPeopleTable.personId, person.id),
+  ));
+  const projectLinks = await db.select().from(projectPeopleTable).where(and(
+    eq(projectPeopleTable.tenantId, tenantId),
+    eq(projectPeopleTable.ownerUserId, userId),
+    eq(projectPeopleTable.projectId, project.id),
+    eq(projectPeopleTable.personId, person.id),
+  ));
+
+  if (remainingPerson) {
+    assert.equal(partyLinks.length, 1);
+    assert.equal(projectLinks.length, 1);
+  } else {
+    assert.equal(partyLinks.length, 0);
+    assert.equal(projectLinks.length, 0);
+  }
+});
+
 test("HTTP entity detail is authorized, typed, bounded, and paginated", async () => {
   const [person] = await db.insert(peopleTable).values({
     tenantId,

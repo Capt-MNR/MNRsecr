@@ -4,6 +4,8 @@ import {
   commitmentsTable,
   db as database,
   expensesTable,
+  financialPartyPeopleTable,
+  financialPartyProjectsTable,
   idempotencyRecordsTable,
   peopleTable,
   projectPeopleTable,
@@ -1894,7 +1896,14 @@ async function executeTool(
         identityWhere(identity, commitmentsTable),
         eq(commitmentsTable.personId, targetId),
       )).limit(1);
-      if (dependency || commitmentDependency) {
+      const [financialPartyDependency] = await db.select({ id: financialPartyPeopleTable.id })
+        .from(financialPartyPeopleTable)
+        .where(and(
+          identityWhere(identity, financialPartyPeopleTable),
+          eq(financialPartyPeopleTable.personId, targetId),
+        ))
+        .limit(1);
+      if (dependency || commitmentDependency || financialPartyDependency) {
         result = { ok: false, error: "Person has saved records and cannot be deleted until those links are resolved." };
         break;
       }
@@ -1933,7 +1942,14 @@ async function executeTool(
         identityWhere(identity, projectPeopleTable),
         eq(projectPeopleTable.projectId, targetId),
       )).limit(1);
-      if (dependency || relationshipDependency) {
+      const [financialPartyDependency] = await db.select({ id: financialPartyProjectsTable.id })
+        .from(financialPartyProjectsTable)
+        .where(and(
+          identityWhere(identity, financialPartyProjectsTable),
+          eq(financialPartyProjectsTable.projectId, targetId),
+        ))
+        .limit(1);
+      if (dependency || relationshipDependency || financialPartyDependency) {
         result = { ok: false, error: "Project has saved records and cannot be deleted until those links are resolved." };
         break;
       }
