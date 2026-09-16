@@ -1,0 +1,273 @@
+{
+  "datasetVersion": 1,
+  "providerMode": "gemini",
+  "label": "after",
+  "dryRun": true,
+  "generatedAt": "2026-09-16T10:00:45.499Z",
+  "summary": {
+    "totalCases": 1,
+    "evaluatedCases": 0,
+    "providerErrors": 0,
+    "contextNotProvided": 1,
+    "runnerErrors": 0,
+    "intentAccuracyPercent": null,
+    "toolSelectionAccuracyPercent": null,
+    "clarificationAccuracyPercent": null,
+    "noWriteViolations": 0,
+    "totalLogicalLlmCalls": 1,
+    "totalHttpAttempts": 1,
+    "fallbackCases": 0,
+    "totalInputTokens": 3367,
+    "totalOutputTokens": 68,
+    "totalTokens": 3435,
+    "totalCachedTokens": null,
+    "cacheHitCases": 0,
+    "cacheMissCases": 1,
+    "totalRequestBytes": 15390,
+    "averageLatencyMs": 1956,
+    "latencyP50Ms": 0,
+    "latencyP95Ms": 0,
+    "averageConversationChars": 25,
+    "rowCountChanges": 0
+  },
+  "cases": [
+    {
+      "id": "E",
+      "category": "follow_up",
+      "message": "وكان ده الأسبوع اللي فات.",
+      "expected": {
+        "intent": "correction",
+        "primaryTool": "update_expense",
+        "acceptableTools": [
+          "update_expense",
+          "record_expense",
+          "final_response"
+        ],
+        "clarification": true,
+        "write": false
+      },
+      "contextMode": "context_required",
+      "status": "context_not_provided",
+      "actualIntent": "clarification",
+      "actualTool": "text_response",
+      "actualTools": [],
+      "toolArguments": [],
+      "clarificationAsked": true,
+      "logicalLlmCalls": 1,
+      "actualHttpAttempts": 1,
+      "httpAttemptsByProvider": {
+        "gemini": 1
+      },
+      "provider": "gemini",
+      "model": "gemini-3.1-flash-lite",
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 1956,
+      "tokenUsage": [
+        {
+          "promptTokenCount": 3367,
+          "candidatesTokenCount": 68,
+          "totalTokenCount": 3435,
+          "promptTokensDetails": [
+            {
+              "modality": "TEXT",
+              "tokenCount": 3367
+            }
+          ],
+          "serviceTier": "standard"
+        }
+      ],
+      "inputTokens": 3367,
+      "outputTokens": 68,
+      "totalTokens": 3435,
+      "cachedTokens": null,
+      "cacheHit": false,
+      "cacheMiss": true,
+      "requestBytesByProvider": {
+        "gemini": 15390
+      },
+      "maxRequestBytes": 15390,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 6605,
+      "toolDefinitionsCount": 16,
+      "maxConversationChars": 64,
+      "contextBreakdown": {
+        "systemPromptChars": 3250,
+        "requestGuidanceChars": 1692,
+        "userMessageChars": 25,
+        "recentConversationChars": 0,
+        "summaryChars": 0,
+        "structuredStateChars": 0,
+        "toolResultChars": 0,
+        "otherConversationChars": 0,
+        "conversationChars": 25,
+        "toolDefinitionsChars": 6605,
+        "requestBytes": 15390
+      },
+      "diagnosticTrace": {
+        "version": 1,
+        "calls": [
+          {
+            "logicalCallNumber": 1,
+            "phase": "tool_round",
+            "scope": "full",
+            "requestedTools": [
+              "final_response",
+              "find_person",
+              "create_person",
+              "update_person",
+              "find_project",
+              "create_project",
+              "update_project",
+              "link_person_to_project",
+              "update_person_project_relationship",
+              "create_typed_relationship",
+              "delete_typed_relationship",
+              "record_expense",
+              "create_financial_party",
+              "create_financial_obligation",
+              "create_financial_payment",
+              "settle_financial_obligation",
+              "create_donation",
+              "create_income_receivable",
+              "create_payment_link",
+              "update_financial_obligation",
+              "update_financial_payment",
+              "update_donation",
+              "update_income_receivable",
+              "update_expense",
+              "query_expenses",
+              "rank_expense_projects",
+              "get_person_expense_total",
+              "get_project_expense_total",
+              "create_task",
+              "create_commitment",
+              "create_reminder",
+              "update_task",
+              "update_commitment",
+              "update_reminder",
+              "delete_expense",
+              "delete_person",
+              "delete_project",
+              "delete_task",
+              "delete_commitment",
+              "delete_reminder",
+              "query_reminders",
+              "recall_context"
+            ],
+            "finalResponseOnly": false,
+            "attempts": [
+              {
+                "requestId": "intent-eval-gemini-E-6e047a8b-98b8-4dc8-b297-ddd505031c2e",
+                "conversationId": "intent-eval-gemini-E",
+                "provider": "gemini",
+                "model": "gemini-3.1-flash-lite",
+                "logicalCallNumber": 1,
+                "attemptNumber": 1,
+                "scope": "full",
+                "toolsAvailable": [
+                  "final_response",
+                  "find_person",
+                  "create_person",
+                  "update_person",
+                  "find_project",
+                  "create_project",
+                  "update_project",
+                  "link_person_to_project",
+                  "update_person_project_relationship",
+                  "create_typed_relationship",
+                  "delete_typed_relationship",
+                  "record_expense",
+                  "create_financial_party",
+                  "create_financial_obligation",
+                  "create_financial_payment",
+                  "settle_financial_obligation"
+                ],
+                "inputTokens": 3367,
+                "outputTokens": 68,
+                "totalTokens": 3435,
+                "cachedTokens": null,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null,
+                "cacheHit": false,
+                "cacheRetry": false,
+                "fallback": false,
+                "retry": false,
+                "httpRequestSent": true,
+                "latencyMs": 1476,
+                "success": true,
+                "failureReason": null,
+                "outputChars": 401,
+                "context": {
+                  "systemPromptChars": 3250,
+                  "requestGuidanceChars": 1692,
+                  "userMessageChars": 25,
+                  "recentConversationChars": 0,
+                  "summaryChars": 0,
+                  "structuredStateChars": 0,
+                  "toolResultChars": 0,
+                  "otherConversationChars": 0,
+                  "conversationChars": 25,
+                  "toolDefinitionsChars": 6605,
+                  "requestBytes": 15390,
+                  "systemPromptTokens": null,
+                  "conversationTokens": null,
+                  "toolDefinitionsTokens": null,
+                  "toolResultTokens": null
+                }
+              }
+            ],
+            "selectedTools": [
+              {
+                "callId": "gemini-call-0",
+                "name": "final_response",
+                "arguments": {
+                  "kind": "clarification",
+                  "message": "عذراً، لم أفهم تماماً ما تقصده بـ \"ده\" في سياق الأسبوع الماضي. هل يمكنك توضيح العملية أو الطلب الذي تود الاستفسار عنه أو تسجيله؟"
+                },
+                "argumentChars": 167,
+                "argumentBytes": 269,
+                "result": null
+              }
+            ],
+            "nextDecision": {
+              "kind": "return_final_response",
+              "reason": "Provider returned only the final_response tool.",
+              "nextLogicalCallNumber": null,
+              "nextCallKind": null,
+              "nextScope": "full"
+            }
+          }
+        ]
+      },
+      "rowCountsBefore": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountsAfter": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountChanged": false,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": null,
+      "toolSelectionMatch": null,
+      "clarificationMatch": null
+    }
+  ]
+}
