@@ -103,7 +103,7 @@ export type DeterministicRequestMetrics = {
 };
 
 const ARABIC_DIGITS = "٠١٢٣٤٥٦٧٨٩";
-const MONEY_WORDS = /جنيه|جنية|دولار|ريال|ريالات|مصروف|مصاريف|صرفيه|فلوس|دراهم|دفعت|دفع|صرف|سجل|اديت|أديت|اعطيت|عطيت|انفقت|أنفقت|حولت|تحويل|سددت|سدد|خد|اخد|أخد|استلم/i;
+const MONEY_WORDS = /جنيه|جنية|دولار|ريال|ريالات|مصروف|مصروفات|مصاريف|صرفيه|فلوس|دراهم|دفعت|دفع|صرف|سجل|اديت|أديت|اعطيت|عطيت|انفقت|أنفقت|حولت|تحويل|سددت|سدد|خد|اخد|أخد|استلم/i;
 const REMINDER_WORDS = /فكرني|ذكرني|تذكير|تذكرني|remind|reminder/i;
 const READ_WORDS = /إيه|ايه|ما|ماذا|كم|كام|قد\s*إيه|قديش|شكد|شگد|اجمالي|إجمالي|مجموع|تقرير|اعرض|أعرض|وريني|هات|عندي|مين|هل|مواعيد|شو|ايش|وش|وين|show|total|list/i;
 const WRITE_WORDS = /سجل|سجّل|دفعت|دفع|صرف|اديت|أديت|اعطيت|عطيت|حولت|تحويل|سددت|سدد|خد|اخد|أخد|استلم|أضف|اضف|ضيف|أنشئ|انشئ|اعمل|عدّل|عدل|غيّر|غير|احذف|امسح|فكرني|ذكرني|create|add|record|update|delete|remind/i;
@@ -337,6 +337,10 @@ function extractEntityMentions(message: string): EntityMention[] {
   return mentions;
 }
 
+function hasNegativeWriteLanguage(value: string): boolean {
+  return /(?:^|\s)(?:ما|مش|مو|لا|من\s+غير)\s+(?:\S+\s+){0,3}(?:سجل\p{L}*|تسجل\p{L}*|دفعت\p{L}*|دفع\p{L}*|صرف\p{L}*|اديت\p{L}*|اعطيت\p{L}*|عطيت\p{L}*|حولت\p{L}*|سددت\p{L}*)/iu.test(value);
+}
+
 export function parseSemanticRequest(message: string): SemanticParse {
   const originalText = message.trim();
   const normalizedText = canonicalizeArabicText(originalText);
@@ -364,6 +368,8 @@ export function parseSemanticRequest(message: string): SemanticParse {
   }
   const explicitExpenseWrite = Boolean(amount && hasWriteLanguage)
     || /(?:سجل)\s+(?:لي\s+)?(?:مصروف|مصاريف)|record\s+expense/iu.test(normalizedText);
+  const negativeWriteLanguage = hasNegativeWriteLanguage(normalizedText);
+  const safeExpenseWrite = !negativeWriteLanguage && explicitExpenseWrite;
   const domains = new Set<SemanticDomain>();
   if (MONEY_WORDS.test(normalizedText) || amount || personTotal) domains.add("expense");
   if (REMINDER_WORDS.test(normalizedText)) domains.add("reminder");
@@ -375,7 +381,7 @@ export function parseSemanticRequest(message: string): SemanticParse {
   let intent: SemanticIntent = "unknown";
   let confidence = 0.35;
   const negativePersonCreation = /(?:ما|مش|من\s+غير)\s+.*?(?:تضيف\w*|ضيف\w*|تعمل\w*|اعمل\w*|تسجل\w*|سجل\w*).*?(?:شخص|جهة|person|contact)/iu.test(normalizedText);
-  const createPersonSignal = !negativePersonCreation && /(?:(?:^|\s)(?:اضف|اضيف|ضيف|انشئ|اعمل|سجل|add|create|record)(?=\s|$).*(?:شخص|جهة|person|contact)|(?:شخص|جهة|person|contact).*(?:اسمه|جديد))/iu.test(normalizedText);
+  const createPersonSignal = !negativePersonCreation && /(?:(?:^|\s)(?:اضف|اضيف|ضيف|انشئ|اعمل|سجل|add|create|record)(?=\s|$).*(?:شخص|جهة|جهه|person|contact)|(?:شخص|جهة|جهه|person|contact).*(?:اسمه|جديد))/iu.test(normalizedText);
   const createProjectSignal = /(?:بدأت|بدات|انشئ|اعمل|create).*(?:مشروع|project)/iu.test(normalizedText);
   if (createPersonSignal) {
     intent = "create_person";
@@ -394,7 +400,7 @@ export function parseSemanticRequest(message: string): SemanticParse {
   } else if (/مين.*(?:مشروع|project)|(?:الناس|اشخاص).*(?:مشروع|project)/iu.test(normalizedText)) {
     intent = "project_people";
     confidence = 0.91;
-  } else if (domains.has("expense") && explicitExpenseWrite) {
+  } else if (domains.has("expense") && safeExpenseWrite) {
     intent = "record_expense";
     confidence = amount
       ? entityMentions.length > 0 ? 0.93 : 0.82

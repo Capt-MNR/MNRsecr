@@ -32,6 +32,10 @@ function hasMoneyLanguage(message: string): boolean {
   return /دفعت|دفع|صرف|مصروف|مصاريف|سجل.*مصروف|جنيه|دولار|ريال|فلوس|paid|spent|expense/i.test(message);
 }
 
+function hasNegativeWriteLanguage(message: string): boolean {
+  return /(?:^|\s)(?:ما|مش|مو|لا|من\s+غير)\s+(?:\S+\s+){0,3}(?:سجل\p{L}*|تسجل\p{L}*|دفعت\p{L}*|دفع\p{L}*|صرف\p{L}*|اديت\p{L}*|اعطيت\p{L}*|عطيت\p{L}*|حولت\p{L}*|سددت\p{L}*)/iu.test(message);
+}
+
 export function routeLocally(message: string): LocalRouteDecision | null {
   if (!featureFlags.localRouter()) return null;
   const normalized = canonicalizeArabicText(message);
@@ -86,7 +90,7 @@ export function routeLocally(message: string): LocalRouteDecision | null {
       safeToExecute: false,
     };
   }
-  if (hasMoneyLanguage(normalized)) {
+  if (hasMoneyLanguage(normalized) && !hasNegativeWriteLanguage(normalized)) {
     const parsedAmount = parseArabicAmount(normalized);
     const person = extractPerson(normalized);
     if (parsedAmount && person) {
