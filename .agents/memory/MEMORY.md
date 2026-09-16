@@ -24,3 +24,4 @@
 - [Arabic dialect understanding](arabic-dialect-understanding.md) — normalize dialect vocabulary only at the intent boundary, then prove it with labeled Egyptian, Gulf, and Levantine cases.
 - [Learning signal capture](learning-signal-capture.md) — explicit corrections are review-only signals; never auto-apply them to financial data or production rules.
 - [Mobile Expo preview environment](mobile-expo-preview.md) — Metro can serve correctly despite DevTools libglib warnings or package freshness blocked by the workspace firewall.
+- [Mobile two-surface architecture](mobile-two-surface-architecture.md) — keep quick assistant and full records in one app with one-tap switching; add notifications as a quick-surface extension.
