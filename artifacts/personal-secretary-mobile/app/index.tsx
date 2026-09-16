@@ -1190,6 +1190,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 16,
     paddingTop: 16,
+    paddingBottom: 24,
   },
   detailHeader: {
     minHeight: 42,
