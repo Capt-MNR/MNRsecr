@@ -4,15 +4,19 @@ import * as Haptics from 'expo-haptics';
 import {
   useApproveSecretaryOperation,
   useCreateTurn,
+  getListRecordsQueryKey,
+  useListRecords,
   useRejectSecretaryOperation,
 } from '@workspace/api-client-react';
-import type { TurnResponse } from '@workspace/api-client-react';
-import { useEffect, useRef, useState } from 'react';
+import type { RecordsResponse, TurnResponse } from '@workspace/api-client-react';
+import { useEffect, useRef, useState, type ComponentProps } from 'react';
 import {
   ActivityIndicator,
   FlatList,
   Platform,
   Pressable,
+  RefreshControl,
+  SectionList,
   StyleSheet,
   Text,
   TextInput,
@@ -55,6 +59,129 @@ const suggestions = [
   'محمد أخد مني كام؟',
 ];
 
+type FeatherName = ComponentProps<typeof Feather>['name'];
+
+type MobileRecordRow = {
+  id: string;
+  title: string;
+  subtitle: string;
+  trailing?: string;
+};
+
+type MobileRecordSection = {
+  key: string;
+  title: string;
+  icon: FeatherName;
+  data: MobileRecordRow[];
+};
+
+function money(amountMinor: number, currency: string) {
+  return new Intl.NumberFormat('ar-EG', {
+    style: 'currency',
+    currency: currency || 'EGP',
+    maximumFractionDigits: 0,
+  }).format(amountMinor / 100);
+}
+
+function recordDate(value?: string | null) {
+  if (!value) return 'بدون موعد';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('ar-EG', {
+    day: 'numeric',
+    month: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date);
+}
+
+function statusLabel(status?: string | null) {
+  const labels: Record<string, string> = {
+    active: 'نشط',
+    open: 'مفتوح',
+    pending: 'معلّق',
+    scheduled: 'مجدول',
+    done: 'مكتمل',
+    completed: 'مكتمل',
+    overdue: 'متأخر',
+    cancelled: 'ملغى',
+  };
+  return status ? labels[status] ?? status : 'بدون حالة';
+}
+
+function recordSections(records: RecordsResponse | undefined): MobileRecordSection[] {
+  if (!records) return [];
+  return [
+    {
+      key: 'expenses',
+      title: 'المصروفات',
+      icon: 'dollar-sign',
+      data: records.expenses.map((expense) => ({
+        id: expense.id,
+        title: expense.description,
+        subtitle: [expense.personName ?? expense.projectName, recordDate(expense.occurredAt)]
+          .filter(Boolean)
+          .join(' · '),
+        trailing: money(expense.amountMinor, expense.currency),
+      })),
+    },
+    {
+      key: 'people',
+      title: 'الأشخاص',
+      icon: 'users',
+      data: records.people.map((person) => ({
+        id: person.id,
+        title: person.name,
+        subtitle: person.phone ?? person.notes ?? 'لا توجد ملاحظات',
+      })),
+    },
+    {
+      key: 'projects',
+      title: 'المشاريع',
+      icon: 'briefcase',
+      data: records.projects.map((project) => ({
+        id: project.id,
+        title: project.name,
+        subtitle: recordDate(project.updatedAt),
+        trailing: statusLabel(project.status),
+      })),
+    },
+    {
+      key: 'tasks',
+      title: 'المهام',
+      icon: 'check-square',
+      data: records.tasks.map((task) => ({
+        id: task.id,
+        title: task.title,
+        subtitle: task.dueAt ? `موعدها ${recordDate(task.dueAt)}` : 'مهمة مستمرة',
+        trailing: statusLabel(task.status),
+      })),
+    },
+    {
+      key: 'reminders',
+      title: 'التذكيرات',
+      icon: 'bell',
+      data: records.reminders.map((reminder) => ({
+        id: reminder.id,
+        title: reminder.text,
+        subtitle: `${recordDate(reminder.dueAt)} · ${reminder.timezone}`,
+        trailing: statusLabel(reminder.status),
+      })),
+    },
+    {
+      key: 'commitments',
+      title: 'الالتزامات',
+      icon: 'link',
+      data: records.commitments.map((commitment) => ({
+        id: commitment.id,
+        title: commitment.title,
+        subtitle: commitment.personName ?? 'بدون طرف محدد',
+        trailing: commitment.dueAt ? recordDate(commitment.dueAt) : statusLabel(commitment.status),
+      })),
+    },
+  ];
+}
+
 function approvalFromAction(action: TurnResponse['action']): Approval | undefined {
   if (!action || action.type !== 'approval_required' || typeof action.operationId !== 'string') {
     return undefined;
@@ -84,6 +211,131 @@ function messageTime(value: string) {
     hour: 'numeric',
     minute: '2-digit',
   }).format(date);
+}
+
+function RecordsView({ colors }: { colors: ReturnType<typeof useColors> }) {
+  const recordsQuery = useListRecords({
+    query: {
+      queryKey: getListRecordsQueryKey(),
+      staleTime: 20_000,
+    },
+  });
+  const sections = recordSections(recordsQuery.data);
+  const totalRecords = sections.reduce((total, section) => total + section.data.length, 0);
+
+  return (
+    <SectionList
+      sections={sections}
+      keyExtractor={(item) => item.id}
+      renderItem={({ item }) => (
+        <View style={[styles.recordRow, { borderBottomColor: colors.border }]}>
+          <View style={styles.recordCopy}>
+            <Text style={[styles.recordTitle, { color: colors.foreground }]} numberOfLines={2}>
+              {item.title}
+            </Text>
+            <Text style={[styles.recordSubtitle, { color: colors.mutedForeground }]} numberOfLines={1}>
+              {item.subtitle}
+            </Text>
+          </View>
+          {item.trailing && (
+            <Text style={[styles.recordTrailing, { color: colors.primary }]} numberOfLines={2}>
+              {item.trailing}
+            </Text>
+          )}
+        </View>
+      )}
+      renderSectionHeader={({ section }) => (
+        <View style={[styles.recordSectionHeader, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+          <View style={styles.recordSectionTitle}>
+            <View style={[styles.recordIcon, { backgroundColor: colors.muted }]}>
+              <Feather name={section.icon} size={15} color={colors.primary} />
+            </View>
+            <Text style={[styles.recordSectionName, { color: colors.foreground }]}>{section.title}</Text>
+          </View>
+          <Text style={[styles.recordCount, { color: colors.mutedForeground }]}>{section.data.length}</Text>
+        </View>
+      )}
+      ListHeaderComponent={(
+        <View>
+          <View style={styles.recordsIntro}>
+            <View>
+              <Text style={[styles.recordsTitle, { color: colors.foreground }]}>الرئيسية</Text>
+              <Text style={[styles.recordsSubtitle, { color: colors.mutedForeground }]}>
+                بياناتك المهمة في مكان واحد
+              </Text>
+            </View>
+            <Pressable
+              testID="refresh-records"
+              accessibilityRole="button"
+              accessibilityLabel="تحديث الرئيسية"
+              onPress={() => void recordsQuery.refetch()}
+              style={({ pressed }) => [
+                styles.iconButton,
+                { borderColor: colors.border, opacity: pressed || recordsQuery.isFetching ? 0.6 : 1 },
+              ]}
+            >
+              {recordsQuery.isFetching ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Feather name="refresh-cw" size={17} color={colors.foreground} />
+              )}
+            </Pressable>
+          </View>
+
+          <View style={styles.recordSummaryGrid}>
+            {sections.map((section) => (
+              <View key={section.key} style={[styles.recordSummaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[styles.recordSummaryCount, { color: colors.primary }]}>{section.data.length}</Text>
+                <Text style={[styles.recordSummaryLabel, { color: colors.mutedForeground }]}>{section.title}</Text>
+              </View>
+            ))}
+          </View>
+
+          {recordsQuery.isError && (
+            <View style={[styles.recordsError, { backgroundColor: colors.destructive, borderColor: colors.destructive }]}>
+              <Feather name="alert-circle" size={16} color={colors.destructiveForeground} />
+              <View style={styles.recordsErrorCopy}>
+                <Text style={[styles.recordsErrorTitle, { color: colors.destructiveForeground }]}>تعذر تحميل الرئيسية</Text>
+                <Text style={[styles.recordsErrorText, { color: colors.destructiveForeground }]}>
+                  تحقق من الاتصال وحاول التحديث مرة أخرى.
+                </Text>
+              </View>
+              <Pressable accessibilityRole="button" onPress={() => void recordsQuery.refetch()}>
+                <Text style={[styles.recordsRetry, { color: colors.destructiveForeground }]}>حاول</Text>
+              </Pressable>
+            </View>
+          )}
+
+          {recordsQuery.isLoading && (
+            <View style={styles.recordsLoading}>
+              <ActivityIndicator color={colors.primary} />
+              <Text style={[styles.recordsLoadingText, { color: colors.mutedForeground }]}>جاري تحميل بياناتك…</Text>
+            </View>
+          )}
+
+          {!recordsQuery.isLoading && !recordsQuery.isError && totalRecords === 0 && (
+            <View style={[styles.recordsEmpty, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <Feather name="archive" size={26} color={colors.primary} />
+              <Text style={[styles.recordsEmptyTitle, { color: colors.foreground }]}>لا توجد سجلات بعد</Text>
+              <Text style={[styles.recordsEmptyText, { color: colors.mutedForeground }]}>
+                أي مصروف أو تذكير أو مهمة تحفظها سيظهر هنا.
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
+      contentContainerStyle={styles.recordsList}
+      stickySectionHeadersEnabled={false}
+      showsVerticalScrollIndicator={false}
+      refreshControl={(
+        <RefreshControl
+          refreshing={recordsQuery.isFetching}
+          onRefresh={() => void recordsQuery.refetch()}
+          tintColor={colors.primary}
+        />
+      )}
+    />
+  );
 }
 
 function MessageBubble({
