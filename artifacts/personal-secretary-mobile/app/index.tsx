@@ -384,6 +384,154 @@ function RecordsView({
   );
 }
 
+const detailStyles = StyleSheet.create({
+  detailScreen: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 24,
+  },
+  detailHeader: {
+    minHeight: 42,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  detailEyebrow: {
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'right',
+  },
+  detailCard: {
+    marginTop: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 18,
+    alignItems: 'flex-end',
+  },
+  detailIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  detailTitle: {
+    width: '100%',
+    marginTop: 16,
+    fontSize: 21,
+    fontWeight: '700',
+    lineHeight: 29,
+    textAlign: 'right',
+  },
+  detailSubtitle: {
+    width: '100%',
+    marginTop: 7,
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: 'right',
+  },
+  detailMeta: {
+    width: '100%',
+    marginTop: 8,
+    fontSize: 12,
+    textAlign: 'right',
+  },
+  detailValue: {
+    marginTop: 14,
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  detailState: {
+    marginTop: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+  },
+  detailStateText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'right',
+  },
+  detailRetry: {
+    fontSize: 12,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
+  },
+  relatedCard: {
+    marginTop: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingTop: 13,
+  },
+  relatedTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  relatedRow: {
+    minHeight: 42,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  relatedLabel: {
+    fontSize: 12,
+    textAlign: 'right',
+  },
+  relatedCount: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  detailContext: {
+    marginTop: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+    flexDirection: 'row-reverse',
+    alignItems: 'flex-start',
+    gap: 9,
+  },
+  detailContextCopy: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  detailContextTitle: {
+    width: '100%',
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  detailContextText: {
+    width: '100%',
+    marginTop: 5,
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'right',
+  },
+  detailPrimaryAction: {
+    minHeight: 48,
+    marginTop: 18,
+    borderRadius: 15,
+    paddingHorizontal: 16,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  detailPrimaryActionText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+});
+
 function RecordDetailView({
   record,
   colors,
@@ -416,8 +564,8 @@ function RecordDetailView({
     .filter((group) => group.count > 0);
 
   return (
-    <View style={styles.detailScreen}>
-      <View style={styles.detailHeader}>
+    <View style={detailStyles.detailScreen}>
+      <View style={detailStyles.detailHeader}>
         <Pressable
           testID="record-detail-back"
           accessibilityRole="button"
@@ -430,34 +578,34 @@ function RecordDetailView({
         >
           <Feather name="arrow-right" size={17} color={colors.foreground} />
         </Pressable>
-        <Text style={[styles.detailEyebrow, { color: colors.mutedForeground }]}>تفاصيل السجل</Text>
+        <Text style={[detailStyles.detailEyebrow, { color: colors.mutedForeground }]}>تفاصيل السجل</Text>
       </View>
 
-      <View style={[styles.detailCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <View style={[styles.detailIcon, { backgroundColor: colors.muted }]}>
+      <View style={[detailStyles.detailCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={[detailStyles.detailIcon, { backgroundColor: colors.muted }]}>
           <Feather name="file-text" size={20} color={colors.primary} />
         </View>
-        <Text style={[styles.detailTitle, { color: colors.foreground }]}>{isEntity ? entityName : record.title}</Text>
-        <Text style={[styles.detailSubtitle, { color: colors.mutedForeground }]}>
+        <Text style={[detailStyles.detailTitle, { color: colors.foreground }]}>{isEntity ? entityName : record.title}</Text>
+        <Text style={[detailStyles.detailSubtitle, { color: colors.mutedForeground }]}>
           {isEntity ? entitySubtitle : record.subtitle}
         </Text>
         {isEntity && typeof entity.phone === 'string' && (
-          <Text style={[styles.detailMeta, { color: colors.mutedForeground }]}>{entity.phone}</Text>
+          <Text style={[detailStyles.detailMeta, { color: colors.mutedForeground }]}>{entity.phone}</Text>
         )}
-        {!isEntity && record.trailing && <Text style={[styles.detailValue, { color: colors.primary }]}>{record.trailing}</Text>}
+        {!isEntity && record.trailing && <Text style={[detailStyles.detailValue, { color: colors.primary }]}>{record.trailing}</Text>}
       </View>
 
       {isEntity && entityQuery.isLoading && (
-        <View style={styles.detailState}>
+        <View style={detailStyles.detailState}>
           <ActivityIndicator size="small" color={colors.primary} />
-          <Text style={[styles.detailStateText, { color: colors.mutedForeground }]}>جاري تحميل تفاصيل الكيان…</Text>
+          <Text style={[detailStyles.detailStateText, { color: colors.mutedForeground }]}>جاري تحميل تفاصيل الكيان…</Text>
         </View>
       )}
 
       {isEntity && entityQuery.isError && (
-        <View style={[styles.detailState, { backgroundColor: colors.destructive, borderColor: colors.destructive }]}>
+        <View style={[detailStyles.detailState, { backgroundColor: colors.destructive, borderColor: colors.destructive }]}>
           <Feather name="alert-circle" size={16} color={colors.destructiveForeground} />
-          <Text style={[styles.detailStateText, { color: colors.destructiveForeground }]}>
+          <Text style={[detailStyles.detailStateText, { color: colors.destructiveForeground }]}>
             تعذر تحميل التفاصيل من السجل الحالي.
           </Text>
           <Pressable
@@ -465,30 +613,30 @@ function RecordDetailView({
             accessibilityLabel="إعادة تحميل التفاصيل"
             onPress={() => void entityQuery.refetch()}
           >
-            <Text style={[styles.detailRetry, { color: colors.destructiveForeground }]}>حاول</Text>
+            <Text style={[detailStyles.detailRetry, { color: colors.destructiveForeground }]}>حاول</Text>
           </Pressable>
         </View>
       )}
 
       {isEntity && !entityQuery.isLoading && !entityQuery.isError && relatedGroups.length > 0 && (
-        <View style={[styles.relatedCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.relatedTitle, { color: colors.foreground }]}>مرتبط بهذا الكيان</Text>
+        <View style={[detailStyles.relatedCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[detailStyles.relatedTitle, { color: colors.foreground }]}>مرتبط بهذا الكيان</Text>
           {relatedGroups.map((group) => (
-            <View key={group.key} style={[styles.relatedRow, { borderBottomColor: colors.border }]}>
-              <Text style={[styles.relatedLabel, { color: colors.mutedForeground }]}>
+            <View key={group.key} style={[detailStyles.relatedRow, { borderBottomColor: colors.border }]}>
+              <Text style={[detailStyles.relatedLabel, { color: colors.mutedForeground }]}>
                 {relatedLabels[group.key] ?? group.key}
               </Text>
-              <Text style={[styles.relatedCount, { color: colors.primary }]}>{group.count}</Text>
+              <Text style={[detailStyles.relatedCount, { color: colors.primary }]}>{group.count}</Text>
             </View>
           ))}
         </View>
       )}
 
-      <View style={[styles.detailContext, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+      <View style={[detailStyles.detailContext, { backgroundColor: colors.muted, borderColor: colors.border }]}>
         <Feather name="message-circle" size={17} color={colors.primary} />
-        <View style={styles.detailContextCopy}>
-          <Text style={[styles.detailContextTitle, { color: colors.foreground }]}>تحدث مع السكرتير عن هذا السجل</Text>
-          <Text style={[styles.detailContextText, { color: colors.mutedForeground }]}>
+        <View style={detailStyles.detailContextCopy}>
+          <Text style={[detailStyles.detailContextTitle, { color: colors.foreground }]}>تحدث مع السكرتير عن هذا السجل</Text>
+          <Text style={[detailStyles.detailContextText, { color: colors.mutedForeground }]}>
             سأجهز لك مسودة مرتبطة بالسجل، ويمكنك تعديلها قبل الإرسال.
           </Text>
         </View>
@@ -500,12 +648,12 @@ function RecordDetailView({
         accessibilityLabel="اسأل السكرتير عن هذا السجل"
         onPress={onAskSecretary}
         style={({ pressed }) => [
-          styles.detailPrimaryAction,
+          detailStyles.detailPrimaryAction,
           { backgroundColor: colors.primary, opacity: pressed ? 0.7 : 1 },
         ]}
       >
         <Feather name="message-circle" size={16} color={colors.primaryForeground} />
-        <Text style={[styles.detailPrimaryActionText, { color: colors.primaryForeground }]}>اسأل السكرتير عن هذا</Text>
+        <Text style={[detailStyles.detailPrimaryActionText, { color: colors.primaryForeground }]}>اسأل السكرتير عن هذا</Text>
       </Pressable>
     </View>
   );
