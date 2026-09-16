@@ -2,15 +2,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import {
-  useApproveSecretaryOperation,
-  useCreateTurn,
-  useGetConversation,
   useGetEntityGraph,
   getGetTodayContextQueryKey,
   getListRecordsQueryKey,
   useGetTodayContext,
   useListRecords,
-  useRejectSecretaryOperation,
 } from '@workspace/api-client-react';
 import type { RecordsResponse, TodayContext, TurnResponse } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -31,6 +27,10 @@ import {
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
+import {
+  useSecretaryChatService,
+  type SecretaryChatContext,
+} from '../services/secretary-chat';
 
 type ApprovalStatus = 'pending' | 'executing' | 'completed' | 'rejected' | 'expired' | 'failed';
 
@@ -378,6 +378,17 @@ function addOrigin(record: MobileRecordRow, conversationId: string, operationId?
       turnId: null,
       operationId: operationId ?? null,
     },
+  };
+}
+
+function secretaryContextFromRecord(record: MobileRecordRow): SecretaryChatContext {
+  return {
+    recordType: record.recordType,
+    recordId: record.id,
+    title: record.title,
+    sourceConversationId: record.origin?.conversationId ?? null,
+    sourceTurnId: record.origin?.turnId ?? null,
+    sourceOperationId: record.origin?.operationId ?? null,
   };
 }
 
@@ -1907,17 +1918,9 @@ export default function QuickSecretaryScreen() {
   const [localError, setLocalError] = useState<string | null>(null);
   const [conversationToLoad, setConversationToLoad] = useState<string | null>(null);
   const [loadedConversationId, setLoadedConversationId] = useState<string | null>(null);
-  const createTurn = useCreateTurn();
-  const approveOperation = useApproveSecretaryOperation();
-  const rejectOperation = useRejectSecretaryOperation();
   const queryClient = useQueryClient();
-  const conversationQuery = useGetConversation(conversationToLoad ?? '', {
-    query: {
-      queryKey: ['getConversation', conversationToLoad],
-      enabled: Boolean(conversationToLoad),
-      staleTime: 20_000,
-    },
-  });
+  const secretaryChat = useSecretaryChatService(conversationToLoad);
+  const conversationQuery = secretaryChat.conversationQuery;
 
   useEffect(() => {
     let cancelled = false;
@@ -1965,7 +1968,7 @@ export default function QuickSecretaryScreen() {
 
   async function sendMessage(value = draft) {
     const message = value.trim();
-    if (!message || createTurn.isPending || conversationQuery.isFetching) return;
+    if (!message || secretaryChat.isSending || conversationQuery.isFetching) return;
     setDraft('');
     setLocalError(null);
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -1976,11 +1979,11 @@ export default function QuickSecretaryScreen() {
       createdAt: new Date().toISOString(),
     });
     try {
-      const result = await createTurn.mutateAsync({
-        data: {
-          message,
-          conversationId: conversationId ?? null,
-        },
+      const result = await secretaryChat.sendTurn({
+        message,
+        conversationId: conversationId ?? null,
+        channel: chatContext ? 'record' : activeView === 'quick' ? 'quick' : 'main',
+        context: chatContext ? secretaryContextFromRecord(chatContext) : null,
       });
       setConversationId(result.conversationId);
       const resultRecord = recordLinkFromAction(result.action);
@@ -2017,8 +2020,8 @@ export default function QuickSecretaryScreen() {
     setLocalError(null);
     try {
       const response = status === 'completed'
-        ? await approveOperation.mutateAsync({ operationId: approval.operationId })
-        : await rejectOperation.mutateAsync({ operationId: approval.operationId });
+        ? await secretaryChat.approveOperation(approval.operationId)
+        : await secretaryChat.rejectOperation(approval.operationId);
       const responseRecord = recordLinkFromAction(response.action);
       const linkedRecord = responseRecord
         ? addOrigin(
@@ -2266,7 +2269,7 @@ export default function QuickSecretaryScreen() {
               chatDraft={draft}
               onChangeChatDraft={setDraft}
               onSendChat={() => void sendMessage()}
-              chatBusy={createTurn.isPending || conversationQuery.isFetching}
+              chatBusy={secretaryChat.isSending || conversationQuery.isFetching}
               onApprove={(approval) => void updateApproval(approval, 'completed')}
               onReject={(approval) => void updateApproval(approval, 'rejected')}
               busyOperationId={busyOperationId}
@@ -2286,7 +2289,7 @@ export default function QuickSecretaryScreen() {
                   onChangeDraft={setDraft}
                   onSend={() => void sendMessage()}
                   inputRef={inputRef}
-                  isSending={createTurn.isPending || conversationQuery.isFetching}
+                  isSending={secretaryChat.isSending || conversationQuery.isFetching}
                   onApprove={(approval) => void updateApproval(approval, 'completed')}
                   onReject={(approval) => void updateApproval(approval, 'rejected')}
                   busyOperationId={busyOperationId}
@@ -2390,7 +2393,7 @@ export default function QuickSecretaryScreen() {
           keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
-          ListHeaderComponent={createTurn.isPending || conversationQuery.isFetching ? (
+          ListHeaderComponent={secretaryChat.isSending || conversationQuery.isFetching ? (
             <View style={styles.typingRow}>
               <View style={[styles.typingBubble, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <ActivityIndicator size="small" color={colors.primary} />
@@ -2400,29 +2403,42 @@ export default function QuickSecretaryScreen() {
               </View>
             </View>
           ) : null}
-          ListFooterComponent={messages.length === 1 ? (
-            <View style={styles.suggestionsBlock}>
-              <Text style={[styles.suggestionsLabel, { color: colors.mutedForeground }]}>ابدأ بطلب سريع</Text>
-              <View style={styles.suggestions}>
-                {suggestions.map((suggestion) => (
-                  <Pressable
-                    key={suggestion}
-                    testID={`suggestion-${suggestion}`}
-                    onPress={() => {
-                      setDraft(suggestion);
-                      inputRef.current?.focus();
-                    }}
-                    style={({ pressed }) => [
-                      styles.suggestionChip,
-                      { borderColor: colors.border, backgroundColor: colors.card, opacity: pressed ? 0.65 : 1 },
-                    ]}
-                  >
-                    <Text style={[styles.suggestionText, { color: colors.foreground }]}>{suggestion}</Text>
-                  </Pressable>
-                ))}
+          ListFooterComponent={(
+            <View>
+              <View style={[styles.quickHero, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={[styles.quickHeroMark, { backgroundColor: colors.primary }]}>
+                  <Feather name="message-circle" size={23} color={colors.primaryForeground} />
+                </View>
+                <Text style={[styles.quickHeroTitle, { color: colors.foreground }]}>السكرتير الشخصي</Text>
+                <Text style={[styles.quickHeroText, { color: colors.mutedForeground }]}>
+                  مساحة سريعة للتحدث والمراجعة، مرتبطة بنفس محادثات وعمليات البرنامج الكامل.
+                </Text>
               </View>
+              {messages.length === 1 && (
+                <View style={styles.suggestionsBlock}>
+                  <Text style={[styles.suggestionsLabel, { color: colors.mutedForeground }]}>ابدأ بطلب سريع</Text>
+                  <View style={styles.suggestions}>
+                    {suggestions.map((suggestion) => (
+                      <Pressable
+                        key={suggestion}
+                        testID={`suggestion-${suggestion}`}
+                        onPress={() => {
+                          setDraft(suggestion);
+                          inputRef.current?.focus();
+                        }}
+                        style={({ pressed }) => [
+                          styles.suggestionChip,
+                          { borderColor: colors.border, backgroundColor: colors.card, opacity: pressed ? 0.65 : 1 },
+                        ]}
+                      >
+                        <Text style={[styles.suggestionText, { color: colors.foreground }]}>{suggestion}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              )}
             </View>
-          ) : null}
+          )}
         />
       )}
 
@@ -2472,10 +2488,10 @@ export default function QuickSecretaryScreen() {
             accessibilityRole="button"
             accessibilityLabel="إرسال الطلب"
             onPress={() => void sendMessage()}
-            disabled={!draft.trim() || createTurn.isPending || conversationQuery.isFetching}
+            disabled={!draft.trim() || secretaryChat.isSending || conversationQuery.isFetching}
             style={({ pressed }) => [
               styles.sendButton,
-              { backgroundColor: colors.primary, opacity: !draft.trim() || createTurn.isPending || conversationQuery.isFetching ? 0.4 : pressed ? 0.7 : 1 },
+              { backgroundColor: colors.primary, opacity: !draft.trim() || secretaryChat.isSending || conversationQuery.isFetching ? 0.4 : pressed ? 0.7 : 1 },
             ]}
           >
             <Feather name="arrow-up" size={18} color={colors.primaryForeground} />
@@ -2696,6 +2712,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 18,
     paddingBottom: 16,
+  },
+  quickHero: {
+    marginBottom: 14,
+    borderRadius: 22,
+    borderWidth: 1,
+    paddingHorizontal: 18,
+    paddingVertical: 22,
+    alignItems: 'center',
+  },
+  quickHeroMark: {
+    width: 54,
+    height: 54,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickHeroTitle: {
+    marginTop: 12,
+    fontSize: 19,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  quickHeroText: {
+    maxWidth: 290,
+    marginTop: 6,
+    fontSize: 11,
+    lineHeight: 18,
+    textAlign: 'center',
   },
   recordsList: {
     paddingHorizontal: 16,

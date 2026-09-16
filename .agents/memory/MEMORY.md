@@ -25,3 +25,4 @@
 - [Learning signal capture](learning-signal-capture.md) — explicit corrections are review-only signals; never auto-apply them to financial data or production rules.
 - [Mobile Expo preview environment](mobile-expo-preview.md) — Metro can serve correctly despite DevTools libglib warnings or package freshness blocked by the workspace firewall.
 - [Mobile two-surface architecture](mobile-two-surface-architecture.md) — mobile opens on quick, then reaches its full records home in one tap; web remains the broader desktop workspace.
+- [Secretary chat boundary](secretary-chat-boundary.md) — Main and Quick share a transport-independent chat service with future peer metadata.
