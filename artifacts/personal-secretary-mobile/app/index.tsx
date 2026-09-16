@@ -220,7 +220,7 @@ function recordSections(records: RecordsResponse | undefined): MobileRecordSecti
         title: commitment.title,
         subtitle: commitment.personName ?? 'بدون طرف محدد',
         trailing: commitment.dueAt ? recordDate(commitment.dueAt) : statusLabel(commitment.status),
-        origin: commitment.origin,
+        origin: commitment.origin as RecordOrigin | null,
       })),
     },
   ];
@@ -643,6 +643,21 @@ const detailStyles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
+  detailSecondaryAction: {
+    minHeight: 44,
+    marginTop: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  detailSecondaryActionText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
 });
 
 function RecordDetailView({
@@ -922,12 +937,25 @@ export default function QuickSecretaryScreen() {
   const [hydrated, setHydrated] = useState(false);
   const [busyOperationId, setBusyOperationId] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [conversationToLoad, setConversationToLoad] = useState<string | null>(null);
+  const [loadedConversationId, setLoadedConversationId] = useState<string | null>(null);
   const createTurn = useCreateTurn();
   const approveOperation = useApproveSecretaryOperation();
   const rejectOperation = useRejectSecretaryOperation();
+  const queryClient = useQueryClient();
+  const conversationQuery = useGetConversation(conversationToLoad ?? '', {
+    query: {
+      queryKey: ['getConversation', conversationToLoad],
+      enabled: Boolean(conversationToLoad),
+      staleTime: 20_000,
+    },
+  });
 
   useEffect(() => {
     let cancelled = false;
+    const hydrationFallback = setTimeout(() => {
+      if (!cancelled) setHydrated(true);
+    }, 1_500);
     void AsyncStorage.multiGet([STORAGE_MESSAGES, STORAGE_CONVERSATION]).then(([storedMessages, storedConversation]) => {
       if (cancelled) return;
       if (storedMessages[1]) {
@@ -940,9 +968,10 @@ export default function QuickSecretaryScreen() {
       }
       if (storedConversation[1]) setConversationId(storedConversation[1]);
       setHydrated(true);
-    }).catch(() => setHydrated(true));
+    }).catch(() => setHydrated(true)).finally(() => clearTimeout(hydrationFallback));
     return () => {
       cancelled = true;
+      clearTimeout(hydrationFallback);
     };
   }, []);
 
@@ -954,13 +983,21 @@ export default function QuickSecretaryScreen() {
     ]);
   }, [conversationId, hydrated, messages]);
 
+  useEffect(() => {
+    if (!conversationToLoad || loadedConversationId === conversationToLoad || !conversationQuery.data) return;
+    setMessages(messagesFromConversation(conversationQuery.data, conversationToLoad));
+    setConversationId(conversationToLoad);
+    setLoadedConversationId(conversationToLoad);
+    setLocalError(null);
+  }, [conversationQuery.data, conversationToLoad, loadedConversationId]);
+
   function appendMessage(message: LocalMessage) {
     setMessages((current) => [...current, message].slice(-40));
   }
 
   async function sendMessage(value = draft) {
     const message = value.trim();
-    if (!message || createTurn.isPending) return;
+    if (!message || createTurn.isPending || conversationQuery.isFetching) return;
     setDraft('');
     setLocalError(null);
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -978,12 +1015,21 @@ export default function QuickSecretaryScreen() {
         },
       });
       setConversationId(result.conversationId);
+      const resultRecord = recordLinkFromAction(result.action);
+      const linkedRecord = resultRecord
+        ? addOrigin(
+          resultRecord,
+          result.conversationId,
+          typeof objectValue(result.action).operationId === 'string' ? objectValue(result.action).operationId as string : null,
+        )
+        : undefined;
       appendMessage({
         id: `assistant-${Date.now()}`,
         role: 'assistant',
         text: result.assistantMessage || result.response?.message || 'تم استلام طلبك.',
         createdAt: new Date().toISOString(),
         approval: approvalFromAction(result.action),
+        ...(linkedRecord ? { recordLink: linkedRecord } : {}),
       });
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {
@@ -1005,18 +1051,35 @@ export default function QuickSecretaryScreen() {
       const response = status === 'completed'
         ? await approveOperation.mutateAsync({ operationId: approval.operationId })
         : await rejectOperation.mutateAsync({ operationId: approval.operationId });
+      const responseRecord = recordLinkFromAction(response.action);
+      const linkedRecord = responseRecord
+        ? addOrigin(
+          responseRecord,
+          response.conversationId,
+          response.operationId,
+        )
+        : undefined;
       setMessages((current) => current.map((message) => (
         message.approval?.operationId === approval.operationId
-          ? { ...message, approval: { ...approval, status: response.status as ApprovalStatus } }
+          ? {
+            ...message,
+            approval: { ...approval, status: response.status as ApprovalStatus },
+            ...(linkedRecord ? { recordLink: linkedRecord } : {}),
+          }
           : message
       )));
+      setConversationId(response.conversationId);
       if (response.assistantMessage) {
         appendMessage({
           id: `approval-${Date.now()}`,
           role: 'assistant',
           text: response.assistantMessage,
           createdAt: new Date().toISOString(),
+          ...(linkedRecord ? { recordLink: linkedRecord } : {}),
         });
+      }
+      if (status === 'completed') {
+        await queryClient.invalidateQueries({ queryKey: getListRecordsQueryKey() });
       }
       await Haptics.notificationAsync(
         status === 'completed'
@@ -1032,6 +1095,8 @@ export default function QuickSecretaryScreen() {
 
   function startNewConversation() {
     setConversationId(undefined);
+    setConversationToLoad(null);
+    setLoadedConversationId(null);
     setMessages([starterMessage]);
     setLocalError(null);
     void Haptics.selectionAsync();
@@ -1046,6 +1111,25 @@ export default function QuickSecretaryScreen() {
   function openQuick() {
     setSelectedRecord(null);
     setActiveView('quick');
+    void Haptics.selectionAsync();
+  }
+
+  function openRecord(record: MobileRecordRow) {
+    setSelectedRecord(record);
+    setActiveView('home');
+    void Haptics.selectionAsync();
+  }
+
+  function openOriginalConversation(origin: RecordOrigin) {
+    setSelectedRecord(null);
+    setActiveView('quick');
+    if (origin.conversationId === conversationId) {
+      void Haptics.selectionAsync();
+      return;
+    }
+    setConversationToLoad(origin.conversationId);
+    setLoadedConversationId(null);
+    setLocalError(null);
     void Haptics.selectionAsync();
   }
 
@@ -1137,6 +1221,7 @@ export default function QuickSecretaryScreen() {
             colors={colors}
             onBack={() => setSelectedRecord(null)}
             onAskSecretary={askSecretaryAboutRecord}
+            onOpenConversation={openOriginalConversation}
           />
         ) : (
           <RecordsView colors={colors} onOpenRecord={setSelectedRecord} />
@@ -1156,6 +1241,7 @@ export default function QuickSecretaryScreen() {
               colors={colors}
               onApprove={(approval) => void updateApproval(approval, 'completed')}
               onReject={(approval) => void updateApproval(approval, 'rejected')}
+              onOpenRecord={openRecord}
               busyOperationId={busyOperationId}
             />
           )}
@@ -1163,11 +1249,13 @@ export default function QuickSecretaryScreen() {
           keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
-          ListHeaderComponent={createTurn.isPending ? (
+          ListHeaderComponent={createTurn.isPending || conversationQuery.isFetching ? (
             <View style={styles.typingRow}>
               <View style={[styles.typingBubble, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <ActivityIndicator size="small" color={colors.primary} />
-                <Text style={[styles.typingText, { color: colors.mutedForeground }]}>بفكر في الرد…</Text>
+                <Text style={[styles.typingText, { color: colors.mutedForeground }]}>
+                  {conversationQuery.isFetching ? 'بفتح المحادثة الأصلية…' : 'بفكر في الرد…'}
+                </Text>
               </View>
             </View>
           ) : null}
@@ -1204,6 +1292,22 @@ export default function QuickSecretaryScreen() {
         </View>
       )}
 
+      {activeView === 'quick' && conversationQuery.isError && (
+        <View style={[styles.errorBanner, { backgroundColor: colors.destructive }]}>
+          <Feather name="alert-circle" size={15} color={colors.destructiveForeground} />
+          <Text style={[styles.errorText, { color: colors.destructiveForeground }]}>
+            تعذر فتح المحادثة الأصلية.
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="إعادة فتح المحادثة الأصلية"
+            onPress={() => void conversationQuery.refetch()}
+          >
+            <Text style={[styles.errorRetry, { color: colors.destructiveForeground }]}>حاول</Text>
+          </Pressable>
+        </View>
+      )}
+
       {activeView === 'quick' && (
       <View style={[styles.composerWrap, { paddingBottom: bottomInset, borderTopColor: colors.border, backgroundColor: colors.background }]}>
         <View style={[styles.composer, { backgroundColor: colors.card, borderColor: colors.input }]}>
@@ -1227,10 +1331,10 @@ export default function QuickSecretaryScreen() {
             accessibilityRole="button"
             accessibilityLabel="إرسال الطلب"
             onPress={() => void sendMessage()}
-            disabled={!draft.trim() || createTurn.isPending}
+            disabled={!draft.trim() || createTurn.isPending || conversationQuery.isFetching}
             style={({ pressed }) => [
               styles.sendButton,
-              { backgroundColor: colors.primary, opacity: !draft.trim() || createTurn.isPending ? 0.4 : pressed ? 0.7 : 1 },
+              { backgroundColor: colors.primary, opacity: !draft.trim() || createTurn.isPending || conversationQuery.isFetching ? 0.4 : pressed ? 0.7 : 1 },
             ]}
           >
             <Feather name="arrow-up" size={18} color={colors.primaryForeground} />
@@ -1726,6 +1830,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  messageLink: {
+    minHeight: 36,
+    marginTop: 10,
+    borderRadius: 11,
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'flex-end',
+    gap: 6,
+  },
+  messageLinkText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
   typingRow: {
     alignItems: 'flex-end',
     marginBottom: 12,
@@ -1781,6 +1901,11 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     textAlign: 'right',
+  },
+  errorRetry: {
+    fontSize: 12,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
   },
   loadingState: {
     flex: 1,
