@@ -25,7 +25,7 @@ import {
   type SecretaryChatContext,
 } from '../services/secretary-chat';
 import QuickScreen from '../features/quick/QuickScreen';
-import { MessageBubble } from '../features/message-bubble';
+import { QuickMessageBubble } from '../features/quick/QuickMessageBubble';
 
 import {
   type Approval,
@@ -617,7 +617,7 @@ export default function QuickSecretaryScreen() {
             data={reversedMessages}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
-              <MessageBubble
+              <QuickMessageBubble
                 message={item}
                 colors={colors}
                 onApprove={(approval) => void updateApproval(approval, 'completed')}
@@ -625,7 +625,6 @@ export default function QuickSecretaryScreen() {
                 onOpenMain={openHome}
                 onOpenRecord={openRecordFromQuick}
                 busyOperationId={busyOperationId}
-                compact
               />
             )}
             contentContainerStyle={styles.messageList}
