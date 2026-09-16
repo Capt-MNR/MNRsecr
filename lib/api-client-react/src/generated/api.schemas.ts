@@ -38,6 +38,65 @@ export interface ErrorResponse {
   provider?: string;
 }
 
+export type TurnInputChannel = typeof TurnInputChannel[keyof typeof TurnInputChannel];
+
+
+export const TurnInputChannel = {
+  main: 'main',
+  quick: 'quick',
+  record: 'record',
+} as const;
+
+export interface SecretaryChatContext {
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  recordType: string;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  recordId: string;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  title: string;
+  /**
+     * @maxLength 200
+     * @nullable
+     */
+  sourceConversationId?: string | null;
+  /**
+     * @maxLength 200
+     * @nullable
+     */
+  sourceTurnId?: string | null;
+  /**
+     * @maxLength 200
+     * @nullable
+     */
+  sourceOperationId?: string | null;
+}
+
+export interface SecretaryChatPeer {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  agentId: string;
+  /** @maxLength 200 */
+  displayName?: string;
+  /** @maxLength 80 */
+  protocol?: string;
+  /**
+     * @maxItems 32
+     * @items.maxLength 100
+     */
+  capabilities?: string[];
+}
+
 export interface TurnInput {
   /** @minLength 1 */
   message: string;
@@ -45,6 +104,9 @@ export interface TurnInput {
   conversationId?: string | null;
   /** @nullable */
   idempotencyKey?: string | null;
+  channel: TurnInputChannel;
+  context?: SecretaryChatContext | null;
+  peer?: SecretaryChatPeer | null;
 }
 
 export interface ActionResult { [key: string]: unknown }
@@ -82,6 +144,7 @@ export interface FinalResponse {
 
 export interface TurnResponse {
   conversationId: string;
+  turnId: string;
   assistantMessage: string;
   action?: ActionResult;
   response?: FinalResponse;
@@ -105,6 +168,7 @@ export interface ApprovalResponse {
   operationId: string;
   status: ApprovalResponseStatus;
   conversationId: string;
+  turnId: string;
   assistantMessage: string;
   action?: ActionResult;
   response?: FinalResponse;

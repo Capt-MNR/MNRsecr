@@ -118,6 +118,27 @@ async function createAndApprove(
   return { pending, approved, operationId };
 }
 
+test("Secretary turn contract validates channel, bounded context, and peer metadata", async () => {
+  const missingChannel = await request("/turns", "POST", {
+    message: "اختبار العقد",
+  });
+  assert.equal(missingChannel.status, 400);
+
+  const invalidPeer = await request("/turns", "POST", {
+    message: "اختبار العقد",
+    channel: "quick",
+    peer: { displayName: "بدون معرف" },
+  });
+  assert.equal(invalidPeer.status, 400);
+
+  const invalidContext = await request("/turns", "POST", {
+    message: "اختبار العقد",
+    channel: "record",
+    context: { recordType: "expense", recordId: "expense-1" },
+  });
+  assert.equal(invalidContext.status, 400);
+});
+
 test("HTTP approval is server-side on the first request and idempotent", async () => {
   const [person] = await db.insert(peopleTable).values({
     tenantId,
@@ -137,8 +158,20 @@ test("HTTP approval is server-side on the first request and idempotent", async (
     message: "دفعت لمحمد 500 جنيه في مشروع المحجر",
     conversationId: `http-approval-conversation-${Date.now()}`,
     idempotencyKey: turnIdempotencyKey,
+    channel: "main",
+    context: {
+      recordType: "project",
+      recordId: project.id,
+      title: project.name,
+    },
+    peer: {
+      agentId: "test-peer",
+      protocol: "a2a",
+      capabilities: ["read"],
+    },
   });
   assert.equal(turn.status, 200);
+  assert.equal(typeof turn.body?.turnId, "string");
   assert.equal(turn.body?.action?.type, "approval_required");
   assert.equal(typeof turn.body?.action?.operationId, "string");
   assert.equal(turn.body?.action?.status, "pending");
@@ -167,6 +200,7 @@ test("HTTP approval is server-side on the first request and idempotent", async (
     message: "دفعت لمحمد 500 جنيه في مشروع المحجر",
     conversationId: turn.body.conversationId,
     idempotencyKey: turnIdempotencyKey,
+    channel: "main",
   });
   assert.equal(retry.status, 200);
   assert.equal(retry.body?.action?.operationId, operationId);
@@ -189,6 +223,7 @@ test("HTTP approval is server-side on the first request and idempotent", async (
   const rejectResponse = await request(`/approvals/${rejectedId}/reject`, "POST", {});
   assert.equal(rejectResponse.status, 200);
   assert.equal(rejectResponse.body?.status, "rejected");
+  assert.equal(typeof rejectResponse.body?.turnId, "string");
   const rejectedExpenses = await db.select().from(expensesTable).where(and(
     eq(expensesTable.tenantId, tenantId),
     eq(expensesTable.ownerUserId, userId),
@@ -212,6 +247,7 @@ test("HTTP approval is server-side on the first request and idempotent", async (
   });
   assert.equal(approved.status, 200);
   assert.equal(approved.body?.status, "completed");
+  assert.equal(typeof approved.body?.turnId, "string");
 
   const saved = await db.select().from(expensesTable).where(and(
     eq(expensesTable.tenantId, tenantId),

@@ -13,6 +13,7 @@ export interface ApprovalResponse {
   operationId: string;
   status: ApprovalResponseStatus;
   conversationId: string;
+  turnId: string;
   assistantMessage: string;
   action?: ActionResult;
   response?: FinalResponse;

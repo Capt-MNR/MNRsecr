@@ -41,7 +41,7 @@ export type SecretaryChatTurnInput = {
 };
 
 export interface SecretaryChatTransport {
-  sendTurn(input: { message: string; conversationId?: string | null }): Promise<TurnResponse>;
+  sendTurn(input: SecretaryChatTurnInput): Promise<TurnResponse>;
   listConversations(params?: ListConversationsParams): Promise<ConversationListResponse>;
   loadConversation(conversationId: string): Promise<ConversationDetail>;
   approveOperation(operationId: string): Promise<ApprovalResponse>;
@@ -57,7 +57,13 @@ export interface SecretaryChatService {
 }
 
 const apiTransport: SecretaryChatTransport = {
-  sendTurn: ({ message, conversationId }) => createTurn({ message, conversationId: conversationId ?? null }),
+  sendTurn: (input) => createTurn({
+    message: input.message,
+    conversationId: input.conversationId ?? null,
+    channel: input.channel,
+    context: input.context ?? null,
+    peer: input.peer ?? null,
+  }),
   listConversations: (params) => listConversations(params),
   loadConversation: (conversationId) => getConversation(conversationId),
   approveOperation: (operationId) => approveSecretaryOperation(operationId),
@@ -68,13 +74,7 @@ class ApiSecretaryChatService implements SecretaryChatService {
   constructor(private readonly transport: SecretaryChatTransport) {}
 
   sendTurn(input: SecretaryChatTurnInput) {
-    // The current HTTP contract accepts message and conversationId. Context,
-    // channel, and peer stay at this boundary so an A2A transport can carry
-    // them later without changing either chat surface.
-    return this.transport.sendTurn({
-      message: input.message,
-      conversationId: input.conversationId ?? null,
-    });
+    return this.transport.sendTurn(input);
   }
 
   listConversations(params?: ListConversationsParams) {

@@ -42,6 +42,7 @@ import {
   type ConversationMemorySnapshot,
 } from "./conversation-memory";
 import { isBroadExpenseReportRequest } from "./expense-report";
+import type { SecretaryChatContext, SecretaryChatPeer, TurnInputChannel } from "@workspace/api-zod";
 
 export type Identity = {
   tenantId: string;
@@ -1049,6 +1050,9 @@ export class DeterministicAgentRuntime {
       message: string;
       conversationId?: string | null;
       idempotencyKey?: string | null;
+      channel?: TurnInputChannel;
+      context?: SecretaryChatContext | null;
+      peer?: SecretaryChatPeer | null;
       requestId?: string;
     },
   ): Promise<TurnResult> {
@@ -1080,6 +1084,7 @@ export class DeterministicAgentRuntime {
         provider: "development",
         model: "deterministic-ar-v1",
       };
+      result = { ...result, turnId };
       if (input.idempotencyKey) {
         await this.persistence.saveIdempotentResponse(identity, input.idempotencyKey, result);
       }
@@ -1373,6 +1378,7 @@ export class DeterministicAgentRuntime {
       }
     }
 
+    result = { ...result, turnId };
     if (input.idempotencyKey) {
       await this.persistence.saveIdempotentResponse(
         identity,

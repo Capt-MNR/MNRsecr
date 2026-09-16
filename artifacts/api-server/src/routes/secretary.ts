@@ -87,6 +87,7 @@ function operationResultResponse(
       ...operation.result,
       operationId: operation.operationId,
       status: operation.status,
+      turnId: operation.sourceTurnId ?? operation.result.turnId ?? operation.operationId,
     };
   }
   const assistantMessage = operation.status === "rejected"
@@ -112,6 +113,7 @@ function operationResultResponse(
     model: "approval-operation",
     operationId: operation.operationId,
     status: operation.status,
+    turnId: operation.sourceTurnId ?? operation.operationId,
   };
 }
 
@@ -284,6 +286,7 @@ router.post("/turns", async (req, res): Promise<void> => {
     const response = operation
       ? {
           ...result,
+          turnId: result.turnId ?? currentRequestId,
           action: {
             ...result.action,
             args: operation.args,
@@ -292,7 +295,10 @@ router.post("/turns", async (req, res): Promise<void> => {
             display: operation.display,
           },
         }
-      : result;
+      : {
+          ...result,
+          turnId: result.turnId ?? currentRequestId,
+        };
     res.json(CreateTurnResponse.parse(response));
   } catch (error) {
     const classified = classifySecretaryError(error);

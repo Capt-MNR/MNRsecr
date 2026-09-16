@@ -5,6 +5,9 @@
  * Personal Secretary API
  * OpenAPI spec version: 0.1.0
  */
+import type { SecretaryChatContext } from './secretaryChatContext';
+import type { SecretaryChatPeer } from './secretaryChatPeer';
+import type { TurnInputChannel } from './turnInputChannel';
 
 export interface TurnInput {
   /** @minLength 1 */
@@ -13,4 +16,7 @@ export interface TurnInput {
   conversationId?: string | null;
   /** @nullable */
   idempotencyKey?: string | null;
+  channel: TurnInputChannel;
+  context?: SecretaryChatContext | null;
+  peer?: SecretaryChatPeer | null;
 }

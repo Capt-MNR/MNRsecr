@@ -26,4 +26,5 @@
 - [Mobile Expo preview environment](mobile-expo-preview.md) — Metro can serve correctly despite DevTools libglib warnings or package freshness blocked by the workspace firewall.
 - [Mobile two-surface architecture](mobile-two-surface-architecture.md) — mobile opens on quick, then reaches its full records home in one tap; web remains the broader desktop workspace.
 - [Secretary chat boundary](secretary-chat-boundary.md) — Main and Quick share a transport-independent chat service with future peer metadata.
+- [Expo Quick separation limits](expo-quick-separation.md) — Main evaluation can be deferred, but current Metro still emits one native launch bundle and RAM is unmeasured.
 - [Mobile preferences](mobile-preferences.md) — language and appearance are shared persisted preferences above Main and Quick.

@@ -265,6 +265,16 @@ function Home() {
           message,
           conversationId: conversationId ?? null,
           idempotencyKey: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `turn-${Date.now()}`,
+          channel: 'main',
+          ...(askContext
+            ? {
+                context: {
+                  recordType: askContext.entityType,
+                  recordId: askContext.entityId,
+                  title: askContext.entityName,
+                },
+              }
+            : {}),
         },
       },
       {
@@ -283,6 +293,7 @@ function Home() {
                text: response.response?.message ?? response.assistantMessage,
               time: formatTime(new Date().toISOString()),
               meta: response.provider ? `${response.provider} · ${response.model}` : 'سكرتيرك الخاص',
+               turnId: response.turnId,
                ...(response.response?.groundedFacts ? { facts: response.response.groundedFacts } : {}),
               ...(approval ? { approval } : {}),
             },
@@ -302,6 +313,7 @@ function Home() {
     operationId: string;
     status: ApprovalStatus;
     assistantMessage: string;
+    turnId?: string;
   }) {
     setApprovalError(null);
     setMessages((current) => current.map((message) => (
@@ -309,6 +321,7 @@ function Home() {
         ? {
             ...message,
             text: response.assistantMessage,
+             ...(response.turnId ? { turnId: response.turnId } : {}),
             approval: { ...message.approval, status: response.status },
           }
         : message

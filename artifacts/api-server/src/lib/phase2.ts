@@ -81,6 +81,7 @@ import {
   updateIncomeReceivable,
 } from "./financial-graph";
 import { createTypedRelationship, deleteTypedRelationship } from "./relationship-graph";
+import type { SecretaryChatContext, SecretaryChatPeer, TurnInputChannel } from "@workspace/api-zod";
 
 const db = database;
 
@@ -88,6 +89,9 @@ export type Phase2TurnInput = {
   message: string;
   conversationId?: string | null;
   idempotencyKey?: string | null;
+  channel?: TurnInputChannel;
+  context?: SecretaryChatContext | null;
+  peer?: SecretaryChatPeer | null;
   requestId?: string;
 };
 
@@ -4439,6 +4443,27 @@ export class Phase2AgentRuntime {
       : null;
     const messages: ConversationMessage[] = [
       ...conversationContextMessages(conversationMemory),
+      ...(input.context
+        ? [{
+            role: "system" as const,
+            text: `[سياق سكرتير محدود]\n${JSON.stringify({
+              channel: input.channel ?? "main",
+              context: input.context,
+              ...(input.peer ? { peer: input.peer } : {}),
+            })}`,
+          }]
+        : input.peer
+          ? [{
+              role: "system" as const,
+              text: `[بيانات قناة سكرتير مستقبلية]\n${JSON.stringify({
+                channel: input.channel ?? "main",
+                peer: input.peer,
+              })}`,
+            }]
+          : [{
+              role: "system" as const,
+              text: `[قناة السكرتير: ${input.channel ?? "main"}]`,
+            }]),
       ...(relationshipContext && !relationshipContext.response
         ? [{
             role: "system" as const,

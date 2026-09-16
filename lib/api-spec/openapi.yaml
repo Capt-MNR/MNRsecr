@@ -988,7 +988,66 @@ components:
           type: ["string", "null"]
         idempotencyKey:
           type: ["string", "null"]
-      required: [message]
+        channel:
+          type: string
+          enum: [main, quick, record]
+        context:
+          anyOf:
+            - $ref: "#/components/schemas/SecretaryChatContext"
+            - type: "null"
+        peer:
+          anyOf:
+            - $ref: "#/components/schemas/SecretaryChatPeer"
+            - type: "null"
+      required: [message, channel]
+      additionalProperties: false
+    SecretaryChatContext:
+      type: object
+      properties:
+        recordType:
+          type: string
+          minLength: 1
+          maxLength: 80
+        recordId:
+          type: string
+          minLength: 1
+          maxLength: 200
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        sourceConversationId:
+          type: ["string", "null"]
+          maxLength: 200
+        sourceTurnId:
+          type: ["string", "null"]
+          maxLength: 200
+        sourceOperationId:
+          type: ["string", "null"]
+          maxLength: 200
+      required: [recordType, recordId, title]
+      additionalProperties: false
+    SecretaryChatPeer:
+      type: object
+      properties:
+        agentId:
+          type: string
+          minLength: 1
+          maxLength: 200
+        displayName:
+          type: string
+          maxLength: 200
+        protocol:
+          type: string
+          maxLength: 80
+        capabilities:
+          type: array
+          maxItems: 32
+          items:
+            type: string
+            maxLength: 100
+      required: [agentId]
+      additionalProperties: false
     ActionResult:
       type: object
       additionalProperties: true
@@ -1021,6 +1080,8 @@ components:
       properties:
         conversationId:
           type: string
+        turnId:
+          type: string
         assistantMessage:
           type: string
         action:
@@ -1031,7 +1092,7 @@ components:
           type: string
         model:
           type: string
-      required: [conversationId, assistantMessage, provider, model]
+      required: [conversationId, turnId, assistantMessage, provider, model]
     ApprovalResponse:
       type: object
       properties:
@@ -1043,6 +1104,8 @@ components:
           enum: [pending, executing, completed, rejected, expired, failed]
         conversationId:
           type: string
+        turnId:
+          type: string
         assistantMessage:
           type: string
         action:
@@ -1053,7 +1116,7 @@ components:
           type: string
         model:
           type: string
-      required: [operationId, status, conversationId, assistantMessage, provider, model]
+      required: [operationId, status, conversationId, turnId, assistantMessage, provider, model]
     ApprovalInput:
       type: object
       properties:
