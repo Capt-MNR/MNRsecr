@@ -474,55 +474,55 @@ export default function QuickSecretaryScreen() {
               onThemeChange={setThemePreference}
               onLanguageChange={setLanguage}
             />
-        selectedRecord ? (
-          <RecordDetailView
-            record={selectedRecord!}
-            colors={colors}
-            onBack={() => setSelectedRecord(null)}
-            onAskSecretary={askSecretaryAboutRecord}
-            onOpenConversation={openOriginalConversation}
-              onOpenRelatedRecord={openOfficeRecord}
-              chatMessages={messages}
-              chatDraft={draft}
-              onChangeChatDraft={setDraft}
-              onSendChat={() => void sendMessage()}
-              chatBusy={secretaryChat.isSending || conversationQuery.isFetching}
-              onApprove={(approval) => void updateApproval(approval, 'completed')}
-              onReject={(approval) => void updateApproval(approval, 'rejected')}
-              busyOperationId={busyOperationId}
-              chatContext={chatContext}
-          />
-        ) : (
-            <>
-              {mainSection === 'office' && (
-                <MainOffice
-                  colors={colors}
-                  language={language}
-                  onOpenRecord={openOfficeRecord}
-                  onOpenRecords={() => openMainSection('records')}
-                  onOpenConversation={openConversation}
-                  onFocusChat={() => setChatContext(null)}
-                  onAskSecretary={openOfficeWithDraft}
-                  messages={messages}
-                  draft={draft}
-                  onChangeDraft={setDraft}
-                  onSend={() => void sendMessage()}
-                  inputRef={inputRef}
-                  isSending={secretaryChat.isSending || conversationQuery.isFetching}
-                  onApprove={(approval) => void updateApproval(approval, 'completed')}
-                  onReject={(approval) => void updateApproval(approval, 'rejected')}
-                  busyOperationId={busyOperationId}
-                  recordOrigins={recordOrigins}
-                  chatContext={chatContext}
-                  recentConversations={recentConversations}
-                  conversationSearch={conversationSearch}
-                  onChangeConversationSearch={setConversationSearch}
-                  conversationsLoading={secretaryChat.conversationsQuery.isFetching}
-                  pendingApprovals={messages.flatMap((message) => (
-                    message.approval && message.approval.status === 'pending' ? [message.approval] : []
-                  ))}
-                />
-              )}
+            {selectedRecord ? (
+              <RecordDetailView
+                record={selectedRecord}
+                colors={colors}
+                onBack={() => setSelectedRecord(null)}
+                onAskSecretary={askSecretaryAboutRecord}
+                onOpenConversation={openOriginalConversation}
+                onOpenRelatedRecord={openOfficeRecord}
+                chatMessages={messages}
+                chatDraft={draft}
+                onChangeChatDraft={setDraft}
+                onSendChat={() => void sendMessage()}
+                chatBusy={secretaryChat.isSending || conversationQuery.isFetching}
+                onApprove={(approval) => void updateApproval(approval, 'completed')}
+                onReject={(approval) => void updateApproval(approval, 'rejected')}
+                busyOperationId={busyOperationId}
+                chatContext={chatContext}
+              />
+            ) : (
+              <>
+                {mainSection === 'office' && (
+                  <MainOffice
+                    colors={colors}
+                    language={language}
+                    onOpenRecord={openOfficeRecord}
+                    onOpenRecords={() => openMainSection('records')}
+                    onOpenConversation={openConversation}
+                    onFocusChat={() => setChatContext(null)}
+                    onAskSecretary={openOfficeWithDraft}
+                    messages={messages}
+                    draft={draft}
+                    onChangeDraft={setDraft}
+                    onSend={() => void sendMessage()}
+                    inputRef={inputRef}
+                    isSending={secretaryChat.isSending || conversationQuery.isFetching}
+                    onApprove={(approval) => void updateApproval(approval, 'completed')}
+                    onReject={(approval) => void updateApproval(approval, 'rejected')}
+                    busyOperationId={busyOperationId}
+                    recordOrigins={recordOrigins}
+                    chatContext={chatContext}
+                    recentConversations={recentConversations}
+                    conversationSearch={conversationSearch}
+                    onChangeConversationSearch={setConversationSearch}
+                    conversationsLoading={secretaryChat.conversationsQuery.isFetching}
+                    pendingApprovals={messages.flatMap((message) => (
+                      message.approval && message.approval.status === 'pending' ? [message.approval] : []
+                    ))}
+                  />
+                )}
               {mainSection === 'records' && (
                 <RecordsView
                   colors={colors}
@@ -598,8 +598,8 @@ export default function QuickSecretaryScreen() {
                   onBack={openHome}
                 />
               )}
-            </>
-            )
+              </>
+            )}
           </>
         </MainWorkspace>
       ) : activeView === 'home' ? (
