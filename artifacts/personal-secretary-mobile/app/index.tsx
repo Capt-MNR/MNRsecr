@@ -442,6 +442,7 @@ export default function QuickSecretaryScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
+  const [activeView, setActiveView] = useState<'quick' | 'home'>('quick');
   const [messages, setMessages] = useState<LocalMessage[]>([starterMessage]);
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [draft, setDraft] = useState('');
@@ -574,30 +575,71 @@ export default function QuickSecretaryScreen() {
       keyboardVerticalOffset={0}
     >
       <View style={[styles.header, { paddingTop: topInset + 8, borderBottomColor: colors.border }]}>
-        <View style={styles.brandBlock}>
-          <View style={[styles.brandMark, { backgroundColor: colors.primary }]}>
-            <Feather name="message-circle" size={18} color={colors.primaryForeground} />
-          </View>
-          <View>
-            <Text style={[styles.brandName, { color: colors.foreground }]}>السكرتير</Text>
-            <View style={styles.availability}>
-              <View style={[styles.statusDot, { backgroundColor: colors.accent }]} />
-              <Text style={[styles.availabilityText, { color: colors.mutedForeground }]}>جاهز للرد السريع</Text>
+        <View style={styles.headerTop}>
+          <View style={styles.brandBlock}>
+            <View style={[styles.brandMark, { backgroundColor: colors.primary }]}>
+              <Feather name={activeView === 'quick' ? 'message-circle' : 'grid'} size={18} color={colors.primaryForeground} />
+            </View>
+            <View>
+              <Text style={[styles.brandName, { color: colors.foreground }]}>
+                {activeView === 'quick' ? 'السكرتير' : 'الرئيسية'}
+              </Text>
+              <View style={styles.availability}>
+                <View style={[styles.statusDot, { backgroundColor: colors.accent }]} />
+                <Text style={[styles.availabilityText, { color: colors.mutedForeground }]}>
+                  {activeView === 'quick' ? 'جاهز للرد السريع' : 'بياناتك المهمة في مكان واحد'}
+                </Text>
+              </View>
             </View>
           </View>
+          {activeView === 'quick' && (
+            <Pressable
+              testID="new-conversation"
+              accessibilityRole="button"
+              accessibilityLabel="محادثة جديدة"
+              onPress={startNewConversation}
+              style={({ pressed }) => [styles.iconButton, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}
+            >
+              <Feather name="edit-3" size={17} color={colors.foreground} />
+            </Pressable>
+          )}
         </View>
-        <Pressable
-          testID="new-conversation"
-          accessibilityRole="button"
-          accessibilityLabel="محادثة جديدة"
-          onPress={startNewConversation}
-          style={({ pressed }) => [styles.iconButton, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}
-        >
-          <Feather name="edit-3" size={17} color={colors.foreground} />
-        </Pressable>
+        <View style={[styles.viewSwitcher, { backgroundColor: colors.muted }]}>
+          <Pressable
+            testID="quick-view-tab"
+            accessibilityRole="button"
+            accessibilityState={{ selected: activeView === 'quick' }}
+            onPress={() => setActiveView('quick')}
+            style={({ pressed }) => [
+              styles.viewTab,
+              activeView === 'quick' && { backgroundColor: colors.card },
+              { opacity: pressed ? 0.7 : 1 },
+            ]}
+          >
+            <Feather name="message-circle" size={14} color={activeView === 'quick' ? colors.primary : colors.mutedForeground} />
+            <Text style={[styles.viewTabText, { color: activeView === 'quick' ? colors.foreground : colors.mutedForeground }]}>السريع</Text>
+          </Pressable>
+          <Pressable
+            testID="home-view-tab"
+            accessibilityRole="button"
+            accessibilityLabel="فتح الواجهة الرئيسية"
+            accessibilityState={{ selected: activeView === 'home' }}
+            onPress={() => setActiveView('home')}
+            style={({ pressed }) => [
+              styles.viewTab,
+              activeView === 'home' && { backgroundColor: colors.card },
+              { opacity: pressed ? 0.7 : 1 },
+            ]}
+          >
+            <Feather name="grid" size={14} color={activeView === 'home' ? colors.primary : colors.mutedForeground} />
+            <Text style={[styles.viewTabText, { color: activeView === 'home' ? colors.foreground : colors.mutedForeground }]}>الرئيسية</Text>
+          </Pressable>
+        </View>
       </View>
 
-      {!hydrated ? (
+      {activeView === 'home' ? (
+        <RecordsView colors={colors} />
+      ) : !hydrated ? (
         <View style={styles.loadingState}>
           <ActivityIndicator color={colors.primary} />
         </View>
@@ -653,13 +695,14 @@ export default function QuickSecretaryScreen() {
         />
       )}
 
-      {localError && (
+      {activeView === 'quick' && localError && (
         <View style={[styles.errorBanner, { backgroundColor: colors.destructive }]}>
           <Feather name="alert-circle" size={15} color={colors.destructiveForeground} />
           <Text style={[styles.errorText, { color: colors.destructiveForeground }]}>{localError}</Text>
         </View>
       )}
 
+      {activeView === 'quick' && (
       <View style={[styles.composerWrap, { paddingBottom: bottomInset, borderTopColor: colors.border, backgroundColor: colors.background }]}>
         <View style={[styles.composer, { backgroundColor: colors.card, borderColor: colors.input }]}>
           <TextInput
@@ -695,6 +738,7 @@ export default function QuickSecretaryScreen() {
           للمحادثات السريعة فقط · أي تغيير حساس سيطلب موافقتك
         </Text>
       </View>
+      )}
     </KeyboardAvoidingView>
   );
 }
