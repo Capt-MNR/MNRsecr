@@ -244,6 +244,51 @@ export interface ConversationDetail {
   state: ConversationDetailState;
 }
 
+export type LearningSignalCategory = typeof LearningSignalCategory[keyof typeof LearningSignalCategory];
+
+
+export const LearningSignalCategory = {
+  amount: 'amount',
+  date_time: 'date_time',
+  person: 'person',
+  project: 'project',
+  intent: 'intent',
+  general: 'general',
+} as const;
+
+export type LearningSignalStatus = typeof LearningSignalStatus[keyof typeof LearningSignalStatus];
+
+
+export const LearningSignalStatus = {
+  pending_review: 'pending_review',
+} as const;
+
+export interface LearningSignal {
+  signalId: string;
+  conversationId: string;
+  conversationTitle: string;
+  /** @nullable */
+  turnId: string | null;
+  /** @nullable */
+  previousTurnId: string | null;
+  category: LearningSignalCategory;
+  confidence: number;
+  status: LearningSignalStatus;
+  userMessage: string;
+  assistantMessage: string;
+  /** @nullable */
+  previousUserMessage: string | null;
+  /** @nullable */
+  previousAssistantMessage: string | null;
+  /** @nullable */
+  previousActionType: string | null;
+  createdAt: string;
+}
+
+export interface LearningSignalListResponse {
+  signals: LearningSignal[];
+}
+
 export type ActivityEventMetadata = { [key: string]: unknown };
 
 export interface ActivityEvent {

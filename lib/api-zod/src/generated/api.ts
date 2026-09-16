@@ -707,6 +707,29 @@ export const ListConversationsResponse = zod.object({
 
 
 /**
+ * @summary List review-only user correction signals
+ */
+export const ListLearningSignalsResponse = zod.object({
+  "signals": zod.array(zod.object({
+  "signalId": zod.string(),
+  "conversationId": zod.string(),
+  "conversationTitle": zod.string(),
+  "turnId": zod.string().nullable(),
+  "previousTurnId": zod.string().nullable(),
+  "category": zod.enum(['amount', 'date_time', 'person', 'project', 'intent', 'general']),
+  "confidence": zod.number(),
+  "status": zod.enum(['pending_review']),
+  "userMessage": zod.string(),
+  "assistantMessage": zod.string(),
+  "previousUserMessage": zod.string().nullable(),
+  "previousAssistantMessage": zod.string().nullable(),
+  "previousActionType": zod.string().nullable(),
+  "createdAt": zod.string()
+}))
+})
+
+
+/**
  * @summary Load a conversation and its recent turns
  */
 export const GetConversationParams = zod.object({

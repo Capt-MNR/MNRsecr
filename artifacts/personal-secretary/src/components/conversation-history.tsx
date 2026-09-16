@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   Archive,
+  BrainCircuit,
   MessageSquareText,
   Plus,
   Search,
@@ -116,6 +117,7 @@ export default function ConversationHistory({
             </div>
             <button type="button" onClick={onNew} className="mb-3 flex items-center gap-2 rounded-xl bg-primary/10 px-3 py-3 text-sm font-semibold text-primary"><Plus className="size-4" /> محادثة جديدة</button>
             <button type="button" onClick={() => { setLocation('/records'); onOpenChange(false); }} className="mb-5 flex items-center gap-2 rounded-xl px-3 py-3 text-sm text-muted-foreground hover:bg-muted"><Archive className="size-4" /> السجلات المحفوظة</button>
+             <button type="button" onClick={() => { setLocation('/learning'); onOpenChange(false); }} className="mb-5 flex items-center gap-2 rounded-xl px-3 py-3 text-sm text-muted-foreground hover:bg-muted"><BrainCircuit className="size-4" /> مراجعة التصحيحات</button>
             <div className="flex min-h-0 flex-1 flex-col">{content}</div>
           </aside>
         </div>

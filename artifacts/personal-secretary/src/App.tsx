@@ -8,6 +8,7 @@ import Records from '@/pages/records';
 import NotFound from '@/pages/not-found';
 import EntityDetail from '@/pages/entity-detail';
 import FinancialDetail from '@/pages/financial-detail';
+import LearningSignals from '@/pages/learning-signals';
 import {
   Route,
   Switch,
@@ -28,6 +29,7 @@ function Router() {
           <Route path="/people/:id" component={() => <EntityDetail entityType="person" />} />
           <Route path="/projects/:id" component={() => <EntityDetail entityType="project" />} />
            <Route path="/financial/parties/:id" component={FinancialDetail} />
+         <Route path="/learning" component={LearningSignals} />
         <Route component={NotFound} />
       </Switch>
     </RoutedErrorBoundary>

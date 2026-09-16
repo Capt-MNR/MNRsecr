@@ -14,6 +14,8 @@ tags:
     description: Personal secretary operations
   - name: conversations
     description: Conversation history operations
+  - name: learning
+    description: Review-only learning signal operations
   - name: records
     description: Structured memory records operations
   - name: financial
@@ -514,6 +516,24 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ConversationListResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /learning/signals:
+    get:
+      operationId: listLearningSignals
+      tags: [learning]
+      summary: List review-only user correction signals
+      responses:
+        "200":
+          description: Correction signals extracted from accessible conversation memory
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LearningSignalListResponse"
         "401":
           description: Authentication required
           content:
@@ -1199,6 +1219,48 @@ components:
           type: object
           additionalProperties: true
       required: [conversationId, title, lastActivityAt, turnCount, recentTurns, summary, state]
+    LearningSignal:
+      type: object
+      properties:
+        signalId:
+          type: string
+        conversationId:
+          type: string
+        conversationTitle:
+          type: string
+        turnId:
+          type: ["string", "null"]
+        previousTurnId:
+          type: ["string", "null"]
+        category:
+          type: string
+          enum: [amount, date_time, person, project, intent, general]
+        confidence:
+          type: number
+        status:
+          type: string
+          enum: [pending_review]
+        userMessage:
+          type: string
+        assistantMessage:
+          type: string
+        previousUserMessage:
+          type: ["string", "null"]
+        previousAssistantMessage:
+          type: ["string", "null"]
+        previousActionType:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required: [signalId, conversationId, conversationTitle, turnId, previousTurnId, category, confidence, status, userMessage, assistantMessage, previousUserMessage, previousAssistantMessage, previousActionType, createdAt]
+    LearningSignalListResponse:
+      type: object
+      properties:
+        signals:
+          type: array
+          items:
+            $ref: "#/components/schemas/LearningSignal"
+      required: [signals]
     ActivityEvent:
       type: object
       additionalProperties: true

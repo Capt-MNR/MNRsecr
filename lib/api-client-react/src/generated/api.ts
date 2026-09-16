@@ -36,6 +36,7 @@ import type {
   FinancialMutationResponse,
   GetCandidatesParams,
   HealthStatus,
+  LearningSignalListResponse,
   ListConversationsParams,
   ListTypedRelationshipsParams,
   PersonGraphResponse,
@@ -2484,6 +2485,83 @@ export function useListConversations<TData = Awaited<ReturnType<typeof listConve
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getListConversationsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListLearningSignalsUrl = () => {
+
+
+
+
+  return `/api/learning/signals`
+}
+
+/**
+ * @summary List review-only user correction signals
+ */
+export const listLearningSignals = async ( options?: Parameters<typeof customFetch>[1]): Promise<LearningSignalListResponse> => {
+
+  return customFetch<LearningSignalListResponse>(getListLearningSignalsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListLearningSignalsQueryKey = () => {
+    return [
+    `/api/learning/signals`
+    ] as const;
+    }
+
+
+export const getListLearningSignalsQueryOptions = <TData = Awaited<ReturnType<typeof listLearningSignals>>, TError = ErrorType<ErrorResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listLearningSignals>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListLearningSignalsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listLearningSignals>>> = ({ signal }) => listLearningSignals({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listLearningSignals>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListLearningSignalsQueryResult = NonNullable<Awaited<ReturnType<typeof listLearningSignals>>>
+export type ListLearningSignalsQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary List review-only user correction signals
+ */
+
+export function useListLearningSignals<TData = Awaited<ReturnType<typeof listLearningSignals>>, TError = ErrorType<ErrorResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listLearningSignals>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListLearningSignalsQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
