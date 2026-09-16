@@ -1,15 +1,22 @@
 import { Router, type IRouter } from "express";
 import { and, desc, eq, ilike, or } from "drizzle-orm";
-import { conversationMemoryTable, db } from "@workspace/db";
+import {
+  conversationMemoryTable,
+  db,
+  learningSignalReviewsTable,
+} from "@workspace/db";
 import {
   GetConversationResponse,
   ListLearningSignalsResponse,
   ListConversationsResponse,
+  ReviewLearningSignalBody,
+  ReviewLearningSignalResponse,
 } from "@workspace/api-zod";
 import {
   loadConversationMemory,
   type ConversationTurn,
 } from "../lib/conversation-memory";
+import type { Identity } from "../lib/secretary";
 import {
   requireIdentity,
   sendRouteError,
@@ -45,6 +52,13 @@ const signalCategories = new Set([
   "intent",
   "general",
 ]);
+const signalStatuses = new Set([
+  "pending_review",
+  "approved",
+  "rejected",
+  "needs_context",
+]);
+type LearningSignalStatus = "pending_review" | "approved" | "rejected" | "needs_context";
 
 function learningSignalFromTurn(
   conversationId: string,
@@ -83,6 +97,47 @@ function learningSignalFromTurn(
       : null,
     createdAt: turn.createdAt,
   };
+}
+
+async function listLearningSignals(identity: Identity) {
+  const [memoryRows, reviewRows] = await Promise.all([
+    db.select().from(conversationMemoryTable).where(and(
+      eq(conversationMemoryTable.tenantId, identity.tenantId),
+      eq(conversationMemoryTable.ownerUserId, identity.userId),
+    )).orderBy(desc(conversationMemoryTable.updatedAt)).limit(100),
+    db.select().from(learningSignalReviewsTable).where(and(
+      eq(learningSignalReviewsTable.tenantId, identity.tenantId),
+      eq(learningSignalReviewsTable.ownerUserId, identity.userId),
+    )),
+  ]);
+  const reviews = new Map(reviewRows.map((review) => [review.signalId, review]));
+  return memoryRows.flatMap((row) => {
+    const turns = parseStoredTurns(row.recentStateJson);
+    const title = conversationPresentation(
+      row.conversationId,
+      row.recentStateJson,
+      row.summary,
+      row.updatedAt,
+      Number(row.turnCount),
+    ).title;
+    return turns.flatMap((turn, index) => {
+      const signal = learningSignalFromTurn(row.conversationId, title, turn, turns[index - 1]);
+      if (!signal) return [];
+      const review = reviews.get(signal.signalId);
+      const status = review && signalStatuses.has(review.status)
+        ? review.status as LearningSignalStatus
+        : signal.status;
+      return [{ ...signal, status }];
+    });
+  }).sort((left, right) => right.createdAt.localeCompare(left.createdAt)).slice(0, 100);
+}
+
+async function findLearningSignal(
+  identity: Identity,
+  signalId: string,
+) {
+  const signals = await listLearningSignals(identity);
+  return signals.find((signal) => signal.signalId === signalId) ?? null;
 }
 
 function conversationPresentation(
@@ -143,28 +198,97 @@ router.get("/learning/signals", async (req, res): Promise<void> => {
   if (!identity) return;
 
   try {
-    const rows = await db.select().from(conversationMemoryTable).where(and(
-      eq(conversationMemoryTable.tenantId, identity.tenantId),
-      eq(conversationMemoryTable.ownerUserId, identity.userId),
-    )).orderBy(desc(conversationMemoryTable.updatedAt)).limit(100);
-    const signals = rows.flatMap((row) => {
-      const turns = parseStoredTurns(row.recentStateJson);
-      const title = conversationPresentation(
-        row.conversationId,
-        row.recentStateJson,
-        row.summary,
-        row.updatedAt,
-        Number(row.turnCount),
-      ).title;
-      return turns.flatMap((turn, index) => {
-        const signal = learningSignalFromTurn(row.conversationId, title, turn, turns[index - 1]);
-        return signal ? [signal] : [];
-      });
-    }).sort((left, right) => right.createdAt.localeCompare(left.createdAt)).slice(0, 100);
+    const signals = await listLearningSignals(identity);
     res.json(ListLearningSignalsResponse.parse({ signals }));
   } catch (error) {
     req.log.error({ error }, "Learning signals read failed");
     sendRouteError(req, res, 500, "تعذر تحميل إشارات التصحيح.", "LEARNING_SIGNALS_READ_FAILED");
+  }
+});
+
+router.post("/learning/signals/:signalId/review", async (req, res): Promise<void> => {
+  const identity = requireIdentity(req, res);
+  if (!identity) return;
+  const parsed = ReviewLearningSignalBody.safeParse(req.body);
+  if (!parsed.success) {
+    sendRouteError(req, res, 400, "بيانات مراجعة الإشارة غير صحيحة.", "INVALID_LEARNING_SIGNAL_REVIEW");
+    return;
+  }
+
+  try {
+    const signal = await findLearningSignal(identity, req.params.signalId);
+    if (!signal) {
+      sendRouteError(req, res, 404, "إشارة التصحيح غير موجودة.", "LEARNING_SIGNAL_NOT_FOUND");
+      return;
+    }
+    const now = new Date();
+    await db.insert(learningSignalReviewsTable).values({
+      tenantId: identity.tenantId,
+      ownerUserId: identity.userId,
+      signalId: signal.signalId,
+      conversationId: signal.conversationId,
+      turnId: signal.turnId,
+      category: signal.category,
+      confidenceBps: Math.round(signal.confidence * 10_000),
+      status: parsed.data.status,
+      reviewerNote: parsed.data.note ?? null,
+      benchmarkPayload: {
+        signalId: signal.signalId,
+        conversationId: signal.conversationId,
+        conversationTitle: signal.conversationTitle,
+        turnId: signal.turnId,
+        previousTurnId: signal.previousTurnId,
+        category: signal.category,
+        confidence: signal.confidence,
+        userMessage: signal.userMessage,
+        assistantMessage: signal.assistantMessage,
+        previousUserMessage: signal.previousUserMessage,
+        previousAssistantMessage: signal.previousAssistantMessage,
+        previousActionType: signal.previousActionType,
+        createdAt: signal.createdAt,
+      },
+      reviewedAt: now,
+      updatedAt: now,
+    }).onConflictDoUpdate({
+      target: [
+        learningSignalReviewsTable.tenantId,
+        learningSignalReviewsTable.ownerUserId,
+        learningSignalReviewsTable.signalId,
+      ],
+      set: {
+        conversationId: signal.conversationId,
+        turnId: signal.turnId,
+        category: signal.category,
+        confidenceBps: Math.round(signal.confidence * 10_000),
+        status: parsed.data.status,
+        reviewerNote: parsed.data.note ?? null,
+        benchmarkPayload: {
+          signalId: signal.signalId,
+          conversationId: signal.conversationId,
+          conversationTitle: signal.conversationTitle,
+          turnId: signal.turnId,
+          previousTurnId: signal.previousTurnId,
+          category: signal.category,
+          confidence: signal.confidence,
+          userMessage: signal.userMessage,
+          assistantMessage: signal.assistantMessage,
+          previousUserMessage: signal.previousUserMessage,
+          previousAssistantMessage: signal.previousAssistantMessage,
+          previousActionType: signal.previousActionType,
+          createdAt: signal.createdAt,
+        },
+        reviewedAt: now,
+        updatedAt: now,
+      },
+    });
+    res.json(ReviewLearningSignalResponse.parse({
+      signalId: signal.signalId,
+      status: parsed.data.status,
+      benchmarkReady: parsed.data.status === "approved",
+    }));
+  } catch (error) {
+    req.log.error({ error }, "Learning signal review failed");
+    sendRouteError(req, res, 500, "تعذر حفظ مراجعة الإشارة.", "LEARNING_SIGNAL_REVIEW_FAILED");
   }
 });
 

@@ -6,12 +6,15 @@ import {
   RefreshCw,
   ShieldCheck,
 } from 'lucide-react';
+import { useState } from 'react';
 import { Link } from 'wouter';
 import {
   getListLearningSignalsQueryKey,
+  useReviewLearningSignal,
   useListLearningSignals,
 } from '@workspace/api-client-react';
 import type { LearningSignal } from '@workspace/api-client-react';
+import { useQueryClient } from '@tanstack/react-query';
 
 const categoryLabels: Record<LearningSignal['category'], string> = {
   amount: 'مبلغ',
@@ -31,7 +34,29 @@ function formatSignalTime(value: string) {
   }).format(date);
 }
 
-function SignalCard({ signal }: { signal: LearningSignal }) {
+const statusLabels: Record<LearningSignal['status'], string> = {
+  pending_review: 'معلّقة للمراجعة',
+  approved: 'معتمدة كـ benchmark',
+  rejected: 'مرفوضة',
+  needs_context: 'تحتاج سياقًا إضافيًا',
+};
+
+const statusClasses: Record<LearningSignal['status'], string> = {
+  pending_review: 'border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300',
+  approved: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+  rejected: 'border-destructive/25 bg-destructive/10 text-destructive',
+  needs_context: 'border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300',
+};
+
+function SignalCard({
+  signal,
+  onReview,
+  isBusy,
+}: {
+  signal: LearningSignal;
+  onReview: (status: 'approved' | 'rejected' | 'needs_context') => void;
+  isBusy: boolean;
+}) {
   return (
     <article className="rounded-3xl border border-border/70 bg-card p-5 shadow-sm sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -40,8 +65,8 @@ function SignalCard({ signal }: { signal: LearningSignal }) {
             <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
               {categoryLabels[signal.category]}
             </span>
-            <span className="rounded-full border border-amber-500/25 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
-              معلّقة للمراجعة
+            <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${statusClasses[signal.status]}`}>
+              {statusLabels[signal.status]}
             </span>
           </div>
           <h2 className="text-base font-semibold text-foreground">{signal.conversationTitle}</h2>
@@ -84,17 +109,70 @@ function SignalCard({ signal }: { signal: LearningSignal }) {
         <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
         <p>هذه الإشارة للمراجعة والتقييم فقط. لا تغيّر أي سجل ولا تُعدّل قواعد السكرتير تلقائيًا.</p>
       </div>
+
+      {signal.status !== 'approved' && (
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => onReview('approved')}
+            disabled={isBusy}
+            className="min-h-10 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
+          >
+            اعتماد كـ benchmark
+          </button>
+          <button
+            type="button"
+            onClick={() => onReview('needs_context')}
+            disabled={isBusy}
+            className="min-h-10 rounded-xl border border-sky-500/30 px-3 py-2 text-xs font-semibold text-sky-700 transition hover:bg-sky-500/10 dark:text-sky-300 disabled:cursor-wait disabled:opacity-60"
+          >
+            أحتاج سياقًا
+          </button>
+          <button
+            type="button"
+            onClick={() => onReview('rejected')}
+            disabled={isBusy}
+            className="min-h-10 rounded-xl border border-border px-3 py-2 text-xs font-semibold text-muted-foreground transition hover:bg-muted disabled:cursor-wait disabled:opacity-60"
+          >
+            رفض الإشارة
+          </button>
+        </div>
+      )}
     </article>
   );
 }
 
 export default function LearningSignals() {
+  const queryClient = useQueryClient();
   const signalsQuery = useListLearningSignals({
     query: {
       queryKey: getListLearningSignalsQueryKey(),
       staleTime: 10_000,
     },
   });
+  const reviewMutation = useReviewLearningSignal();
+  const [activeSignalId, setActiveSignalId] = useState<string | null>(null);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+
+  async function reviewSignal(
+    signalId: string,
+    status: 'approved' | 'rejected' | 'needs_context',
+  ) {
+    setActiveSignalId(signalId);
+    setReviewError(null);
+    try {
+      await reviewMutation.mutateAsync({ signalId, data: { status } });
+      await queryClient.invalidateQueries({ queryKey: getListLearningSignalsQueryKey() });
+    } catch {
+      setReviewError('تعذر حفظ قرار المراجعة. حاول مرة أخرى.');
+    } finally {
+      setActiveSignalId(null);
+    }
+  }
+
+  const pendingCount = signalsQuery.data?.signals.filter(
+    (signal) => signal.status === 'pending_review' || signal.status === 'needs_context',
+  ).length ?? 0;
 
   return (
     <main className="min-h-screen bg-background px-4 py-5 text-foreground sm:px-8 sm:py-8" dir="rtl">
@@ -144,6 +222,12 @@ export default function LearningSignals() {
           </div>
         )}
 
+        {reviewError && (
+          <div className="mb-4 rounded-2xl border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive" role="alert">
+            {reviewError}
+          </div>
+        )}
+
         {!signalsQuery.isLoading && !signalsQuery.isError && signalsQuery.data?.signals.length === 0 && (
           <div className="rounded-3xl border border-dashed border-border bg-card/60 px-6 py-14 text-center">
             <BrainCircuit className="mx-auto size-8 text-muted-foreground/60" />
@@ -157,9 +241,16 @@ export default function LearningSignals() {
         {!signalsQuery.isLoading && !signalsQuery.isError && (signalsQuery.data?.signals.length ?? 0) > 0 && (
           <div className="space-y-4">
             <p className="text-xs text-muted-foreground">
-              {signalsQuery.data?.signals.length} إشارة تنتظر المراجعة
+              {pendingCount} إشارة تحتاج قرارًا · {signalsQuery.data?.signals.length} إجمالي الإشارات
             </p>
-            {signalsQuery.data?.signals.map((signal) => <SignalCard key={signal.signalId} signal={signal} />)}
+            {signalsQuery.data?.signals.map((signal) => (
+              <SignalCard
+                key={signal.signalId}
+                signal={signal}
+                isBusy={activeSignalId === signal.signalId}
+                onReview={(status) => void reviewSignal(signal.signalId, status)}
+              />
+            ))}
           </div>
         )}
       </div>

@@ -6,11 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type LearningSignalStatus = typeof LearningSignalStatus[keyof typeof LearningSignalStatus];
+export type LearningSignalReviewInputStatus = typeof LearningSignalReviewInputStatus[keyof typeof LearningSignalReviewInputStatus];
 
 
-export const LearningSignalStatus = {
-  pending_review: 'pending_review',
+export const LearningSignalReviewInputStatus = {
   approved: 'approved',
   rejected: 'rejected',
   needs_context: 'needs_context',

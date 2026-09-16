@@ -718,7 +718,7 @@ export const ListLearningSignalsResponse = zod.object({
   "previousTurnId": zod.string().nullable(),
   "category": zod.enum(['amount', 'date_time', 'person', 'project', 'intent', 'general']),
   "confidence": zod.number(),
-  "status": zod.enum(['pending_review']),
+  "status": zod.enum(['pending_review', 'approved', 'rejected', 'needs_context']),
   "userMessage": zod.string(),
   "assistantMessage": zod.string(),
   "previousUserMessage": zod.string().nullable(),
@@ -726,6 +726,29 @@ export const ListLearningSignalsResponse = zod.object({
   "previousActionType": zod.string().nullable(),
   "createdAt": zod.string()
 }))
+})
+
+
+/**
+ * @summary Review a correction signal for offline benchmark use
+ */
+export const ReviewLearningSignalParams = zod.object({
+  "signalId": zod.coerce.string()
+})
+
+export const reviewLearningSignalBodyNoteMax = 1000;
+
+
+
+export const ReviewLearningSignalBody = zod.object({
+  "status": zod.enum(['approved', 'rejected', 'needs_context']),
+  "note": zod.string().max(reviewLearningSignalBodyNoteMax).nullish()
+})
+
+export const ReviewLearningSignalResponse = zod.object({
+  "signalId": zod.string(),
+  "status": zod.enum(['approved', 'rejected', 'needs_context']),
+  "benchmarkReady": zod.boolean()
 })
 
 

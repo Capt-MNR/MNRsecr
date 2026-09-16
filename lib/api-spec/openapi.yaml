@@ -540,6 +540,48 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /learning/signals/{signalId}/review:
+    post:
+      operationId: reviewLearningSignal
+      tags: [learning]
+      summary: Review a correction signal for offline benchmark use
+      parameters:
+        - name: signalId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LearningSignalReviewInput"
+      responses:
+        "200":
+          description: Review saved without changing production behavior
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LearningSignalReviewResponse"
+        "400":
+          description: Invalid review
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Learning signal not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /conversations/{conversationId}:
     get:
       operationId: getConversation
@@ -1239,7 +1281,7 @@ components:
           type: number
         status:
           type: string
-          enum: [pending_review]
+          enum: [pending_review, approved, rejected, needs_context]
         userMessage:
           type: string
         assistantMessage:
@@ -1253,6 +1295,27 @@ components:
         createdAt:
           type: string
       required: [signalId, conversationId, conversationTitle, turnId, previousTurnId, category, confidence, status, userMessage, assistantMessage, previousUserMessage, previousAssistantMessage, previousActionType, createdAt]
+    LearningSignalReviewInput:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [approved, rejected, needs_context]
+        note:
+          type: ["string", "null"]
+          maxLength: 1000
+      required: [status]
+    LearningSignalReviewResponse:
+      type: object
+      properties:
+        signalId:
+          type: string
+        status:
+          type: string
+          enum: [approved, rejected, needs_context]
+        benchmarkReady:
+          type: boolean
+      required: [signalId, status, benchmarkReady]
     LearningSignalListResponse:
       type: object
       properties:

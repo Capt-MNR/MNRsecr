@@ -673,6 +673,38 @@ export const conversationMemoryTable = pgTable(
   ],
 );
 
+export const learningSignalReviewsTable = pgTable(
+  "learning_signal_reviews",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    signalId: text("signal_id").notNull(),
+    conversationId: text("conversation_id").notNull(),
+    turnId: text("turn_id"),
+    category: text("category").notNull(),
+    confidenceBps: integer("confidence_bps").notNull(),
+    status: text("status").notNull().default("pending_review"),
+    reviewerNote: text("reviewer_note"),
+    benchmarkPayload: jsonb("benchmark_payload").$type<Record<string, unknown>>().notNull(),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("learning_signal_reviews_owner_signal_unique").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.signalId,
+    ),
+    index("learning_signal_reviews_owner_status_updated_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.status,
+      table.updatedAt,
+    ),
+  ],
+);
+
 export const activityEventsTable = pgTable(
   "activity_events",
   {
@@ -766,6 +798,7 @@ export type Task = typeof tasksTable.$inferSelect;
 export type ProjectPerson = typeof projectPeopleTable.$inferSelect;
 export type Commitment = typeof commitmentsTable.$inferSelect;
 export type ConversationMemory = typeof conversationMemoryTable.$inferSelect;
+export type LearningSignalReview = typeof learningSignalReviewsTable.$inferSelect;
 export type SecretaryOperation = typeof secretaryOperationsTable.$inferSelect;
 export type Purpose = typeof purposesTable.$inferSelect;
 export type FinancialParty = typeof financialPartiesTable.$inferSelect;

@@ -261,6 +261,9 @@ export type LearningSignalStatus = typeof LearningSignalStatus[keyof typeof Lear
 
 export const LearningSignalStatus = {
   pending_review: 'pending_review',
+  approved: 'approved',
+  rejected: 'rejected',
+  needs_context: 'needs_context',
 } as const;
 
 export interface LearningSignal {
@@ -283,6 +286,39 @@ export interface LearningSignal {
   /** @nullable */
   previousActionType: string | null;
   createdAt: string;
+}
+
+export type LearningSignalReviewInputStatus = typeof LearningSignalReviewInputStatus[keyof typeof LearningSignalReviewInputStatus];
+
+
+export const LearningSignalReviewInputStatus = {
+  approved: 'approved',
+  rejected: 'rejected',
+  needs_context: 'needs_context',
+} as const;
+
+export interface LearningSignalReviewInput {
+  status: LearningSignalReviewInputStatus;
+  /**
+     * @maxLength 1000
+     * @nullable
+     */
+  note?: string | null;
+}
+
+export type LearningSignalReviewResponseStatus = typeof LearningSignalReviewResponseStatus[keyof typeof LearningSignalReviewResponseStatus];
+
+
+export const LearningSignalReviewResponseStatus = {
+  approved: 'approved',
+  rejected: 'rejected',
+  needs_context: 'needs_context',
+} as const;
+
+export interface LearningSignalReviewResponse {
+  signalId: string;
+  status: LearningSignalReviewResponseStatus;
+  benchmarkReady: boolean;
 }
 
 export interface LearningSignalListResponse {

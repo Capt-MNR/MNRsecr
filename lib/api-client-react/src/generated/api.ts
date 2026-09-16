@@ -37,6 +37,8 @@ import type {
   GetCandidatesParams,
   HealthStatus,
   LearningSignalListResponse,
+  LearningSignalReviewInput,
+  LearningSignalReviewResponse,
   ListConversationsParams,
   ListTypedRelationshipsParams,
   PersonGraphResponse,
@@ -2573,6 +2575,95 @@ export function useListLearningSignals<TData = Awaited<ReturnType<typeof listLea
 
 
 
+
+export const getReviewLearningSignalUrl = (signalId: string,) => {
+
+
+
+
+  return `/api/learning/signals/${signalId}/review`
+}
+
+/**
+ * @summary Review a correction signal for offline benchmark use
+ */
+export const reviewLearningSignal = async (signalId: string,
+    learningSignalReviewInput: LearningSignalReviewInput, options?: Parameters<typeof customFetch>[1]): Promise<LearningSignalReviewResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<LearningSignalReviewResponse>(getReviewLearningSignalUrl(signalId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(learningSignalReviewInput)
+  }
+);}
+
+
+
+
+
+export const getReviewLearningSignalMutationKey = () => ['reviewLearningSignal'] as const;
+
+export const getReviewLearningSignalMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reviewLearningSignal>>, TError,ReviewLearningSignalMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reviewLearningSignal>>, TError,ReviewLearningSignalMutationVariables, TContext> => {
+
+const mutationKey = getReviewLearningSignalMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reviewLearningSignal>>, ReviewLearningSignalMutationVariables> = (props) => {
+          const {signalId,data} = props ?? {};
+
+          return  reviewLearningSignal(signalId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReviewLearningSignalMutationResult = NonNullable<Awaited<ReturnType<typeof reviewLearningSignal>>>
+    export type ReviewLearningSignalMutationBody = BodyType<LearningSignalReviewInput>
+    export type ReviewLearningSignalMutationError = ErrorType<ErrorResponse>
+    export type ReviewLearningSignalMutationVariables = {signalId: string;data: BodyType<LearningSignalReviewInput>}
+
+    /**
+ * @summary Review a correction signal for offline benchmark use
+ */
+export const useReviewLearningSignal = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reviewLearningSignal>>, TError,ReviewLearningSignalMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reviewLearningSignal>>,
+        TError,
+        ReviewLearningSignalMutationVariables,
+        TContext
+      > => {
+      return useMutation(getReviewLearningSignalMutationOptions(options));
+    }
 
 export const getGetConversationUrl = (conversationId: string,) => {
 
