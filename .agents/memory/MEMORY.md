@@ -21,3 +21,4 @@
 - [Token baseline experiments](token-baseline-experiments.md) — measure real-provider token cost before optimization; context-budget flags are not safe to enable without repeated accuracy and retry checks.
 - [Optimistic record edits](optimistic-record-edits.md) — refresh-before-edit improves UX, but only an atomic row-version condition prevents stale approvals from overwriting newer changes.
 - [Reminder approval input contract](reminder-approval-input-contract.md) — normalize local reminder times and default the timezone before sending strict approval overrides.
+- [Arabic dialect understanding](arabic-dialect-understanding.md) — normalize dialect vocabulary only at the intent boundary, then prove it with labeled Egyptian, Gulf, and Levantine cases.

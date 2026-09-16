@@ -173,7 +173,10 @@ function currencyFromText(value: string): ParsedAmount["currency"] {
 }
 
 function amountNumber(raw: string): number {
-  const ascii = arabicDigitsToAscii(raw).replace(/\s/g, "");
+  const ascii = arabicDigitsToAscii(raw)
+    .replace(/٬/g, ",")
+    .replace(/٫/g, ".")
+    .replace(/\s/g, "");
   const hasComma = ascii.includes(",");
   const hasDot = ascii.includes(".");
   let numeric = ascii;
@@ -193,7 +196,7 @@ function amountNumber(raw: string): number {
 
 export function parseArabicAmount(value: string): ParsedAmount | null {
   const normalized = canonicalizeArabicText(value);
-  const numeric = value.match(/[\d٠-٩]+(?:[.,][\d٠-٩]+)*/u);
+  const numeric = value.match(/[\d٠-٩]+(?:[.,٬٫][\d٠-٩]+)*/u);
   let amount: number | null = numeric ? amountNumber(numeric[0]) : null;
   let raw = numeric?.[0] ?? "";
 
@@ -281,17 +284,19 @@ function cairoLocalDate(
 
 export function parseArabicDateTime(value: string, now = new Date()): ParsedDateTime | null {
   const normalized = canonicalizeArabicText(value);
-  const dayOffset = normalized.includes("بكره")
-    ? 1
-    : normalized.includes("اليوم")
-      ? 0
-      : null;
+  const dayOffset = normalized.includes("بعد بكره")
+    ? 2
+    : normalized.includes("بكره")
+      ? 1
+      : normalized.includes("اليوم")
+        ? 0
+        : null;
   const time = normalized.match(
-    /(?:الساعه\s*)?([0-9]{1,2})(?:\s*[:٫]\s*([0-9]{1,2}))?\s*(صباحا|مساء|بالليل|ليل|ظهر)?/u,
+    /(?:الساعه\s*)?([0-9٠-٩]{1,2})(?:\s*[:٫]\s*([0-9٠-٩]{1,2}))?\s*(صباحا|مساء|بالليل|ليل|ظهر)?/u,
   );
   if (dayOffset === null || !time) return null;
-  let hour = Number(time[1]);
-  const minute = time[2] ? Number(time[2]) : 0;
+  let hour = Number(arabicDigitsToAscii(time[1]));
+  const minute = time[2] ? Number(arabicDigitsToAscii(time[2])) : 0;
   const period = time[3] ?? "";
   if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour > 23 || minute > 59) return null;
   if ((period === "مساء" || period === "بالليل" || period === "ليل") && hour < 12) hour += 12;
@@ -316,7 +321,7 @@ export function parseArabicDateTime(value: string, now = new Date()): ParsedDate
 function extractEntityMentions(message: string): EntityMention[] {
   const mentions: EntityMention[] = [];
   const person = message.match(
-    /(?<!\p{L})(?:ل|الى|إلى|مع|لصالح)\s*([\p{L}][\p{L}\s-]{1,40}?)(?=\s+(?:بمبلغ|مبلغ|بقيمة|على|في|جنيه|جنية|دولار|ريال|الف|الفين|ألف|ألفين|امبارح|أمس|اليوم|بكره|[0-9٠-٩])|$)/u,
+    /(?<!\p{L})(?:(?:ل|الى|إلى|مع|لصالح)\s*|(?:دفعت|اديت|أديت|اعطيت|عطيت|حولت|سددت)\s+(?:ل|الى|إلى|مع|لصالح)?\s*)([\p{L}][\p{L}\s-]{1,40}?)(?=\s+(?:بمبلغ|مبلغ|بقيمة|على|في|بمشروع|جنيه|جنية|دولار|ريال|الف|الفين|ألف|ألفين|امبارح|أمس|اليوم|بكره|بعد\s+بكره|[0-9٠-٩])|$)/u,
   );
   if (person?.[1]) {
     const query = cleanMention(person[1]);
@@ -336,12 +341,13 @@ export function parseSemanticRequest(message: string): SemanticParse {
   const originalText = message.trim();
   const normalizedText = canonicalizeArabicText(originalText);
   const tokens = normalizedText.split(/\s+/u).filter(Boolean);
-  const hasWriteLanguage = WRITE_WORDS.test(originalText);
-  const hasReadLanguage = READ_WORDS.test(originalText);
+  const hasWriteLanguage = WRITE_WORDS.test(normalizedText);
+  const hasReadLanguage = READ_WORDS.test(normalizedText);
   const amount = REMINDER_WORDS.test(originalText) ? undefined : parseArabicAmount(originalText);
   const entityMentions = extractEntityMentions(originalText);
-  const personTotal = originalText.match(/^(.+?)\s+(?:اخد|أخد)\s+مني\s+(?:كام|كم)/iu);
-  const personReceived = originalText.match(/^([\p{L}][\p{L}\s-]{1,40}?)\s+(?:خد|اخد|أخد)\s+مني(?=\s|$)/iu);
+  const personTotal = normalizedText.match(/^(.+?)\s+(?:اخد)\s+مني\s+(?:كم)/iu)
+    ?? normalizedText.match(/^كم\s+(?:اخد)\s+مني\s+(.+?)$/iu);
+  const personReceived = normalizedText.match(/^([\p{L}][\p{L}\s-]{1,40}?)\s+(?:خد|اخد|استلم)\s+(?:مني|عندي)(?=\s|$)/iu);
   if (personTotal?.[1]?.trim() && !entityMentions.some((item) => item.entityType === "person")) {
     entityMentions.push({
       entityType: "person",
@@ -357,27 +363,27 @@ export function parseSemanticRequest(message: string): SemanticParse {
     });
   }
   const explicitExpenseWrite = Boolean(amount && hasWriteLanguage)
-    || /(?:سجل|سجّل)\s+(?:لي\s+)?(?:مصروف|مصاريف)|record\s+expense/iu.test(originalText);
+    || /(?:سجل)\s+(?:لي\s+)?(?:مصروف|مصاريف)|record\s+expense/iu.test(normalizedText);
   const domains = new Set<SemanticDomain>();
-  if (MONEY_WORDS.test(originalText) || amount || personTotal) domains.add("expense");
-  if (REMINDER_WORDS.test(originalText)) domains.add("reminder");
-  if (/موعد|مواعيد|ميعاد|مهمه|مهام|schedule|task/i.test(originalText)) domains.add("schedule");
-  if (/شخص|جهة|contact|person|مين/i.test(originalText)) domains.add("person");
-  if (/مشروع|project/i.test(originalText)) domains.add("project");
-  if (/فاكر|آخر|اخر|سجلنا|المحفوظ|memory|remember/i.test(originalText)) domains.add("memory");
+  if (MONEY_WORDS.test(normalizedText) || amount || personTotal) domains.add("expense");
+  if (REMINDER_WORDS.test(normalizedText)) domains.add("reminder");
+  if (/موعد|مواعيد|ميعاد|مهمه|مهام|schedule|task/i.test(normalizedText)) domains.add("schedule");
+  if (/شخص|جهة|contact|person|مين/i.test(normalizedText)) domains.add("person");
+  if (/مشروع|project/i.test(normalizedText)) domains.add("project");
+  if (/فاكر|آخر|اخر|سجلنا|المحفوظ|memory|remember/i.test(normalizedText)) domains.add("memory");
 
   let intent: SemanticIntent = "unknown";
   let confidence = 0.35;
-  const negativePersonCreation = /(?:ما|مش|من\s+غير)\s+.*?(?:تضيف\w*|ضيف\w*|تعمل\w*|اعمل\w*|أعمل\w*|تسجل\w*|سجل\w*).*?(?:شخص|جهة|person|contact)/iu.test(originalText);
-  const createPersonSignal = !negativePersonCreation && /(?:(?:^|\s)(?:أضف|اضف|أضيف|اضيف|ضيف|أنشئ|انشئ|اعمل|سجل|سجّل|add|create|record)(?=\s|$).*(?:شخص|جهة|person|contact)|(?:شخص|جهة|person|contact).*(?:اسمه|جديد))/iu.test(originalText);
-  const createProjectSignal = /(?:بدأت|انشئ|أنشئ|اعمل|create).*(?:مشروع|project)/iu.test(originalText);
+  const negativePersonCreation = /(?:ما|مش|من\s+غير)\s+.*?(?:تضيف\w*|ضيف\w*|تعمل\w*|اعمل\w*|تسجل\w*|سجل\w*).*?(?:شخص|جهة|person|contact)/iu.test(normalizedText);
+  const createPersonSignal = !negativePersonCreation && /(?:(?:^|\s)(?:اضف|اضيف|ضيف|انشئ|اعمل|سجل|add|create|record)(?=\s|$).*(?:شخص|جهة|person|contact)|(?:شخص|جهة|person|contact).*(?:اسمه|جديد))/iu.test(normalizedText);
+  const createProjectSignal = /(?:بدأت|بدات|انشئ|اعمل|create).*(?:مشروع|project)/iu.test(normalizedText);
   if (createPersonSignal) {
     intent = "create_person";
     confidence = 0.93;
   } else if (createProjectSignal) {
     intent = "create_project";
     confidence = 0.93;
-  } else if (REMINDER_WORDS.test(originalText)) {
+  } else if (REMINDER_WORDS.test(normalizedText)) {
     intent = "create_reminder";
     confidence = 0.9;
   } else if (domains.has("expense") && hasReadLanguage && !explicitExpenseWrite) {
@@ -385,7 +391,7 @@ export function parseSemanticRequest(message: string): SemanticParse {
       ? "person_expense_total"
       : "expense_report";
     confidence = 0.91;
-  } else if (/مين.*(?:مشروع|project)|(?:الناس|اشخاص).*(?:مشروع|project)/iu.test(originalText)) {
+  } else if (/مين.*(?:مشروع|project)|(?:الناس|اشخاص).*(?:مشروع|project)/iu.test(normalizedText)) {
     intent = "project_people";
     confidence = 0.91;
   } else if (domains.has("expense") && explicitExpenseWrite) {
@@ -416,7 +422,7 @@ export function parseSemanticRequest(message: string): SemanticParse {
     intent,
     confidence,
     ...(amount ? { amount } : {}),
-    ...(REMINDER_WORDS.test(originalText) ? { dateTime: parseArabicDateTime(originalText) ?? undefined } : {}),
+    ...(REMINDER_WORDS.test(normalizedText) ? { dateTime: parseArabicDateTime(normalizedText) ?? undefined } : {}),
     entityMentions,
     hasWriteLanguage,
     hasReadLanguage,

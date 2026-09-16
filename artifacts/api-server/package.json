@@ -11,6 +11,7 @@
     "test:phase2": "node --test test/phase2.integration.mjs",
     "test:intent-eval-dataset": "node --test test/intent-evaluation/dataset.test.mjs",
     "test:financial": "../../scripts/node_modules/.bin/tsx --test test/activity-atomicity.test.ts test/financial-graph.test.ts test/relationship-graph.test.ts",
+    "test:dialect": "../../scripts/node_modules/.bin/tsx --test test/deterministic-intelligence.test.ts test/phase2-optimization-layers.test.ts",
     "test:phase4": "../../scripts/node_modules/.bin/tsx --test test/phase4-context.test.ts",
     "test:http-phase3": "../../scripts/node_modules/.bin/tsx --test test/http-phase3.test.ts",
     "test:phase3:records": "node --test test/phase3.records.integration.mjs",

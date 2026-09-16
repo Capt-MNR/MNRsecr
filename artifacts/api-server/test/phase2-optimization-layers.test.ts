@@ -114,6 +114,10 @@ test("local router and deterministic plans only act on high-signal requests", ()
   const expense = routeLocally("دفعت لمحمد 7500");
   assert.equal(expense?.intent, "expense");
   assert.equal(expense?.safeToExecute, true);
+  const gulfExpense = routeLocally("عطيت خالد ١٬٢٠٠ ريال");
+  assert.equal(gulfExpense?.intent, "expense");
+  assert.equal(gulfExpense?.args?.amountMinor, 120_000);
+  assert.equal(gulfExpense?.args?.currency, "SAR");
   assert.equal(buildDeterministicPlan("محمد")?.kind, "clarification");
   assert.equal(buildDeterministicPlan("فكرني بالمكالمة")?.kind, "none");
   delete process.env.LOCAL_ROUTER_ENABLED;

@@ -1,4 +1,5 @@
 import { featureFlags } from "./feature-flags";
+import { canonicalizeArabicText, parseArabicAmount } from "./deterministic-intelligence";
 
 export type LocalRouteIntent =
   | "expense"
@@ -16,12 +17,7 @@ export type LocalRouteDecision = {
   safeToExecute: boolean;
 };
 
-const amountPattern = /([0-9٠-٩]+(?:[.,][0-9٠-٩]+)?)/;
-const personPattern = /(?:ل|إلى|الى|مع|اسم(?:ه|ها)?|شخص(?:ا|ًا)?\s+اسمه)\s*([\u0600-\u06FF][\u0600-\u06FF\s-]{1,39})/u;
-
-function arabicDigits(value: string): string {
-  return value.replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)));
-}
+const personPattern = /(?:(?:ل|إلى|الى|مع|اسم(?:ه|ها)?|شخص(?:ا|ًا)?\s+اسمه)\s*|(?:دفعت|اديت|اعطيت|عطيت|حولت|سددت)\s+(?:ل|إلى|الى|مع)?\s*)([\u0600-\u06FF][\u0600-\u06FF\s-]{1,39}?)(?=\s+(?:بمبلغ|مبلغ|بقيمة|على|في|بمشروع|جنيه|دولار|ريال|[0-9٠-٩٬٫])|$)/u;
 
 function cleanName(value: string): string {
   return value.replace(/\s+/g, " ").replace(/[،,.؛:!?؟].*$/u, "").trim();
@@ -38,7 +34,7 @@ function hasMoneyLanguage(message: string): boolean {
 
 export function routeLocally(message: string): LocalRouteDecision | null {
   if (!featureFlags.localRouter()) return null;
-  const normalized = message.trim();
+  const normalized = canonicalizeArabicText(message);
   if (!normalized) {
     return {
       intent: "clarification",
@@ -90,18 +86,17 @@ export function routeLocally(message: string): LocalRouteDecision | null {
       safeToExecute: false,
     };
   }
-  if (hasMoneyLanguage(normalized) && amountPattern.test(normalized)) {
-    const amountMatch = normalized.match(amountPattern);
+  if (hasMoneyLanguage(normalized)) {
+    const parsedAmount = parseArabicAmount(normalized);
     const person = extractPerson(normalized);
-    const amount = amountMatch?.[1] ? Number(arabicDigits(amountMatch[1]).replace(",", ".")) : NaN;
-    if (Number.isFinite(amount) && person) {
+    if (parsedAmount && person) {
       return {
         intent: "expense",
         confidence: 0.93,
         toolName: "record_expense",
         args: {
-          amountMinor: Math.round(amount * 100),
-          currency: "EGP",
+          amountMinor: parsedAmount.amountMinor,
+          currency: parsedAmount.currency,
           description: normalized,
           personName: person,
         },

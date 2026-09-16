@@ -49,6 +49,67 @@ test("semantic layer recognizes expense, totals, schedules, and reminders", () =
   assert.equal(decideDeterministically(reminder).kind, "deterministic");
 });
 
+test("dialect corpus keeps Egyptian, Gulf, and Levantine requests on the same intents", () => {
+  const cases = [
+    {
+      dialect: "egyptian",
+      text: "دفعت لمحمد 7500 في مشروع المحجر",
+      intent: "record_expense",
+      amountMinor: 750_000,
+      currency: "EGP",
+      person: "محمد",
+    },
+    {
+      dialect: "gulf",
+      text: "عطيت خالد ١٬٢٠٠ ريال في مشروع البيت",
+      intent: "record_expense",
+      amountMinor: 120_000,
+      currency: "SAR",
+      person: "خالد",
+    },
+    {
+      dialect: "levantine",
+      text: "دفعت لرامي ٣٠٠ دولار بمشروع الشقة",
+      intent: "record_expense",
+      amountMinor: 30_000,
+      currency: "USD",
+      person: "رامي",
+    },
+  ] as const;
+
+  for (const sample of cases) {
+    const parsed = parseSemanticRequest(sample.text);
+    assert.equal(parsed.intent, sample.intent, sample.dialect);
+    assert.equal(parsed.amount?.amountMinor, sample.amountMinor, sample.dialect);
+    assert.equal(parsed.amount?.currency, sample.currency, sample.dialect);
+    assert.deepEqual(
+      parsed.entityMentions.find((mention) => mention.entityType === "person")?.query,
+      sample.person,
+      sample.dialect,
+    );
+    assert.equal(decideDeterministically(parsed).kind, "deterministic", sample.dialect);
+  }
+
+  const reminders = [
+    { dialect: "gulf", text: "ذكرني باچر الساعة ٨ الصبح أتصل على سالم", hour: 8 },
+    { dialect: "levantine", text: "ذكرني بكرا الساعة ٦ المسا احكي مع ليان", hour: 18 },
+  ] as const;
+  for (const sample of reminders) {
+    const parsed = parseSemanticRequest(sample.text);
+    assert.equal(parsed.intent, "create_reminder", sample.dialect);
+    assert.equal(parsed.dateTime?.hour, sample.hour, sample.dialect);
+    assert.equal(decideDeterministically(parsed).kind, "deterministic", sample.dialect);
+  }
+
+  const total = parseSemanticRequest("قديش أخد مني رامي؟");
+  assert.equal(total.intent, "person_expense_total");
+  assert.deepEqual(total.entityMentions[0], {
+    entityType: "person",
+    query: "رامي",
+    confidence: 0.94,
+  });
+});
+
 test("missing information and mixed intents never become writes", () => {
   const missingAmount = parseSemanticRequest("سجل مصروف لمحمد");
   assert.equal(decideDeterministically(missingAmount).kind, "clarification");
