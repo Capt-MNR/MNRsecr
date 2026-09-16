@@ -1,0 +1,765 @@
+أريد منك تنفيذ UX/Product Architecture Pass عميق على التطبيق بناءً على مفهوم جديد أريد أن يصبح جزءًا أساسيًا من تجربة Personal AI Secretary.
+
+الفكرة الأساسية
+
+لا أريد أن يكون لدينا "تطبيق Dashboard + صفحة Chat".
+
+أريد أن يكون لدينا:
+
+سكرتير واحد — بطريقتين للتعامل معه
+
+1. Main Mode
+
+وضع الإدارة والاستكشاف والمراجعة.
+
+2. Quick Chat Mode
+
+وضع الكلام السريع والتفاعل المباشر مع السكرتير.
+
+المستخدم لا يجب أن يشعر أنه يستخدم واجهتين مختلفتين أو نظامين مختلفين.
+
+يجب أن يشعر أنه يتعامل مع نفس السكرتير، لكنه يستطيع استخدامه بطريقتين:
+
+«Talk to my Secretary
+
+أو
+
+Manage my information»
+
+---
+
+أولًا: Main Mode
+
+Main Mode هو Personal AI OS الكامل الموجود حاليًا.
+
+يجب أن يبقى المكان الذي يستطيع المستخدم من خلاله:
+
+- رؤية Dashboard.
+- مراجعة المصروفات.
+- الأشخاص.
+- المشاريع.
+- المهام.
+- التذكيرات.
+- الالتزامات المالية.
+- العلاقات بين الكيانات.
+- timelines.
+- activity.
+- تفاصيل السجلات.
+- مراجعة العمليات والموافقات.
+- استكشاف معلوماته.
+
+لا أريد إعادة بناء الـdomain أو الـbackend.
+
+المطلوب هو إعادة التفكير في طريقة عرض هذا كله بحيث يصبح واضحًا أن هذا هو:
+
+Manage / Explore / Review Mode
+
+وليس الواجهة التي يحتاجها المستخدم في كل مرة يريد أن يقول فيها جملة للسكرتير.
+
+---
+
+ثانيًا: Quick Chat Mode
+
+هذه هي النقطة الأهم في هذا العمل.
+
+أريد واجهة Chat خفيفة جدًا، سريعة، ومريحة، مستوحاة من فلسفة تطبيقات المراسلة الحديثة مثل WhatsApp/Telegram من ناحية البساطة والسرعة، وليس من ناحية نسخ التصميم حرفيًا.
+
+Quick Chat يجب أن يكون:
+
+- سريع الفتح.
+- سريع الاستجابة بصريًا.
+- قليل العناصر.
+- واضحًا جدًا.
+- مريحًا للاستخدام بيد واحدة على الهاتف.
+- مناسبًا للمحادثات القصيرة والمتكررة.
+- مناسبًا للطلبات الطبيعية مثل:
+  - "فكرني بكرة أكلم محمد."
+  - "دفعت لمحمد 5000."
+  - "آخر حاجة سجلناها عن شركة المحجر؟"
+  - "إيه اللي عليا النهارده؟"
+  - "ضيف مهمة..."
+- مناسبًا أيضًا لفتح تفاصيل عندما يحتاج المستخدم ذلك.
+
+لا أريد أن يكون Quick Chat Dashboard مصغرًا.
+
+أريد أن يكون Chat حقيقيًا مع السكرتير.
+
+---
+
+ثالثًا: أهم مبدأ UX
+
+المستخدم يجب ألا يضطر للتفكير:
+
+«"أنا الآن في Main Mode أم Quick Mode؟"»
+
+هذه تفاصيل داخلية.
+
+هو فقط يتعامل مع السكرتير.
+
+لكن التصميم يجب أن يجعل الفرق واضحًا وظيفيًا:
+
+Quick Chat
+
+Talk → Ask → Respond → Act
+
+Main Mode
+
+Manage → Explore → Review → Understand
+
+---
+
+رابعًا: الانتقال بين الوضعين
+
+صمّم انتقالًا طبيعيًا جدًا بين الوضعين.
+
+أريد أكثر من سيناريو واضح:
+
+Scenario A — المستخدم يريد الكلام فقط
+
+يفتح التطبيق ويدخل مباشرة إلى Quick Chat.
+
+يكتب:
+
+"فكرني أكلم أحمد بكرة الساعة 10."
+
+يتم التعامل مع الطلب.
+
+لا يجب أن يضطر المستخدم إلى المرور بالـDashboard.
+
+---
+
+Scenario B — المستخدم يحتاج تفاصيل
+
+المستخدم داخل Quick Chat.
+
+السكرتير يقول:
+
+"عندك التزام مستحق لمحمد."
+
+يوجد action مثل:
+
+عرض التفاصيل
+
+عند الضغط:
+
+Quick Chat
+→ Relevant Record / Entity Detail
+→ Main Mode
+
+وعند العودة:
+
+Main Mode
+→ Quick Chat
+
+ويجب ألا يشعر المستخدم أنه خرج من تطبيق ودخل تطبيقًا آخر.
+
+---
+
+Scenario C — المستخدم بدأ من Main Mode
+
+المستخدم يفتح Person أو Project أو Expense.
+
+يجد:
+
+اسأل السكرتير عن هذا
+
+عند الضغط، يتم فتح Quick Chat مع contextual conversation.
+
+لكن:
+
+لا ترسل سؤالًا تلقائيًا نيابة عن المستخدم.
+
+السؤال/الـdraft يمكن أن يكون جاهزًا للتحرير، والمستخدم هو الذي يقرر إرساله.
+
+هذا متوافق مع مبدأ approval/user control الموجود حاليًا.
+
+---
+
+Scenario D — Notification مستقبلية
+
+نريد أن تكون البنية جاهزة لهذا السيناريو:
+
+Push Notification
+↓
+فتح التطبيق
+↓
+Quick Chat
+↓
+السياق المرتبط
+↓
+المستخدم يتفاعل مع السكرتير
+
+مثال:
+
+🔔
+"لديك التزام مستحق اليوم."
+
+عند الضغط:
+
+يفتح Quick Chat في السياق المناسب، وليس Dashboard عامة.
+
+لا تنفذ نظام Push أو Worker جديد الآن إذا لم يكن موجودًا.
+
+المطلوب هو تصميم الـfrontend/navigation بحيث يكون هذا المسار طبيعيًا لاحقًا.
+
+---
+
+خامسًا: Quick Chat يجب أن يكون خفيفًا فعليًا
+
+هذه نقطة معمارية مهمة جدًا.
+
+وجود Main Mode غني وثقيل داخل نفس التطبيق لا يعني أن كل مكوناته يجب أن يتم تحميلها عندما يكون المستخدم في Quick Chat.
+
+أريد منك مراجعة الـfrontend architecture لتحقيق الفصل المناسب.
+
+عند فتح Quick Chat:
+
+لا تقم بتحميل أو render مكونات غير ضرورية مثل:
+
+- Graph visualization.
+- Dashboard widgets الثقيلة.
+- Financial dashboards الثقيلة.
+- Lists كبيرة من Records.
+- Entity graph components غير المطلوبة.
+- صفحات الإدارة التي لا يحتاجها المستخدم.
+- بيانات لا علاقة لها بالمحادثة الحالية.
+
+استخدم عند الحاجة:
+
+- route-level lazy loading.
+- dynamic imports.
+- code splitting.
+- deferred loading.
+- component-level lazy loading.
+- bounded data fetching.
+
+بحيث يكون لدينا:
+
+Light Shell / Quick Chat
++
+Main App modules loaded on demand
+
+وليس:
+
+كل التطبيق يتحمل ثم نخفي نصفه.
+
+---
+
+سادسًا: لا أريد optimization شكلي فقط
+
+لا يكفي أن تقول إن Quick Chat "خفيف" لأن شكله بسيط.
+
+راجع فعليًا:
+
+- JavaScript bundles.
+- route loading.
+- component imports.
+- data fetching.
+- API requests.
+- rendering.
+- unnecessary rerenders.
+- initial payload.
+- navigation behavior.
+
+حدد ما الذي يمكن تأجيل تحميله.
+
+لكن لا تدخل في optimization مبالغ فيه إذا كان سيعقد المشروع بلا فائدة.
+
+الهدف:
+
+Fast enough + simple architecture + maintainability.
+
+---
+
+سابعًا: البطارية وBackground behavior
+
+نريد أن تكون تجربة Quick Chat مناسبة مستقبلًا لتطبيق Proactive Secretary.
+
+لكن لا أريد أن يصبح التطبيق Background Service دائم.
+
+تجنب:
+
+- polling المتكرر.
+- timers غير الضرورية.
+- persistent background JS.
+- فتح اتصالات دائمة بدون حاجة.
+- إعادة تحميل البيانات باستمرار لمجرد تحديث الشاشة.
+
+الهدف المستقبلي:
+
+Backend
+→ Scheduler/Worker
+→ Push Notification
+→ Mobile
+→ Quick Chat عند تفاعل المستخدم
+
+وليس:
+
+Mobile App
+→ يعمل طوال الوقت
+→ يسأل السيرفر باستمرار
+→ يستهلك البطارية.
+
+لا تبنِ الـscheduler/push infrastructure الآن إلا إذا كانت موجودة أصلًا.
+
+---
+
+ثامنًا: Quick Chat Navigation
+
+أريد منك التفكير جيدًا في أفضل navigation model.
+
+يمكن أن يكون:
+
+- tab.
+- floating action.
+- persistent secretary button.
+- gesture.
+- mode switch.
+- أو أي حل أفضل تراه.
+
+لا أفترض مسبقًا شكل navigation.
+
+لكن يجب أن تحقق:
+
+1. الوصول إلى Quick Chat بسرعة.
+2. الوصول إلى Main Mode بسهولة.
+3. عدم إرباك المستخدم.
+4. أن يكون واضحًا دائمًا أين توجد المحادثة.
+5. ألا تزدحم الشاشة بأزرار.
+6. أن يكون الاستخدام ممتازًا على الهاتف.
+
+اختر الحل الأفضل بعد مراجعة التطبيق الحالي.
+
+---
+
+تاسعًا: لا تجعل Main Mode يختفي تمامًا
+
+Main Mode ليس "واجهة قديمة".
+
+هو الجزء الذي يعطي السكرتير قوته عندما يريد المستخدم:
+
+- المراجعة.
+- البحث.
+- استكشاف العلاقات.
+- معرفة تاريخ شخص.
+- مراجعة المصروفات.
+- رؤية المشروع.
+- مراجعة الالتزامات.
+- متابعة activity.
+- تعديل البيانات.
+
+Quick Chat هو أسرع طريق للسكرتير.
+
+Main Mode هو أعمق طريقة لفهم وإدارة المعلومات.
+
+يجب أن يكمل كل منهما الآخر.
+
+---
+
+عاشرًا: العلاقة بين Chat وRecords
+
+هذه نقطة أساسية جدًا في المشروع الحالي.
+
+يجب الحفاظ على العلاقة الموجودة حاليًا:
+
+Conversation
+→ Turn
+→ Operation
+→ Record
+
+ويمكن للمستخدم:
+
+Record
+→ Open original conversation
+→ Original Turn
+
+وبالعكس:
+
+Conversation
+→ Created Record
+→ Open Record
+
+لا تكسر provenance الحالية.
+
+لا تنشئ نظام Conversation جديد خاص بالـQuick Chat.
+
+يجب أن يستخدم Quick Chat:
+
+نفس Conversation / Turn / Operation / Approval / Provenance architecture الحالية.
+
+---
+
+الحادي عشر: Approval UX
+
+Quick Chat يجب أن يتعامل مع الـapproval الموجود حاليًا كما هو.
+
+مثال:
+
+المستخدم:
+"دفعت لمحمد 5000."
+
+السكرتير:
+
+"وجدت عملية مصروف بقيمة 5000 لمحمد."
+
+ثم تظهر approval UI الحالية.
+
+المستخدم يوافق.
+
+بعد التنفيذ:
+
+يظهر رابط أو action:
+
+فتح المصروف
+
+ويمكن لاحقًا:
+
+فتح المحادثة الأصلية
+
+لا تبنِ approval architecture جديدة.
+
+ولا تجعل approval مجرد نص داخل رسالة LLM.
+
+Server-side operation هو المصدر authoritative.
+
+---
+
+الثاني عشر: Notifications مستقبلًا
+
+صمّم UX بحيث لا تكون notification مجرد:
+
+"افتح التطبيق."
+
+بل تكون contextual.
+
+مثلًا:
+
+🔔
+"عندك تذكير بعد 30 دقيقة."
+
+Tap
+↓
+Quick Chat
+↓
+التذكير والسياق المناسب.
+
+أو:
+
+🔔
+"هناك مصروف يحتاج مراجعة."
+
+Tap
+↓
+Quick Chat
+↓
+المصروف المرتبط.
+
+أو:
+
+🔔
+"عندك التزام مستحق اليوم."
+
+Tap
+↓
+Quick Chat
+↓
+الالتزام.
+
+هذا سيكون مهمًا جدًا للـProactive Secretary لاحقًا.
+
+---
+
+الثالث عشر: Daily Brief
+
+أريد أن تضع التصميم الجديد في اعتبارك أن Quick Chat سيكون أيضًا المكان الطبيعي الذي يبدأ منه Daily Brief لاحقًا.
+
+مثال:
+
+صباح الخير يا منير.
+
+عندك اليوم:
+
+- مهمتان.
+- تذكير قريب.
+- التزام يحتاج انتباه.
+- مصروف يحتاج مراجعة.
+
+ثم:
+
+اقتراح السكرتير:
+ابدأ بالالتزام المستحق.
+
+زر:
+
+عرض
+
+وعند الضغط يتم فتح السياق المناسب.
+
+لكن لا تنفذ Daily Brief الآن إلا إذا كان ذلك جزءًا صغيرًا من UX prototype؛ لا أريد تحويل هذا العمل إلى Phase 2 implementation.
+
+---
+
+الرابع عشر: لا نريد "Chatbot UI"
+
+مهم جدًا:
+
+لا تصمم Quick Chat على أنه chatbot تقليدي.
+
+لا أريد:
+
+- avatar ضخم.
+- أزرار كثيرة.
+- cards في كل رسالة.
+- واجهة dashboard داخل chat.
+- animations مبالغ فيها.
+- عناصر decorative كثيرة.
+
+أريد إحساس:
+
+"أنا بكلم سكرتيري."
+
+وليس:
+
+"أنا أستخدم AI chatbot."
+
+---
+
+الخامس عشر: Mobile-first
+
+ركز على الهاتف أولًا.
+
+يجب أن يكون:
+
+- مناسبًا للاستخدام بيد واحدة.
+- input قريبًا من أسفل الشاشة.
+- keyboard behavior جيد.
+- scrolling طبيعي.
+- conversation restoration سريع.
+- safe areas صحيحة.
+- لا يوجد horizontal overflow.
+- transitions بسيطة وسريعة.
+- loading states واضحة.
+- error states مفهومة.
+- empty states غير مزعجة.
+
+راجع portrait أولًا.
+
+لا تضف تعقيدات خاصة بالـdesktop إلا إذا كانت ضرورية.
+
+---
+
+السادس عشر: Performance Philosophy
+
+أريد أن تكون لدينا فلسفة واضحة:
+
+Quick Chat:
+
+Small + fast + focused.
+
+Main Mode:
+
+Rich + detailed + loaded when needed.
+
+Backend:
+
+Persistent + intelligent + responsible for heavy work.
+
+Mobile:
+
+Presentation + interaction + notifications.
+
+لا تنقل أعمال الـAI أو graph processing أو business logic الثقيلة إلى الهاتف بدون سبب.
+
+---
+
+السابع عشر: حافظ على كل ما تم بناؤه
+
+لا أريد أن يؤدي هذا الـUX pass إلى regression.
+
+يجب الحفاظ على:
+
+- approvals.
+- provenance.
+- sourceConversationId.
+- sourceTurnId.
+- sourceOperationId.
+- correction safety.
+- rowVersion.
+- tenant isolation.
+- financial semantics.
+- entity relationships.
+- activity timeline.
+- API contracts.
+- deterministic intelligence الحالية.
+- token optimization الحالية.
+
+لا تعيد فتح قرارات optimization السابقة.
+
+لا تضف LLM calls لمجرد تحسين الواجهة.
+
+لا تغير intelligence behavior.
+
+---
+
+الثامن عشر: لا تضف Telegram الآن
+
+لا أريد Telegram أو WhatsApp أو external chatbot في هذا العمل.
+
+نحن نبني:
+
+Native Secretary Chat
+
+داخل التطبيق نفسه.
+
+Telegram مستقبلًا يمكن أن يكون مجرد Channel إضافية لنفس Secretary Engine.
+
+لا تجعل التصميم الحالي يعتمد عليه.
+
+---
+
+التاسع عشر: لا تضف A2A الآن
+
+لكن صمم الواجهة بحيث لا تمنع A2A مستقبلًا.
+
+في المستقبل قد تكون هناك عمليات مثل:
+
+Secretary A
+↔
+Secretary B
+
+لكن حاليًا:
+
+User
+↔
+Our Secretary
+
+يجب أن يكون الـChat والـoperation/provenance model قادرًا مستقبلًا على استيعاب هذا النوع من المصدر والتفويض، لكن لا تنفذ A2A الآن.
+
+---
+
+العشرون: المطلوب منك قبل التنفيذ
+
+راجع التطبيق الحالي أولًا.
+
+لا تبدأ مباشرة بتغيير الشاشات.
+
+حدد:
+
+1. كيف تعمل navigation الحالية.
+2. ما الذي يتم تحميله عند startup.
+3. ما الذي يتم تحميله عند فتح Dashboard.
+4. ما الذي يمكن lazy-load له.
+5. أين توجد Conversation الحالية.
+6. كيف يمكن تحويلها إلى Quick Chat دون كسر architecture.
+7. ما أفضل نقطة دخول للمستخدم.
+8. كيف يجب أن يكون الانتقال بين الوضعين.
+
+ثم اختر التصميم الذي تراه أفضل.
+
+أريد منك أن تستخدم حكمك في التفاصيل البصرية.
+
+أنا لا أريد منك تنفيذ wireframe حرفيًا.
+
+أريد منك حل UX كاملًا بناءً على هذه الفلسفة.
+
+---
+
+الحادي والعشرون: اختبارات مطلوبة
+
+بعد التنفيذ، تحقق على الأقل من:
+
+Quick Chat
+
+- فتح سريع.
+- إرسال رسالة.
+- استمرار conversation.
+- loading.
+- error.
+- empty state.
+- keyboard.
+- mobile layout.
+
+Quick Chat → Main
+
+- فتح Record.
+- فتح Person.
+- فتح Project.
+- فتح Financial Detail.
+- العودة إلى conversation.
+
+Main → Quick Chat
+
+- Ask Secretary about this.
+- contextual draft.
+- عدم الإرسال التلقائي.
+
+Provenance
+
+- Record منشأ من Quick Chat.
+- فتح original conversation.
+- الوصول إلى original turn.
+
+Approval
+
+- approval يظهر بشكل صحيح.
+- execution state صحيح.
+- record يظهر بعد النجاح.
+- لا يحدث duplicate operation.
+
+Performance
+
+- تأكد أن Quick Chat لا يقوم بتحميل الـheavy modules غير المطلوبة.
+- تحقق من network requests غير الضرورية.
+- تحقق من عدم وجود polling أو background behavior جديد.
+
+Regression
+
+- typecheck.
+- build.
+- existing frontend tests.
+- existing backend tests ذات الصلة.
+- browser/mobile verification.
+
+---
+
+النتيجة التي أريدها
+
+في النهاية، أريد أن أستطيع وصف التطبيق بجملة واحدة:
+
+«Personal AI Secretary واحد، له وضع سريع للكلام معه، ووضع كامل لإدارة وفهم حياتك.»
+
+المستخدم:
+يفتح → يتكلم → السكرتير يفهم → يقترح/ينفذ بعد الموافقة → المستخدم يستطيع فتح التفاصيل عند الحاجة.
+
+ولا يجب أن يشعر المستخدم أنه يتعامل مع:
+
+"Dashboard + Chat + Records + Graph"
+
+بل مع:
+
+سكرتير واحد له واجهة سريعة وواجهة عميقة.
+
+إذا وجدت أثناء التنفيذ قرارًا معماريًا أو UX مهمًا لم أحدده، اختر الحل الذي يخدم هذه الفلسفة بدلًا من انتظار تعليمات تفصيلية مني.
+
+لكن لا توسع نطاق العمل إلى:
+
+- Telegram
+- WhatsApp
+- A2A
+- autonomous execution
+- new AI intelligence
+- new token optimization
+- scheduler/worker infrastructure
+
+إلا إذا كان هناك سبب تقني مباشر لا يمكن تجنبُه.
+
+بعد الانتهاء، أعطني تقريرًا واضحًا ومختصرًا عن:
+
+1. UX النهائي الذي اخترته ولماذا.
+2. طريقة الانتقال بين Main وQuick Chat.
+3. كيف فصلت تحميل الواجهتين.
+4. تأثير ذلك على initial load والـnetwork requests إن أمكن قياسه.
+5. ما الذي تغير في frontend.
+6. أي backend changes — إن وجدت.
+7. الاختبارات التي نجحت.
+8. أي trade-offs أو نقاط تحتاج قرارًا مني.
