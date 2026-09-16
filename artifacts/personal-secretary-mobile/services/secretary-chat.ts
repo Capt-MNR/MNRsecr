@@ -2,10 +2,12 @@ import {
   approveSecretaryOperation,
   createTurn,
   getConversation,
+  listConversations,
   rejectSecretaryOperation,
 } from '@workspace/api-client-react';
 import type {
   ApprovalResponse,
+  ConversationListResponse,
   ConversationDetail,
   TurnResponse,
 } from '@workspace/api-client-react';
@@ -39,6 +41,7 @@ export type SecretaryChatTurnInput = {
 
 export interface SecretaryChatTransport {
   sendTurn(input: { message: string; conversationId?: string | null }): Promise<TurnResponse>;
+  listConversations(): Promise<ConversationListResponse>;
   loadConversation(conversationId: string): Promise<ConversationDetail>;
   approveOperation(operationId: string): Promise<ApprovalResponse>;
   rejectOperation(operationId: string): Promise<ApprovalResponse>;
@@ -46,6 +49,7 @@ export interface SecretaryChatTransport {
 
 export interface SecretaryChatService {
   sendTurn(input: SecretaryChatTurnInput): Promise<TurnResponse>;
+  listConversations(): Promise<ConversationListResponse>;
   loadConversation(conversationId: string): Promise<ConversationDetail>;
   approveOperation(operationId: string): Promise<ApprovalResponse>;
   rejectOperation(operationId: string): Promise<ApprovalResponse>;
@@ -53,6 +57,7 @@ export interface SecretaryChatService {
 
 const apiTransport: SecretaryChatTransport = {
   sendTurn: ({ message, conversationId }) => createTurn({ message, conversationId: conversationId ?? null }),
+  listConversations: () => listConversations(),
   loadConversation: (conversationId) => getConversation(conversationId),
   approveOperation: (operationId) => approveSecretaryOperation(operationId),
   rejectOperation: (operationId) => rejectSecretaryOperation(operationId),
@@ -69,6 +74,10 @@ class ApiSecretaryChatService implements SecretaryChatService {
       message: input.message,
       conversationId: input.conversationId ?? null,
     });
+  }
+
+  listConversations() {
+    return this.transport.listConversations();
   }
 
   loadConversation(conversationId: string) {
@@ -102,12 +111,18 @@ export function useSecretaryChatService(conversationId: string | null) {
     enabled: Boolean(conversationId),
     staleTime: 20_000,
   });
+  const conversationsQuery = useQuery({
+    queryKey: ['secretary-chat-conversations'],
+    queryFn: () => secretaryChatService.listConversations(),
+    staleTime: 20_000,
+  });
 
   return {
     sendTurn: turnMutation.mutateAsync,
     isSending: turnMutation.isPending,
     approveOperation: approveMutation.mutateAsync,
     rejectOperation: rejectMutation.mutateAsync,
+    conversationsQuery,
     isApproving: approveMutation.isPending,
     isRejecting: rejectMutation.isPending,
     conversationQuery,
