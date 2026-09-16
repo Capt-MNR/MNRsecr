@@ -63,6 +63,7 @@ type FeatherName = ComponentProps<typeof Feather>['name'];
 
 type MobileRecordRow = {
   id: string;
+  recordType: string;
   title: string;
   subtitle: string;
   trailing?: string;
@@ -118,6 +119,7 @@ function recordSections(records: RecordsResponse | undefined): MobileRecordSecti
       icon: 'dollar-sign',
       data: records.expenses.map((expense) => ({
         id: expense.id,
+        recordType: 'expense',
         title: expense.description,
         subtitle: [expense.personName ?? expense.projectName, recordDate(expense.occurredAt)]
           .filter(Boolean)
@@ -131,6 +133,7 @@ function recordSections(records: RecordsResponse | undefined): MobileRecordSecti
       icon: 'users',
       data: records.people.map((person) => ({
         id: person.id,
+        recordType: 'person',
         title: person.name,
         subtitle: person.phone ?? person.notes ?? 'لا توجد ملاحظات',
       })),
@@ -141,6 +144,7 @@ function recordSections(records: RecordsResponse | undefined): MobileRecordSecti
       icon: 'briefcase',
       data: records.projects.map((project) => ({
         id: project.id,
+        recordType: 'project',
         title: project.name,
         subtitle: recordDate(project.updatedAt),
         trailing: statusLabel(project.status),
@@ -152,6 +156,7 @@ function recordSections(records: RecordsResponse | undefined): MobileRecordSecti
       icon: 'check-square',
       data: records.tasks.map((task) => ({
         id: task.id,
+        recordType: 'task',
         title: task.title,
         subtitle: task.dueAt ? `موعدها ${recordDate(task.dueAt)}` : 'مهمة مستمرة',
         trailing: statusLabel(task.status),
@@ -163,6 +168,7 @@ function recordSections(records: RecordsResponse | undefined): MobileRecordSecti
       icon: 'bell',
       data: records.reminders.map((reminder) => ({
         id: reminder.id,
+        recordType: 'reminder',
         title: reminder.text,
         subtitle: `${recordDate(reminder.dueAt)} · ${reminder.timezone}`,
         trailing: statusLabel(reminder.status),
@@ -174,6 +180,7 @@ function recordSections(records: RecordsResponse | undefined): MobileRecordSecti
       icon: 'link',
       data: records.commitments.map((commitment) => ({
         id: commitment.id,
+        recordType: 'commitment',
         title: commitment.title,
         subtitle: commitment.personName ?? 'بدون طرف محدد',
         trailing: commitment.dueAt ? recordDate(commitment.dueAt) : statusLabel(commitment.status),
@@ -213,7 +220,13 @@ function messageTime(value: string) {
   }).format(date);
 }
 
-function RecordsView({ colors }: { colors: ReturnType<typeof useColors> }) {
+function RecordsView({
+  colors,
+  onOpenRecord,
+}: {
+  colors: ReturnType<typeof useColors>;
+  onOpenRecord: (record: MobileRecordRow) => void;
+}) {
   const recordsQuery = useListRecords({
     query: {
       queryKey: getListRecordsQueryKey(),
@@ -228,7 +241,16 @@ function RecordsView({ colors }: { colors: ReturnType<typeof useColors> }) {
       sections={sections}
       keyExtractor={(item) => item.id}
       renderItem={({ item }) => (
-        <View style={[styles.recordRow, { borderBottomColor: colors.border }]}>
+        <Pressable
+          testID={`record-${item.recordType}-${item.id}`}
+          accessibilityRole="button"
+          accessibilityLabel={`فتح ${item.title}`}
+          onPress={() => onOpenRecord(item)}
+          style={({ pressed }) => [
+            styles.recordRow,
+            { borderBottomColor: colors.border, opacity: pressed ? 0.65 : 1 },
+          ]}
+        >
           <View style={styles.recordCopy}>
             <Text style={[styles.recordTitle, { color: colors.foreground }]} numberOfLines={2}>
               {item.title}
@@ -242,7 +264,8 @@ function RecordsView({ colors }: { colors: ReturnType<typeof useColors> }) {
               {item.trailing}
             </Text>
           )}
-        </View>
+          <Feather name="chevron-left" size={15} color={colors.mutedForeground} />
+        </Pressable>
       )}
       renderSectionHeader={({ section }) => (
         <View style={[styles.recordSectionHeader, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
@@ -335,6 +358,71 @@ function RecordsView({ colors }: { colors: ReturnType<typeof useColors> }) {
         />
       )}
     />
+  );
+}
+
+function RecordDetailView({
+  record,
+  colors,
+  onBack,
+  onAskSecretary,
+}: {
+  record: MobileRecordRow;
+  colors: ReturnType<typeof useColors>;
+  onBack: () => void;
+  onAskSecretary: () => void;
+}) {
+  return (
+    <View style={styles.detailScreen}>
+      <View style={styles.detailHeader}>
+        <Pressable
+          testID="record-detail-back"
+          accessibilityRole="button"
+          accessibilityLabel="العودة إلى الرئيسية"
+          onPress={onBack}
+          style={({ pressed }) => [
+            styles.iconButton,
+            { borderColor: colors.border, opacity: pressed ? 0.65 : 1 },
+          ]}
+        >
+          <Feather name="arrow-right" size={17} color={colors.foreground} />
+        </Pressable>
+        <Text style={[styles.detailEyebrow, { color: colors.mutedForeground }]}>تفاصيل السجل</Text>
+      </View>
+
+      <View style={[styles.detailCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={[styles.detailIcon, { backgroundColor: colors.muted }]}>
+          <Feather name="file-text" size={20} color={colors.primary} />
+        </View>
+        <Text style={[styles.detailTitle, { color: colors.foreground }]}>{record.title}</Text>
+        <Text style={[styles.detailSubtitle, { color: colors.mutedForeground }]}>{record.subtitle}</Text>
+        {record.trailing && <Text style={[styles.detailValue, { color: colors.primary }]}>{record.trailing}</Text>}
+      </View>
+
+      <View style={[styles.detailContext, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+        <Feather name="message-circle" size={17} color={colors.primary} />
+        <View style={styles.detailContextCopy}>
+          <Text style={[styles.detailContextTitle, { color: colors.foreground }]}>تحدث مع السكرتير عن هذا السجل</Text>
+          <Text style={[styles.detailContextText, { color: colors.mutedForeground }]}>
+            سأجهز لك مسودة مرتبطة بالسجل، ويمكنك تعديلها قبل الإرسال.
+          </Text>
+        </View>
+      </View>
+
+      <Pressable
+        testID="ask-secretary-about-record"
+        accessibilityRole="button"
+        accessibilityLabel="اسأل السكرتير عن هذا السجل"
+        onPress={onAskSecretary}
+        style={({ pressed }) => [
+          styles.detailPrimaryAction,
+          { backgroundColor: colors.primary, opacity: pressed ? 0.7 : 1 },
+        ]}
+      >
+        <Feather name="message-circle" size={16} color={colors.primaryForeground} />
+        <Text style={[styles.detailPrimaryActionText, { color: colors.primaryForeground }]}>اسأل السكرتير عن هذا</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -443,6 +531,7 @@ export default function QuickSecretaryScreen() {
   const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
   const [activeView, setActiveView] = useState<'quick' | 'home'>('quick');
+  const [selectedRecord, setSelectedRecord] = useState<MobileRecordRow | null>(null);
   const [messages, setMessages] = useState<LocalMessage[]>([starterMessage]);
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [draft, setDraft] = useState('');
@@ -564,6 +653,26 @@ export default function QuickSecretaryScreen() {
     void Haptics.selectionAsync();
   }
 
+  function openHome() {
+    setSelectedRecord(null);
+    setActiveView('home');
+    void Haptics.selectionAsync();
+  }
+
+  function openQuick() {
+    setSelectedRecord(null);
+    setActiveView('quick');
+    void Haptics.selectionAsync();
+  }
+
+  function askSecretaryAboutRecord() {
+    if (!selectedRecord) return;
+    setDraft(`اسألني عن ${selectedRecord.title}`);
+    setSelectedRecord(null);
+    setActiveView('quick');
+    void Haptics.selectionAsync();
+  }
+
   const reversedMessages = [...messages].reverse();
   const topInset = insets.top + (Platform.OS === 'web' ? 67 : 0);
   const bottomInset = insets.bottom + (Platform.OS === 'web' ? 34 : 10);
@@ -609,7 +718,7 @@ export default function QuickSecretaryScreen() {
             testID="quick-view-tab"
             accessibilityRole="button"
             accessibilityState={{ selected: activeView === 'quick' }}
-            onPress={() => setActiveView('quick')}
+            onPress={openQuick}
             style={({ pressed }) => [
               styles.viewTab,
               activeView === 'quick' && { backgroundColor: colors.card },
@@ -624,7 +733,7 @@ export default function QuickSecretaryScreen() {
             accessibilityRole="button"
             accessibilityLabel="فتح الواجهة الرئيسية"
             accessibilityState={{ selected: activeView === 'home' }}
-            onPress={() => setActiveView('home')}
+            onPress={openHome}
             style={({ pressed }) => [
               styles.viewTab,
               activeView === 'home' && { backgroundColor: colors.card },
@@ -638,7 +747,16 @@ export default function QuickSecretaryScreen() {
       </View>
 
       {activeView === 'home' ? (
-        <RecordsView colors={colors} />
+        selectedRecord ? (
+          <RecordDetailView
+            record={selectedRecord}
+            colors={colors}
+            onBack={() => setSelectedRecord(null)}
+            onAskSecretary={askSecretaryAboutRecord}
+          />
+        ) : (
+          <RecordsView colors={colors} onOpenRecord={setSelectedRecord} />
+        )
       ) : !hydrated ? (
         <View style={styles.loadingState}>
           <ActivityIndicator color={colors.primary} />
