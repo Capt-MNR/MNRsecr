@@ -4,6 +4,7 @@ import * as Haptics from 'expo-haptics';
 import {
   useApproveSecretaryOperation,
   useCreateTurn,
+  useGetEntityGraph,
   getListRecordsQueryKey,
   useListRecords,
   useRejectSecretaryOperation,
@@ -95,6 +96,28 @@ function recordDate(value?: string | null) {
     minute: '2-digit',
   }).format(date);
 }
+
+function stringValue(value: unknown, fallback: string) {
+  return typeof value === 'string' && value.trim() ? value : fallback;
+}
+
+function objectValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' ? value as Record<string, unknown> : {};
+}
+
+function arrayValue(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+const relatedLabels: Record<string, string> = {
+  projects: 'المشاريع',
+  people: 'الأشخاص',
+  expenses: 'المصروفات',
+  commitments: 'الالتزامات',
+  tasks: 'المهام',
+  reminders: 'التذكيرات',
+  financialParties: 'العلاقات المالية',
+};
 
 function statusLabel(status?: string | null) {
   const labels: Record<string, string> = {
@@ -372,6 +395,26 @@ function RecordDetailView({
   onBack: () => void;
   onAskSecretary: () => void;
 }) {
+  const isEntity = record.recordType === 'person' || record.recordType === 'project';
+  const entityType = record.recordType === 'person' ? 'person' : 'project';
+  const entityQuery = useGetEntityGraph(entityType, record.id, {
+    query: {
+      enabled: isEntity,
+      queryKey: [`/api/entities/${entityType}/${record.id}`],
+      staleTime: 20_000,
+    },
+  });
+  const entityData = objectValue(entityQuery.data);
+  const entity = objectValue(entityData.entity);
+  const related = objectValue(entityData.related);
+  const entityName = stringValue(entity.name, record.title);
+  const entitySubtitle = record.recordType === 'person'
+    ? stringValue(entity.notes, stringValue(entity.phone, record.subtitle))
+    : `الحالة: ${stringValue(entity.status, record.trailing ?? 'غير محددة')}`;
+  const relatedGroups = Object.entries(related)
+    .map(([key, value]) => ({ key, count: arrayValue(value).length }))
+    .filter((group) => group.count > 0);
+
   return (
     <View style={styles.detailScreen}>
       <View style={styles.detailHeader}>
@@ -394,10 +437,52 @@ function RecordDetailView({
         <View style={[styles.detailIcon, { backgroundColor: colors.muted }]}>
           <Feather name="file-text" size={20} color={colors.primary} />
         </View>
-        <Text style={[styles.detailTitle, { color: colors.foreground }]}>{record.title}</Text>
-        <Text style={[styles.detailSubtitle, { color: colors.mutedForeground }]}>{record.subtitle}</Text>
-        {record.trailing && <Text style={[styles.detailValue, { color: colors.primary }]}>{record.trailing}</Text>}
+        <Text style={[styles.detailTitle, { color: colors.foreground }]}>{isEntity ? entityName : record.title}</Text>
+        <Text style={[styles.detailSubtitle, { color: colors.mutedForeground }]}>
+          {isEntity ? entitySubtitle : record.subtitle}
+        </Text>
+        {isEntity && typeof entity.phone === 'string' && (
+          <Text style={[styles.detailMeta, { color: colors.mutedForeground }]}>{entity.phone}</Text>
+        )}
+        {!isEntity && record.trailing && <Text style={[styles.detailValue, { color: colors.primary }]}>{record.trailing}</Text>}
       </View>
+
+      {isEntity && entityQuery.isLoading && (
+        <View style={styles.detailState}>
+          <ActivityIndicator size="small" color={colors.primary} />
+          <Text style={[styles.detailStateText, { color: colors.mutedForeground }]}>جاري تحميل تفاصيل الكيان…</Text>
+        </View>
+      )}
+
+      {isEntity && entityQuery.isError && (
+        <View style={[styles.detailState, { backgroundColor: colors.destructive, borderColor: colors.destructive }]}>
+          <Feather name="alert-circle" size={16} color={colors.destructiveForeground} />
+          <Text style={[styles.detailStateText, { color: colors.destructiveForeground }]}>
+            تعذر تحميل التفاصيل من السجل الحالي.
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="إعادة تحميل التفاصيل"
+            onPress={() => void entityQuery.refetch()}
+          >
+            <Text style={[styles.detailRetry, { color: colors.destructiveForeground }]}>حاول</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {isEntity && !entityQuery.isLoading && !entityQuery.isError && relatedGroups.length > 0 && (
+        <View style={[styles.relatedCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.relatedTitle, { color: colors.foreground }]}>مرتبط بهذا الكيان</Text>
+          {relatedGroups.map((group) => (
+            <View key={group.key} style={[styles.relatedRow, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.relatedLabel, { color: colors.mutedForeground }]}>
+                {relatedLabels[group.key] ?? group.key}
+              </Text>
+              <Text style={[styles.relatedCount, { color: colors.primary }]}>{group.count}</Text>
+            </View>
+          ))}
+        </View>
+      )}
 
       <View style={[styles.detailContext, { backgroundColor: colors.muted, borderColor: colors.border }]}>
         <Feather name="message-circle" size={17} color={colors.primary} />
@@ -1146,11 +1231,64 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     textAlign: 'right',
   },
+  detailMeta: {
+    width: '100%',
+    marginTop: 8,
+    fontSize: 12,
+    textAlign: 'right',
+  },
   detailValue: {
     marginTop: 14,
     fontSize: 18,
     fontWeight: '700',
     textAlign: 'right',
+  },
+  detailState: {
+    marginTop: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+  },
+  detailStateText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'right',
+  },
+  detailRetry: {
+    fontSize: 12,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
+  },
+  relatedCard: {
+    marginTop: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingTop: 13,
+  },
+  relatedTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  relatedRow: {
+    minHeight: 42,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  relatedLabel: {
+    fontSize: 12,
+    textAlign: 'right',
+  },
+  relatedCount: {
+    fontSize: 13,
+    fontWeight: '700',
   },
   detailContext: {
     marginTop: 14,
