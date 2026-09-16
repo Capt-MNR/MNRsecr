@@ -7,4 +7,4 @@ The current Gemini key/model combination can answer normal generateContent reque
 
 **Why:** Live verification of `usageMetadata.cachedContentTokenCount` cannot succeed in this environment until a Gemini project/model with nonzero CachedContent storage is used.
 
-**How to apply:** Keep cache creation non-fatal, add a cooldown after cache quota failures, and verify cached token usage separately in an environment that permits CachedContent storage.
+**How to apply:** Keep cache creation non-fatal, add a cooldown after cache quota failures, and verify cached token usage separately in an environment that permits CachedContent storage. Treat this as a final optimization after correctness, approval, and benchmark gates are stable.
