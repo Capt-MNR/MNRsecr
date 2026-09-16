@@ -84,6 +84,19 @@ export function approvalFromAction(action: Action): Approval | undefined {
     || typeof action.operationId !== 'string'
   ) return undefined;
   const display = objectValue(action.display);
+  const actionArgs = objectValue(action.args);
+  const candidatesFrom = (value: unknown): ApprovalCandidate[] | undefined => (
+    Array.isArray(value)
+      ? value.filter((item): item is ApprovalCandidate => (
+        Boolean(item)
+        && typeof item === 'object'
+        && typeof objectValue(item).id === 'string'
+        && typeof objectValue(item).name === 'string'
+      ))
+      : undefined
+  );
+  const personCandidates = candidatesFrom(action.personCandidates ?? actionArgs.personCandidates);
+  const projectCandidates = candidatesFrom(action.projectCandidates ?? actionArgs.projectCandidates);
   const status = typeof action.status === 'string' && ['pending', 'executing', 'completed', 'rejected', 'expired', 'failed'].includes(action.status)
     ? action.status as ApprovalStatus : 'pending';
   return {
@@ -99,22 +112,8 @@ export function approvalFromAction(action: Action): Approval | undefined {
     ...(objectValue(action.args) && Object.keys(objectValue(action.args)).length > 0
       ? { initialArgs: objectValue(action.args) }
       : {}),
-    ...(Array.isArray(action.personCandidates)
-      ? { personCandidates: action.personCandidates.filter((item): item is ApprovalCandidate => (
-        Boolean(item)
-        && typeof item === 'object'
-        && typeof objectValue(item).id === 'string'
-        && typeof objectValue(item).name === 'string'
-      )) }
-      : {}),
-    ...(Array.isArray(action.projectCandidates)
-      ? { projectCandidates: action.projectCandidates.filter((item): item is ApprovalCandidate => (
-        Boolean(item)
-        && typeof item === 'object'
-        && typeof objectValue(item).id === 'string'
-        && typeof objectValue(item).name === 'string'
-      )) }
-      : {}),
+    ...(personCandidates ? { personCandidates } : {}),
+    ...(projectCandidates ? { projectCandidates } : {}),
   };
 }
 export function recordLinkFromAction(action: Action): MobileRecordRow | undefined {

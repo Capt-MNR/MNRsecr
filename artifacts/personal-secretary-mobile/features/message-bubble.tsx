@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useState } from 'react';
 import { useColors } from '@/hooks/useColors';
 import type { Approval, ApprovalArgs, ApprovalCandidate, LocalMessage, MobileRecordRow } from './shared';
@@ -65,6 +65,12 @@ function ApprovalEditor({
   const [projectName, setProjectName] = useState(() => asString(initialArgs.projectName));
   const [personId, setPersonId] = useState(() => asString(initialArgs.personId));
   const [projectId, setProjectId] = useState(() => asString(initialArgs.projectId));
+  const [personMode, setPersonMode] = useState<'existing' | 'new' | 'none'>(
+    () => asString(initialArgs.personId) ? 'existing' : asString(initialArgs.personName) ? 'new' : 'none',
+  );
+  const [projectMode, setProjectMode] = useState<'existing' | 'new' | 'none'>(
+    () => asString(initialArgs.projectId) ? 'existing' : asString(initialArgs.projectName) ? 'new' : 'none',
+  );
   const [dueAtInput, setDueAtInput] = useState(() => localDateTimeValue(asString(initialArgs.dueAt)));
 
   function updateArg(key: string, value: unknown) {
@@ -76,15 +82,45 @@ function ApprovalEditor({
     kind: 'person' | 'project',
   ) {
     if (kind === 'person') {
+      setPersonMode('existing');
       setPersonId(candidate.id);
       setPersonName(candidate.name);
       updateArg('personId', candidate.id);
       updateArg('personName', candidate.name);
     } else {
+      setProjectMode('existing');
       setProjectId(candidate.id);
       setProjectName(candidate.name);
       updateArg('projectId', candidate.id);
       updateArg('projectName', candidate.name);
+    }
+  }
+
+  function selectUnlinked(kind: 'person' | 'project') {
+    if (kind === 'person') {
+      setPersonMode('none');
+      setPersonId('');
+      setPersonName('');
+      updateArg('personId', null);
+      updateArg('personName', undefined);
+    } else {
+      setProjectMode('none');
+      setProjectId('');
+      setProjectName('');
+      updateArg('projectId', null);
+      updateArg('projectName', undefined);
+    }
+  }
+
+  function selectNew(kind: 'person' | 'project') {
+    if (kind === 'person') {
+      setPersonMode('new');
+      setPersonId('');
+      updateArg('personId', null);
+    } else {
+      setProjectMode('new');
+      setProjectId('');
+      updateArg('projectId', null);
     }
   }
 
@@ -101,8 +137,10 @@ function ApprovalEditor({
       ...(personName ? { personName } : {}),
       ...(projectName ? { projectName } : {}),
     };
-    const candidates = (approval.personCandidates ?? []).filter((candidate) => candidate.id !== personId);
-    const projectCandidates = (approval.projectCandidates ?? []).filter((candidate) => candidate.id !== projectId);
+    const candidates = approval.personCandidates ?? [];
+    const projectCandidates = approval.projectCandidates ?? [];
+    const validPerson = personMode !== 'new' || personName.trim().length > 0;
+    const validProject = projectMode !== 'new' || projectName.trim().length > 0;
 
     return (
       <View style={styles.approvalFields}>
@@ -141,60 +179,84 @@ function ApprovalEditor({
         </View>
         <View style={styles.approvalField}>
           <Text style={[styles.approvalLabel, { color: colors.mutedForeground }]}>الشخص</Text>
-          <TextInput
-            value={personName}
-            onChangeText={(value) => {
-              setPersonName(value);
-              setPersonId('');
-              updateArg('personName', value);
-              updateArg('personId', null);
-            }}
-            style={[styles.approvalInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]}
-            placeholder="اختياري"
-            placeholderTextColor={colors.mutedForeground}
-            testID={`approval-person-${approval.operationId}`}
-          />
-          {candidates.length > 0 && (
-            <View style={styles.approvalCandidates}>
-              {candidates.slice(0, 6).map((candidate) => (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.approvalCandidates}>
+            <Pressable
+              testID={`approval-person-none-${approval.operationId}`}
+              onPress={() => selectUnlinked('person')}
+              style={({ pressed }) => [styles.approvalCandidate, { borderColor: personMode === 'none' ? colors.primary : colors.border, backgroundColor: pressed ? colors.muted : colors.background }]}
+            >
+              <Text style={[styles.approvalCandidateText, { color: colors.foreground }]}>بدون شخص</Text>
+            </Pressable>
+            <Pressable
+              testID={`approval-person-new-${approval.operationId}`}
+              onPress={() => selectNew('person')}
+              style={({ pressed }) => [styles.approvalCandidate, { borderColor: personMode === 'new' ? colors.primary : colors.border, backgroundColor: pressed ? colors.muted : colors.background }]}
+            >
+              <Text style={[styles.approvalCandidateText, { color: colors.foreground }]}>+ جديد</Text>
+            </Pressable>
+            {candidates.map((candidate) => (
                 <Pressable
                   key={candidate.id}
                   onPress={() => selectCandidate(candidate, 'person')}
-                  style={({ pressed }) => [styles.approvalCandidate, { borderColor: colors.border, backgroundColor: pressed ? colors.muted : colors.background }]}
+                  style={({ pressed }) => [styles.approvalCandidate, { borderColor: personMode === 'existing' && candidate.id === personId ? colors.primary : colors.border, backgroundColor: pressed ? colors.muted : colors.background }]}
                 >
                   <Text style={[styles.approvalCandidateText, { color: colors.foreground }]}>{candidate.name}</Text>
                 </Pressable>
-              ))}
-            </View>
+            ))}
+          </ScrollView>
+          {personMode === 'new' && (
+            <TextInput
+              value={personName}
+              onChangeText={(value) => {
+                setPersonName(value);
+                updateArg('personName', value);
+              }}
+              style={[styles.approvalInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]}
+              placeholder="اسم الشخص الجديد"
+              placeholderTextColor={colors.mutedForeground}
+              testID={`approval-person-${approval.operationId}`}
+            />
           )}
         </View>
         <View style={styles.approvalField}>
           <Text style={[styles.approvalLabel, { color: colors.mutedForeground }]}>المشروع</Text>
-          <TextInput
-            value={projectName}
-            onChangeText={(value) => {
-              setProjectName(value);
-              setProjectId('');
-              updateArg('projectName', value);
-              updateArg('projectId', null);
-            }}
-            style={[styles.approvalInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]}
-            placeholder="اختياري"
-            placeholderTextColor={colors.mutedForeground}
-            testID={`approval-project-${approval.operationId}`}
-          />
-          {projectCandidates.length > 0 && (
-            <View style={styles.approvalCandidates}>
-              {projectCandidates.slice(0, 6).map((candidate) => (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.approvalCandidates}>
+            <Pressable
+              testID={`approval-project-none-${approval.operationId}`}
+              onPress={() => selectUnlinked('project')}
+              style={({ pressed }) => [styles.approvalCandidate, { borderColor: projectMode === 'none' ? colors.primary : colors.border, backgroundColor: pressed ? colors.muted : colors.background }]}
+            >
+              <Text style={[styles.approvalCandidateText, { color: colors.foreground }]}>بدون مشروع</Text>
+            </Pressable>
+            <Pressable
+              testID={`approval-project-new-${approval.operationId}`}
+              onPress={() => selectNew('project')}
+              style={({ pressed }) => [styles.approvalCandidate, { borderColor: projectMode === 'new' ? colors.primary : colors.border, backgroundColor: pressed ? colors.muted : colors.background }]}
+            >
+              <Text style={[styles.approvalCandidateText, { color: colors.foreground }]}>+ جديد</Text>
+            </Pressable>
+            {projectCandidates.map((candidate) => (
                 <Pressable
                   key={candidate.id}
                   onPress={() => selectCandidate(candidate, 'project')}
-                  style={({ pressed }) => [styles.approvalCandidate, { borderColor: colors.border, backgroundColor: pressed ? colors.muted : colors.background }]}
+                  style={({ pressed }) => [styles.approvalCandidate, { borderColor: projectMode === 'existing' && candidate.id === projectId ? colors.primary : colors.border, backgroundColor: pressed ? colors.muted : colors.background }]}
                 >
                   <Text style={[styles.approvalCandidateText, { color: colors.foreground }]}>{candidate.name}</Text>
                 </Pressable>
-              ))}
-            </View>
+            ))}
+          </ScrollView>
+          {projectMode === 'new' && (
+            <TextInput
+              value={projectName}
+              onChangeText={(value) => {
+                setProjectName(value);
+                updateArg('projectName', value);
+              }}
+              style={[styles.approvalInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]}
+              placeholder="اسم المشروع الجديد"
+              placeholderTextColor={colors.mutedForeground}
+              testID={`approval-project-${approval.operationId}`}
+            />
           )}
         </View>
         <Pressable
@@ -202,9 +264,9 @@ function ApprovalEditor({
           accessibilityRole="button"
           accessibilityLabel="اعتماد التعديلات"
           onPress={() => {
-            if (amountMinor && description.trim()) onApprove(approval, nextArgs);
+            if (amountMinor && description.trim() && validPerson && validProject) onApprove(approval, nextArgs);
           }}
-          style={({ pressed }) => [styles.approveButton, { backgroundColor: colors.primary, opacity: pressed || !amountMinor || !description.trim() ? 0.55 : 1 }]}
+          style={({ pressed }) => [styles.approveButton, { backgroundColor: colors.primary, opacity: pressed || !amountMinor || !description.trim() || !validPerson || !validProject ? 0.55 : 1 }]}
         >
           <Feather name="check" size={15} color={colors.primaryForeground} />
           <Text style={[styles.approveText, { color: colors.primaryForeground }]}>اعتماد التعديلات</Text>

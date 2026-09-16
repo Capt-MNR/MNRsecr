@@ -325,6 +325,21 @@ export function approvalFromAction(action: TurnResponse['action']): Approval | u
   const display = action.display && typeof action.display === 'object'
     ? action.display as { title?: unknown; details?: unknown }
     : {};
+  const actionArgs = action.args && typeof action.args === 'object'
+    ? action.args as Record<string, unknown>
+    : {};
+  const candidatesFrom = (value: unknown): ApprovalCandidate[] | undefined => (
+    Array.isArray(value)
+      ? value.filter((item): item is ApprovalCandidate => (
+        Boolean(item)
+        && typeof item === 'object'
+        && typeof (item as { id?: unknown }).id === 'string'
+        && typeof (item as { name?: unknown }).name === 'string'
+      ))
+      : undefined
+  );
+  const personCandidates = candidatesFrom(action.personCandidates ?? actionArgs.personCandidates);
+  const projectCandidates = candidatesFrom(action.projectCandidates ?? actionArgs.projectCandidates);
   const status = typeof action.status === 'string'
     && ['pending', 'executing', 'completed', 'rejected', 'expired', 'failed'].includes(action.status)
     ? action.status as ApprovalStatus
@@ -342,12 +357,8 @@ export function approvalFromAction(action: TurnResponse['action']): Approval | u
     ...(action.quickApprove === true ? { quickApprove: true } : {}),
     ...(typeof action.toolName === 'string' ? { toolName: action.toolName } : {}),
     ...(action.args && typeof action.args === 'object' ? { initialArgs: action.args as Record<string, unknown> } : {}),
-    ...(Array.isArray(action.personCandidates)
-      ? { personCandidates: action.personCandidates as ApprovalCandidate[] }
-      : {}),
-    ...(Array.isArray(action.projectCandidates)
-      ? { projectCandidates: action.projectCandidates as ApprovalCandidate[] }
-      : {}),
+    ...(personCandidates ? { personCandidates } : {}),
+    ...(projectCandidates ? { projectCandidates } : {}),
   };
 }
 

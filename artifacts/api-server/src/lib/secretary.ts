@@ -113,6 +113,8 @@ export interface PersistencePort {
   ): Promise<PersistedExpense>;
   findPeople(identity: Identity, name: string): Promise<Person[]>;
   findProjects(identity: Identity, name: string): Promise<Project[]>;
+  listPeople(identity: Identity): Promise<Person[]>;
+  listProjects(identity: Identity): Promise<Project[]>;
   createProject(identity: Identity, name: string): Promise<Project>;
   createPerson(identity: Identity, name: string): Promise<Person>;
   linkPersonToProject(
@@ -291,6 +293,18 @@ class DrizzlePersistence implements PersistencePort {
       eq(projectsTable.ownerUserId, identity.userId),
       eq(projectsTable.nameKey, normalizeArabic(name)),
     )).orderBy(asc(projectsTable.createdAt));
+  }
+
+  async listPeople(identity: Identity): Promise<Person[]> {
+    return db.select().from(peopleTable).where(ownerWhere(identity))
+      .orderBy(asc(peopleTable.name));
+  }
+
+  async listProjects(identity: Identity): Promise<Project[]> {
+    return db.select().from(projectsTable).where(and(
+      eq(projectsTable.tenantId, identity.tenantId),
+      eq(projectsTable.ownerUserId, identity.userId),
+    )).orderBy(asc(projectsTable.name));
   }
 
   async createProject(identity: Identity, name: string): Promise<Project> {
@@ -984,16 +998,29 @@ async function saveDeterministicExpense(
     personName?: string;
     projectName?: string;
     projectId?: string;
+    personCandidates?: Array<{ id: string; name: string }>;
     projectCandidates?: Array<{ id: string; name: string }>;
   },
   sourceTurnId?: string,
+  channel?: TurnInputChannel,
 ): Promise<TurnResult> {
+  const [people, projects] = channel === "quick"
+    ? [[], []] as const
+    : await Promise.all([
+        persistence.listPeople(identity),
+        persistence.listProjects(identity),
+      ]);
+  const operationArgs = {
+    ...input,
+    personCandidates: input.personCandidates ?? people.map((person) => ({ id: person.id, name: person.name })),
+    projectCandidates: input.projectCandidates ?? projects.map((project) => ({ id: project.id, name: project.name })),
+  };
   const pending = await createPendingOperation(identity, {
     conversationId,
     sourceTurnId,
     idempotencyKey,
     toolName: "record_expense",
-    args: input,
+    args: operationArgs,
   });
   return {
     conversationId,
@@ -1170,6 +1197,7 @@ export class DeterministicAgentRuntime {
         input.idempotencyKey,
         contextualExpense,
         turnId,
+        input.channel,
       );
     } else if (pendingProjectSelection) {
       const pending = pendingProjectSelection as Record<string, unknown>;
@@ -1188,7 +1216,7 @@ export class DeterministicAgentRuntime {
                 && typeof (candidate as Record<string, unknown>).id === "string"
                 && typeof (candidate as Record<string, unknown>).name === "string"))
             : undefined,
-         }, turnId);
+         }, turnId, input.channel);
       } else {
         result = {
           conversationId,
@@ -1280,7 +1308,7 @@ export class DeterministicAgentRuntime {
             model: "deterministic-ar-v1",
           };
         } else {
-          result = await saveDeterministicExpense(this.persistence, identity, conversationId, input.idempotencyKey, resolvedExpense, turnId);
+          result = await saveDeterministicExpense(this.persistence, identity, conversationId, input.idempotencyKey, resolvedExpense, turnId, input.channel);
         }
       }
     } else {

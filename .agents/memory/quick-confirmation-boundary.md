@@ -3,7 +3,7 @@ name: Quick confirmation boundary
 description: The safe boundary for lightweight Quick confirmations versus Main review and editing.
 ---
 
-Quick may offer direct approval only for simple, unambiguous `record_expense` and `create_reminder` operations. Other pending writes stay review-only and open Main.
+Quick may offer direct approval only for simple, unambiguous `record_expense` and `create_reminder` operations. Other pending writes stay review-only and open Main. Full person/project candidate lists belong to Main approvals, not Quick payloads.
 
 **Why:** Quick must remain a low-RAM, low-interaction surface without bypassing the existing server-side approval, ownership, expiry, and idempotency checks.
 
