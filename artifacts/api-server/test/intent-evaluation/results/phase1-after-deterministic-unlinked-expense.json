@@ -1,0 +1,131 @@
+{
+  "datasetVersion": 1,
+  "providerMode": "gemini",
+  "label": "after",
+  "dryRun": true,
+  "generatedAt": "2026-09-16T10:16:25.619Z",
+  "summary": {
+    "totalCases": 1,
+    "evaluatedCases": 1,
+    "providerErrors": 0,
+    "contextNotProvided": 0,
+    "runnerErrors": 0,
+    "intentAccuracyPercent": 100,
+    "toolSelectionAccuracyPercent": 100,
+    "clarificationAccuracyPercent": 100,
+    "noWriteViolations": 0,
+    "totalLogicalLlmCalls": 0,
+    "totalHttpAttempts": 0,
+    "fallbackCases": 0,
+    "totalInputTokens": null,
+    "totalOutputTokens": null,
+    "totalTokens": null,
+    "totalCachedTokens": null,
+    "cacheHitCases": 0,
+    "cacheMissCases": 0,
+    "totalRequestBytes": 0,
+    "averageLatencyMs": 16,
+    "latencyP50Ms": 16,
+    "latencyP95Ms": 16,
+    "averageConversationChars": 0,
+    "rowCountChanges": 0
+  },
+  "cases": [
+    {
+      "id": "D",
+      "category": "expense_intent",
+      "message": "سجل إني دفعت 11,500 جنيه تشطيبات لشركة المحجر.",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": [
+          "find_person",
+          "record_expense",
+          "final_response"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": "expense",
+      "actualTool": "record_expense",
+      "actualTools": [
+        "record_expense"
+      ],
+      "toolArguments": [
+        {
+          "name": "record_expense",
+          "arguments": {
+            "amountMinor": 1150000,
+            "currency": "EGP",
+            "description": "تشطيبات لشركة المحجر."
+          },
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": false,
+      "logicalLlmCalls": 0,
+      "actualHttpAttempts": 0,
+      "httpAttemptsByProvider": {},
+      "provider": "gemini",
+      "model": "gemini-3.1-flash-lite",
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 16,
+      "tokenUsage": null,
+      "inputTokens": null,
+      "outputTokens": null,
+      "totalTokens": null,
+      "cachedTokens": null,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {},
+      "maxRequestBytes": 0,
+      "systemPromptChars": 0,
+      "toolDefinitionsChars": 0,
+      "toolDefinitionsCount": 0,
+      "maxConversationChars": 0,
+      "contextBreakdown": {
+        "systemPromptChars": null,
+        "requestGuidanceChars": null,
+        "userMessageChars": null,
+        "recentConversationChars": null,
+        "summaryChars": null,
+        "structuredStateChars": null,
+        "toolResultChars": null,
+        "otherConversationChars": null,
+        "conversationChars": null,
+        "toolDefinitionsChars": null,
+        "requestBytes": null
+      },
+      "diagnosticTrace": null,
+      "rowCountsBefore": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountsAfter": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountChanged": false,
+      "approvalReached": false,
+      "wouldSelectWriteTool": true,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": true,
+      "toolSelectionMatch": true,
+      "clarificationMatch": true
+    }
+  ]
+}

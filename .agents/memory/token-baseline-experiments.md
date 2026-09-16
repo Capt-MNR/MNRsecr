@@ -16,3 +16,11 @@ A correction or reference follow-up that has no saved recent turns, summary, or 
 **Why:** Context-required benchmark cases can spend thousands of tokens while no context fixture is available, and the only safe outcome is to ask for the missing operation.
 
 **How to apply:** Gate this shortcut on both narrow correction language patterns and an empty conversation snapshot. It must never create or update a financial record, and it should remain covered by an unreachable-provider test.
+
+## Unlinked deterministic expenses
+
+When a high-signal expense includes an amount and purpose but no confirmed person or project, prepare it for approval with the purpose as its description rather than asking the model to invent an entity link.
+
+**Why:** Project and person links are optional for expenses; forcing an unresolved optional link into the LLM path added multiple calls without improving the safe write boundary.
+
+**How to apply:** Keep explicit unresolved entity mentions on the resolver/clarification path. For entity-free expense text, preserve the user’s purpose, leave optional IDs absent, and require the normal approval operation before any write.

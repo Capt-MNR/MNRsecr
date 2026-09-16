@@ -4114,6 +4114,14 @@ function reminderText(message: string): string {
     .trim() || "تذكير";
 }
 
+function expenseDescription(message: string): string {
+  const compact = message.replace(/\s+/g, " ").trim();
+  const purpose = compact
+    .replace(/^(?:سجل|سجّل|اكتب|اثبت)\s*(?:إني|اني)?\s*(?:دفعت|صرف(?:ت)?|دفعت)\s*[\d٠-٩,٬.]+\s*(?:جنيه|جنية|دولار|يورو|ريال|درهم)?\s*/iu, "")
+    .trim();
+  return (purpose || compact).slice(0, 320);
+}
+
 function createdEntityName(message: string, entityType: "person" | "project"): string | null {
   const patterns = entityType === "person"
     ? [
@@ -4254,13 +4262,12 @@ async function deterministicPreflight(
     const project = projectMention ? await resolve("project", projectMention.query) : null;
     if (person && !person.selected) return null;
     if (project && !project.selected) return null;
-    if (!project?.selected) return null;
     const args: Record<string, unknown> = {
       amountMinor: parsed.amount.amountMinor,
       currency: parsed.amount.currency,
-      description: "مصروف مسجل من طلب المستخدم",
+      description: expenseDescription(parsed.originalText),
       ...(person?.selected ? { personId: person.selected.id } : {}),
-      projectId: project.selected.id,
+      ...(project?.selected ? { projectId: project.selected.id } : {}),
     };
     const validation = validateDeterministicPayload(parsed, args);
     if (!validation.valid) {
