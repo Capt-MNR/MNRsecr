@@ -1,0 +1,24 @@
+kind = "mobile"
+previewPath = "/personal-secretary-mobile/"
+title = "Personal Secretary Mobile"
+description = "A lightweight mobile companion for fast secretary conversations, notification replies, and safe approval actions without loading the full records workspace."
+version = "1.0.0"
+id = "artifacts/personal-secretary-mobile"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/personal-secretary-mobile/" ]
+localPort = 21225
+
+[services.development]
+run = "pnpm --filter @workspace/personal-secretary-mobile run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/personal-secretary-mobile", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/personal-secretary-mobile", "run", "serve" ]
+
+[services.env]
+PORT = "21225"
+BASE_PATH = "/personal-secretary-mobile/"
