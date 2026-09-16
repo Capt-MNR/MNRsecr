@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { Platform } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
@@ -16,7 +17,10 @@ import * as SplashScreen from 'expo-splash-screen';
 import { setAuthTokenGetter, setBaseUrl } from '@workspace/api-client-react';
 
 const apiDomain = process.env.EXPO_PUBLIC_DOMAIN;
-setBaseUrl(apiDomain ? `https://${apiDomain}` : null);
+// The Expo web preview proxies /api on its own origin. Keeping web requests
+// relative avoids a browser CORS preflight; native bundles still need the
+// injected absolute API domain.
+setBaseUrl(Platform.OS === 'web' ? null : apiDomain ? `https://${apiDomain}` : null);
 setAuthTokenGetter(() => 'dev-user');
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
