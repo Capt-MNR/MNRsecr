@@ -4,12 +4,14 @@ import * as Haptics from 'expo-haptics';
 import {
   useApproveSecretaryOperation,
   useCreateTurn,
+  useGetConversation,
   useGetEntityGraph,
   getListRecordsQueryKey,
   useListRecords,
   useRejectSecretaryOperation,
 } from '@workspace/api-client-react';
 import type { RecordsResponse, TurnResponse } from '@workspace/api-client-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type ComponentProps } from 'react';
 import {
   ActivityIndicator,
@@ -42,6 +44,13 @@ type LocalMessage = {
   text: string;
   createdAt: string;
   approval?: Approval;
+  recordLink?: MobileRecordRow;
+};
+
+type RecordOrigin = {
+  conversationId: string;
+  turnId?: string | null;
+  operationId?: string | null;
 };
 
 const STORAGE_MESSAGES = '@personal-secretary-mobile/messages';
@@ -68,6 +77,7 @@ type MobileRecordRow = {
   title: string;
   subtitle: string;
   trailing?: string;
+  origin?: RecordOrigin | null;
 };
 
 type MobileRecordSection = {
@@ -148,6 +158,7 @@ function recordSections(records: RecordsResponse | undefined): MobileRecordSecti
           .filter(Boolean)
           .join(' · '),
         trailing: money(expense.amountMinor, expense.currency),
+        origin: expense.origin,
       })),
     },
     {
@@ -183,6 +194,7 @@ function recordSections(records: RecordsResponse | undefined): MobileRecordSecti
         title: task.title,
         subtitle: task.dueAt ? `موعدها ${recordDate(task.dueAt)}` : 'مهمة مستمرة',
         trailing: statusLabel(task.status),
+        origin: task.origin,
       })),
     },
     {
@@ -195,6 +207,7 @@ function recordSections(records: RecordsResponse | undefined): MobileRecordSecti
         title: reminder.text,
         subtitle: `${recordDate(reminder.dueAt)} · ${reminder.timezone}`,
         trailing: statusLabel(reminder.status),
+        origin: reminder.origin,
       })),
     },
     {
@@ -207,6 +220,7 @@ function recordSections(records: RecordsResponse | undefined): MobileRecordSecti
         title: commitment.title,
         subtitle: commitment.personName ?? 'بدون طرف محدد',
         trailing: commitment.dueAt ? recordDate(commitment.dueAt) : statusLabel(commitment.status),
+        origin: commitment.origin,
       })),
     },
   ];
@@ -231,6 +245,105 @@ function approvalFromAction(action: TurnResponse['action']): Approval | undefine
       : [],
     status,
   };
+}
+
+function recordLinkFromAction(action: TurnResponse['action']): MobileRecordRow | undefined {
+  const value = objectValue(action);
+  const type = stringValue(value.type, '');
+  const amountMinor = typeof value.amountMinor === 'number' ? value.amountMinor : null;
+  const currency = stringValue(value.currency, 'EGP');
+  const occurredAt = typeof value.occurredAt === 'string' ? value.occurredAt : null;
+
+  if (type === 'expense_recorded' && typeof value.expenseId === 'string') {
+    return {
+      id: value.expenseId,
+      recordType: 'expense',
+      title: stringValue(value.description, 'مصروف محفوظ'),
+      subtitle: [
+        stringValue(value.personName, stringValue(value.projectName, '')),
+        occurredAt ? recordDate(occurredAt) : '',
+      ].filter(Boolean).join(' · '),
+      ...(amountMinor !== null ? { trailing: money(amountMinor, currency) } : {}),
+    };
+  }
+
+  if ((type === 'person_created' || type === 'person_linked' || type === 'person_expense_total')
+    && typeof value.personId === 'string') {
+    return {
+      id: value.personId,
+      recordType: 'person',
+      title: stringValue(value.personName, 'الشخص المرتبط'),
+      subtitle: 'فتح تفاصيل الشخص',
+    };
+  }
+
+  if ((type === 'project_created' || type === 'project_people')
+    && typeof value.projectId === 'string') {
+    return {
+      id: value.projectId,
+      recordType: 'project',
+      title: stringValue(value.projectName, 'المشروع المرتبط'),
+      subtitle: 'فتح تفاصيل المشروع',
+    };
+  }
+
+  if (type === 'reminder_created' && typeof value.reminderId === 'string') {
+    return {
+      id: value.reminderId,
+      recordType: 'reminder',
+      title: stringValue(value.text, 'تذكير محفوظ'),
+      subtitle: typeof value.dueAt === 'string' ? recordDate(value.dueAt) : 'فتح تفاصيل التذكير',
+      trailing: statusLabel(typeof value.status === 'string' ? value.status : null),
+    };
+  }
+
+  return undefined;
+}
+
+function addOrigin(record: MobileRecordRow, conversationId: string, operationId?: string | null): MobileRecordRow {
+  return {
+    ...record,
+    origin: {
+      conversationId,
+      turnId: null,
+      operationId: operationId ?? null,
+    },
+  };
+}
+
+function messagesFromConversation(detail: unknown, conversationId: string): LocalMessage[] {
+  const turns = arrayValue(objectValue(detail).recentTurns);
+  const loadedMessages: LocalMessage[] = [];
+
+  turns.forEach((rawTurn, index) => {
+    const turn = objectValue(rawTurn);
+    const turnId = typeof turn.turnId === 'string' ? turn.turnId : `turn-${index}`;
+    const createdAt = typeof turn.createdAt === 'string' ? turn.createdAt : new Date().toISOString();
+    const action = Object.keys(objectValue(turn.action)).length > 0 ? objectValue(turn.action) : undefined;
+    const recordLink = action ? recordLinkFromAction(action) : undefined;
+    const linkedRecord = recordLink ? addOrigin(recordLink, conversationId, typeof action?.operationId === 'string' ? action.operationId : null) : undefined;
+
+    if (typeof turn.userMessage === 'string') {
+      loadedMessages.push({
+        id: `${conversationId}-${turnId}-user`,
+        role: 'user',
+        text: turn.userMessage,
+        createdAt,
+      });
+    }
+    if (typeof turn.assistantMessage === 'string') {
+      loadedMessages.push({
+        id: `${conversationId}-${turnId}-assistant`,
+        role: 'assistant',
+        text: turn.assistantMessage,
+        createdAt,
+        approval: action ? approvalFromAction(action) : undefined,
+        ...(linkedRecord ? { recordLink: linkedRecord } : {}),
+      });
+    }
+  });
+
+  return loadedMessages.length > 0 ? loadedMessages : [starterMessage];
 }
 
 function messageTime(value: string) {
@@ -537,11 +650,13 @@ function RecordDetailView({
   colors,
   onBack,
   onAskSecretary,
+  onOpenConversation,
 }: {
   record: MobileRecordRow;
   colors: ReturnType<typeof useColors>;
   onBack: () => void;
   onAskSecretary: () => void;
+  onOpenConversation?: (origin: RecordOrigin) => void;
 }) {
   const isEntity = record.recordType === 'person' || record.recordType === 'project';
   const entityType = record.recordType === 'person' ? 'person' : 'project';
@@ -632,6 +747,24 @@ function RecordDetailView({
         </View>
       )}
 
+      {record.origin && onOpenConversation && (
+        <Pressable
+          testID="open-original-conversation"
+          accessibilityRole="button"
+          accessibilityLabel="فتح المحادثة الأصلية"
+          onPress={() => onOpenConversation(record.origin as RecordOrigin)}
+          style={({ pressed }) => [
+            detailStyles.detailSecondaryAction,
+            { borderColor: colors.border, opacity: pressed ? 0.65 : 1 },
+          ]}
+        >
+          <Feather name="corner-up-left" size={16} color={colors.foreground} />
+          <Text style={[detailStyles.detailSecondaryActionText, { color: colors.foreground }]}>
+            فتح المحادثة الأصلية
+          </Text>
+        </Pressable>
+      )}
+
       <View style={[detailStyles.detailContext, { backgroundColor: colors.muted, borderColor: colors.border }]}>
         <Feather name="message-circle" size={17} color={colors.primary} />
         <View style={detailStyles.detailContextCopy}>
@@ -664,12 +797,14 @@ function MessageBubble({
   colors,
   onApprove,
   onReject,
+  onOpenRecord,
   busyOperationId,
 }: {
   message: LocalMessage;
   colors: ReturnType<typeof useColors>;
   onApprove: (approval: Approval) => void;
   onReject: (approval: Approval) => void;
+  onOpenRecord: (record: MobileRecordRow) => void;
   busyOperationId: string | null;
 }) {
   const isUser = message.role === 'user';
@@ -753,6 +888,22 @@ function MessageBubble({
               </View>
             )}
           </View>
+        )}
+
+        {message.recordLink && (
+          <Pressable
+            testID={`open-record-${message.recordLink.recordType}-${message.recordLink.id}`}
+            accessibilityRole="button"
+            accessibilityLabel={`فتح تفاصيل ${message.recordLink.title}`}
+            onPress={() => onOpenRecord(message.recordLink as MobileRecordRow)}
+            style={({ pressed }) => [
+              styles.messageLink,
+              { borderColor: colors.border, opacity: pressed ? 0.65 : 1 },
+            ]}
+          >
+            <Feather name="arrow-up-left" size={15} color={colors.primary} />
+            <Text style={[styles.messageLinkText, { color: colors.primary }]}>فتح التفاصيل</Text>
+          </Pressable>
         )}
       </View>
     </View>
