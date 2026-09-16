@@ -118,6 +118,7 @@ test("local router and deterministic plans only act on high-signal requests", ()
   assert.equal(gulfExpense?.intent, "expense");
   assert.equal(gulfExpense?.args?.amountMinor, 120_000);
   assert.equal(gulfExpense?.args?.currency, "SAR");
+  assert.equal(routeLocally("ما تسجلش مصروف ٥٠٠ لمحمد"), null);
   assert.equal(buildDeterministicPlan("محمد")?.kind, "clarification");
   assert.equal(buildDeterministicPlan("فكرني بالمكالمة")?.kind, "none");
   delete process.env.LOCAL_ROUTER_ENABLED;
