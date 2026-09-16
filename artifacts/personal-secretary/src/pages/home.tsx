@@ -540,9 +540,6 @@ function Home() {
                               onConfirm={(args) => approve(message.approval!.operationId, args)}
                               onReject={() => reject(message.approval!.operationId)}
                             />
-                            {approvalError && message.approval.status === 'pending' && (
-                              <p className="mt-2 text-xs text-destructive" role="alert">{approvalError}</p>
-                            )}
                           </div>
                         )}
                       </div>

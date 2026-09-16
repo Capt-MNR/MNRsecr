@@ -6,6 +6,7 @@ import {
   type ApprovalOperation,
   type Candidate,
 } from '@workspace/api-client-react';
+import { prepareReminderApprovalArgs } from '../lib/approval-args';
 
 type ApprovalDisplay = {
   title: string;
@@ -370,16 +371,19 @@ export default function ApprovalForm({
 
   function confirm() {
     if (validationError || busy || !hasAuthoritativeOperation || operationQuery.isError) return;
-    const nextArgs = {
-      ...args,
-      ...(toolName === 'record_expense' ? {
-        amountMinor: parseAmountMinor(amount)!,
-        personId: selectedPersonId || null,
-        projectId: selectedProjectId || null,
-        ...(personName ? { personName } : {}),
-        ...(projectName ? { projectName } : {}),
-      } : {}),
-    };
+    const nextArgs = toolName === 'create_reminder'
+      ? prepareReminderApprovalArgs(args)
+      : {
+        ...args,
+        ...(toolName === 'record_expense' ? {
+          amountMinor: parseAmountMinor(amount)!,
+          personId: selectedPersonId || null,
+          projectId: selectedProjectId || null,
+          ...(personName ? { personName } : {}),
+          ...(projectName ? { projectName } : {}),
+        } : {}),
+      };
+    if (!nextArgs) return;
     onConfirm(allowArgsOverride ? nextArgs : undefined);
   }
 

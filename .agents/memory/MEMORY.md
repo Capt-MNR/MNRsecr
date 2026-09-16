@@ -20,3 +20,4 @@
 - [Conversation provenance](conversation-provenance.md) — link created expenses, tasks, and reminders to the originating conversation turn; keep manual records explicitly unlinked.
 - [Token baseline experiments](token-baseline-experiments.md) — measure real-provider token cost before optimization; context-budget flags are not safe to enable without repeated accuracy and retry checks.
 - [Optimistic record edits](optimistic-record-edits.md) — refresh-before-edit improves UX, but only an atomic row-version condition prevents stale approvals from overwriting newer changes.
+- [Reminder approval input contract](reminder-approval-input-contract.md) — normalize local reminder times and default the timezone before sending strict approval overrides.
