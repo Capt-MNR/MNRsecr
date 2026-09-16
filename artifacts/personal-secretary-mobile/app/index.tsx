@@ -528,6 +528,16 @@ function MainOffice({
   onOpenQuick,
   onAskSecretary,
   pendingApprovals,
+  lastAssistantMessage,
+  draft,
+  onChangeDraft,
+  onSend,
+  inputRef,
+  isSending,
+  onApprove,
+  onReject,
+  busyOperationId,
+  recordOrigins,
 }: {
   colors: ReturnType<typeof useColors>;
   onOpenRecord: (record: MobileRecordRow) => void;
@@ -535,6 +545,16 @@ function MainOffice({
   onOpenQuick: () => void;
   onAskSecretary: (draft: string) => void;
   pendingApprovals: Approval[];
+  lastAssistantMessage: LocalMessage | null;
+  draft: string;
+  onChangeDraft: (value: string) => void;
+  onSend: () => void;
+  inputRef: { current: TextInput | null };
+  isSending: boolean;
+  onApprove: (approval: Approval) => void;
+  onReject: (approval: Approval) => void;
+  busyOperationId: string | null;
+  recordOrigins: Record<string, RecordOrigin>;
 }) {
   const todayQuery = useGetTodayContext({
     query: {
@@ -622,6 +642,67 @@ function MainOffice({
             <Feather name="refresh-cw" size={16} color={colors.foreground} />
           )}
         </Pressable>
+      </View>
+
+      <View style={[styles.officeChatPanel, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={styles.officeChatHeading}>
+          <View style={[styles.officeChatIcon, { backgroundColor: colors.muted }]}>
+            <Feather name="message-circle" size={16} color={colors.primary} />
+          </View>
+          <View style={styles.officeChatHeadingCopy}>
+            <Text style={[styles.officeChatTitle, { color: colors.foreground }]}>تحدث مع السكرتير</Text>
+            <Text style={[styles.officeChatHint, { color: colors.mutedForeground }]}>اسأل، اطلب، أو ابدأ إجراءً من داخل المكتب</Text>
+          </View>
+        </View>
+        {lastAssistantMessage && (
+          <View style={styles.officeChatReply}>
+            <MessageBubble
+              message={lastAssistantMessage}
+              colors={colors}
+              onApprove={onApprove}
+              onReject={onReject}
+              onOpenRecord={onOpenRecord}
+              busyOperationId={busyOperationId}
+            />
+          </View>
+        )}
+        {isSending && (
+          <View style={[styles.officeChatTyping, { backgroundColor: colors.muted }]}>
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={[styles.officeChatTypingText, { color: colors.mutedForeground }]}>السكرتير يفكر…</Text>
+          </View>
+        )}
+        <View style={[styles.officeChatComposer, { backgroundColor: colors.background, borderColor: colors.input }]}>
+          <TextInput
+            ref={inputRef}
+            testID="main-message-input"
+            value={draft}
+            onChangeText={onChangeDraft}
+            onSubmitEditing={onSend}
+            placeholder="اكتب طلبًا للسكرتير…"
+            placeholderTextColor={colors.mutedForeground}
+            multiline
+            maxLength={1000}
+            returnKeyType="send"
+            blurOnSubmit={false}
+            textAlign="right"
+            style={[styles.officeChatInput, { color: colors.foreground }]}
+          />
+          <Pressable
+            testID="main-send-message"
+            accessibilityRole="button"
+            accessibilityLabel="إرسال طلب من المكتب"
+            onPress={onSend}
+            disabled={!draft.trim() || isSending}
+            style={({ pressed }) => [
+              styles.officeChatSend,
+              { backgroundColor: colors.primary, opacity: !draft.trim() || isSending ? 0.4 : pressed ? 0.7 : 1 },
+            ]}
+          >
+            <Feather name="arrow-up" size={17} color={colors.primaryForeground} />
+          </Pressable>
+        </View>
+        <Text style={[styles.officeChatFooter, { color: colors.mutedForeground }]}>نفس محادثتك في السريع · التغييرات الحساسة تحتاج موافقتك</Text>
       </View>
 
       {todayQuery.isError && (
@@ -828,6 +909,50 @@ function MainOffice({
                 )}
               </View>
             )}
+          </View>
+
+          <View style={styles.officeSection}>
+            <View style={styles.officeSectionHeading}>
+              <View>
+                <Text style={[styles.officeSectionTitle, { color: colors.foreground }]}>النشاط الأخير</Text>
+                <Text style={[styles.officeSectionHint, { color: colors.mutedForeground }]}>مصروفات حديثة يمكنك فتح تفاصيلها</Text>
+              </View>
+              <Feather name="activity" size={18} color={colors.primary} />
+            </View>
+            <View style={styles.officeActivityList}>
+              {context.recentExpenses.slice(0, 4).map((expense) => (
+                <Pressable
+                  key={`expense-${expense.id}`}
+                  testID={`office-expense-${expense.id}`}
+                  accessibilityRole="button"
+                  accessibilityLabel={`فتح تفاصيل ${expense.description}`}
+                  onPress={() => onOpenRecord({
+                    id: expense.id,
+                    recordType: 'expense',
+                    title: expense.description,
+                    subtitle: [expense.personName ?? expense.projectName, recordDate(expense.occurredAt)].filter(Boolean).join(' · '),
+                    trailing: money(expense.amountMinor, expense.currency),
+                    origin: recordOrigins[expense.id] ?? null,
+                  })}
+                  style={({ pressed }) => [
+                    styles.officeActivityRow,
+                    { borderBottomColor: colors.border, opacity: pressed ? 0.65 : 1 },
+                  ]}
+                >
+                  <Text style={[styles.officeActivityAmount, { color: colors.primary }]}>{money(expense.amountMinor, expense.currency)}</Text>
+                  <View style={styles.officeActivityCopy}>
+                    <Text style={[styles.officeActivityTitle, { color: colors.foreground }]} numberOfLines={1}>{expense.description}</Text>
+                    <Text style={[styles.officeActivityMeta, { color: colors.mutedForeground }]} numberOfLines={1}>
+                      {expense.personName ?? expense.projectName ?? recordDate(expense.occurredAt)}
+                    </Text>
+                  </View>
+                  <Feather name="chevron-left" size={15} color={colors.mutedForeground} />
+                </Pressable>
+              ))}
+              {context.recentExpenses.length === 0 && (
+                <Text style={[styles.officeEmptyLine, { color: colors.mutedForeground }]}>لا توجد مصروفات حديثة في الموجز الحالي.</Text>
+              )}
+            </View>
           </View>
 
           <View style={styles.officeSection}>
@@ -1554,9 +1679,16 @@ export default function QuickSecretaryScreen() {
     void Haptics.selectionAsync();
   }
 
-  function openRecord(record: MobileRecordRow) {
+  function openRecordFromRecords(record: MobileRecordRow) {
     setSelectedRecord(record);
     setMainSection('records');
+    setActiveView('home');
+    void Haptics.selectionAsync();
+  }
+
+  function openRecordFromQuick(record: MobileRecordRow) {
+    setSelectedRecord(record);
+    setMainSection('office');
     setActiveView('home');
     void Haptics.selectionAsync();
   }
@@ -1572,6 +1704,15 @@ export default function QuickSecretaryScreen() {
     setDraft(value);
     setSelectedRecord(null);
     setActiveView('quick');
+    void Haptics.selectionAsync();
+  }
+
+  function openOfficeWithDraft(value: string) {
+    setDraft(value);
+    setSelectedRecord(null);
+    setMainSection('office');
+    setActiveView('home');
+    setTimeout(() => inputRef.current?.focus(), 0);
     void Haptics.selectionAsync();
   }
 
@@ -1597,6 +1738,11 @@ export default function QuickSecretaryScreen() {
   }
 
   const reversedMessages = [...messages].reverse();
+  const lastAssistantMessage = [...messages].reverse().find((message) => message.role === 'assistant') ?? null;
+  const recordOrigins = messages.reduce<Record<string, RecordOrigin>>((origins, message) => {
+    if (message.recordLink?.origin) origins[message.recordLink.id] = message.recordLink.origin;
+    return origins;
+  }, {});
   const topInset = insets.top + (Platform.OS === 'web' ? 67 : 0);
   const bottomInset = insets.bottom + (Platform.OS === 'web' ? 34 : 10);
 
@@ -1685,13 +1831,23 @@ export default function QuickSecretaryScreen() {
                onOpenRecord={openOfficeRecord}
                onOpenRecords={openRecords}
                onOpenQuick={openQuick}
-               onAskSecretary={openQuickWithDraft}
+               onAskSecretary={openOfficeWithDraft}
+               lastAssistantMessage={lastAssistantMessage}
+               draft={draft}
+               onChangeDraft={setDraft}
+               onSend={() => void sendMessage()}
+               inputRef={inputRef}
+               isSending={createTurn.isPending || conversationQuery.isFetching}
+               onApprove={(approval) => void updateApproval(approval, 'completed')}
+               onReject={(approval) => void updateApproval(approval, 'rejected')}
+               busyOperationId={busyOperationId}
+               recordOrigins={recordOrigins}
                pendingApprovals={messages.flatMap((message) => (
                  message.approval && message.approval.status === 'pending' ? [message.approval] : []
                ))}
              />
            ) : (
-             <RecordsView colors={colors} onOpenRecord={openRecord} onBack={openHome} />
+             <RecordsView colors={colors} onOpenRecord={openRecordFromRecords} onBack={openHome} />
            )
         )
       ) : !hydrated ? (
@@ -1709,7 +1865,7 @@ export default function QuickSecretaryScreen() {
               colors={colors}
               onApprove={(approval) => void updateApproval(approval, 'completed')}
               onReject={(approval) => void updateApproval(approval, 'rejected')}
-              onOpenRecord={openRecord}
+               onOpenRecord={openRecordFromQuick}
               busyOperationId={busyOperationId}
             />
           )}
@@ -2104,6 +2260,87 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  officeChatPanel: {
+    marginTop: 18,
+    borderRadius: 19,
+    borderWidth: 1,
+    padding: 12,
+  },
+  officeChatHeading: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 9,
+  },
+  officeChatIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  officeChatHeadingCopy: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  officeChatTitle: {
+    width: '100%',
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  officeChatHint: {
+    width: '100%',
+    marginTop: 2,
+    fontSize: 10,
+    textAlign: 'right',
+  },
+  officeChatReply: {
+    marginTop: 9,
+  },
+  officeChatTyping: {
+    marginTop: 9,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 7,
+  },
+  officeChatTypingText: {
+    fontSize: 11,
+  },
+  officeChatComposer: {
+    minHeight: 48,
+    marginTop: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingLeft: 6,
+    paddingRight: 10,
+    flexDirection: 'row-reverse',
+    alignItems: 'flex-end',
+  },
+  officeChatInput: {
+    flex: 1,
+    maxHeight: 76,
+    paddingTop: 10,
+    paddingBottom: 9,
+    paddingHorizontal: 4,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  officeChatSend: {
+    width: 32,
+    height: 32,
+    marginBottom: 6,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  officeChatFooter: {
+    paddingTop: 6,
+    fontSize: 9,
+    textAlign: 'center',
+  },
   officeError: {
     marginTop: 15,
     borderRadius: 14,
@@ -2236,6 +2473,39 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     textAlign: 'right',
+  },
+  officeActivityList: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  officeActivityRow: {
+    minHeight: 61,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 9,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 9,
+  },
+  officeActivityCopy: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  officeActivityTitle: {
+    width: '100%',
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'right',
+  },
+  officeActivityMeta: {
+    width: '100%',
+    marginTop: 3,
+    fontSize: 10,
+    textAlign: 'right',
+  },
+  officeActivityAmount: {
+    maxWidth: 92,
+    fontSize: 11,
+    fontWeight: '700',
+    textAlign: 'left',
   },
   officeEmptyLine: {
     paddingVertical: 13,
