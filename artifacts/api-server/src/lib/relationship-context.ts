@@ -216,7 +216,7 @@ export function parseFinancialFollowupAdjustment(
   };
 }
 
-export function isUnanchoredRelativeDateFollowup(
+export function isUnanchoredConversationFollowup(
   message: string,
   state: ConversationState,
 ): boolean {
@@ -224,7 +224,15 @@ export function isUnanchoredRelativeDateFollowup(
   const normalized = normalizeEntityText(message);
   const relativeDate = /(?:الاسبوع\s+اللي\s+فات|الشهر\s+اللي\s+فات|امس|امبارح|قبل\s+كده|من\s+يومين|من\s+اسبوع)/u;
   const correctionReference = /(?:وكان|وكانت|وده|ودي|ده|دي|المبلغ|المصروف|الدفعة|العملية)/u;
-  return relativeDate.test(normalized) && correctionReference.test(normalized);
+  if (relativeDate.test(normalized) && correctionReference.test(normalized)) return true;
+
+  const contextualReference = /(?:ده|دي|ها|اللي\s+فات|التاني|الثاني|مشروع\s+\S+)/u;
+  const correctionSignal = /(?:قصدي|المبلغ|المصروف|الدفعة|العملية|سجلها|عدلها|عدله|غيرها|غيره|(?:على|علي)(?:\s|$))/u;
+  const nameCorrection = /^لا\s+مش\s+\S+\s+\S+/u.test(normalized);
+  const numericCorrection = /المبلغ.*\d.*مش.*\d/u.test(normalized);
+  return (contextualReference.test(normalized) && correctionSignal.test(normalized))
+    || nameCorrection
+    || numericCorrection;
 }
 
 function emptyContext(intent: RelationshipIntent): RelationshipContext {

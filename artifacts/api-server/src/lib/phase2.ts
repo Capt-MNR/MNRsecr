@@ -26,7 +26,7 @@ import {
   type ConversationMemorySnapshot,
 } from "./conversation-memory";
 import {
-  isUnanchoredRelativeDateFollowup,
+  isUnanchoredConversationFollowup,
   parseFinancialFollowupAdjustment,
   retrieveRelationshipContext,
   serializeRelationshipContext,
@@ -4660,7 +4660,7 @@ export class Phase2AgentRuntime {
     if (
       conversationMemory.recentTurns.length === 0
       && !conversationMemory.summary
-      && isUnanchoredRelativeDateFollowup(input.message, conversationMemory.state)
+      && isUnanchoredConversationFollowup(input.message, conversationMemory.state)
     ) {
       deterministicMetrics.decision = "clarification";
       deterministicMetrics.falsePositiveGuard = "blocked";

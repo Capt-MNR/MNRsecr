@@ -26,7 +26,7 @@ import {
   type ConversationState,
 } from "../src/lib/conversation-memory.ts";
 import {
-  isUnanchoredRelativeDateFollowup,
+  isUnanchoredConversationFollowup,
   parseFinancialFollowupAdjustment,
   parseRelationshipRequest,
   RELATIONSHIP_CONTEXT_LIMITS,
@@ -216,13 +216,22 @@ test("relationship parser recognizes bounded deterministic reads and safe follow
     { status: "currency_mismatch" },
   );
   assert.equal(
-    isUnanchoredRelativeDateFollowup("وكان ده الأسبوع اللي فات", emptyConversationState()),
+    isUnanchoredConversationFollowup("وكان ده الأسبوع اللي فات", emptyConversationState()),
     true,
   );
   assert.equal(
-    isUnanchoredRelativeDateFollowup("وكان ده الأسبوع اللي فات", state),
+    isUnanchoredConversationFollowup("وكان ده الأسبوع اللي فات", state),
     false,
   );
+  for (const message of [
+    "لا مش محمد، أحمد",
+    "المبلغ 8500 مش 7500",
+    "على المشروع التاني",
+    "قصدي المصروف اللي فات",
+    "لا، سجلها على مشروع التشطيبات",
+  ]) {
+    assert.equal(isUnanchoredConversationFollowup(message, emptyConversationState()), true, message);
+  }
 });
 
 test("financial context uses canonical directions, settlements, currencies, and tenant isolation", async () => {

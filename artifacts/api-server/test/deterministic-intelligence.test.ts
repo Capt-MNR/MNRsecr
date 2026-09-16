@@ -163,16 +163,26 @@ test("Phase2 asks for missing context without calling a provider", async () => {
     tenantId: `deterministic-context-${process.pid}-${Date.now()}`,
     userId: "deterministic-user",
   };
-  const result = await runtime.run(identity, {
-    message: "وكان ده الأسبوع اللي فات",
-    conversationId: `deterministic-context-missing-${Date.now()}`,
-  }, { dryRun: true });
+  for (const [index, message] of [
+    "وكان ده الأسبوع اللي فات",
+    "لا مش محمد، أحمد",
+    "المبلغ 8500 مش 7500",
+    "على المشروع التاني",
+    "قصدي المصروف اللي فات",
+    "لا، سجلها على مشروع التشطيبات",
+  ].entries()) {
+    const result = await runtime.run(identity, {
+      message,
+      conversationId: `deterministic-context-missing-${Date.now()}-${index}`,
+    }, { dryRun: true });
 
+    assert.equal(result.response?.kind, "clarification", message);
+    assert.equal(result.action?.type, "clarification_needed", message);
+    assert.equal(
+      (result.action?.deterministicIntelligence as { solvedWithoutLlm?: boolean } | undefined)?.solvedWithoutLlm,
+      true,
+      message,
+    );
+  }
   assert.equal(gateway.calls, 0);
-  assert.equal(result.response?.kind, "clarification");
-  assert.equal(result.action?.type, "clarification_needed");
-  assert.equal(
-    (result.action?.deterministicIntelligence as { solvedWithoutLlm?: boolean } | undefined)?.solvedWithoutLlm,
-    true,
-  );
 });

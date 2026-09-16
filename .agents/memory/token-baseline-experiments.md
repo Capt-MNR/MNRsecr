@@ -9,10 +9,10 @@ The first optimization target must be a reproducible real-provider baseline, spl
 
 **How to apply:** Keep baseline and experiment reports as separate files. Compare the same provider, cases, and context fixture; treat context-required cases separately; never count provider-error runs as evidence of an accuracy win. Prefer one bounded change at a time and require repeated runs before enabling a production flag.
 
-## Contextless relative-date follow-ups
+## Contextless correction follow-ups
 
-A relative-date correction that has no saved recent turns, summary, or last expense should return a deterministic clarification instead of spending a provider call. Preserve the model path whenever conversation context exists.
+A correction or reference follow-up that has no saved recent turns, summary, or last expense should return a deterministic clarification instead of spending a provider call. Preserve the model path whenever conversation context exists.
 
-**Why:** A context-required benchmark case consumed 11,759 tokens across two calls while no context fixture was available, and the only safe outcome was to ask for the missing operation.
+**Why:** Context-required benchmark cases can spend thousands of tokens while no context fixture is available, and the only safe outcome is to ask for the missing operation.
 
-**How to apply:** Gate this shortcut on both the narrow follow-up language pattern and an empty conversation snapshot. It must never create or update a financial record, and it should remain covered by an unreachable-provider test.
+**How to apply:** Gate this shortcut on both narrow correction language patterns and an empty conversation snapshot. It must never create or update a financial record, and it should remain covered by an unreachable-provider test.
