@@ -25,12 +25,17 @@ export { default as MainWorkspace } from './MainWorkspace';
 export { MessageBubble };
 
 export type ApprovalStatus = 'pending' | 'executing' | 'completed' | 'rejected' | 'expired' | 'failed';
+type ApprovalCandidate = { id: string; name: string; status?: string };
 
 export type Approval = {
   operationId: string;
   title: string;
   details: string[];
   status: ApprovalStatus;
+  toolName?: string;
+  initialArgs?: Record<string, unknown>;
+  personCandidates?: ApprovalCandidate[];
+  projectCandidates?: ApprovalCandidate[];
 };
 
 export type LocalMessage = {
@@ -324,6 +329,14 @@ export function approvalFromAction(action: TurnResponse['action']): Approval | u
       ? display.details.filter((detail): detail is string => typeof detail === 'string')
       : [],
     status,
+    ...(typeof action.toolName === 'string' ? { toolName: action.toolName } : {}),
+    ...(action.args && typeof action.args === 'object' ? { initialArgs: action.args as Record<string, unknown> } : {}),
+    ...(Array.isArray(action.personCandidates)
+      ? { personCandidates: action.personCandidates as ApprovalCandidate[] }
+      : {}),
+    ...(Array.isArray(action.projectCandidates)
+      ? { projectCandidates: action.projectCandidates as ApprovalCandidate[] }
+      : {}),
   };
 }
 
@@ -650,7 +663,7 @@ type SecretaryChatProps = {
   onChangeDraft: (value: string) => void;
   onSend: () => void;
   isSending: boolean;
-  onApprove: (approval: Approval) => void;
+  onApprove: (approval: Approval, args?: Record<string, unknown>) => void;
   onReject: (approval: Approval) => void;
   busyOperationId: string | null;
   onOpenRecord: (record: MobileRecordRow) => void;
@@ -816,7 +829,7 @@ export function MainOffice({
   onSend: () => void;
   inputRef: { current: TextInput | null };
   isSending: boolean;
-  onApprove: (approval: Approval) => void;
+  onApprove: (approval: Approval, args?: Record<string, unknown>) => void;
   onReject: (approval: Approval) => void;
   busyOperationId: string | null;
   recordOrigins: Record<string, RecordOrigin>;
@@ -1712,7 +1725,7 @@ export function RecordDetailView({
   onChangeChatDraft: (value: string) => void;
   onSendChat: () => void;
   chatBusy: boolean;
-  onApprove: (approval: Approval) => void;
+  onApprove: (approval: Approval, args?: Record<string, unknown>) => void;
   onReject: (approval: Approval) => void;
   busyOperationId: string | null;
   chatContext: MobileRecordRow | null;

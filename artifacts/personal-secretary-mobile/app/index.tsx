@@ -189,12 +189,12 @@ export default function QuickSecretaryScreen() {
     }
   }
 
-  async function updateApproval(approval: Approval, status: ApprovalStatus) {
+  async function updateApproval(approval: Approval, status: ApprovalStatus, args?: Record<string, unknown>) {
     setBusyOperationId(approval.operationId);
     setLocalError(null);
     try {
       const response = status === 'completed'
-        ? await secretaryChat.approveOperation(approval.operationId)
+        ? await secretaryChat.approveOperation(approval.operationId, args)
         : await secretaryChat.rejectOperation(approval.operationId);
       const responseRecord = recordLinkFromAction(response.action);
       const linkedRecord = responseRecord
@@ -487,7 +487,7 @@ export default function QuickSecretaryScreen() {
                 onChangeChatDraft={setDraft}
                 onSendChat={() => void sendMessage()}
                 chatBusy={secretaryChat.isSending || conversationQuery.isFetching}
-                onApprove={(approval) => void updateApproval(approval, 'completed')}
+               onApprove={(approval, args) => void updateApproval(approval, 'completed', args)}
                 onReject={(approval) => void updateApproval(approval, 'rejected')}
                 busyOperationId={busyOperationId}
                 chatContext={chatContext}
@@ -509,7 +509,7 @@ export default function QuickSecretaryScreen() {
                     onSend={() => void sendMessage()}
                     inputRef={inputRef}
                     isSending={secretaryChat.isSending || conversationQuery.isFetching}
-                    onApprove={(approval) => void updateApproval(approval, 'completed')}
+                   onApprove={(approval, args) => void updateApproval(approval, 'completed', args)}
                     onReject={(approval) => void updateApproval(approval, 'rejected')}
                     busyOperationId={busyOperationId}
                     recordOrigins={recordOrigins}

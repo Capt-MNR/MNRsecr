@@ -3,11 +3,17 @@ import type { AppLanguage } from '@/hooks/useLanguage';
 import type { SecretaryChatContext } from '../services/secretary-chat';
 
 export type ApprovalStatus = 'pending' | 'executing' | 'completed' | 'rejected' | 'expired' | 'failed';
+export type ApprovalCandidate = { id: string; name: string; status?: string };
+export type ApprovalArgs = Record<string, unknown>;
 export type Approval = {
   operationId: string;
   title: string;
   details: string[];
   status: ApprovalStatus;
+  toolName?: string;
+  initialArgs?: ApprovalArgs;
+  personCandidates?: ApprovalCandidate[];
+  projectCandidates?: ApprovalCandidate[];
 };
 export type RecordOrigin = {
   conversationId: string;
@@ -78,6 +84,26 @@ export function approvalFromAction(action: Action): Approval | undefined {
     title: typeof display.title === 'string' ? display.title : 'تأكيد العملية',
     details: Array.isArray(display.details) ? display.details.filter((item): item is string => typeof item === 'string') : [],
     status,
+    ...(typeof action.toolName === 'string' ? { toolName: action.toolName } : {}),
+    ...(objectValue(action.args) && Object.keys(objectValue(action.args)).length > 0
+      ? { initialArgs: objectValue(action.args) }
+      : {}),
+    ...(Array.isArray(action.personCandidates)
+      ? { personCandidates: action.personCandidates.filter((item): item is ApprovalCandidate => (
+        Boolean(item)
+        && typeof item === 'object'
+        && typeof objectValue(item).id === 'string'
+        && typeof objectValue(item).name === 'string'
+      )) }
+      : {}),
+    ...(Array.isArray(action.projectCandidates)
+      ? { projectCandidates: action.projectCandidates.filter((item): item is ApprovalCandidate => (
+        Boolean(item)
+        && typeof item === 'object'
+        && typeof objectValue(item).id === 'string'
+        && typeof objectValue(item).name === 'string'
+      )) }
+      : {}),
   };
 }
 export function recordLinkFromAction(action: Action): MobileRecordRow | undefined {
@@ -146,6 +172,10 @@ export const styles = StyleSheet.create({
   messageText: { fontSize: 15, lineHeight: 24, textAlign: 'right' }, messageTime: { marginTop: 5, fontSize: 10, textAlign: 'right', opacity: 0.78 },
   approvalCard: { marginTop: 10, borderRadius: 15, borderWidth: 1, padding: 10 }, approvalHeading: { flexDirection: 'row-reverse', alignItems: 'center', gap: 7 },
   approvalTitle: { flex: 1, fontSize: 13, fontWeight: '700', textAlign: 'right' }, approvalDetail: { marginTop: 5, fontSize: 12, lineHeight: 18, textAlign: 'right' },
+  approvalFields: { marginTop: 10, gap: 8 }, approvalField: { gap: 4 }, approvalLabel: { fontSize: 11, textAlign: 'right' },
+  approvalInput: { minHeight: 38, borderRadius: 11, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 7, fontSize: 13, textAlign: 'right' },
+  approvalCandidates: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 6 }, approvalCandidate: { borderRadius: 10, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 6 },
+  approvalCandidateText: { fontSize: 11 }, approvalValidation: { fontSize: 11, textAlign: 'right' },
   approvalActions: { flexDirection: 'row-reverse', gap: 8, marginTop: 11 }, approveButton: { minHeight: 38, flex: 1, borderRadius: 11, paddingHorizontal: 12, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 6 },
   approveText: { fontSize: 12, fontWeight: '700' }, rejectButton: { minHeight: 38, flex: 1, borderRadius: 11, borderWidth: 1, paddingHorizontal: 12, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 6 },
   rejectText: { fontSize: 12, fontWeight: '600' }, resolvedRow: { marginTop: 10, flexDirection: 'row-reverse', alignItems: 'center', gap: 6 }, resolvedText: { fontSize: 12, fontWeight: '600' },
