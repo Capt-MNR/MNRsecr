@@ -311,6 +311,7 @@ export interface PersonRecord {
   phone?: string | null;
   createdAt: string;
   updatedAt: string;
+  rowVersion: number;
   [key: string]: unknown;
  }
 
@@ -355,6 +356,7 @@ export interface ProjectRecord {
   status: string;
   createdAt: string;
   updatedAt: string;
+  rowVersion: number;
   [key: string]: unknown;
  }
 
@@ -419,6 +421,8 @@ export interface RecordCreateInput {
 }
 
 export interface RecordUpdateInput {
+  /** @minimum 1 */
+  expectedRowVersion?: number;
   amountMinor?: number;
   currency?: string;
   description?: string;
@@ -503,6 +507,7 @@ export interface ExpenseRecord {
   purposeName?: string | null;
   occurredAt: string;
   createdAt: string;
+  rowVersion: number;
   origin: RecordConversationOrigin | null;
   [key: string]: unknown;
  }
@@ -514,6 +519,7 @@ export interface TaskRecord {
   dueAt?: string | null;
   status: string;
   createdAt: string;
+  rowVersion: number;
   origin: RecordConversationOrigin | null;
   [key: string]: unknown;
  }
@@ -525,6 +531,7 @@ export interface ReminderRecord {
   timezone: string;
   status: string;
   createdAt: string;
+  rowVersion: number;
   origin: RecordConversationOrigin | null;
   [key: string]: unknown;
  }
@@ -540,6 +547,7 @@ export interface CommitmentRecord {
   dueAt?: string | null;
   status: string;
   createdAt: string;
+  rowVersion: number;
   [key: string]: unknown;
  }
 

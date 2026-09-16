@@ -74,6 +74,7 @@ async function listRecords(identity: Identity) {
       sourceOperationId: expensesTable.sourceOperationId,
       occurredAt: expensesTable.occurredAt,
       createdAt: expensesTable.createdAt,
+      rowVersion: expensesTable.rowVersion,
     }).from(expensesTable)
       .leftJoin(peopleTable, and(
         eq(expensesTable.personId, peopleTable.id),
@@ -104,6 +105,7 @@ async function listRecords(identity: Identity) {
       dueAt: commitmentsTable.dueAt,
       status: commitmentsTable.status,
       createdAt: commitmentsTable.createdAt,
+      rowVersion: commitmentsTable.rowVersion,
     }).from(commitmentsTable)
       .leftJoin(peopleTable, and(
         eq(commitmentsTable.personId, peopleTable.id),
@@ -252,6 +254,10 @@ function sendPendingApproval(
   return true;
 }
 
+function isVersionConflict(message: string): boolean {
+  return message.includes("Record changed after this edit was opened.");
+}
+
 router.post("/records", async (req, res): Promise<void> => {
   const identity = requireIdentity(req, res);
   if (!identity) return;
@@ -312,7 +318,14 @@ router.patch("/records/:recordType/:recordId", async (req, res): Promise<void> =
     const result = await executeStructuredTool(identity, toolForUpdate(kind), updateArgs(kind, req.params.recordId, parsed.data), { requestId: requestId(req) });
     if (sendPendingApproval(res, result, kind, req.params.recordId)) return;
     if (!result.ok) {
-      sendRouteError(req, res, 404, String(result.error ?? "السجل غير موجود."), "RECORD_UPDATE_FAILED");
+      const message = String(result.error ?? "السجل غير موجود.");
+      sendRouteError(
+        req,
+        res,
+        isVersionConflict(message) ? 409 : 404,
+        isVersionConflict(message) ? "تم تعديل السجل من نافذة أخرى. حدّث القائمة ثم أعد المحاولة." : message,
+        isVersionConflict(message) ? "RECORD_UPDATE_CONFLICT" : "RECORD_UPDATE_FAILED",
+      );
       return;
     }
     const record = resultRecord(result, kind);

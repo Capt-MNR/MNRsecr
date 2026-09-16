@@ -26,6 +26,7 @@ export interface ExpenseRecord {
   purposeName?: string | null;
   occurredAt: string;
   createdAt: string;
+  rowVersion: number;
   origin: RecordConversationOrigin | null;
   [key: string]: unknown;
  }

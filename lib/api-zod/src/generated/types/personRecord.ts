@@ -15,5 +15,6 @@ export interface PersonRecord {
   phone?: string | null;
   createdAt: string;
   updatedAt: string;
+  rowVersion: number;
   [key: string]: unknown;
  }

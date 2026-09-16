@@ -495,6 +495,11 @@ function identityWhere(identity: Identity, table: { tenantId: any; ownerUserId: 
   );
 }
 
+function expectedRowVersion(args: Record<string, unknown>): number | undefined {
+  const value = Number(args.expectedRowVersion);
+  return Number.isSafeInteger(value) && value > 0 ? value : undefined;
+}
+
 function jsonSafe(value: unknown): unknown {
   return JSON.parse(
     JSON.stringify(value, (_key, current) =>
@@ -621,6 +626,7 @@ export const phase2Tools: ToolDefinition[] = [
     name: { type: "STRING" },
     notes: { type: "STRING" },
     phone: { type: "STRING", description: "Optional phone number" },
+    expectedRowVersion: { type: "INTEGER" },
   }, ["personId"]),
   tool("find_project", "Find accessible projects by name. Always call before using a project.", {
     name: { type: "STRING", description: "The known project name" },
@@ -632,6 +638,7 @@ export const phase2Tools: ToolDefinition[] = [
     projectId: { type: "STRING" },
     name: { type: "STRING" },
     status: { type: "STRING", enum: ["active", "archived"] },
+    expectedRowVersion: { type: "INTEGER" },
   }, ["projectId"]),
   tool("link_person_to_project", "Link an accessible person and project with a known relationship.", {
     personId: { type: "STRING" },
@@ -763,6 +770,7 @@ export const phase2Tools: ToolDefinition[] = [
     projectId: { type: "STRING" },
      purposeId: { type: ["STRING", "NULL"] },
     occurredAt: { type: "STRING", description: "Optional ISO timestamp" },
+    expectedRowVersion: { type: "INTEGER" },
   }, ["expenseId", "amountMinor"]),
   tool("query_expenses", "Query saved expenses for a person or project.", {
     personId: { type: "STRING" },
@@ -813,6 +821,7 @@ export const phase2Tools: ToolDefinition[] = [
     title: { type: "STRING" },
     dueAt: { type: ["STRING", "NULL"] },
     status: { type: "STRING", enum: ["pending", "in_progress", "completed", "cancelled"] },
+    expectedRowVersion: { type: "INTEGER" },
   }, ["taskId"]),
   tool("update_commitment", "Update an accessible commitment by exact ID.", {
     commitmentId: { type: "STRING" },
@@ -820,6 +829,7 @@ export const phase2Tools: ToolDefinition[] = [
     personId: { type: ["STRING", "NULL"] },
     dueAt: { type: ["STRING", "NULL"] },
     status: { type: "STRING", enum: ["open", "completed", "cancelled"] },
+    expectedRowVersion: { type: "INTEGER" },
   }, ["commitmentId"]),
   tool("update_reminder", "Update an accessible reminder by exact ID.", {
     reminderId: { type: "STRING" },
@@ -827,6 +837,7 @@ export const phase2Tools: ToolDefinition[] = [
     dueAt: { type: "STRING" },
     timezone: { type: "STRING" },
     status: { type: "STRING", enum: ["scheduled", "completed", "cancelled"] },
+    expectedRowVersion: { type: "INTEGER" },
   }, ["reminderId"]),
   tool("delete_expense", "Delete one expense only by an exact resolved expenseId. Never guess or choose between similar expenses.", {
     expenseId: { type: "STRING" },
@@ -1467,6 +1478,7 @@ async function executeTool(
     }
     case "update_person": {
       if (!personId) return { ok: false, error: "personId is required." };
+      const expectedVersion = expectedRowVersion(args);
       const updates: Record<string, unknown> = {
         updatedAt: new Date(),
         rowVersion: sql`${peopleTable.rowVersion} + 1`,
@@ -1483,8 +1495,11 @@ async function executeTool(
       const [updated] = await db.update(peopleTable).set(updates).where(and(
         identityWhere(identity, peopleTable),
         eq(peopleTable.id, personId),
+        ...(expectedVersion === undefined ? [] : [eq(peopleTable.rowVersion, expectedVersion)]),
       )).returning();
-      result = updated ? { ok: true, person: updated } : { ok: false, error: "Person not found." };
+      result = updated
+        ? { ok: true, person: updated }
+        : { ok: false, error: expectedVersion === undefined ? "Person not found." : "Record changed after this edit was opened." };
       break;
     }
     case "find_project": {
@@ -1521,6 +1536,7 @@ async function executeTool(
     }
     case "update_project": {
       if (!projectId) return { ok: false, error: "projectId is required." };
+      const expectedVersion = expectedRowVersion(args);
       const updates: Record<string, unknown> = {
         updatedAt: new Date(),
         rowVersion: sql`${projectsTable.rowVersion} + 1`,
@@ -1534,8 +1550,11 @@ async function executeTool(
       const [updated] = await db.update(projectsTable).set(updates).where(and(
         identityWhere(identity, projectsTable),
         eq(projectsTable.id, projectId),
+        ...(expectedVersion === undefined ? [] : [eq(projectsTable.rowVersion, expectedVersion)]),
       )).returning();
-      result = updated ? { ok: true, project: updated } : { ok: false, error: "Project not found." };
+      result = updated
+        ? { ok: true, project: updated }
+        : { ok: false, error: expectedVersion === undefined ? "Project not found." : "Record changed after this edit was opened." };
       break;
     }
     case "link_person_to_project": {
@@ -1652,6 +1671,7 @@ async function executeTool(
       const amountMinor = Number(args.amountMinor);
       const amountDeltaMinor = Number(args.amountDeltaMinor);
       const expectedCurrency = stringArg("expectedCurrency")?.toUpperCase();
+      const expectedVersion = expectedRowVersion(args);
       if (
         !expenseId
         || (args.amountMinor !== undefined && args.amountDeltaMinor !== undefined)
@@ -1724,15 +1744,24 @@ async function executeTool(
         identityWhere(identity, expensesTable),
         eq(expensesTable.id, expenseId),
         ...(expectedCurrency ? [eq(expensesTable.currency, expectedCurrency)] : []),
+        ...(expectedVersion === undefined ? [] : [eq(expensesTable.rowVersion, expectedVersion)]),
       )).returning();
       result = updated
         ? { ok: true, corrected: true, expense: updated }
-        : { ok: false, error: expectedCurrency ? "Expense currency changed after approval was prepared." : "Expense not found." };
+        : {
+            ok: false,
+            error: expectedVersion !== undefined
+              ? "Record changed after this edit was opened."
+              : expectedCurrency
+                ? "Expense currency changed after approval was prepared."
+                : "Expense not found.",
+          };
       break;
     }
     case "update_task": {
       const taskId = stringArg("taskId");
       if (!taskId) return { ok: false, error: "taskId is required." };
+      const expectedVersion = expectedRowVersion(args);
        const updates: Record<string, unknown> = {
          updatedAt: new Date(),
          rowVersion: sql`${tasksTable.rowVersion} + 1`,
@@ -1749,13 +1778,17 @@ async function executeTool(
       const [updated] = await db.update(tasksTable).set(updates).where(and(
         identityWhere(identity, tasksTable),
         eq(tasksTable.id, taskId),
+        ...(expectedVersion === undefined ? [] : [eq(tasksTable.rowVersion, expectedVersion)]),
       )).returning();
-      result = updated ? { ok: true, task: updated } : { ok: false, error: "Task not found." };
+      result = updated
+        ? { ok: true, task: updated }
+        : { ok: false, error: expectedVersion === undefined ? "Task not found." : "Record changed after this edit was opened." };
       break;
     }
     case "update_commitment": {
       const commitmentId = stringArg("commitmentId");
       if (!commitmentId) return { ok: false, error: "commitmentId is required." };
+      const expectedVersion = expectedRowVersion(args);
        const updates: Record<string, unknown> = {
          updatedAt: new Date(),
          rowVersion: sql`${commitmentsTable.rowVersion} + 1`,
@@ -1782,13 +1815,17 @@ async function executeTool(
       const [updated] = await db.update(commitmentsTable).set(updates).where(and(
         identityWhere(identity, commitmentsTable),
         eq(commitmentsTable.id, commitmentId),
+        ...(expectedVersion === undefined ? [] : [eq(commitmentsTable.rowVersion, expectedVersion)]),
       )).returning();
-      result = updated ? { ok: true, commitment: updated } : { ok: false, error: "Commitment not found." };
+      result = updated
+        ? { ok: true, commitment: updated }
+        : { ok: false, error: expectedVersion === undefined ? "Commitment not found." : "Record changed after this edit was opened." };
       break;
     }
     case "update_reminder": {
       const reminderId = stringArg("reminderId");
       if (!reminderId) return { ok: false, error: "reminderId is required." };
+      const expectedVersion = expectedRowVersion(args);
        const updates: Record<string, unknown> = {
          updatedAt: new Date(),
          rowVersion: sql`${remindersTable.rowVersion} + 1`,
@@ -1804,8 +1841,11 @@ async function executeTool(
       const [updated] = await db.update(remindersTable).set(updates).where(and(
         identityWhere(identity, remindersTable),
         eq(remindersTable.id, reminderId),
+        ...(expectedVersion === undefined ? [] : [eq(remindersTable.rowVersion, expectedVersion)]),
       )).returning();
-      result = updated ? { ok: true, reminder: updated } : { ok: false, error: "Reminder not found." };
+      result = updated
+        ? { ok: true, reminder: updated }
+        : { ok: false, error: expectedVersion === undefined ? "Reminder not found." : "Record changed after this edit was opened." };
       break;
     }
     case "delete_expense": {

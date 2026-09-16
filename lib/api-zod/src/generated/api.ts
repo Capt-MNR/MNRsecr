@@ -747,6 +747,7 @@ export const ListRecordsResponse = zod.object({
   "purposeName": zod.string().nullish(),
   "occurredAt": zod.string(),
   "createdAt": zod.string(),
+  "rowVersion": zod.number().int(),
   "origin": zod.union([zod.object({
   "conversationId": zod.string(),
   "turnId": zod.string().nullable(),
@@ -759,14 +760,16 @@ export const ListRecordsResponse = zod.object({
   "notes": zod.string().nullish(),
   "phone": zod.string().nullish(),
   "createdAt": zod.string(),
-  "updatedAt": zod.string()
+  "updatedAt": zod.string(),
+  "rowVersion": zod.number().int()
 })),
   "projects": zod.array(zod.object({
   "id": zod.string(),
   "name": zod.string(),
   "status": zod.string(),
   "createdAt": zod.string(),
-  "updatedAt": zod.string()
+  "updatedAt": zod.string(),
+  "rowVersion": zod.number().int()
 })),
   "tasks": zod.array(zod.object({
   "id": zod.string(),
@@ -774,6 +777,7 @@ export const ListRecordsResponse = zod.object({
   "dueAt": zod.string().nullish(),
   "status": zod.string(),
   "createdAt": zod.string(),
+  "rowVersion": zod.number().int(),
   "origin": zod.union([zod.object({
   "conversationId": zod.string(),
   "turnId": zod.string().nullable(),
@@ -787,6 +791,7 @@ export const ListRecordsResponse = zod.object({
   "timezone": zod.string(),
   "status": zod.string(),
   "createdAt": zod.string(),
+  "rowVersion": zod.number().int(),
   "origin": zod.union([zod.object({
   "conversationId": zod.string(),
   "turnId": zod.string().nullable(),
@@ -800,7 +805,8 @@ export const ListRecordsResponse = zod.object({
   "personName": zod.string().nullish(),
   "dueAt": zod.string().nullish(),
   "status": zod.string(),
-  "createdAt": zod.string()
+  "createdAt": zod.string(),
+  "rowVersion": zod.number().int()
 }))
 })
 
@@ -883,7 +889,8 @@ export const GetPersonGraphResponse = zod.object({
   "notes": zod.string().nullish(),
   "phone": zod.string().nullish(),
   "createdAt": zod.string(),
-  "updatedAt": zod.string()
+  "updatedAt": zod.string(),
+  "rowVersion": zod.number().int()
 }),
   "related": zod.object({
   "projects": zod.array(zod.object({
@@ -941,7 +948,8 @@ export const GetProjectGraphResponse = zod.object({
   "name": zod.string(),
   "status": zod.string(),
   "createdAt": zod.string(),
-  "updatedAt": zod.string()
+  "updatedAt": zod.string(),
+  "rowVersion": zod.number().int()
 }),
   "related": zod.object({
   "people": zod.array(zod.object({
@@ -1010,7 +1018,11 @@ export const UpdateRecordParams = zod.object({
   "recordId": zod.coerce.string()
 })
 
+
+
+
 export const UpdateRecordBody = zod.object({
+  "expectedRowVersion": zod.number().int().min(1).optional(),
   "amountMinor": zod.number().int().optional(),
   "currency": zod.string().optional(),
   "description": zod.string().optional(),

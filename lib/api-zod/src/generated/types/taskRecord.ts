@@ -14,6 +14,7 @@ export interface TaskRecord {
   dueAt?: string | null;
   status: string;
   createdAt: string;
+  rowVersion: number;
   origin: RecordConversationOrigin | null;
   [key: string]: unknown;
  }

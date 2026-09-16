@@ -12,5 +12,6 @@ export interface ProjectRecord {
   status: string;
   createdAt: string;
   updatedAt: string;
+  rowVersion: number;
   [key: string]: unknown;
  }

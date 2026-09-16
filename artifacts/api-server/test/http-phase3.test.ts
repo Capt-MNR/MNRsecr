@@ -242,6 +242,49 @@ test("HTTP approval is server-side on the first request and idempotent", async (
   ));
   assert.equal(eventsAfterDuplicate.filter((event) => event.sourceId === saved[0]?.id).length, 1);
 
+  const concurrentPending = await request("/records", "POST", {
+    recordType: "expense",
+    amountMinor: 27000,
+    currency: "EGP",
+    description: "مصروف موافقة متزامنة",
+    idempotencyKey: `concurrent-approval-${Date.now()}`,
+  });
+  assert.equal(concurrentPending.status, 202);
+  const concurrentOperationId = concurrentPending.body?.approval?.operationId as string;
+  const concurrentArgs = (amountMinor: number) => ({
+    args: {
+      amountMinor,
+      currency: "EGP",
+      description: "مصروف موافقة متزامنة معدل",
+      personId: null,
+      projectId: null,
+    },
+  });
+  const [concurrentFirst, concurrentSecond] = await Promise.all([
+    approve(concurrentOperationId, concurrentArgs(28000)),
+    approve(concurrentOperationId, concurrentArgs(29000)),
+  ]);
+  assert.equal(concurrentFirst.status, 200);
+  assert.equal(concurrentSecond.status, 200);
+  const concurrentOperation = await db.select().from(secretaryOperationsTable).where(and(
+    eq(secretaryOperationsTable.tenantId, tenantId),
+    eq(secretaryOperationsTable.ownerUserId, userId),
+    eq(secretaryOperationsTable.id, concurrentOperationId),
+  ));
+  assert.equal(concurrentOperation[0]?.status, "completed");
+  const concurrentExpenses = await db.select().from(expensesTable).where(and(
+    eq(expensesTable.tenantId, tenantId),
+    eq(expensesTable.ownerUserId, userId),
+    eq(expensesTable.description, "مصروف موافقة متزامنة معدل"),
+  ));
+  assert.equal(concurrentExpenses.length, 1);
+  assert.ok([28000, 29000].includes(concurrentExpenses[0]?.amountMinor ?? -1));
+  const concurrentEvents = await db.select().from(activityEventsTable).where(and(
+    eq(activityEventsTable.tenantId, tenantId),
+    eq(activityEventsTable.ownerUserId, userId),
+  ));
+  assert.equal(concurrentEvents.filter((event) => event.sourceId === concurrentExpenses[0]?.id).length, 1);
+
   const updatePending = await request(`/records/expense/${saved[0]?.id}`, "PATCH", {
     amountMinor: 26000,
     currency: "EGP",
@@ -291,6 +334,53 @@ test("HTTP approval is server-side on the first request and idempotent", async (
   } finally {
     process.env.SECRETARY_TENANT_ID = previousTenant;
   }
+});
+
+test("HTTP record edits reject a stale approval instead of overwriting a newer edit", async () => {
+  const [expense] = await db.insert(expensesTable).values({
+    tenantId,
+    ownerUserId: userId,
+    amountMinor: 10000,
+    currency: "EGP",
+    description: "مصروف نافذتين",
+    occurredAt: new Date(),
+  }).returning();
+
+  const firstPending = await request(`/records/expense/${expense.id}`, "PATCH", {
+    amountMinor: 11000,
+    currency: "EGP",
+    description: "تعديل النافذة الأولى",
+    occurredAt: new Date().toISOString(),
+    expectedRowVersion: expense.rowVersion,
+  });
+  const secondPending = await request(`/records/expense/${expense.id}`, "PATCH", {
+    amountMinor: 12000,
+    currency: "EGP",
+    description: "تعديل النافذة الثانية",
+    occurredAt: new Date().toISOString(),
+    expectedRowVersion: expense.rowVersion,
+  });
+  assert.equal(firstPending.status, 202);
+  assert.equal(secondPending.status, 202);
+
+  const firstApprovalId = firstPending.body?.approval?.operationId as string;
+  const secondApprovalId = secondPending.body?.approval?.operationId as string;
+  const firstApproved = await approve(firstApprovalId);
+  assert.equal(firstApproved.status, 200);
+  assert.equal(firstApproved.body?.status, "completed");
+
+  const staleApproved = await approve(secondApprovalId);
+  assert.equal(staleApproved.status, 500);
+  assert.equal(staleApproved.body?.code, "APPROVED_OPERATION_FAILED");
+
+  const [stored] = await db.select().from(expensesTable).where(and(
+    eq(expensesTable.tenantId, tenantId),
+    eq(expensesTable.ownerUserId, userId),
+    eq(expensesTable.id, expense.id),
+  ));
+  assert.equal(stored?.amountMinor, 11000);
+  assert.equal(stored?.description, "تعديل النافذة الأولى");
+  assert.equal(stored?.rowVersion, expense.rowVersion + 1);
 });
 
 test("HTTP entity detail is authorized, typed, bounded, and paginated", async () => {

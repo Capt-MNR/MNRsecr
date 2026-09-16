@@ -1379,6 +1379,9 @@ components:
       type: object
       additionalProperties: false
       properties:
+        expectedRowVersion:
+          type: integer
+          minimum: 1
         amountMinor:
           type: integer
         currency:
@@ -1476,11 +1479,12 @@ components:
         purposeName: { type: ["string", "null"] }
         occurredAt: { type: string }
         createdAt: { type: string }
+        rowVersion: { type: integer }
         origin:
           oneOf:
             - $ref: "#/components/schemas/RecordConversationOrigin"
             - type: "null"
-      required: [id, amountMinor, currency, description, occurredAt, createdAt, origin]
+      required: [id, amountMinor, currency, description, occurredAt, createdAt, rowVersion, origin]
     PersonRecord:
       type: object
       additionalProperties: true
@@ -1491,7 +1495,8 @@ components:
         phone: { type: ["string", "null"] }
         createdAt: { type: string }
         updatedAt: { type: string }
-      required: [id, name, createdAt, updatedAt]
+        rowVersion: { type: integer }
+      required: [id, name, createdAt, updatedAt, rowVersion]
     ProjectRecord:
       type: object
       additionalProperties: true
@@ -1501,7 +1506,8 @@ components:
         status: { type: string }
         createdAt: { type: string }
         updatedAt: { type: string }
-      required: [id, name, status, createdAt, updatedAt]
+        rowVersion: { type: integer }
+      required: [id, name, status, createdAt, updatedAt, rowVersion]
     TaskRecord:
       type: object
       additionalProperties: true
@@ -1511,11 +1517,12 @@ components:
         dueAt: { type: ["string", "null"] }
         status: { type: string }
         createdAt: { type: string }
+        rowVersion: { type: integer }
         origin:
           oneOf:
             - $ref: "#/components/schemas/RecordConversationOrigin"
             - type: "null"
-      required: [id, title, status, createdAt, origin]
+      required: [id, title, status, createdAt, rowVersion, origin]
     ReminderRecord:
       type: object
       additionalProperties: true
@@ -1526,11 +1533,12 @@ components:
         timezone: { type: string }
         status: { type: string }
         createdAt: { type: string }
+        rowVersion: { type: integer }
         origin:
           oneOf:
             - $ref: "#/components/schemas/RecordConversationOrigin"
             - type: "null"
-      required: [id, text, dueAt, timezone, status, createdAt, origin]
+      required: [id, text, dueAt, timezone, status, createdAt, rowVersion, origin]
     CommitmentRecord:
       type: object
       additionalProperties: true
@@ -1542,7 +1550,8 @@ components:
         dueAt: { type: ["string", "null"] }
         status: { type: string }
         createdAt: { type: string }
-      required: [id, title, status, createdAt]
+        rowVersion: { type: integer }
+      required: [id, title, status, createdAt, rowVersion]
     RecordsResponse:
       type: object
       properties:

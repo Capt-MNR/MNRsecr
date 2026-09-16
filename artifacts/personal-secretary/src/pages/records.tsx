@@ -335,6 +335,8 @@ function EditModal({
       (data as RecordCreateInput).idempotencyKey = typeof crypto !== 'undefined' && crypto.randomUUID
         ? crypto.randomUUID()
         : `record-${Date.now()}`;
+    } else if (record && typeof record.rowVersion === 'number') {
+      (data as RecordUpdateInput).expectedRowVersion = record.rowVersion;
     }
     if (kind === 'expense') {
       data.amountMinor = Number(form.amountMinor);

@@ -17,5 +17,6 @@ export interface CommitmentRecord {
   dueAt?: string | null;
   status: string;
   createdAt: string;
+  rowVersion: number;
   [key: string]: unknown;
  }

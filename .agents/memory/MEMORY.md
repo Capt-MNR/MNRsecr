@@ -19,3 +19,4 @@
 - [Isolated approval browser fixtures](approval-browser-fixtures.md) — run the API fixture with the repository-local scripts tsx binary and a unique tenant; never point browser verification at shared data.
 - [Conversation provenance](conversation-provenance.md) — link created expenses, tasks, and reminders to the originating conversation turn; keep manual records explicitly unlinked.
 - [Token baseline experiments](token-baseline-experiments.md) — measure real-provider token cost before optimization; context-budget flags are not safe to enable without repeated accuracy and retry checks.
+- [Optimistic record edits](optimistic-record-edits.md) — refresh-before-edit improves UX, but only an atomic row-version condition prevents stale approvals from overwriting newer changes.

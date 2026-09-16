@@ -14,6 +14,7 @@ export interface ReminderRecord {
   timezone: string;
   status: string;
   createdAt: string;
+  rowVersion: number;
   origin: RecordConversationOrigin | null;
   [key: string]: unknown;
  }
