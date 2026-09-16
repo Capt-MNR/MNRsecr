@@ -6,11 +6,13 @@ import {
   useCreateTurn,
   useGetConversation,
   useGetEntityGraph,
+  getGetTodayContextQueryKey,
   getListRecordsQueryKey,
+  useGetTodayContext,
   useListRecords,
   useRejectSecretaryOperation,
 } from '@workspace/api-client-react';
-import type { RecordsResponse, TurnResponse } from '@workspace/api-client-react';
+import type { RecordsResponse, TodayContext, TurnResponse } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type ComponentProps } from 'react';
 import {
@@ -19,6 +21,7 @@ import {
   Platform,
   Pressable,
   RefreshControl,
+  ScrollView,
   SectionList,
   StyleSheet,
   Text,
@@ -86,6 +89,9 @@ type MobileRecordSection = {
   icon: FeatherName;
   data: MobileRecordRow[];
 };
+
+type TodayContextReminder = TodayContext['upcomingReminders'][number];
+type TodayContextTask = TodayContext['pendingTasks'][number];
 
 function money(amountMinor: number, currency: string) {
   return new Intl.NumberFormat('ar-EG', {
@@ -359,9 +365,11 @@ function messageTime(value: string) {
 function RecordsView({
   colors,
   onOpenRecord,
+  onBack,
 }: {
   colors: ReturnType<typeof useColors>;
   onOpenRecord: (record: MobileRecordRow) => void;
+  onBack?: () => void;
 }) {
   const recordsQuery = useListRecords({
     query: {
@@ -423,22 +431,38 @@ function RecordsView({
                 بياناتك المهمة في مكان واحد
               </Text>
             </View>
-            <Pressable
-              testID="refresh-records"
-              accessibilityRole="button"
-              accessibilityLabel="تحديث الرئيسية"
-              onPress={() => void recordsQuery.refetch()}
-              style={({ pressed }) => [
-                styles.iconButton,
-                { borderColor: colors.border, opacity: pressed || recordsQuery.isFetching ? 0.6 : 1 },
-              ]}
-            >
-              {recordsQuery.isFetching ? (
-                <ActivityIndicator size="small" color={colors.primary} />
-              ) : (
-                <Feather name="refresh-cw" size={17} color={colors.foreground} />
+            <View style={styles.recordsHeaderActions}>
+              {onBack && (
+                <Pressable
+                  testID="records-back-to-office"
+                  accessibilityRole="button"
+                  accessibilityLabel="العودة إلى مكتب السكرتير"
+                  onPress={onBack}
+                  style={({ pressed }) => [
+                    styles.iconButton,
+                    { borderColor: colors.border, opacity: pressed ? 0.65 : 1 },
+                  ]}
+                >
+                  <Feather name="arrow-right" size={17} color={colors.foreground} />
+                </Pressable>
               )}
-            </Pressable>
+              <Pressable
+                testID="refresh-records"
+                accessibilityRole="button"
+                accessibilityLabel="تحديث السجلات"
+                onPress={() => void recordsQuery.refetch()}
+                style={({ pressed }) => [
+                  styles.iconButton,
+                  { borderColor: colors.border, opacity: pressed || recordsQuery.isFetching ? 0.6 : 1 },
+                ]}
+              >
+                {recordsQuery.isFetching ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Feather name="refresh-cw" size={17} color={colors.foreground} />
+                )}
+              </Pressable>
+            </View>
           </View>
 
           <View style={styles.recordSummaryGrid}>
@@ -494,6 +518,413 @@ function RecordsView({
         />
       )}
     />
+  );
+}
+
+function MainOffice({
+  colors,
+  onOpenRecord,
+  onOpenRecords,
+  onOpenQuick,
+  onAskSecretary,
+  pendingApprovals,
+}: {
+  colors: ReturnType<typeof useColors>;
+  onOpenRecord: (record: MobileRecordRow) => void;
+  onOpenRecords: () => void;
+  onOpenQuick: () => void;
+  onAskSecretary: (draft: string) => void;
+  pendingApprovals: Approval[];
+}) {
+  const todayQuery = useGetTodayContext({
+    query: {
+      queryKey: getGetTodayContextQueryKey(),
+      staleTime: 30_000,
+    },
+  });
+  const [financialExpanded, setFinancialExpanded] = useState(false);
+  const recordsQuery = useListRecords({
+    query: {
+      queryKey: getListRecordsQueryKey(),
+      enabled: financialExpanded,
+      staleTime: 20_000,
+    },
+  });
+  const context = todayQuery.data?.context;
+  const recentTotal = context
+    ? [...context.recentExpenses.reduce((totals, expense) => {
+      totals.set(expense.currency, (totals.get(expense.currency) ?? 0) + expense.amountMinor);
+      return totals;
+    }, new Map<string, number>())].map(([currency, amount]) => money(amount, currency)).join('، ')
+    : '';
+  const attentionCount = pendingApprovals.length
+    + (context?.pendingTasks.length ?? 0)
+    + (context?.upcomingReminders.length ?? 0);
+
+  function openReminder(reminder: TodayContextReminder) {
+    onOpenRecord({
+      id: reminder.id,
+      recordType: 'reminder',
+      title: reminder.text,
+      subtitle: `${recordDate(reminder.dueAt)} · ${reminder.timezone}`,
+      trailing: statusLabel(reminder.status),
+    });
+  }
+
+  function openTask(task: TodayContextTask) {
+    onOpenRecord({
+      id: task.id,
+      recordType: 'task',
+      title: task.title,
+      subtitle: task.dueAt ? `موعدها ${recordDate(task.dueAt)}` : 'مهمة مستمرة',
+      trailing: statusLabel(task.status),
+    });
+  }
+
+  const financialSections = recordSections(recordsQuery.data);
+  const commitmentSection = financialSections.find((section) => section.key === 'commitments');
+
+  return (
+    <ScrollView
+      contentContainerStyle={styles.officeList}
+      showsVerticalScrollIndicator={false}
+      refreshControl={(
+        <RefreshControl
+          refreshing={todayQuery.isFetching}
+          onRefresh={() => void todayQuery.refetch()}
+          tintColor={colors.primary}
+        />
+      )}
+    >
+      <View style={styles.officeIntro}>
+        <View style={styles.officeIntroCopy}>
+          <Text style={[styles.officeEyebrow, { color: colors.primary }]}>مكتب السكرتير</Text>
+          <Text style={[styles.officeGreeting, { color: colors.foreground }]}>
+            {new Date().getHours() < 12 ? 'صباح الخير' : new Date().getHours() < 17 ? 'نهارك هادئ' : 'مساء الخير'}
+          </Text>
+          <Text style={[styles.officeSubtitle, { color: colors.mutedForeground }]}>
+            نظرة هادئة على ما يستحق انتباهك اليوم.
+          </Text>
+        </View>
+        <Pressable
+          testID="refresh-office"
+          accessibilityRole="button"
+          accessibilityLabel="تحديث مكتب السكرتير"
+          onPress={() => void todayQuery.refetch()}
+          style={({ pressed }) => [
+            styles.officeRefresh,
+            { borderColor: colors.border, opacity: pressed || todayQuery.isFetching ? 0.6 : 1 },
+          ]}
+        >
+          {todayQuery.isFetching ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <Feather name="refresh-cw" size={16} color={colors.foreground} />
+          )}
+        </Pressable>
+      </View>
+
+      {todayQuery.isError && (
+        <View style={[styles.officeError, { backgroundColor: colors.destructive, borderColor: colors.destructive }]}>
+          <Feather name="alert-circle" size={16} color={colors.destructiveForeground} />
+          <Text style={[styles.officeErrorText, { color: colors.destructiveForeground }]}>
+            تعذر تحميل موجز اليوم.
+          </Text>
+          <Pressable accessibilityRole="button" onPress={() => void todayQuery.refetch()}>
+            <Text style={[styles.recordsRetry, { color: colors.destructiveForeground }]}>حاول</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {todayQuery.isLoading && (
+        <View style={styles.officeLoading}>
+          <ActivityIndicator color={colors.primary} />
+          <Text style={[styles.recordsLoadingText, { color: colors.mutedForeground }]}>السكرتير يجهز الموجز…</Text>
+        </View>
+      )}
+
+      {!todayQuery.isLoading && !todayQuery.isError && context && (
+        <>
+          <View style={[styles.officePulse, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.officePulseItem}>
+              <Text style={[styles.officePulseValue, { color: colors.primary }]}>{context.pendingTasks.length}</Text>
+              <Text style={[styles.officePulseLabel, { color: colors.mutedForeground }]}>مهام مفتوحة</Text>
+            </View>
+            <View style={[styles.officePulseDivider, { backgroundColor: colors.border }]} />
+            <View style={styles.officePulseItem}>
+              <Text style={[styles.officePulseValue, { color: colors.primary }]}>{context.upcomingReminders.length}</Text>
+              <Text style={[styles.officePulseLabel, { color: colors.mutedForeground }]}>تذكيرات قادمة</Text>
+            </View>
+            <View style={[styles.officePulseDivider, { backgroundColor: colors.border }]} />
+            <View style={styles.officePulseItem}>
+              <Text style={[styles.officePulseValue, { color: colors.primary }]}>{context.activeProjects.length}</Text>
+              <Text style={[styles.officePulseLabel, { color: colors.mutedForeground }]}>مشاريع نشطة</Text>
+            </View>
+          </View>
+
+          <View style={styles.officeSection}>
+            <View style={styles.officeSectionHeading}>
+              <View>
+                <Text style={[styles.officeSectionTitle, { color: colors.foreground }]}>يحتاج انتباهك</Text>
+                <Text style={[styles.officeSectionHint, { color: colors.mutedForeground }]}>
+                  {attentionCount > 0 ? `${attentionCount} أشياء تستحق نظرة` : 'كل شيء هادئ الآن'}
+                </Text>
+              </View>
+              <Feather name={attentionCount > 0 ? 'bell' : 'check-circle'} size={18} color={attentionCount > 0 ? colors.primary : colors.accent} />
+            </View>
+            {attentionCount === 0 ? (
+              <View style={[styles.officeCalm, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+                <Text style={[styles.officeCalmText, { color: colors.mutedForeground }]}>
+                  لا توجد مهام عاجلة أو موافقات معلّقة.
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.officeActionList}>
+                {pendingApprovals.slice(0, 2).map((approval) => (
+                  <Pressable
+                    key={approval.operationId}
+                    testID={`office-approval-${approval.operationId}`}
+                    accessibilityRole="button"
+                    onPress={onOpenQuick}
+                    style={({ pressed }) => [
+                      styles.officeActionRow,
+                      { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.65 : 1 },
+                    ]}
+                  >
+                    <View style={[styles.officeActionIcon, { backgroundColor: colors.destructive }]}>
+                      <Feather name="check-circle" size={15} color={colors.destructiveForeground} />
+                    </View>
+                    <View style={styles.officeActionCopy}>
+                      <Text style={[styles.officeActionTitle, { color: colors.foreground }]} numberOfLines={1}>{approval.title}</Text>
+                      <Text style={[styles.officeActionMeta, { color: colors.mutedForeground }]}>موافقة مطلوبة · افتح السكرتير</Text>
+                    </View>
+                    <Feather name="chevron-left" size={15} color={colors.mutedForeground} />
+                  </Pressable>
+                ))}
+                {context.upcomingReminders.slice(0, 2).map((reminder) => (
+                  <Pressable
+                    key={`reminder-${reminder.id}`}
+                    testID={`office-reminder-${reminder.id}`}
+                    accessibilityRole="button"
+                    onPress={() => openReminder(reminder)}
+                    style={({ pressed }) => [
+                      styles.officeActionRow,
+                      { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.65 : 1 },
+                    ]}
+                  >
+                    <View style={[styles.officeActionIcon, { backgroundColor: colors.muted }]}>
+                      <Feather name="clock" size={15} color={colors.primary} />
+                    </View>
+                    <View style={styles.officeActionCopy}>
+                      <Text style={[styles.officeActionTitle, { color: colors.foreground }]} numberOfLines={1}>{reminder.text}</Text>
+                      <Text style={[styles.officeActionMeta, { color: colors.mutedForeground }]}>{recordDate(reminder.dueAt)}</Text>
+                    </View>
+                    <Feather name="chevron-left" size={15} color={colors.mutedForeground} />
+                  </Pressable>
+                ))}
+                {context.pendingTasks.slice(0, 2).map((task) => (
+                  <Pressable
+                    key={`task-${task.id}`}
+                    testID={`office-task-${task.id}`}
+                    accessibilityRole="button"
+                    onPress={() => openTask(task)}
+                    style={({ pressed }) => [
+                      styles.officeActionRow,
+                      { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.65 : 1 },
+                    ]}
+                  >
+                    <View style={[styles.officeActionIcon, { backgroundColor: colors.muted }]}>
+                      <Feather name="check-square" size={15} color={colors.primary} />
+                    </View>
+                    <View style={styles.officeActionCopy}>
+                      <Text style={[styles.officeActionTitle, { color: colors.foreground }]} numberOfLines={1}>{task.title}</Text>
+                      <Text style={[styles.officeActionMeta, { color: colors.mutedForeground }]}>{task.dueAt ? recordDate(task.dueAt) : 'مهمة مستمرة'}</Text>
+                    </View>
+                    <Feather name="chevron-left" size={15} color={colors.mutedForeground} />
+                  </Pressable>
+                ))}
+              </View>
+            )}
+          </View>
+
+          <View style={styles.officeSection}>
+            <View style={styles.officeSectionHeading}>
+              <View>
+                <Text style={[styles.officeSectionTitle, { color: colors.foreground }]}>اليوم</Text>
+                <Text style={[styles.officeSectionHint, { color: colors.mutedForeground }]}>ما يعرفه السكرتير عن يومك الآن</Text>
+              </View>
+              <Feather name="sun" size={18} color={colors.primary} />
+            </View>
+            <View style={styles.officeTodayList}>
+              {context.upcomingReminders.slice(0, 3).map((reminder) => (
+                <Pressable key={`today-${reminder.id}`} onPress={() => openReminder(reminder)} style={styles.officeTodayRow}>
+                  <Text style={[styles.officeTodayTime, { color: colors.primary }]}>{recordDate(reminder.dueAt)}</Text>
+                  <Text style={[styles.officeTodayText, { color: colors.foreground }]} numberOfLines={1}>{reminder.text}</Text>
+                </Pressable>
+              ))}
+              {context.pendingTasks.slice(0, 3).map((task) => (
+                <Pressable key={`today-task-${task.id}`} onPress={() => openTask(task)} style={styles.officeTodayRow}>
+                  <Text style={[styles.officeTodayTime, { color: colors.mutedForeground }]}>{task.dueAt ? recordDate(task.dueAt) : 'مفتوحة'}</Text>
+                  <Text style={[styles.officeTodayText, { color: colors.foreground }]} numberOfLines={1}>{task.title}</Text>
+                </Pressable>
+              ))}
+              {context.upcomingReminders.length === 0 && context.pendingTasks.length === 0 && (
+                <Text style={[styles.officeEmptyLine, { color: colors.mutedForeground }]}>لا يوجد شيء مجدول في الموجز الحالي.</Text>
+              )}
+            </View>
+          </View>
+
+          <View style={styles.officeSection}>
+            <View style={styles.officeSectionHeading}>
+              <View>
+                <Text style={[styles.officeSectionTitle, { color: colors.foreground }]}>النبض المالي</Text>
+                <Text style={[styles.officeSectionHint, { color: colors.mutedForeground }]}>
+                  {recentTotal ? `${recentTotal} في أحدث المصروفات` : 'لا توجد حركة مالية حديثة'}
+                </Text>
+              </View>
+              <Feather name="dollar-sign" size={18} color={colors.primary} />
+            </View>
+            <View style={[styles.officeFinancialRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={styles.officeFinancialCopy}>
+                <Text style={[styles.officeFinancialTitle, { color: colors.foreground }]}>آخر المصروفات</Text>
+                <Text style={[styles.officeFinancialMeta, { color: colors.mutedForeground }]}>{context.recentExpenses.length} سجلات محدودة</Text>
+              </View>
+              <Pressable
+                testID="office-financial-toggle"
+                accessibilityRole="button"
+                onPress={() => setFinancialExpanded((expanded) => !expanded)}
+                style={({ pressed }) => [
+                  styles.officeInlineAction,
+                  { borderColor: colors.border, opacity: pressed ? 0.65 : 1 },
+                ]}
+              >
+                <Text style={[styles.officeInlineActionText, { color: colors.foreground }]}>
+                  {financialExpanded ? 'إخفاء التفاصيل' : 'عرض الالتزامات'}
+                </Text>
+                <Feather name={financialExpanded ? 'chevron-up' : 'chevron-left'} size={14} color={colors.foreground} />
+              </Pressable>
+            </View>
+            {financialExpanded && (
+              <View style={[styles.officeExpandedPanel, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+                {recordsQuery.isLoading ? (
+                  <ActivityIndicator color={colors.primary} />
+                ) : recordsQuery.isError ? (
+                  <Text style={[styles.officeEmptyLine, { color: colors.mutedForeground }]}>تعذر تحميل التفاصيل المالية.</Text>
+                ) : (
+                  <>
+                    <Text style={[styles.officeExpandedTitle, { color: colors.foreground }]}>
+                      {commitmentSection?.data.length ?? 0} التزامات محفوظة
+                    </Text>
+                    {(commitmentSection?.data ?? []).slice(0, 3).map((commitment) => (
+                      <Pressable key={commitment.id} onPress={() => onOpenRecord(commitment)} style={styles.officeTodayRow}>
+                        <Text style={[styles.officeTodayTime, { color: colors.mutedForeground }]}>{commitment.trailing ?? 'مفتوح'}</Text>
+                        <Text style={[styles.officeTodayText, { color: colors.foreground }]} numberOfLines={1}>{commitment.title}</Text>
+                      </Pressable>
+                    ))}
+                    <Pressable testID="office-open-all-records-financial" onPress={onOpenRecords}>
+                      <Text style={[styles.officeMoreLink, { color: colors.primary }]}>استكشف كل السجلات المالية</Text>
+                    </Pressable>
+                  </>
+                )}
+              </View>
+            )}
+          </View>
+
+          <View style={styles.officeSection}>
+            <View style={styles.officeSectionHeading}>
+              <View>
+                <Text style={[styles.officeSectionTitle, { color: colors.foreground }]}>السياق النشط</Text>
+                <Text style={[styles.officeSectionHint, { color: colors.mutedForeground }]}>أشخاص ومشاريع في الصورة الآن</Text>
+              </View>
+              <Feather name="layers" size={18} color={colors.primary} />
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.officeEntityRail}>
+              {context.relevantPeople.slice(0, 5).map((person) => (
+                <Pressable
+                  key={`person-${person.id}`}
+                  testID={`office-person-${person.id}`}
+                  onPress={() => onOpenRecord({ id: person.id, recordType: 'person', title: person.name, subtitle: 'فتح مركز الشخص' })}
+                  style={({ pressed }) => [
+                    styles.officeEntityTile,
+                    { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.65 : 1 },
+                  ]}
+                >
+                  <View style={[styles.officeEntityIcon, { backgroundColor: colors.muted }]}>
+                    <Feather name="user" size={15} color={colors.primary} />
+                  </View>
+                  <Text style={[styles.officeEntityName, { color: colors.foreground }]} numberOfLines={1}>{person.name}</Text>
+                  <Text style={[styles.officeEntityMeta, { color: colors.mutedForeground }]}>مركز الشخص</Text>
+                </Pressable>
+              ))}
+              {context.activeProjects.slice(0, 5).map((project) => (
+                <Pressable
+                  key={`project-${project.id}`}
+                  testID={`office-project-${project.id}`}
+                  onPress={() => onOpenRecord({ id: project.id, recordType: 'project', title: project.name, subtitle: 'فتح مركز المشروع' })}
+                  style={({ pressed }) => [
+                    styles.officeEntityTile,
+                    { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.65 : 1 },
+                  ]}
+                >
+                  <View style={[styles.officeEntityIcon, { backgroundColor: colors.muted }]}>
+                    <Feather name="briefcase" size={15} color={colors.primary} />
+                  </View>
+                  <Text style={[styles.officeEntityName, { color: colors.foreground }]} numberOfLines={1}>{project.name}</Text>
+                  <Text style={[styles.officeEntityMeta, { color: colors.mutedForeground }]}>مركز المشروع</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+
+          <View style={styles.officeSection}>
+            <View style={styles.officeSectionHeading}>
+              <View>
+                <Text style={[styles.officeSectionTitle, { color: colors.foreground }]}>ماذا يمكن أن يفعل السكرتير؟</Text>
+                <Text style={[styles.officeSectionHint, { color: colors.mutedForeground }]}>ابدأ من فضولك، وليس من قائمة إعدادات</Text>
+              </View>
+              <Feather name="compass" size={18} color={colors.primary} />
+            </View>
+            <View style={styles.officeSuggestions}>
+              {[
+                ['اسأل عن آخر مصروف مرتبط بشخص', 'محمد أخد مني كام؟'],
+                ['راجع ما يستحق انتباهك اليوم', 'إيه اللي عليا النهارده؟'],
+                ['سجّل شيء جديد بسرعة', 'دفعت لمحمد 5000'],
+              ].map(([label, draft]) => (
+                <Pressable
+                  key={draft}
+                  testID={`office-suggestion-${draft}`}
+                  onPress={() => onAskSecretary(draft)}
+                  style={({ pressed }) => [
+                    styles.officeSuggestionRow,
+                    { borderBottomColor: colors.border, opacity: pressed ? 0.65 : 1 },
+                  ]}
+                >
+                  <Feather name="arrow-up-left" size={15} color={colors.primary} />
+                  <View style={styles.officeSuggestionCopy}>
+                    <Text style={[styles.officeSuggestionLabel, { color: colors.foreground }]}>{label}</Text>
+                    <Text style={[styles.officeSuggestionDraft, { color: colors.mutedForeground }]}>{draft}</Text>
+                  </View>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+
+          <Pressable
+            testID="open-all-records"
+            accessibilityRole="button"
+            onPress={onOpenRecords}
+            style={({ pressed }) => [
+              styles.officeExploreButton,
+              { backgroundColor: colors.primary, opacity: pressed ? 0.7 : 1 },
+            ]}
+          >
+            <Feather name="archive" size={16} color={colors.primaryForeground} />
+            <Text style={[styles.officeExploreText, { color: colors.primaryForeground }]}>استكشف كل معلوماتك</Text>
+            <Feather name="arrow-left" size={16} color={colors.primaryForeground} />
+          </Pressable>
+        </>
+      )}
+    </ScrollView>
   );
 }
 
@@ -930,6 +1361,7 @@ export default function QuickSecretaryScreen() {
   const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
   const [activeView, setActiveView] = useState<'quick' | 'home'>('quick');
+  const [mainSection, setMainSection] = useState<'office' | 'records'>('office');
   const [selectedRecord, setSelectedRecord] = useState<MobileRecordRow | null>(null);
   const [messages, setMessages] = useState<LocalMessage[]>([starterMessage]);
   const [conversationId, setConversationId] = useState<string | undefined>();
@@ -1104,6 +1536,14 @@ export default function QuickSecretaryScreen() {
 
   function openHome() {
     setSelectedRecord(null);
+    setMainSection('office');
+    setActiveView('home');
+    void Haptics.selectionAsync();
+  }
+
+  function openRecords() {
+    setSelectedRecord(null);
+    setMainSection('records');
     setActiveView('home');
     void Haptics.selectionAsync();
   }
@@ -1116,7 +1556,22 @@ export default function QuickSecretaryScreen() {
 
   function openRecord(record: MobileRecordRow) {
     setSelectedRecord(record);
+    setMainSection('records');
     setActiveView('home');
+    void Haptics.selectionAsync();
+  }
+
+  function openOfficeRecord(record: MobileRecordRow) {
+    setSelectedRecord(record);
+    setMainSection('office');
+    setActiveView('home');
+    void Haptics.selectionAsync();
+  }
+
+  function openQuickWithDraft(value: string) {
+    setDraft(value);
+    setSelectedRecord(null);
+    setActiveView('quick');
     void Haptics.selectionAsync();
   }
 
@@ -1158,13 +1613,13 @@ export default function QuickSecretaryScreen() {
               <Feather name={activeView === 'quick' ? 'message-circle' : 'grid'} size={18} color={colors.primaryForeground} />
             </View>
             <View>
-              <Text style={[styles.brandName, { color: colors.foreground }]}>
-                {activeView === 'quick' ? 'السكرتير' : 'الرئيسية'}
+               <Text style={[styles.brandName, { color: colors.foreground }]}>
+                 {activeView === 'quick' ? 'السكرتير' : 'مكتب السكرتير'}
               </Text>
               <View style={styles.availability}>
                 <View style={[styles.statusDot, { backgroundColor: colors.accent }]} />
                 <Text style={[styles.availabilityText, { color: colors.mutedForeground }]}>
-                  {activeView === 'quick' ? 'جاهز للرد السريع' : 'بياناتك المهمة في مكان واحد'}
+                   {activeView === 'quick' ? 'جاهز للرد السريع' : 'استكشف، راجع، وافهم'}
                 </Text>
               </View>
             </View>
@@ -1208,13 +1663,13 @@ export default function QuickSecretaryScreen() {
               { opacity: pressed ? 0.7 : 1 },
             ]}
           >
-            <Feather name="grid" size={14} color={activeView === 'home' ? colors.primary : colors.mutedForeground} />
-            <Text style={[styles.viewTabText, { color: activeView === 'home' ? colors.foreground : colors.mutedForeground }]}>الرئيسية</Text>
+           <Feather name="briefcase" size={14} color={activeView === 'home' ? colors.primary : colors.mutedForeground} />
+           <Text style={[styles.viewTabText, { color: activeView === 'home' ? colors.foreground : colors.mutedForeground }]}>المكتب</Text>
           </Pressable>
         </View>
       </View>
 
-      {activeView === 'home' ? (
+       {activeView === 'home' ? (
         selectedRecord ? (
           <RecordDetailView
             record={selectedRecord}
@@ -1224,7 +1679,20 @@ export default function QuickSecretaryScreen() {
             onOpenConversation={openOriginalConversation}
           />
         ) : (
-          <RecordsView colors={colors} onOpenRecord={setSelectedRecord} />
+           mainSection === 'office' ? (
+             <MainOffice
+               colors={colors}
+               onOpenRecord={openOfficeRecord}
+               onOpenRecords={openRecords}
+               onOpenQuick={openQuick}
+               onAskSecretary={openQuickWithDraft}
+               pendingApprovals={messages.flatMap((message) => (
+                 message.approval && message.approval.status === 'pending' ? [message.approval] : []
+               ))}
+             />
+           ) : (
+             <RecordsView colors={colors} onOpenRecord={openRecord} onBack={openHome} />
+           )
         )
       ) : !hydrated ? (
         <View style={styles.loadingState}>
@@ -1441,6 +1909,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  recordsHeaderActions: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+  },
   recordsTitle: {
     fontSize: 22,
     fontWeight: '700',
@@ -1588,6 +2061,315 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 19,
     textAlign: 'center',
+  },
+  officeList: {
+    paddingHorizontal: 16,
+    paddingTop: 18,
+    paddingBottom: 32,
+  },
+  officeIntro: {
+    flexDirection: 'row-reverse',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  officeIntroCopy: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  officeEyebrow: {
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  officeGreeting: {
+    marginTop: 5,
+    fontSize: 26,
+    fontWeight: '700',
+    letterSpacing: -0.4,
+    textAlign: 'right',
+  },
+  officeSubtitle: {
+    maxWidth: 270,
+    marginTop: 5,
+    fontSize: 12,
+    lineHeight: 19,
+    textAlign: 'right',
+  },
+  officeRefresh: {
+    width: 38,
+    height: 38,
+    marginTop: 2,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  officeError: {
+    marginTop: 15,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+  },
+  officeErrorText: {
+    flex: 1,
+    fontSize: 12,
+    textAlign: 'right',
+  },
+  officeLoading: {
+    minHeight: 300,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 9,
+  },
+  officePulse: {
+    minHeight: 84,
+    marginTop: 18,
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+  },
+  officePulseItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  officePulseValue: {
+    fontSize: 21,
+    fontWeight: '700',
+  },
+  officePulseLabel: {
+    marginTop: 3,
+    fontSize: 10,
+    textAlign: 'center',
+  },
+  officePulseDivider: {
+    width: StyleSheet.hairlineWidth,
+    height: 36,
+  },
+  officeSection: {
+    marginTop: 27,
+  },
+  officeSectionHeading: {
+    marginBottom: 11,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  officeSectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  officeSectionHint: {
+    marginTop: 3,
+    fontSize: 11,
+    textAlign: 'right',
+  },
+  officeCalm: {
+    minHeight: 52,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 13,
+    justifyContent: 'center',
+  },
+  officeCalmText: {
+    fontSize: 12,
+    textAlign: 'right',
+  },
+  officeActionList: {
+    gap: 8,
+  },
+  officeActionRow: {
+    minHeight: 60,
+    borderRadius: 15,
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 9,
+  },
+  officeActionIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  officeActionCopy: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  officeActionTitle: {
+    width: '100%',
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'right',
+  },
+  officeActionMeta: {
+    width: '100%',
+    marginTop: 3,
+    fontSize: 10,
+    textAlign: 'right',
+  },
+  officeTodayList: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  officeTodayRow: {
+    minHeight: 43,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 10,
+  },
+  officeTodayTime: {
+    minWidth: 78,
+    fontSize: 10,
+    textAlign: 'right',
+  },
+  officeTodayText: {
+    flex: 1,
+    fontSize: 12,
+    textAlign: 'right',
+  },
+  officeEmptyLine: {
+    paddingVertical: 13,
+    fontSize: 12,
+    textAlign: 'right',
+  },
+  officeFinancialRow: {
+    minHeight: 72,
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 10,
+  },
+  officeFinancialCopy: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  officeFinancialTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  officeFinancialMeta: {
+    marginTop: 3,
+    fontSize: 10,
+    textAlign: 'right',
+  },
+  officeInlineAction: {
+    minHeight: 34,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 9,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 4,
+  },
+  officeInlineActionText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  officeExpandedPanel: {
+    marginTop: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingBottom: 5,
+  },
+  officeExpandedTitle: {
+    paddingTop: 11,
+    paddingBottom: 3,
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  officeMoreLink: {
+    paddingVertical: 12,
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  officeEntityRail: {
+    gap: 9,
+    paddingVertical: 2,
+  },
+  officeEntityTile: {
+    width: 128,
+    minHeight: 111,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 11,
+    alignItems: 'flex-end',
+  },
+  officeEntityIcon: {
+    width: 29,
+    height: 29,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  officeEntityName: {
+    width: '100%',
+    marginTop: 10,
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  officeEntityMeta: {
+    width: '100%',
+    marginTop: 3,
+    fontSize: 10,
+    textAlign: 'right',
+  },
+  officeSuggestions: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  officeSuggestionRow: {
+    minHeight: 57,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 9,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 9,
+  },
+  officeSuggestionCopy: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  officeSuggestionLabel: {
+    width: '100%',
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'right',
+  },
+  officeSuggestionDraft: {
+    width: '100%',
+    marginTop: 2,
+    fontSize: 10,
+    textAlign: 'right',
+  },
+  officeExploreButton: {
+    minHeight: 50,
+    marginTop: 27,
+    borderRadius: 16,
+    paddingHorizontal: 15,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  officeExploreText: {
+    fontSize: 13,
+    fontWeight: '700',
   },
   detailScreen: {
     flex: 1,
