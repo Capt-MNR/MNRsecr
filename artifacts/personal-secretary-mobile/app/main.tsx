@@ -33,6 +33,8 @@ import {
   styles,
   type Approval,
   type ApprovalStatus,
+  type AssistantPreferences,
+  defaultAssistantPreferences,
   type LocalMessage,
   type MainSection,
   type MobileRecordRow,
@@ -109,6 +111,7 @@ export default function MainRoute() {
   const [conversationToLoad, setConversationToLoad] = useState<string | null>(null);
   const [loadedConversationId, setLoadedConversationId] = useState<string | null>(null);
   const [conversationSearch, setConversationSearch] = useState('');
+  const [assistantPreferences, setAssistantPreferences] = useState<AssistantPreferences>(defaultAssistantPreferences);
   const queryClient = useQueryClient();
   const secretaryChat = useSecretaryChatService(conversationToLoad, conversationSearch.trim(), true);
   const conversationQuery = secretaryChat.conversationQuery;
@@ -128,7 +131,7 @@ export default function MainRoute() {
 
   useEffect(() => {
     let active = true;
-    void AsyncStorage.multiGet([STORAGE_MESSAGES, STORAGE_CONVERSATION]).then(([storedMessages, storedConversation]) => {
+    void AsyncStorage.multiGet([STORAGE_MESSAGES, STORAGE_CONVERSATION, 'secretary:assistant-preferences']).then(([storedMessages, storedConversation, storedPreferences]) => {
       if (!active) return;
       if (storedMessages[1]) {
         try {
@@ -139,6 +142,14 @@ export default function MainRoute() {
         }
       }
       if (storedConversation[1]) setConversationId(storedConversation[1]);
+      if (storedPreferences[1]) {
+        try {
+          const parsed = JSON.parse(storedPreferences[1]) as Partial<AssistantPreferences>;
+          setAssistantPreferences({ ...defaultAssistantPreferences, ...parsed });
+        } catch {
+          setAssistantPreferences(defaultAssistantPreferences);
+        }
+      }
       setHydrated(true);
     }).catch(() => setHydrated(true));
     void initializeSecretaryPush();
@@ -158,6 +169,11 @@ export default function MainRoute() {
       [STORAGE_CONVERSATION, conversationId ?? ''],
     ]);
   }, [conversationId, hydrated, messages]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    void AsyncStorage.setItem('secretary:assistant-preferences', JSON.stringify(assistantPreferences));
+  }, [assistantPreferences, hydrated]);
 
   useEffect(() => {
     if (!conversationToLoad || loadedConversationId === conversationToLoad || !conversationQuery.data) return;
@@ -284,10 +300,10 @@ export default function MainRoute() {
       </View>
       {!hydrated ? <View style={styles.loadingState}><ActivityIndicator color={colors.primary} /></View> : (
         <MainWorkspace>
-          <MainDrawer colors={colors} language={language} themePreference={themePreference} open={drawerOpen} activeSection={mainSection} onClose={() => setDrawerOpen(false)} onSelect={openMainSection} onOpenQuick={() => router.replace('/')} onThemeChange={setThemePreference} onLanguageChange={setLanguage} />
+          <MainDrawer colors={colors} language={language} themePreference={themePreference} open={drawerOpen} activeSection={mainSection} onClose={() => setDrawerOpen(false)} onSelect={openMainSection} onOpenQuick={() => router.replace('/')} onThemeChange={setThemePreference} onLanguageChange={setLanguage} assistantPreferences={assistantPreferences} onAssistantPreferencesChange={(patch) => setAssistantPreferences((current) => ({ ...current, ...patch }))} />
           {selectedRecord ? <RecordDetailView record={selectedRecord} colors={colors} onBack={() => setSelectedRecord(null)} onAskSecretary={askSecretaryAboutRecord} onOpenConversation={openConversation} onOpenRelatedRecord={openRecord} chatMessages={messages} chatDraft={draft} onChangeChatDraft={setDraft} onSendChat={() => void sendMessage()} chatBusy={secretaryChat.isSending || conversationQuery.isFetching} onApprove={(approval, args) => void updateApproval(approval, 'completed', args)} onReject={(approval) => void updateApproval(approval, 'rejected')} busyOperationId={busyOperationId} chatContext={chatContext} /> : (
             <>
-                {mainSection === 'office' && <MainOffice colors={colors} language={language} onOpenRecord={openRecord} onOpenRecords={() => openMainSection('records')} onOpenFinancial={() => openMainSection('financial')} onOpenConversation={openConversationById} onFocusChat={focusMainChat} onAskSecretary={(value) => { setDraft(value); setTimeout(() => inputRef.current?.focus(), 0); }} messages={messages} draft={draft} onChangeDraft={setDraft} onSend={() => void sendMessage()} inputRef={inputRef} isSending={secretaryChat.isSending || conversationQuery.isFetching} onApprove={(approval, args) => void updateApproval(approval, 'completed', args)} onReject={(approval) => void updateApproval(approval, 'rejected')} busyOperationId={busyOperationId} recordOrigins={recordOrigins} chatContext={chatContext} recentConversations={recentConversations} conversationSearch={conversationSearch} onChangeConversationSearch={setConversationSearch} conversationsLoading={secretaryChat.conversationsQuery.isFetching} pendingApprovals={messages.flatMap((message) => message.approval?.status === 'pending' ? [message.approval] : [])} />}
+                {mainSection === 'office' && <MainOffice colors={colors} language={language} assistantPreferences={assistantPreferences} onOpenRecord={openRecord} onOpenRecords={() => openMainSection('records')} onOpenFinancial={() => openMainSection('financial')} onOpenConversation={openConversationById} onFocusChat={focusMainChat} onAskSecretary={(value) => { setDraft(value); setTimeout(() => inputRef.current?.focus(), 0); }} messages={messages} draft={draft} onChangeDraft={setDraft} onSend={() => void sendMessage()} inputRef={inputRef} isSending={secretaryChat.isSending || conversationQuery.isFetching} onApprove={(approval, args) => void updateApproval(approval, 'completed', args)} onReject={(approval) => void updateApproval(approval, 'rejected')} busyOperationId={busyOperationId} recordOrigins={recordOrigins} chatContext={chatContext} recentConversations={recentConversations} conversationSearch={conversationSearch} onChangeConversationSearch={setConversationSearch} conversationsLoading={secretaryChat.conversationsQuery.isFetching} pendingApprovals={messages.flatMap((message) => message.approval?.status === 'pending' ? [message.approval] : [])} />}
                 {mainSection === 'chat' && <ConversationHistoryView colors={colors} language={language} conversations={recentConversations} loading={secretaryChat.conversationsQuery.isFetching} onOpenConversation={openConversationById} onBack={() => openMainSection('office')} />}
               {mainSection === 'records' && <RecordsView colors={colors} onOpenSection={openRecordSection} onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}
               {mainSection === 'people' && <RecordsView colors={colors} onOpenSection={openRecordSection} title="الأشخاص" subtitle="الأشخاص وعلاقاتهم بالسجلات والمشاريع" sectionKeys={['people']} onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}

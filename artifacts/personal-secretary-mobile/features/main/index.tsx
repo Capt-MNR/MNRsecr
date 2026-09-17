@@ -93,6 +93,16 @@ type MobileRecordSection = {
 };
 
 export type MainSection = 'office' | 'chat' | 'records' | 'people' | 'projects' | 'financial' | 'tasks' | 'reminders' | 'activity';
+export type AssistantPreferences = {
+  activity: 'focused' | 'balanced' | 'quiet';
+  proactive: 'low' | 'balanced' | 'high';
+  intelligence: 'fast' | 'balanced' | 'deep';
+};
+export const defaultAssistantPreferences: AssistantPreferences = {
+  activity: 'balanced',
+  proactive: 'balanced',
+  intelligence: 'balanced',
+};
 type ConversationSummary = ConversationListResponse['conversations'][number];
 
 type TodayContextReminder = TodayContext['upcomingReminders'][number];
@@ -880,6 +890,7 @@ export function MainOffice({
   onOpenRecord,
   onOpenRecords,
   onOpenFinancial,
+  assistantPreferences,
   onOpenConversation,
   onFocusChat,
   onAskSecretary,
@@ -905,6 +916,7 @@ export function MainOffice({
   onOpenRecord: (record: MobileRecordRow) => void;
   onOpenRecords: () => void;
   onOpenFinancial: () => void;
+  assistantPreferences: AssistantPreferences;
   onOpenConversation: (conversationId: string) => void;
   onFocusChat: (record?: MobileRecordRow) => void;
   onAskSecretary: (draft: string) => void;
@@ -1037,13 +1049,20 @@ export function MainOffice({
       + context.activeProjects.length
       + context.recentExpenses.length
     : 0;
-  const smartSignal = todayQuery.isFetching
+  const smartSignalBase = assistantPreferences.activity === 'quiet'
+    ? localized(language, 'وضع الاستعداد · سأنتظر طلبك', 'Standby mode · waiting for your request')
+    : todayQuery.isFetching
     ? localized(language, 'أقرأ موجز اليوم…', 'Reading today’s context…')
-    : pendingApprovals.length > 0
+    : pendingApprovals.length > 0 && assistantPreferences.proactive !== 'low'
       ? `${pendingApprovals.length} ${localized(language, 'موافقة تحتاج قرارك', 'approval needs your decision')}`
       : context.pendingTasks.length + context.upcomingReminders.length > 0
-        ? `${context.pendingTasks.length + context.upcomingReminders.length} ${localized(language, 'عناصر رتّبها السكرتير اليوم', 'items organized for today')}`
+        ? `${context.pendingTasks.length + context.upcomingReminders.length} ${assistantPreferences.proactive === 'high' ? localized(language, 'إشارات رتّبها السكرتير اليوم', 'signals organized for today') : localized(language, 'عناصر في موجز اليوم', 'items in today’s brief')}`
         : `${contextualRecordCount} ${localized(language, 'عنصرًا في سياقك اليوم', 'items in today’s context')}`;
+  const smartSignal = `${smartSignalBase} · ${assistantPreferences.intelligence === 'deep'
+    ? localized(language, 'تحليل عميق', 'deep analysis')
+    : assistantPreferences.intelligence === 'fast'
+      ? localized(language, 'رد سريع', 'fast response')
+      : localized(language, 'سياق متوازن', 'balanced context')}`;
   const summaryCards: Array<{
     key: string;
     label: string;
@@ -1098,17 +1117,7 @@ export function MainOffice({
   ];
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.officeList}
-      showsVerticalScrollIndicator={false}
-      refreshControl={(
-        <RefreshControl
-          refreshing={todayQuery.isFetching}
-          onRefresh={() => void todayQuery.refetch()}
-          tintColor={colors.primary}
-        />
-      )}
-    >
+    <View testID="main-office-home" style={styles.officeHome}>
       <View testID="main-summary-cards" style={styles.officeSummaryGrid}>
         {summaryCards.map((card) => (
           <Pressable
@@ -1133,7 +1142,7 @@ export function MainOffice({
             }}
             style={({ pressed }) => [
               styles.officeSummaryCard,
-              { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.68 : 1 },
+              { backgroundColor: colors.muted, opacity: pressed ? 0.68 : 1 },
             ]}
           >
             <View style={[styles.officeSummaryIcon, { backgroundColor: colors.muted }]}>
@@ -1170,7 +1179,7 @@ export function MainOffice({
       {!todayQuery.isLoading && !todayQuery.isError && contextData && (
         <>
           <View style={styles.officeDashboardSplit}>
-            <View style={[styles.officeDashboardCard, styles.officeTodayCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.officeDashboardCard, styles.officeTodayCard]}>
               <View style={styles.officeSectionHeading}>
                 <View>
                   <Text style={[styles.officeSectionTitle, { color: colors.foreground }]}>
@@ -1206,7 +1215,7 @@ export function MainOffice({
               </View>
             </View>
 
-            <View style={[styles.officeDashboardCard, styles.officeQuickCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.officeDashboardCard, styles.officeQuickCard]}>
               <View style={styles.officeSectionHeading}>
                 <View>
                   <Text style={[styles.officeSectionTitle, { color: colors.foreground }]}>
@@ -1226,7 +1235,7 @@ export function MainOffice({
                     onPress={() => onAskSecretary(action.draft)}
                     style={({ pressed }) => [
                       styles.officeQuickAction,
-                      { borderBottomColor: colors.border, opacity: pressed ? 0.62 : 1 },
+                      { opacity: pressed ? 0.62 : 1 },
                     ]}
                   >
                     <View style={[styles.officeQuickActionIcon, { backgroundColor: colors.muted }]}>
@@ -1297,14 +1306,11 @@ export function MainOffice({
             {conversationsLoading && <ActivityIndicator size="small" color={colors.primary} />}
           </View>
         )}
-        <ScrollView
+        <View
           testID="recent-activity-list"
           style={styles.officeRecentActivityScroll}
-          contentContainerStyle={styles.officeRecentActivityContent}
-          nestedScrollEnabled
-          showsVerticalScrollIndicator
         >
-          {recentConversations.slice(0, 20).map((conversation) => (
+          {recentConversations.slice(0, 1).map((conversation) => (
               <Pressable
                 key={conversation.conversationId}
                 testID={`recent-conversation-${conversation.conversationId}`}
@@ -1313,7 +1319,7 @@ export function MainOffice({
                 onPress={() => onOpenConversation(conversation.conversationId)}
                 style={({ pressed }) => [
                   styles.officeRecentActivityRow,
-                  { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.65 : 1 },
+                  { opacity: pressed ? 0.65 : 1 },
                 ]}
               >
                 <View style={[styles.officeRecentActivityIcon, { backgroundColor: colors.muted }]}>
@@ -1333,7 +1339,7 @@ export function MainOffice({
                 <Feather name="chevron-left" size={15} color={colors.mutedForeground} />
               </Pressable>
             ))}
-          {filteredLatestEdits.map((edit) => (
+          {filteredLatestEdits.slice(0, 2).map((edit) => (
               <Pressable
                 key={edit.id}
                 testID={`recent-edit-${edit.record.id}`}
@@ -1342,7 +1348,7 @@ export function MainOffice({
                 onPress={() => onOpenRecord(edit.record)}
                 style={({ pressed }) => [
                   styles.officeRecentActivityRow,
-                  { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.65 : 1 },
+                  { opacity: pressed ? 0.65 : 1 },
                 ]}
               >
                 <View style={[styles.officeRecentActivityIcon, { backgroundColor: colors.muted }]}>
@@ -1372,7 +1378,7 @@ export function MainOffice({
               </Text>
             </View>
           )}
-        </ScrollView>
+        </View>
       </View>
 
       {todayQuery.isError && (
@@ -1742,7 +1748,7 @@ export function MainOffice({
           </Pressable>
         </>
       )}
-    </ScrollView>
+    </View>
   );
 }
 
@@ -2220,6 +2226,7 @@ export function RecordDetailView({
 
 const mainNavigation: Array<{ key: MainSection; labelAr: string; labelEn: string; icon: FeatherName }> = [
   { key: 'office', labelAr: 'الرئيسية', labelEn: 'Home', icon: 'home' },
+  { key: 'chat', labelAr: 'المحادثات السابقة', labelEn: 'Conversations', icon: 'message-circle' },
   { key: 'records', labelAr: 'السجلات', labelEn: 'Records', icon: 'archive' },
   { key: 'people', labelAr: 'الأشخاص', labelEn: 'People', icon: 'users' },
   { key: 'projects', labelAr: 'المشاريع', labelEn: 'Projects', icon: 'briefcase' },
@@ -2392,6 +2399,8 @@ export function MainDrawer({
   onOpenQuick,
   onThemeChange,
   onLanguageChange,
+  assistantPreferences,
+  onAssistantPreferencesChange,
 }: {
   colors: ReturnType<typeof useColors>;
   language: AppLanguage;
@@ -2403,6 +2412,8 @@ export function MainDrawer({
   onOpenQuick: () => void;
   onThemeChange: (theme: ThemePreference) => void;
   onLanguageChange: (language: AppLanguage) => void;
+  assistantPreferences: AssistantPreferences;
+  onAssistantPreferencesChange: (patch: Partial<AssistantPreferences>) => void;
 }) {
   if (!open) return null;
   return (
@@ -2436,6 +2447,14 @@ export function MainDrawer({
           >
             <Feather name="x" size={17} color={colors.foreground} />
           </Pressable>
+        </View>
+        <View style={[styles.drawerStatus, { backgroundColor: colors.muted }]}>
+          <Text style={[styles.drawerStatusLabel, { color: colors.mutedForeground }]}>
+            {localized(language, 'حالة المكتب', 'Office status')}
+          </Text>
+          <Text style={[styles.drawerStatusValue, { color: colors.foreground }]}>
+            {localized(language, 'السكرتير مستعد ويتبع اختيارك', 'The secretary is ready and follows your settings')}
+          </Text>
         </View>
         <View style={styles.drawerNav}>
           {mainNavigation.map((item) => (
@@ -2532,6 +2551,96 @@ export function MainDrawer({
                 ]}
               >
                 <Text style={[styles.drawerChoiceText, { color: language === value ? colors.foreground : colors.mutedForeground }]}>
+                  {localized(language, arabicLabel, englishLabel)}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <Text style={[styles.drawerSettingLabel, { color: colors.mutedForeground }]}>
+            {localized(language, 'حضور السكرتير', 'Secretary activity')}
+          </Text>
+          <Text style={[styles.drawerSettingHint, { color: colors.mutedForeground }]}>
+            {localized(language, 'تحكم في مقدار ما يظهر على الشاشة.', 'Control how much the secretary surfaces.')}
+          </Text>
+          <View style={[styles.drawerChoiceRow, { backgroundColor: colors.muted }]}>
+            {([
+              ['focused', 'مركز', 'Focused'],
+              ['balanced', 'متوازن', 'Balanced'],
+              ['quiet', 'استعداد', 'Standby'],
+            ] as const).map(([value, arabicLabel, englishLabel]) => (
+              <Pressable
+                key={value}
+                testID={`assistant-activity-${value}`}
+                accessibilityRole="button"
+                accessibilityState={{ selected: assistantPreferences.activity === value }}
+                onPress={() => onAssistantPreferencesChange({ activity: value })}
+                style={({ pressed }) => [
+                  styles.drawerChoice,
+                  assistantPreferences.activity === value && { backgroundColor: colors.card, borderColor: colors.border },
+                  { opacity: pressed ? 0.65 : 1 },
+                ]}
+              >
+                <Text style={[styles.drawerChoiceText, { color: assistantPreferences.activity === value ? colors.foreground : colors.mutedForeground }]}>
+                  {localized(language, arabicLabel, englishLabel)}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <Text style={[styles.drawerSettingLabel, { color: colors.mutedForeground }]}>
+            {localized(language, 'المبادرة', 'Proactive level')}
+          </Text>
+          <Text style={[styles.drawerSettingHint, { color: colors.mutedForeground }]}>
+            {localized(language, 'متى يقترح عليك السكرتير خطوة تالية.', 'When the secretary suggests the next step.')}
+          </Text>
+          <View style={[styles.drawerChoiceRow, { backgroundColor: colors.muted }]}>
+            {([
+              ['low', 'هادئ', 'Low'],
+              ['balanced', 'متوازن', 'Balanced'],
+              ['high', 'استباقي', 'High'],
+            ] as const).map(([value, arabicLabel, englishLabel]) => (
+              <Pressable
+                key={value}
+                testID={`assistant-proactive-${value}`}
+                accessibilityRole="button"
+                accessibilityState={{ selected: assistantPreferences.proactive === value }}
+                onPress={() => onAssistantPreferencesChange({ proactive: value })}
+                style={({ pressed }) => [
+                  styles.drawerChoice,
+                  assistantPreferences.proactive === value && { backgroundColor: colors.card, borderColor: colors.border },
+                  { opacity: pressed ? 0.65 : 1 },
+                ]}
+              >
+                <Text style={[styles.drawerChoiceText, { color: assistantPreferences.proactive === value ? colors.foreground : colors.mutedForeground }]}>
+                  {localized(language, arabicLabel, englishLabel)}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <Text style={[styles.drawerSettingLabel, { color: colors.mutedForeground }]}>
+            {localized(language, 'عمق الذكاء', 'AI depth')}
+          </Text>
+          <Text style={[styles.drawerSettingHint, { color: colors.mutedForeground }]}>
+            {localized(language, 'سرعة الرد مقابل تحليل أعمق للسياق.', 'Response speed versus deeper context analysis.')}
+          </Text>
+          <View style={[styles.drawerChoiceRow, { backgroundColor: colors.muted }]}>
+            {([
+              ['fast', 'سريع', 'Fast'],
+              ['balanced', 'متوازن', 'Balanced'],
+              ['deep', 'عميق', 'Deep'],
+            ] as const).map(([value, arabicLabel, englishLabel]) => (
+              <Pressable
+                key={value}
+                testID={`assistant-intelligence-${value}`}
+                accessibilityRole="button"
+                accessibilityState={{ selected: assistantPreferences.intelligence === value }}
+                onPress={() => onAssistantPreferencesChange({ intelligence: value })}
+                style={({ pressed }) => [
+                  styles.drawerChoice,
+                  assistantPreferences.intelligence === value && { backgroundColor: colors.card, borderColor: colors.border },
+                  { opacity: pressed ? 0.65 : 1 },
+                ]}
+              >
+                <Text style={[styles.drawerChoiceText, { color: assistantPreferences.intelligence === value ? colors.foreground : colors.mutedForeground }]}>
                   {localized(language, arabicLabel, englishLabel)}
                 </Text>
               </Pressable>
@@ -2653,6 +2762,27 @@ export const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'flex-end',
   },
+  drawerStatus: {
+    marginTop: 16,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    alignItems: 'flex-end',
+  },
+  drawerStatusLabel: {
+    width: '100%',
+    fontSize: 10,
+    fontWeight: '600',
+    textAlign: 'right',
+  },
+  drawerStatusValue: {
+    width: '100%',
+    marginTop: 3,
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 18,
+    textAlign: 'right',
+  },
   drawerTitle: {
     width: '100%',
     fontSize: 14,
@@ -2748,6 +2878,13 @@ export const styles = StyleSheet.create({
     marginBottom: 6,
     fontSize: 10,
     fontWeight: '600',
+    textAlign: 'right',
+  },
+  drawerSettingHint: {
+    marginTop: -3,
+    marginBottom: 6,
+    fontSize: 9,
+    lineHeight: 14,
     textAlign: 'right',
   },
   drawerChoiceRow: {
@@ -3048,10 +3185,10 @@ export const styles = StyleSheet.create({
     textAlign: 'center',
   },
   centralChatPanel: {
-    height: 198,
+    height: 270,
     marginTop: 10,
     borderRadius: 15,
-    borderWidth: 1,
+    borderWidth: 0,
     padding: 10,
     overflow: 'hidden',
     position: 'relative',
@@ -3149,8 +3286,8 @@ export const styles = StyleSheet.create({
     textAlign: 'right',
   },
   centralChatTranscript: {
-    height: 45,
-    maxHeight: 45,
+    height: 72,
+    maxHeight: 72,
     marginTop: 4,
   },
   recordChatTranscript: {
@@ -3172,10 +3309,10 @@ export const styles = StyleSheet.create({
     fontSize: 11,
   },
   centralChatComposer: {
-    minHeight: 38,
+    minHeight: 45,
     marginTop: 5,
     borderRadius: 11,
-    borderWidth: 1,
+    borderWidth: 0,
     paddingLeft: 6,
     paddingRight: 10,
     flexDirection: 'row-reverse',
@@ -3191,8 +3328,8 @@ export const styles = StyleSheet.create({
     lineHeight: 16,
   },
   centralChatSend: {
-    width: 27,
-    height: 27,
+    width: 32,
+    height: 32,
     marginBottom: 5,
     borderRadius: 14,
     alignItems: 'center',
@@ -3210,7 +3347,7 @@ export const styles = StyleSheet.create({
   centralChatPrompt: {
     minHeight: 22,
     borderRadius: 11,
-    borderWidth: 1,
+    borderWidth: 0,
     paddingHorizontal: 8,
     alignItems: 'center',
     justifyContent: 'center',
@@ -3223,6 +3360,13 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 7,
     paddingTop: 9,
     paddingBottom: 88,
+  },
+  officeHome: {
+    flex: 1,
+    overflow: 'hidden',
+    paddingHorizontal: 7,
+    paddingTop: 7,
+    paddingBottom: 4,
   },
   officeIntro: {
     flexDirection: 'row-reverse',
@@ -3271,57 +3415,57 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   officeSummaryGrid: {
-    marginTop: 9,
+    marginTop: 0,
     flexDirection: 'row',
-    gap: 8,
+    gap: 5,
   },
   officeSummaryCard: {
-    height: 76,
+    height: 62,
     flex: 1,
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingHorizontal: 6,
-    paddingVertical: 6,
+    borderRadius: 22,
+    borderWidth: 0,
+    paddingHorizontal: 5,
+    paddingVertical: 5,
     alignItems: 'flex-end',
   },
   officeSummaryIcon: {
-    width: 20,
-    height: 20,
-    borderRadius: 7,
+    width: 23,
+    height: 23,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   officeSummaryValue: {
     width: '100%',
-    marginTop: 3,
-    fontSize: 16,
+    marginTop: 1,
+    fontSize: 14,
     fontWeight: '700',
     textAlign: 'right',
   },
   officeSummaryLabel: {
     width: '100%',
     marginTop: 0,
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: '600',
     textAlign: 'right',
   },
   officeSummaryHint: {
     width: '100%',
     marginTop: 0,
-    fontSize: 7,
+    fontSize: 6,
     textAlign: 'right',
   },
   officeDashboardSplit: {
-    marginTop: 10,
+    marginTop: 8,
     flexDirection: 'row',
-    gap: 7,
+    gap: 16,
   },
   officeDashboardCard: {
     flex: 1,
-    minHeight: 126,
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 8,
+    minHeight: 112,
+    borderRadius: 0,
+    borderWidth: 0,
+    padding: 0,
   },
   officeTodayCard: {
     flex: 1.15,
@@ -3390,7 +3534,7 @@ export const styles = StyleSheet.create({
   },
   officeQuickAction: {
     minHeight: 25,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: 0,
     flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 6,
@@ -3632,20 +3776,20 @@ export const styles = StyleSheet.create({
     textAlign: 'right',
   },
   officeRecentActivityScroll: {
-    maxHeight: 118,
-    marginTop: 5,
-    borderRadius: 10,
+    maxHeight: 90,
+    marginTop: 3,
+    borderRadius: 0,
   },
   officeRecentActivityContent: {
     gap: 4,
     paddingBottom: 2,
   },
   officeRecentActivityRow: {
-    minHeight: 34,
-    borderRadius: 9,
-    borderWidth: 1,
-    paddingHorizontal: 7,
-    paddingVertical: 4,
+    minHeight: 28,
+    borderRadius: 0,
+    borderWidth: 0,
+    paddingHorizontal: 0,
+    paddingVertical: 2,
     flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 6,
@@ -3819,7 +3963,7 @@ export const styles = StyleSheet.create({
     textAlign: 'right',
   },
   officeTodayList: {
-    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: 0,
   },
   officeTodayRow: {
     minHeight: 25,
