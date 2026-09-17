@@ -20,7 +20,54 @@ tags:
     description: Structured memory records operations
   - name: financial
     description: Financial graph operations
+  - name: notifications
+    description: Mobile notification registration and delivery operations
 paths:
+  /push-tokens:
+    post:
+      operationId: registerMobilePushToken
+      tags: [notifications]
+      summary: Register a mobile push token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterMobilePushTokenInput"
+      responses:
+        "200":
+          description: Token registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MobilePushTokenResponse"
+        "400":
+          description: Invalid token registration
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    delete:
+      operationId: unregisterMobilePushToken
+      tags: [notifications]
+      summary: Disable a mobile push token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UnregisterMobilePushTokenInput"
+      responses:
+        "200":
+          description: Token disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MobilePushTokenResponse"
+        "400":
+          description: Invalid token registration
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
   /entities/{entityType}/{entityId}:
     get:
       operationId: getEntityGraph
@@ -1154,6 +1201,41 @@ components:
           type: string
           format: date-time
       required: [operationId, toolName, args, display, status, updatedAt]
+    RegisterMobilePushTokenInput:
+      type: object
+      properties:
+        token:
+          type: string
+          minLength: 8
+        provider:
+          type: string
+          enum: [expo, fcm, apns]
+        platform:
+          type: string
+          enum: [android, ios]
+        appId:
+          type: string
+          minLength: 1
+        deviceId:
+          type: ["string", "null"]
+      required: [token, provider, platform, appId]
+      additionalProperties: false
+    UnregisterMobilePushTokenInput:
+      type: object
+      properties:
+        token:
+          type: string
+          minLength: 8
+      required: [token]
+      additionalProperties: false
+    MobilePushTokenResponse:
+      type: object
+      properties:
+        registered:
+          type: boolean
+        enabled:
+          type: boolean
+      required: [registered, enabled]
     Candidate:
       type: object
       properties:

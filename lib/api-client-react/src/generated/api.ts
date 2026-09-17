@@ -41,6 +41,7 @@ import type {
   LearningSignalReviewResponse,
   ListConversationsParams,
   ListTypedRelationshipsParams,
+  MobilePushTokenResponse,
   PersonGraphResponse,
   ProjectGraphResponse,
   RecordCreateInput,
@@ -48,12 +49,14 @@ import type {
   RecordType,
   RecordUpdateInput,
   RecordsResponse,
+  RegisterMobilePushTokenInput,
   RelationshipListResponse,
   RelationshipMutationInput,
   TodayContextResponse,
   TurnInput,
   TurnResponse,
-  UndoRecordInput
+  UndoRecordInput,
+  UnregisterMobilePushTokenInput
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -82,6 +85,182 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getRegisterMobilePushTokenUrl = () => {
+
+
+
+
+  return `/api/push-tokens`
+}
+
+/**
+ * @summary Register a mobile push token
+ */
+export const registerMobilePushToken = async (registerMobilePushTokenInput: RegisterMobilePushTokenInput, options?: Parameters<typeof customFetch>[1]): Promise<MobilePushTokenResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<MobilePushTokenResponse>(getRegisterMobilePushTokenUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(registerMobilePushTokenInput)
+  }
+);}
+
+
+
+
+
+export const getRegisterMobilePushTokenMutationKey = () => ['registerMobilePushToken'] as const;
+
+export const getRegisterMobilePushTokenMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerMobilePushToken>>, TError,RegisterMobilePushTokenMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof registerMobilePushToken>>, TError,RegisterMobilePushTokenMutationVariables, TContext> => {
+
+const mutationKey = getRegisterMobilePushTokenMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof registerMobilePushToken>>, RegisterMobilePushTokenMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  registerMobilePushToken(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RegisterMobilePushTokenMutationResult = NonNullable<Awaited<ReturnType<typeof registerMobilePushToken>>>
+    export type RegisterMobilePushTokenMutationBody = BodyType<RegisterMobilePushTokenInput>
+    export type RegisterMobilePushTokenMutationError = ErrorType<ErrorResponse>
+    export type RegisterMobilePushTokenMutationVariables = {data: BodyType<RegisterMobilePushTokenInput>}
+
+    /**
+ * @summary Register a mobile push token
+ */
+export const useRegisterMobilePushToken = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerMobilePushToken>>, TError,RegisterMobilePushTokenMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof registerMobilePushToken>>,
+        TError,
+        RegisterMobilePushTokenMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRegisterMobilePushTokenMutationOptions(options));
+    }
+
+export const getUnregisterMobilePushTokenUrl = () => {
+
+
+
+
+  return `/api/push-tokens`
+}
+
+/**
+ * @summary Disable a mobile push token
+ */
+export const unregisterMobilePushToken = async (unregisterMobilePushTokenInput: UnregisterMobilePushTokenInput, options?: Parameters<typeof customFetch>[1]): Promise<MobilePushTokenResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<MobilePushTokenResponse>(getUnregisterMobilePushTokenUrl(),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(unregisterMobilePushTokenInput)
+  }
+);}
+
+
+
+
+
+export const getUnregisterMobilePushTokenMutationKey = () => ['unregisterMobilePushToken'] as const;
+
+export const getUnregisterMobilePushTokenMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unregisterMobilePushToken>>, TError,UnregisterMobilePushTokenMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof unregisterMobilePushToken>>, TError,UnregisterMobilePushTokenMutationVariables, TContext> => {
+
+const mutationKey = getUnregisterMobilePushTokenMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof unregisterMobilePushToken>>, UnregisterMobilePushTokenMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  unregisterMobilePushToken(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UnregisterMobilePushTokenMutationResult = NonNullable<Awaited<ReturnType<typeof unregisterMobilePushToken>>>
+    export type UnregisterMobilePushTokenMutationBody = BodyType<UnregisterMobilePushTokenInput>
+    export type UnregisterMobilePushTokenMutationError = ErrorType<ErrorResponse>
+    export type UnregisterMobilePushTokenMutationVariables = {data: BodyType<UnregisterMobilePushTokenInput>}
+
+    /**
+ * @summary Disable a mobile push token
+ */
+export const useUnregisterMobilePushToken = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unregisterMobilePushToken>>, TError,UnregisterMobilePushTokenMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof unregisterMobilePushToken>>,
+        TError,
+        UnregisterMobilePushTokenMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUnregisterMobilePushTokenMutationOptions(options));
+    }
 
 export const getGetEntityGraphUrl = (entityType: 'person' | 'project' | 'financial_party',
     entityId: string,) => {

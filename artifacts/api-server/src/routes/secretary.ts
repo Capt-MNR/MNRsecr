@@ -34,6 +34,7 @@ import {
   errorLogFields,
   SecretaryError,
 } from "../lib/error-contract";
+import { dispatchMobilePush } from "../lib/mobile-push";
 
 const router: IRouter = Router();
 
@@ -299,6 +300,20 @@ router.post("/turns", async (req, res): Promise<void> => {
           ...result,
           turnId: result.turnId ?? currentRequestId,
         };
+    if (operation) {
+      void dispatchMobilePush(identity, {
+        title: "السكرتير يحتاج موافقتك",
+        body: operation.display.title,
+        data: {
+          kind: "secretary-event",
+          route: "quick",
+          operationId: operation.operationId,
+          conversationId: operation.conversationId ?? "",
+        },
+      }).catch((error) => {
+        req.log.warn({ error, operationId: operation.operationId }, "Push dispatch failed");
+      });
+    }
     res.json(CreateTurnResponse.parse(response));
   } catch (error) {
     const classified = classifySecretaryError(error);

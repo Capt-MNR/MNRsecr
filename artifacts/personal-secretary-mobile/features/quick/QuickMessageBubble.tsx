@@ -1,8 +1,8 @@
 import { Feather } from '@expo/vector-icons';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { useColors } from '@/hooks/useColors';
-import type { Approval, LocalMessage, MobileRecordRow } from '../shared';
-import { starterMessage, styles } from '../shared';
+import type { Approval, LocalMessage, MobileRecordRow } from './quick-model';
+import { starterMessage, styles } from './quick-model';
 
 function messageTime(value: string) {
   if (value === starterMessage.createdAt) return 'الآن';

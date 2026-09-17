@@ -212,6 +212,44 @@ export interface ApprovalOperation {
   updatedAt: string;
 }
 
+export type RegisterMobilePushTokenInputProvider = typeof RegisterMobilePushTokenInputProvider[keyof typeof RegisterMobilePushTokenInputProvider];
+
+
+export const RegisterMobilePushTokenInputProvider = {
+  expo: 'expo',
+  fcm: 'fcm',
+  apns: 'apns',
+} as const;
+
+export type RegisterMobilePushTokenInputPlatform = typeof RegisterMobilePushTokenInputPlatform[keyof typeof RegisterMobilePushTokenInputPlatform];
+
+
+export const RegisterMobilePushTokenInputPlatform = {
+  android: 'android',
+  ios: 'ios',
+} as const;
+
+export interface RegisterMobilePushTokenInput {
+  /** @minLength 8 */
+  token: string;
+  provider: RegisterMobilePushTokenInputProvider;
+  platform: RegisterMobilePushTokenInputPlatform;
+  /** @minLength 1 */
+  appId: string;
+  /** @nullable */
+  deviceId?: string | null;
+}
+
+export interface UnregisterMobilePushTokenInput {
+  /** @minLength 8 */
+  token: string;
+}
+
+export interface MobilePushTokenResponse {
+  registered: boolean;
+  enabled: boolean;
+}
+
 export interface Candidate {
   id: string;
   name: string;

@@ -9,6 +9,45 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Register a mobile push token
+ */
+export const registerMobilePushTokenBodyTokenMin = 8;
+
+
+
+
+export const RegisterMobilePushTokenBody = zod.object({
+  "token": zod.string().min(registerMobilePushTokenBodyTokenMin),
+  "provider": zod.enum(['expo', 'fcm', 'apns']),
+  "platform": zod.enum(['android', 'ios']),
+  "appId": zod.string().min(1),
+  "deviceId": zod.string().nullish()
+})
+
+export const RegisterMobilePushTokenResponse = zod.object({
+  "registered": zod.boolean(),
+  "enabled": zod.boolean()
+})
+
+
+/**
+ * @summary Disable a mobile push token
+ */
+export const unregisterMobilePushTokenBodyTokenMin = 8;
+
+
+
+export const UnregisterMobilePushTokenBody = zod.object({
+  "token": zod.string().min(unregisterMobilePushTokenBodyTokenMin)
+})
+
+export const UnregisterMobilePushTokenResponse = zod.object({
+  "registered": zod.boolean(),
+  "enabled": zod.boolean()
+})
+
+
+/**
  * @summary Get a bounded entity detail graph
  */
 export const GetEntityGraphParams = zod.object({
