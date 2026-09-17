@@ -31,3 +31,4 @@
 - [Quick confirmation boundary](quick-confirmation-boundary.md) — only simple expenses and reminders may be directly approved from Quick; complex or ambiguous writes stay in Main.
 - [Android Quick notification](android-quick-notification.md) — use one low-priority sticky local notification as an entry point; no device runtime, polling, or reboot receiver.
 - [Mobile push delivery](mobile-push-delivery.md) — register tenant-scoped Expo tokens server-side; Expo relays approval events to FCM/APNs without provider credentials in the app.
+- [EAS native build environment](eas-native-build-environment.md) — Expo SDK 57 needs Node 20 and a Java 17 Android image; iOS remote signing still needs validated interactive credentials.
