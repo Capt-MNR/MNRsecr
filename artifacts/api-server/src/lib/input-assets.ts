@@ -49,6 +49,7 @@ const processedInputCache = new Map<string, {
   result: InputAssetProcessResult;
   expiresAt: number;
 }>();
+const inputProcessingFlights = new Map<string, Promise<InputAssetProcessResult>>();
 
 function inputCacheKey(input: InputAssetProcessInput, scope: InputAssetScope): string {
   return createHash("sha256")
@@ -140,23 +141,10 @@ function inputPrompt(kind: InputAssetKind): string {
   ].join("\n");
 }
 
-export async function processInputAsset(
+async function processInputAssetUncached(
   input: InputAssetProcessInput,
-  scope: InputAssetScope,
+  cacheKey: string,
 ): Promise<InputAssetProcessResult> {
-  const cacheKey = inputCacheKey(input, scope);
-  pruneInputCache();
-  const cached = processedInputCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) {
-    return {
-      ...cached.result,
-      processing: {
-        ...cached.result.processing,
-        cacheHit: true,
-      },
-    };
-  }
-  if (cached) processedInputCache.delete(cacheKey);
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new SecretaryError("معالجة الإدخال غير متاحة حاليًا.", {
@@ -271,5 +259,46 @@ export async function processInputAsset(
     throw providerExceptionError(INPUT_PROVIDER, error);
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+export async function processInputAsset(
+  input: InputAssetProcessInput,
+  scope: InputAssetScope,
+): Promise<InputAssetProcessResult> {
+  const cacheKey = inputCacheKey(input, scope);
+  pruneInputCache();
+  const cached = processedInputCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return {
+      ...cached.result,
+      processing: {
+        ...cached.result.processing,
+        cacheHit: true,
+      },
+    };
+  }
+  if (cached) processedInputCache.delete(cacheKey);
+
+  const existingFlight = inputProcessingFlights.get(cacheKey);
+  if (existingFlight) {
+    const result = await existingFlight;
+    return {
+      ...result,
+      processing: {
+        ...result.processing,
+        cacheHit: true,
+      },
+    };
+  }
+
+  const flight = processInputAssetUncached(input, cacheKey);
+  inputProcessingFlights.set(cacheKey, flight);
+  try {
+    return await flight;
+  } finally {
+    if (inputProcessingFlights.get(cacheKey) === flight) {
+      inputProcessingFlights.delete(cacheKey);
+    }
   }
 }
