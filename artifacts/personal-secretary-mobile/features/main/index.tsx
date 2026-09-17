@@ -2958,6 +2958,17 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  errorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+  },
+  retryButton: {
+    backgroundColor: '#2b7a7f',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
   drawerLayer: {
     ...StyleSheet.absoluteFill,
     zIndex: 20,

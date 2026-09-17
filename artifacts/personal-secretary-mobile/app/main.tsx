@@ -341,17 +341,3 @@ export default function MainRoute() {
     </KeyboardAvoidingView>
   );
 }
-
-const styles = {
-  errorRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    paddingHorizontal: 8,
-  },
-  retryButton: {
-    backgroundColor: '#2b7a7f',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-};

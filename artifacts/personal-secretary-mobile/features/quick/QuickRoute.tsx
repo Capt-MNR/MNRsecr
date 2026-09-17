@@ -254,7 +254,13 @@ export default function QuickRoute() {
           />
         </QuickScreen>
       )}
-      {localError && <View style={[styles.errorBanner, { backgroundColor: colors.destructive }]}><Feather name="alert-circle" size={15} color={colors.destructiveForeground} /><Text style={[styles.errorText, { color: colors.destructiveForeground }]}>{localError}</Text></View>}
+      {localError && <View style={[styles.errorBanner, { backgroundColor: colors.destructive }]}>
+        <Feather name="alert-circle" size={15} color={colors.destructiveForeground} />
+        <Text style={[styles.errorText, { color: colors.destructiveForeground }]}>{localError}</Text>
+        {inputCapture.canRetry && <Pressable onPress={() => void inputCapture.retry()} style={styles.errorRetryButton}>
+          <Text style={[styles.errorRetryText, { color: colors.destructiveForeground }]}>{localized(language, 'إعادة المحاولة', 'Retry')}</Text>
+        </Pressable>}
+      </View>}
       {conversationQuery.isError && <View style={[styles.errorBanner, { backgroundColor: colors.destructive }]}><Text style={[styles.errorText, { color: colors.destructiveForeground }]}>{localized(language, 'تعذر فتح المحادثة الأصلية.', 'Unable to open the original conversation.')}</Text></View>}
       <View style={[styles.composerWrap, { paddingBottom: bottomInset, borderTopColor: colors.border, backgroundColor: colors.background }]}>
         {inputReview?.kind === 'receipt' && <ReceiptReviewCard result={inputReview} colors={colors} language={language} onChange={updateInputReview} onClear={() => setInputReview(null)} />}
