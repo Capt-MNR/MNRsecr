@@ -654,6 +654,8 @@ export const createTurnBodyPeerOneCapabilitiesItemMax = 100;
 
 export const createTurnBodyPeerOneCapabilitiesMax = 32;
 
+export const createTurnBodyInputIdMax = 100;
+
 
 
 export const CreateTurnBody = zod.object({
@@ -674,7 +676,8 @@ export const CreateTurnBody = zod.object({
   "displayName": zod.string().max(createTurnBodyPeerOneDisplayNameMax).optional(),
   "protocol": zod.string().max(createTurnBodyPeerOneProtocolMax).optional(),
   "capabilities": zod.array(zod.string().max(createTurnBodyPeerOneCapabilitiesItemMax)).max(createTurnBodyPeerOneCapabilitiesMax).optional()
-}),zod.null()]).optional()
+}),zod.null()]).optional(),
+  "inputId": zod.string().max(createTurnBodyInputIdMax).nullish()
 })
 
 export const CreateTurnResponse = zod.object({

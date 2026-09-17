@@ -190,11 +190,12 @@ export default function MainRoute() {
     const message = value.trim();
     if (!message || secretaryChat.isSending || conversationQuery.isFetching) return;
     setDraft('');
+    const submittedInputId = inputReview?.inputId ?? null;
     setInputReview(null);
     setLocalError(null);
     appendMessage({ id: `user-${Date.now()}`, role: 'user', text: message, createdAt: new Date().toISOString() });
     try {
-      const result = await secretaryChat.sendTurn({ message, conversationId: conversationId ?? null, channel: chatContext ? 'record' : 'main', context: chatContext ? secretaryContextFromRecord(chatContext) : null });
+       const result = await secretaryChat.sendTurn({ message, conversationId: conversationId ?? null, channel: chatContext ? 'record' : 'main', context: chatContext ? secretaryContextFromRecord(chatContext) : null, inputId: submittedInputId });
       setConversationId(result.conversationId);
       const linked = recordLinkFromAction(result.action);
       appendMessage({

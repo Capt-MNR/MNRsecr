@@ -350,7 +350,7 @@ router.post("/input-assets/process", async (req, res): Promise<void> => {
     return;
   }
   try {
-    const result = await processInputAsset(parsed.data);
+    const result = await processInputAsset(parsed.data, identity);
     req.log.info({
       requestId: requestId(req),
       inputId: result.inputId,
@@ -359,6 +359,7 @@ router.post("/input-assets/process", async (req, res): Promise<void> => {
       model: result.processing.model,
       inputTokens: result.processing.inputTokens,
       outputTokens: result.processing.outputTokens,
+      cacheHit: result.processing.cacheHit,
     }, "secretary input asset processed");
     res.json(ProcessSecretaryInputAssetResponse.parse(result));
   } catch (error) {

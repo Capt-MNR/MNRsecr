@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   providerExceptionError,
   providerResponseError,
@@ -12,6 +12,11 @@ export type InputAssetProcessInput = {
   kind: InputAssetKind;
   mimeType: string;
   base64: string;
+};
+
+export type InputAssetScope = {
+  tenantId: string;
+  userId: string;
 };
 
 export type InputAssetProcessResult = {
@@ -38,6 +43,35 @@ export type InputAssetProcessResult = {
 const INPUT_PROVIDER = "gemini";
 const INPUT_MODEL = process.env.GEMINI_INPUT_MODEL ?? process.env.GEMINI_MODEL ?? "gemini-3.6-flash";
 const MAX_INPUT_BYTES = 9_000_000;
+const INPUT_CACHE_TTL_MS = 30 * 60_000;
+const INPUT_CACHE_MAX_ENTRIES = 500;
+const processedInputCache = new Map<string, {
+  result: InputAssetProcessResult;
+  expiresAt: number;
+}>();
+
+function inputCacheKey(input: InputAssetProcessInput, scope: InputAssetScope): string {
+  return createHash("sha256")
+    .update(JSON.stringify({
+      tenantId: scope.tenantId,
+      userId: scope.userId,
+      kind: input.kind,
+      mimeType: input.mimeType,
+      base64: input.base64,
+    }))
+    .digest("hex");
+}
+
+function pruneInputCache(now = Date.now()): void {
+  for (const [key, entry] of processedInputCache) {
+    if (entry.expiresAt <= now) processedInputCache.delete(key);
+  }
+  while (processedInputCache.size >= INPUT_CACHE_MAX_ENTRIES) {
+    const oldestKey = processedInputCache.keys().next().value;
+    if (!oldestKey) break;
+    processedInputCache.delete(oldestKey);
+  }
+}
 
 function parseJsonResponse(raw: string): Record<string, unknown> {
   const text = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
@@ -108,7 +142,21 @@ function inputPrompt(kind: InputAssetKind): string {
 
 export async function processInputAsset(
   input: InputAssetProcessInput,
+  scope: InputAssetScope,
 ): Promise<InputAssetProcessResult> {
+  const cacheKey = inputCacheKey(input, scope);
+  pruneInputCache();
+  const cached = processedInputCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return {
+      ...cached.result,
+      processing: {
+        ...cached.result.processing,
+        cacheHit: true,
+      },
+    };
+  }
+  if (cached) processedInputCache.delete(cacheKey);
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new SecretaryError("معالجة الإدخال غير متاحة حاليًا.", {
@@ -196,7 +244,7 @@ export async function processInputAsset(
     }
     const payload = parseJsonResponse(output);
     const receipt = input.kind === "receipt" ? normalizeReceipt(payload.receipt) : undefined;
-    return {
+    const result = {
       inputId: randomUUID(),
       kind: input.kind,
       text: nullableString(payload.text) ?? "",
@@ -209,6 +257,12 @@ export async function processInputAsset(
         cacheHit: false,
       },
     };
+    pruneInputCache();
+    processedInputCache.set(cacheKey, {
+      result,
+      expiresAt: Date.now() + INPUT_CACHE_TTL_MS,
+    });
+    return result;
   } catch (error) {
     if (error instanceof SecretaryError) throw error;
     if (error instanceof DOMException && error.name === "AbortError") {

@@ -107,6 +107,11 @@ export interface TurnInput {
   channel: TurnInputChannel;
   context?: SecretaryChatContext | null;
   peer?: SecretaryChatPeer | null;
+  /**
+     * @maxLength 100
+     * @nullable
+     */
+  inputId?: string | null;
 }
 
 export type InputAssetProcessInputKind = typeof InputAssetProcessInputKind[keyof typeof InputAssetProcessInputKind];

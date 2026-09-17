@@ -140,6 +140,7 @@ export default function QuickRoute() {
     const message = value.trim();
     if (!message || secretaryChat.isSending || conversationQuery.isFetching) return;
     setDraft('');
+    const submittedInputId = inputReview?.inputId ?? null;
     setInputReview(null);
     setLocalError(null);
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -150,6 +151,7 @@ export default function QuickRoute() {
         conversationId: conversationId ?? null,
         channel: 'quick',
         context: null,
+        inputId: submittedInputId,
       });
       setConversationId(result.conversationId);
       await queryClient.invalidateQueries({ queryKey: ['secretary-chat-conversations'] });

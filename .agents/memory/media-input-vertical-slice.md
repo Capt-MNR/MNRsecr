@@ -7,4 +7,4 @@ Voice and receipt media must be processed once into editable text or structured 
 
 **Why:** This keeps follow-up turns small and preserves the existing approval boundary while provider selection, storage, hashing, and benchmark coverage are still being finalized.
 
-**How to apply:** Keep new media integrations behind the input-asset processing boundary; do not let image/audio bytes flow through `/turns` or persistent conversation messages.
+**How to apply:** Keep new media integrations behind the input-asset processing boundary; do not let image/audio bytes flow through `/turns` or persistent conversation messages. Any short-lived processed-result cache must hash the full input and include tenant and user scope in its key.

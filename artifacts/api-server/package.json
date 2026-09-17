@@ -18,6 +18,7 @@
     "test:http-phase3": "../../scripts/node_modules/.bin/tsx --test test/http-phase3.test.ts",
     "test:phase3:records": "node --test test/phase3.records.integration.mjs",
     "test:expense-report": "node --experimental-strip-types --test test/expense-report.test.ts",
+    "test:input-assets": "../../scripts/node_modules/.bin/tsx --test test/input-assets.test.ts",
     "test:intent-eval": "../../scripts/node_modules/.bin/tsx ./test/intent-evaluation/runner.ts"
   },
   "dependencies": {
