@@ -3283,6 +3283,7 @@ export const styles = StyleSheet.create({
     marginTop: 8,
     padding: 14,
     borderRadius: 24,
+    justifyContent: 'space-between',
   },
   recordChatPanel: {
     marginTop: 14,
@@ -3395,6 +3396,8 @@ export const styles = StyleSheet.create({
   },
   centralChatTranscriptExpanded: {
     flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
     height: undefined,
     maxHeight: undefined,
     marginTop: 12,
@@ -3434,6 +3437,10 @@ export const styles = StyleSheet.create({
     paddingLeft: 10,
     paddingRight: 14,
   },
+  centralChatInputExpanded: {
+    paddingTop: 11,
+    paddingBottom: 10,
+  },
   centralChatInput: {
     flex: 1,
     maxHeight: 58,
@@ -3463,6 +3470,37 @@ export const styles = StyleSheet.create({
   centralChatSuggestionMenu: {
     marginTop: 9,
     gap: 5,
+  },
+  centralChatSuggestionMenuExpanded: {
+    position: 'absolute',
+    right: 14,
+    bottom: 106,
+    width: '72%',
+    zIndex: 5,
+    padding: 8,
+    borderRadius: 17,
+    shadowOpacity: 0.14,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 5,
+  },
+  centralChatQuickDock: {
+    position: 'absolute',
+    right: 14,
+    bottom: 67,
+    zIndex: 4,
+  },
+  centralChatQuickButton: {
+    minHeight: 32,
+    borderRadius: 16,
+    paddingHorizontal: 11,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 5,
+  },
+  centralChatQuickButtonText: {
+    fontSize: 9,
+    fontWeight: '700',
   },
   centralChatPrompt: {
     minHeight: 34,

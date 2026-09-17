@@ -28,8 +28,6 @@ import {
   recordLinkFromAction,
   secretaryContextFromRecord,
   starterMessage,
-  STORAGE_CONVERSATION,
-  STORAGE_MESSAGES,
   styles,
   type Approval,
   type ApprovalStatus,
@@ -131,20 +129,11 @@ export default function MainRoute() {
 
   useEffect(() => {
     let active = true;
-    void AsyncStorage.multiGet([STORAGE_MESSAGES, STORAGE_CONVERSATION, 'secretary:assistant-preferences']).then(([storedMessages, storedConversation, storedPreferences]) => {
+    void AsyncStorage.getItem('secretary:assistant-preferences').then((storedPreferences) => {
       if (!active) return;
-      if (storedMessages[1]) {
+      if (storedPreferences) {
         try {
-          const parsed = JSON.parse(storedMessages[1]) as LocalMessage[];
-          if (Array.isArray(parsed) && parsed.length > 0) setMessages(parsed);
-        } catch {
-          setMessages([starterMessage]);
-        }
-      }
-      if (storedConversation[1]) setConversationId(storedConversation[1]);
-      if (storedPreferences[1]) {
-        try {
-          const parsed = JSON.parse(storedPreferences[1]) as Partial<AssistantPreferences>;
+          const parsed = JSON.parse(storedPreferences) as Partial<AssistantPreferences>;
           setAssistantPreferences({ ...defaultAssistantPreferences, ...parsed });
         } catch {
           setAssistantPreferences(defaultAssistantPreferences);
@@ -161,14 +150,6 @@ export default function MainRoute() {
       subscription.remove();
     };
   }, [router]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    void AsyncStorage.multiSet([
-      [STORAGE_MESSAGES, JSON.stringify(messages.slice(-40))],
-      [STORAGE_CONVERSATION, conversationId ?? ''],
-    ]);
-  }, [conversationId, hydrated, messages]);
 
   useEffect(() => {
     if (!hydrated) return;
