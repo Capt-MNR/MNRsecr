@@ -724,7 +724,15 @@ function CentralSecretaryChat({
 }: SecretaryChatProps) {
   const { language } = useLanguage();
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const [inputHeight, setInputHeight] = useState(30);
+  useEffect(() => {
+    if (!draft) setInputHeight(30);
+  }, [draft]);
   const transcriptMessages = messages.length === 1 && messages[0]?.id === 'welcome' ? [] : messages;
+  const inputMaxHeight = expanded ? 132 : 76;
+  const inputContentHeight = (event: { nativeEvent: { contentSize: { height: number } } }) => {
+    setInputHeight(Math.min(inputMaxHeight, Math.max(30, event.nativeEvent.contentSize.height)));
+  };
   return (
     <View
       testID={compact ? 'record-context-chat' : 'main-central-chat'}
@@ -840,7 +848,7 @@ function CentralSecretaryChat({
         nestedScrollEnabled
         showsVerticalScrollIndicator={false}
       >
-        {transcriptMessages.map((message) => (
+        {transcriptMessages.slice().reverse().map((message) => (
           <MessageBubble
             key={message.id}
             message={message}
@@ -866,6 +874,7 @@ function CentralSecretaryChat({
           testID={compact ? 'record-context-input' : 'main-message-input'}
           value={draft}
           onChangeText={onChangeDraft}
+          onContentSizeChange={inputContentHeight}
           onSubmitEditing={onSend}
           placeholder={context
             ? localized(language, 'اكتب سؤالك عن هذا السياق…', 'Ask about this context…')
@@ -876,7 +885,7 @@ function CentralSecretaryChat({
           returnKeyType="send"
           blurOnSubmit={false}
           textAlign="right"
-          style={[styles.centralChatInput, { color: colors.foreground }]}
+          style={[styles.centralChatInput, expanded && styles.centralChatInputExpanded, { color: colors.foreground, height: inputHeight, maxHeight: inputMaxHeight }]}
         />
         <Pressable
           testID={compact ? 'record-context-send' : 'main-send-message'}
@@ -894,8 +903,34 @@ function CentralSecretaryChat({
           <Feather name="arrow-up" size={17} color={colors.primaryForeground} />
         </Pressable>
       </View>
+      {!compact && onQuickPrompt && expanded && (
+        <View style={styles.centralChatQuickDock}>
+          <Pressable
+            testID="main-chat-quick-actions"
+            accessibilityRole="button"
+            accessibilityLabel={localized(language, 'فتح الإجراءات السريعة', 'Open quick actions')}
+            accessibilityState={{ expanded: suggestionsOpen }}
+            onPress={() => setSuggestionsOpen((open) => !open)}
+            style={({ pressed }) => [
+              styles.centralChatQuickButton,
+              { backgroundColor: colors.muted, opacity: pressed ? 0.9 : 0.72 },
+            ]}
+          >
+            <Feather name="zap" size={13} color={colors.primary} />
+            <Text style={[styles.centralChatQuickButtonText, { color: colors.foreground }]}>
+              {localized(language, 'إجراءات سريعة', 'Quick actions')}
+            </Text>
+          </Pressable>
+        </View>
+      )}
       {!compact && onQuickPrompt && suggestionsOpen && (
-        <View style={styles.centralChatSuggestionMenu}>
+        <View
+          style={[
+            styles.centralChatSuggestionMenu,
+            expanded && styles.centralChatSuggestionMenuExpanded,
+            { backgroundColor: colors.card, shadowColor: colors.foreground },
+          ]}
+        >
           {[
             [localized(language, 'لخّص يومي', 'Summarize today'), 'اعرض ملخص اليوم'],
             [localized(language, 'ابحث عن مصروف', 'Find an expense'), 'اعرض مصروفاتي الأخيرة'],
@@ -1164,7 +1199,7 @@ export function MainOffice({
 
   return (
     <View testID="main-office-home" style={styles.officeHome}>
-      <View testID="main-summary-cards" style={styles.officeSummaryGrid}>
+      {!chatExpanded && <View testID="main-summary-cards" style={styles.officeSummaryGrid}>
         {summaryCards.map((card) => (
           <Pressable
             key={card.key}
@@ -1203,7 +1238,7 @@ export function MainOffice({
             </Text>
           </Pressable>
         ))}
-      </View>
+      </View>}
 
       <CentralSecretaryChat
         colors={colors}
