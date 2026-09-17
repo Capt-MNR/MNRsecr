@@ -7,12 +7,14 @@
     "preview": {
       "distribution": "internal",
       "corepack": true,
+      "node": "20.19.1",
       "android": {
         "buildType": "apk"
       }
     },
     "production": {
       "corepack": true,
+      "node": "20.19.1",
       "autoIncrement": true
     }
   },
