@@ -4,6 +4,11 @@ This verification is required before the mobile architecture phase is complete.
 Use an Android internal APK and an iOS TestFlight build. Expo Go and web preview
 do not count as proof of remote notification delivery.
 
+## Current scope
+
+Android verification is the active scope. iOS/TestFlight verification is deferred
+until the Distribution Certificate is validated and a TestFlight build is available.
+
 ## Current Android build
 
 - Status: `FINISHED`
