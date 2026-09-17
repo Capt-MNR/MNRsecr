@@ -9,6 +9,7 @@
       "corepack": true,
       "node": "20.19.1",
       "android": {
+        "image": "sdk-57",
         "buildType": "apk"
       }
     },
