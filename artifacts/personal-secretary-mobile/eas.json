@@ -6,11 +6,13 @@
   "build": {
     "preview": {
       "distribution": "internal",
+      "corepack": true,
       "android": {
         "buildType": "apk"
       }
     },
     "production": {
+      "corepack": true,
       "autoIncrement": true
     }
   },
