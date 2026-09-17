@@ -502,8 +502,6 @@ export function RecordsView({
 }: {
   colors: ReturnType<typeof useColors>;
   onOpenRecord: (record: MobileRecordRow) => void;
-  onRetryInput?: (attachment: LocalMessage['inputAttachment']) => void;
-  retryingInput?: boolean;
   onOpenSection?: (sectionKey: string) => void;
   onBack?: () => void;
   sectionKeys?: string[];
@@ -705,6 +703,8 @@ type SecretaryChatProps = {
   onReject: (approval: Approval) => void;
   busyOperationId: string | null;
   onOpenRecord: (record: MobileRecordRow) => void;
+  onRetryInput?: (attachment: LocalMessage['inputAttachment']) => void;
+  retryingInput?: boolean;
   context?: MobileRecordRow | null;
   smartSignal?: string;
   quickPrompts?: Array<{ label: string; value: string }>;
@@ -1115,6 +1115,8 @@ export function MainOffice({
   busyOperationId,
   recordOrigins,
   chatContext,
+  onRetryInput,
+  retryingInput = false,
   recentConversations,
   conversationSearch,
   onChangeConversationSearch,

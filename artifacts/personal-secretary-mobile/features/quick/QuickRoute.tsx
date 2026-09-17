@@ -258,7 +258,7 @@ export default function QuickRoute() {
             inverted
             data={reversedMessages}
             keyExtractor={(item) => item.id}
-            renderItem={({ item }) => <QuickMessageBubble message={item} colors={colors} onApprove={(approval) => void updateApproval(approval, 'completed')} onReject={(approval) => void updateApproval(approval, 'rejected')} onOpenMain={() => openMain()} onOpenRecord={(record) => openMain(record)} busyOperationId={busyOperationId} />}
+            renderItem={({ item }) => <QuickMessageBubble message={item} colors={colors} onApprove={(approval) => void updateApproval(approval, 'completed')} onReject={(approval) => void updateApproval(approval, 'rejected')} onOpenMain={() => openMain()} onOpenRecord={(record) => openMain(record)} onRetryInput={(attachment) => { if (attachment) void inputCapture.retryAttachment(attachment); }} retryingInput={inputCapture.state === 'processing'} busyOperationId={busyOperationId} />}
             contentContainerStyle={styles.messageList}
             keyboardDismissMode="interactive"
             keyboardShouldPersistTaps="handled"

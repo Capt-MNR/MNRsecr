@@ -5,7 +5,7 @@ description: The first mobile media flow processes voice and receipt media once,
 
 Voice and receipt media must be processed once into editable text or structured receipt data before entering the secretary conversation. Receipt fields are reviewed independently before the app rebuilds the secretary draft. Raw media is not appended to conversation history, and the user still explicitly submits the resulting draft.
 
-After successful processing, the mobile client may copy the original media into its private document directory and keep only bounded metadata keyed by `inputId` in local storage. The server receives only the structured result's `inputId`; cloud upload remains a separate future boundary. If the copy fails, preserve the in-memory source for a retry and let the processed text remain usable.
+After successful processing, the mobile client may copy the original media into its private document directory and keep only bounded metadata keyed by `inputId` in local storage. The server receives only the structured result's `inputId`; cloud upload remains a separate future boundary. If the copy fails, preserve the in-memory source for a retry and let the processed text remain usable. A later retry from a persisted local attachment must return to the editable composer and still require explicit submission.
 
 **Why:** This keeps follow-up turns small and preserves the existing approval boundary while provider selection, storage, hashing, and benchmark coverage are still being finalized.
 
