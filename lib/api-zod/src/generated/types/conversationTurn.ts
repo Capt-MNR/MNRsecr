@@ -9,6 +9,8 @@ import type { ConversationTurnAction } from './conversationTurnAction';
 
 export interface ConversationTurn {
   turnId?: string;
+  /** @maxLength 100 */
+  inputId?: string;
   userMessage: string;
   assistantMessage: string;
   createdAt: string;

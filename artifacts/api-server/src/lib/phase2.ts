@@ -4579,6 +4579,7 @@ export class Phase2AgentRuntime {
           type: "llm_response",
           conversationState,
         }),
+        ...(input.inputId ? { inputId: input.inputId } : {}),
         deterministicIntelligence: deterministicMetrics,
         ...(learningSignal ? { learningSignal } : {}),
         ...(patternInsights.length > 0 ? { patternInsights } : {}),
@@ -4598,6 +4599,7 @@ export class Phase2AgentRuntime {
       if (!options.dryRun) {
         await saveConversationTurn(identity, conversationMemory, {
           turnId: requestId,
+          ...(input.inputId ? { inputId: input.inputId } : {}),
           userMessage: input.message.trim(),
           assistantMessage: result.assistantMessage,
           action: result.action,

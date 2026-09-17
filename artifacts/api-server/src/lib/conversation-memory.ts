@@ -5,6 +5,7 @@ import { featureFlags } from "./feature-flags";
 
 export type ConversationTurn = {
   turnId?: string;
+  inputId?: string;
   userMessage: string;
   assistantMessage: string;
   action?: Record<string, unknown>;

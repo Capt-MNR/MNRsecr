@@ -891,6 +891,10 @@ export const GetConversationParams = zod.object({
   "conversationId": zod.coerce.string()
 })
 
+export const getConversationResponseRecentTurnsItemInputIdMax = 100;
+
+
+
 export const GetConversationResponse = zod.object({
   "conversationId": zod.string(),
   "title": zod.string(),
@@ -898,6 +902,7 @@ export const GetConversationResponse = zod.object({
   "turnCount": zod.number().int(),
   "recentTurns": zod.array(zod.object({
   "turnId": zod.string().optional(),
+  "inputId": zod.string().max(getConversationResponseRecentTurnsItemInputIdMax).optional(),
   "userMessage": zod.string(),
   "assistantMessage": zod.string(),
   "createdAt": zod.string(),

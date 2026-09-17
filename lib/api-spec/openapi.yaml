@@ -1432,6 +1432,9 @@ components:
       properties:
         turnId:
           type: string
+        inputId:
+          type: string
+          maxLength: 100
         userMessage:
           type: string
         assistantMessage:

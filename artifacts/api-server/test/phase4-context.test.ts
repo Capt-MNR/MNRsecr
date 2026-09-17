@@ -481,6 +481,22 @@ test("Phase2 persists a financial referent and resolves the next turn without pr
   await cleanup();
 });
 
+test("conversation turns retain input provenance without storing raw media", async () => {
+  await cleanup();
+  const conversationId = `phase4-input-provenance-${Date.now()}`;
+  const snapshot = await loadConversationMemory(identity, conversationId);
+  await saveConversationTurn(identity, snapshot, {
+    inputId: "input-provenance-test",
+    userMessage: "سجل هذه الفاتورة",
+    assistantMessage: "تمت مراجعة المسودة",
+  });
+
+  const loaded = await loadConversationMemory(identity, conversationId);
+  assert.equal(loaded.recentTurns.at(-1)?.inputId, "input-provenance-test");
+  assert.equal("base64" in (loaded.recentTurns.at(-1) ?? {}), false);
+  await cleanup();
+});
+
 test("relative expense approval applies its delta to the latest saved amount atomically", async () => {
   await cleanup();
   const seeded = await seedGraph();
