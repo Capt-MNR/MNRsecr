@@ -464,8 +464,8 @@ export function MessageBubble({
             onPress={() => onOpenRecord(message.recordLink as MobileRecordRow)}
             style={({ pressed }) => [styles.messageLink, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}
           >
-            <Feather name="arrow-up-left" size={15} color={colors.primary} />
-            <Text style={[styles.messageLinkText, { color: colors.primary }]}>فتح التفاصيل</Text>
+            <Feather name="file-text" size={14} color={colors.primary} />
+            <Text style={[styles.messageLinkText, { color: colors.primary }]}>فتح السجل المصدر</Text>
           </Pressable>
         )}
       </View>

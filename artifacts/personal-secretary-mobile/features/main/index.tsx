@@ -698,6 +698,7 @@ type SecretaryChatProps = {
   onOpenRecord: (record: MobileRecordRow) => void;
   context?: MobileRecordRow | null;
   smartSignal?: string;
+  quickPrompts?: Array<{ label: string; value: string }>;
   compact?: boolean;
   expanded?: boolean;
   onToggleExpanded?: () => void;
@@ -718,6 +719,7 @@ function CentralSecretaryChat({
   onOpenRecord,
   context,
   smartSignal,
+  quickPrompts,
   compact = false,
   expanded = false,
   onToggleExpanded,
@@ -729,6 +731,11 @@ function CentralSecretaryChat({
     if (!draft) setInputHeight(30);
   }, [draft]);
   const transcriptMessages = messages.length === 1 && messages[0]?.id === 'welcome' ? [] : messages;
+  const promptOptions = quickPrompts ?? [
+    { label: localized(language, 'لخّص يومي', 'Summarize today'), value: 'اعرض ملخص اليوم' },
+    { label: localized(language, 'ابحث عن مصروف', 'Find an expense'), value: 'اعرض مصروفاتي الأخيرة' },
+    { label: localized(language, 'أضف مهمة', 'Add a task'), value: 'أنشئ مهمة جديدة' },
+  ];
   const inputMaxHeight = expanded ? 132 : 76;
   const inputContentHeight = (event: { nativeEvent: { contentSize: { height: number } } }) => {
     setInputHeight(Math.min(inputMaxHeight, Math.max(30, event.nativeEvent.contentSize.height)));
@@ -843,11 +850,29 @@ function CentralSecretaryChat({
           compact && styles.recordChatTranscript,
           !compact && expanded && styles.centralChatTranscriptExpanded,
         ]}
-        contentContainerStyle={styles.centralChatTranscriptContent}
+        contentContainerStyle={[
+          styles.centralChatTranscriptContent,
+          !compact && expanded && transcriptMessages.length === 0 && styles.centralChatTranscriptEmptyContent,
+        ]}
         keyboardShouldPersistTaps="handled"
         nestedScrollEnabled
         showsVerticalScrollIndicator={false}
       >
+        {!compact && transcriptMessages.length === 0 && !isSending && (
+          <View style={styles.centralChatEmpty}>
+            <View style={[styles.centralChatEmptyIcon, { backgroundColor: colors.muted }]}>
+              <Feather name="message-circle" size={20} color={colors.primary} />
+            </View>
+            <Text style={[styles.centralChatEmptyTitle, { color: colors.foreground }]}>
+              {localized(language, 'إيه أهم حاجة أساعدك فيها؟', 'What should we take care of?')}
+            </Text>
+            <Text style={[styles.centralChatEmptyText, { color: colors.mutedForeground }]}>
+              {context
+                ? localized(language, 'اسأل عن السجل الحالي أو أي علاقة مرتبطة به.', 'Ask about this record or anything connected to it.')
+                : localized(language, 'اكتب بطريقتك الطبيعية، وأنا أرتّب الخطوة التالية معك.', 'Write naturally, and I’ll help organize the next step.')}
+            </Text>
+          </View>
+        )}
         {transcriptMessages.slice().reverse().map((message) => (
           <MessageBubble
             key={message.id}
@@ -931,11 +956,7 @@ function CentralSecretaryChat({
             { backgroundColor: colors.card, shadowColor: colors.foreground },
           ]}
         >
-          {[
-            [localized(language, 'لخّص يومي', 'Summarize today'), 'اعرض ملخص اليوم'],
-            [localized(language, 'ابحث عن مصروف', 'Find an expense'), 'اعرض مصروفاتي الأخيرة'],
-            [localized(language, 'أضف مهمة', 'Add a task'), 'أنشئ مهمة جديدة'],
-          ].map(([label, value]) => (
+          {promptOptions.map(({ label, value }) => (
             <Pressable
               key={value}
               testID={`main-chat-prompt-${value}`}
@@ -1191,10 +1212,16 @@ export function MainOffice({
     },
   ];
   const quickActions: Array<{ icon: FeatherName; label: string; labelEn: string; draft: string }> = [
-    { icon: 'bar-chart-2', label: 'حلّل مصروفاتي', labelEn: 'Analyze spending', draft: 'اعرض مصروفاتي الأخيرة' },
-    { icon: 'sun', label: 'رتّب يومي', labelEn: 'Organize my day', draft: 'اعرض ملخص اليوم ورتب أولوياتي' },
-    { icon: 'bell', label: 'ما الذي يستحق انتباهي؟', labelEn: 'What needs my attention?', draft: 'ما الذي يحتاج انتباهي اليوم؟' },
-    { icon: 'layers', label: 'لخّص سياقي', labelEn: 'Summarize my context', draft: 'لخص السجلات المرتبطة بي' },
+    pendingApprovals.length > 0
+      ? { icon: 'shield', label: 'راجع الموافقات', labelEn: 'Review approvals', draft: 'إيه اللي محتاج موافقتي؟' }
+      : { icon: 'sun', label: 'رتّب يومي', labelEn: 'Organize my day', draft: 'اعرض ملخص اليوم ورتب أولوياتي' },
+    context.recentExpenses.length > 0
+      ? { icon: 'bar-chart-2', label: 'راجع مصروفاتي', labelEn: 'Review spending', draft: 'اعرض مصروفاتي الأخيرة' }
+      : { icon: 'bell', label: 'ما الذي يستحق انتباهي؟', labelEn: 'What needs my attention?', draft: 'ما الذي يحتاج انتباهي اليوم؟' },
+    context.pendingTasks.length > 0
+      ? { icon: 'check-square', label: 'رتّب مهامي', labelEn: 'Organize tasks', draft: 'اعرض مهامي المفتوحة ورتبها' }
+      : { icon: 'layers', label: 'لخّص سياقي', labelEn: 'Summarize my context', draft: 'لخص السجلات المرتبطة بي' },
+    { icon: 'users', label: 'راجع علاقاتي', labelEn: 'Review relationships', draft: 'مين لسه عليه فلوس أو متابعة؟' },
   ];
 
   return (
@@ -1247,6 +1274,10 @@ export function MainOffice({
         onChangeDraft={onChangeDraft}
         onSend={onSend}
         onQuickPrompt={onAskSecretary}
+        quickPrompts={quickActions.slice(0, 3).map((action) => ({
+          label: localized(language, action.label, action.labelEn),
+          value: action.draft,
+        }))}
         onFocusChat={focusAndExpandChat}
         expanded={chatExpanded}
         onToggleExpanded={() => setChatExpanded((expanded) => !expanded)}
@@ -3412,6 +3443,34 @@ export const styles = StyleSheet.create({
   centralChatTranscriptContent: {
     paddingVertical: 1,
     gap: 5,
+  },
+  centralChatTranscriptEmptyContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
+  centralChatEmpty: {
+    alignItems: 'center',
+    paddingHorizontal: 28,
+  },
+  centralChatEmptyIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  centralChatEmptyTitle: {
+    marginTop: 12,
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  centralChatEmptyText: {
+    maxWidth: 280,
+    marginTop: 6,
+    fontSize: 12,
+    lineHeight: 19,
+    textAlign: 'center',
   },
   centralChatTyping: {
     borderRadius: 12,
