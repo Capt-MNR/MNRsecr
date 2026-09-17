@@ -36,6 +36,8 @@ import type {
   FinancialMutationResponse,
   GetCandidatesParams,
   HealthStatus,
+  InputAssetProcessInput,
+  InputAssetProcessResponse,
   LearningSignalListResponse,
   LearningSignalReviewInput,
   LearningSignalReviewResponse,
@@ -2352,6 +2354,94 @@ export const useCreateTurn = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getCreateTurnMutationOptions(options));
+    }
+
+export const getProcessSecretaryInputAssetUrl = () => {
+
+
+
+
+  return `/api/input-assets/process`
+}
+
+/**
+ * @summary Process one voice recording or receipt image into a compact reviewable input
+ */
+export const processSecretaryInputAsset = async (inputAssetProcessInput: InputAssetProcessInput, options?: Parameters<typeof customFetch>[1]): Promise<InputAssetProcessResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<InputAssetProcessResponse>(getProcessSecretaryInputAssetUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(inputAssetProcessInput)
+  }
+);}
+
+
+
+
+
+export const getProcessSecretaryInputAssetMutationKey = () => ['processSecretaryInputAsset'] as const;
+
+export const getProcessSecretaryInputAssetMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof processSecretaryInputAsset>>, TError,ProcessSecretaryInputAssetMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof processSecretaryInputAsset>>, TError,ProcessSecretaryInputAssetMutationVariables, TContext> => {
+
+const mutationKey = getProcessSecretaryInputAssetMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof processSecretaryInputAsset>>, ProcessSecretaryInputAssetMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  processSecretaryInputAsset(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ProcessSecretaryInputAssetMutationResult = NonNullable<Awaited<ReturnType<typeof processSecretaryInputAsset>>>
+    export type ProcessSecretaryInputAssetMutationBody = BodyType<InputAssetProcessInput>
+    export type ProcessSecretaryInputAssetMutationError = ErrorType<ErrorResponse>
+    export type ProcessSecretaryInputAssetMutationVariables = {data: BodyType<InputAssetProcessInput>}
+
+    /**
+ * @summary Process one voice recording or receipt image into a compact reviewable input
+ */
+export const useProcessSecretaryInputAsset = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof processSecretaryInputAsset>>, TError,ProcessSecretaryInputAssetMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof processSecretaryInputAsset>>,
+        TError,
+        ProcessSecretaryInputAssetMutationVariables,
+        TContext
+      > => {
+      return useMutation(getProcessSecretaryInputAssetMutationOptions(options));
     }
 
 export const getApproveSecretaryOperationUrl = (operationId: string,) => {

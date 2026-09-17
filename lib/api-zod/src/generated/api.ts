@@ -698,6 +698,43 @@ export const CreateTurnResponse = zod.object({
 
 
 /**
+ * @summary Process one voice recording or receipt image into a compact reviewable input
+ */
+export const processSecretaryInputAssetBodyMimeTypeMax = 100;
+
+export const processSecretaryInputAssetBodyBase64Max = 12000000;
+
+
+
+export const ProcessSecretaryInputAssetBody = zod.object({
+  "kind": zod.enum(['voice', 'receipt']),
+  "mimeType": zod.string().max(processSecretaryInputAssetBodyMimeTypeMax),
+  "base64": zod.string().min(1).max(processSecretaryInputAssetBodyBase64Max)
+})
+
+export const ProcessSecretaryInputAssetResponse = zod.object({
+  "inputId": zod.string(),
+  "kind": zod.enum(['voice', 'receipt']),
+  "text": zod.string(),
+  "receipt": zod.object({
+  "merchant": zod.string().nullable(),
+  "amountMinor": zod.number().int().nullable(),
+  "currency": zod.string().nullable(),
+  "occurredAt": zod.string().nullable(),
+  "description": zod.string().nullable(),
+  "confidence": zod.number()
+}).optional(),
+  "processing": zod.object({
+  "provider": zod.string(),
+  "model": zod.string(),
+  "inputTokens": zod.number().int().nullable(),
+  "outputTokens": zod.number().int().nullable(),
+  "cacheHit": zod.boolean()
+})
+})
+
+
+/**
  * @summary Approve and execute one stored secretary operation
  */
 export const ApproveSecretaryOperationParams = zod.object({

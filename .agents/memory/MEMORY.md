@@ -34,3 +34,4 @@
 - [EAS native build environment](eas-native-build-environment.md) — Expo SDK 57 needs Node 20 and a Java 17 Android image; iOS remote signing still needs validated interactive credentials.
 - [Android build gate](android-build-gate.md) — batch meaningful mobile changes and verify production data before spending another EAS Android build.
 - [Main mockup geometry](main-mockup-geometry.md) — the approved Main mockup is the source of truth for composition and proportions, not only the color palette.
+- [Media input vertical slice](media-input-vertical-slice.md) — process voice and receipts once into reviewable compact data before composing a secretary turn.

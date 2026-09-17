@@ -3,6 +3,8 @@ import {
   CreateTurnBody,
   CreateTurnResponse,
   GetTodayContextResponse,
+  ProcessSecretaryInputAssetBody,
+  ProcessSecretaryInputAssetResponse,
 } from "@workspace/api-zod";
 import {
   agentRuntime,
@@ -35,6 +37,7 @@ import {
   SecretaryError,
 } from "../lib/error-contract";
 import { dispatchMobilePush } from "../lib/mobile-push";
+import { processInputAsset } from "../lib/input-assets";
 
 const router: IRouter = Router();
 
@@ -319,6 +322,45 @@ router.post("/turns", async (req, res): Promise<void> => {
     const classified = classifySecretaryError(error);
     const provider = configuredProvider() === "unavailable" ? undefined : configuredProvider();
     sendError(req, res, classified, "error", provider);
+  }
+});
+
+router.post("/input-assets/process", async (req, res): Promise<void> => {
+  const identity = getIdentity(req);
+  if (!identity) {
+    sendError(req, res, new SecretaryError("Authentication required.", {
+      status: 401,
+      category: "authentication_error",
+      code: "AUTHENTICATION_REQUIRED",
+      retryable: false,
+    }), "warn");
+    return;
+  }
+  const parsed = ProcessSecretaryInputAssetBody.safeParse(req.body);
+  if (!parsed.success) {
+    sendError(req, res, new SecretaryError("Invalid input asset.", {
+      status: 400,
+      category: "validation_error",
+      code: "INVALID_INPUT_ASSET",
+      retryable: false,
+      cause: parsed.error,
+    }), "warn");
+    return;
+  }
+  try {
+    const result = await processInputAsset(parsed.data);
+    req.log.info({
+      requestId: requestId(req),
+      inputId: result.inputId,
+      kind: result.kind,
+      provider: result.processing.provider,
+      model: result.processing.model,
+      inputTokens: result.processing.inputTokens,
+      outputTokens: result.processing.outputTokens,
+    }, "secretary input asset processed");
+    res.json(ProcessSecretaryInputAssetResponse.parse(result));
+  } catch (error) {
+    sendError(req, res, error);
   }
 });
 

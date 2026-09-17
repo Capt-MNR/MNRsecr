@@ -21,6 +21,11 @@ import { useLanguage } from '@/hooks/useLanguage';
 import {
   useSecretaryChatService,
 } from '../../services/secretary-chat';
+import {
+  receiptDraft,
+  useSecretaryInputCapture,
+  type SecretaryInputResult,
+} from '../../services/secretary-input';
 import { initializeSecretaryPush } from '../../services/mobile-push';
 import {
   initializeQuickNotification,
@@ -58,6 +63,7 @@ export default function QuickRoute() {
   const [hydrated, setHydrated] = useState(false);
   const [busyOperationId, setBusyOperationId] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [inputReview, setInputReview] = useState<SecretaryInputResult | null>(null);
   const [conversationToLoad, setConversationToLoad] = useState<string | null>(null);
   const [loadedConversationId, setLoadedConversationId] = useState<string | null>(null);
   const queryClient = useQueryClient();
@@ -66,6 +72,15 @@ export default function QuickRoute() {
   const visibleSuggestions = language === 'en'
     ? ['What do I have today?', 'Remind me tomorrow to call Mohamed', 'How much does Mohamed owe me?']
     : suggestions;
+  const inputCapture = useSecretaryInputCapture(
+    (result) => {
+      setInputReview(result);
+      setDraft(result.kind === 'receipt' ? receiptDraft(result) : result.text);
+      setLocalError(null);
+      setTimeout(() => inputRef.current?.focus(), 0);
+    },
+    setLocalError,
+  );
 
   useEffect(() => {
     let active = true;
@@ -120,6 +135,7 @@ export default function QuickRoute() {
     const message = value.trim();
     if (!message || secretaryChat.isSending || conversationQuery.isFetching) return;
     setDraft('');
+    setInputReview(null);
     setLocalError(null);
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     appendMessage({ id: `user-${Date.now()}`, role: 'user', text: message, createdAt: new Date().toISOString() });
@@ -229,9 +245,23 @@ export default function QuickRoute() {
       {localError && <View style={[styles.errorBanner, { backgroundColor: colors.destructive }]}><Feather name="alert-circle" size={15} color={colors.destructiveForeground} /><Text style={[styles.errorText, { color: colors.destructiveForeground }]}>{localError}</Text></View>}
       {conversationQuery.isError && <View style={[styles.errorBanner, { backgroundColor: colors.destructive }]}><Text style={[styles.errorText, { color: colors.destructiveForeground }]}>{localized(language, 'تعذر فتح المحادثة الأصلية.', 'Unable to open the original conversation.')}</Text></View>}
       <View style={[styles.composerWrap, { paddingBottom: bottomInset, borderTopColor: colors.border, backgroundColor: colors.background }]}>
+        {inputReview && <View style={[styles.inputReview, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+          <Feather name={inputReview.kind === 'receipt' ? 'file-text' : 'mic'} size={14} color={colors.primary} />
+          <Text style={[styles.inputReviewText, { color: colors.mutedForeground }]} numberOfLines={2}>
+            {inputReview.kind === 'receipt' && inputReview.receipt?.confidence !== undefined
+              ? `${inputReview.text} · ${Math.round(inputReview.receipt.confidence * 100)}% ثقة`
+              : inputReview.text}
+          </Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="إلغاء الإدخال" onPress={() => setInputReview(null)}><Feather name="x" size={15} color={colors.mutedForeground} /></Pressable>
+        </View>}
         <View style={[styles.composer, { backgroundColor: colors.card, borderColor: colors.input }]}>
+          <View style={styles.inputActions}>
+            <Pressable testID="quick-voice-input" accessibilityRole="button" accessibilityLabel={inputCapture.state === 'recording' ? 'إيقاف التسجيل' : 'تسجيل طلب صوتي'} onPress={() => void inputCapture.toggleVoice()} disabled={inputCapture.state === 'processing'} style={({ pressed }) => [styles.inputAction, { backgroundColor: inputCapture.state === 'recording' ? colors.destructive : colors.muted, opacity: pressed || inputCapture.state === 'processing' ? 0.6 : 1 }]}>{inputCapture.state === 'processing' ? <ActivityIndicator size="small" color={colors.primary} /> : <Feather name={inputCapture.state === 'recording' ? 'square' : 'mic'} size={14} color={inputCapture.state === 'recording' ? colors.destructiveForeground : colors.primary} />}</Pressable>
+            <Pressable testID="quick-receipt-camera" accessibilityRole="button" accessibilityLabel="تصوير فاتورة" onPress={() => void inputCapture.pickReceipt('camera')} disabled={inputCapture.state !== 'idle'} style={({ pressed }) => [styles.inputAction, { backgroundColor: colors.muted, opacity: pressed || inputCapture.state !== 'idle' ? 0.6 : 1 }]}><Feather name="camera" size={14} color={colors.primary} /></Pressable>
+            <Pressable testID="quick-receipt-library" accessibilityRole="button" accessibilityLabel="اختيار صورة فاتورة" onPress={() => void inputCapture.pickReceipt('library')} disabled={inputCapture.state !== 'idle'} style={({ pressed }) => [styles.inputAction, { backgroundColor: colors.muted, opacity: pressed || inputCapture.state !== 'idle' ? 0.6 : 1 }]}><Feather name="image" size={14} color={colors.primary} /></Pressable>
+          </View>
           <TextInput ref={inputRef} testID="quick-message-input" value={draft} onChangeText={setDraft} onSubmitEditing={() => void sendMessage()} placeholder={localized(language, 'اكتب طلبك بسرعة…', 'Write a quick request…')} placeholderTextColor={colors.mutedForeground} multiline maxLength={1000} returnKeyType="send" blurOnSubmit={false} textAlign="right" style={[styles.input, { color: colors.foreground }]} />
-          <Pressable testID="send-message" accessibilityRole="button" accessibilityLabel={localized(language, 'إرسال الطلب', 'Send request')} onPress={() => void sendMessage()} disabled={!draft.trim() || secretaryChat.isSending || conversationQuery.isFetching} style={({ pressed }) => [styles.sendButton, { backgroundColor: colors.primary, opacity: !draft.trim() || secretaryChat.isSending || conversationQuery.isFetching ? 0.4 : pressed ? 0.7 : 1 }]}><Feather name="arrow-up" size={18} color={colors.primaryForeground} /></Pressable>
+          <Pressable testID="send-message" accessibilityRole="button" accessibilityLabel={localized(language, 'إرسال الطلب', 'Send request')} onPress={() => void sendMessage()} disabled={!draft.trim() || secretaryChat.isSending || conversationQuery.isFetching || inputCapture.state !== 'idle'} style={({ pressed }) => [styles.sendButton, { backgroundColor: colors.primary, opacity: !draft.trim() || secretaryChat.isSending || conversationQuery.isFetching || inputCapture.state !== 'idle' ? 0.4 : pressed ? 0.7 : 1 }]}><Feather name="arrow-up" size={18} color={colors.primaryForeground} /></Pressable>
         </View>
         <Text style={[styles.composerHint, { color: colors.mutedForeground }]}>{localized(language, 'للمحادثات السريعة فقط · أي تغيير حساس سيطلب موافقتك', 'Quick conversations only · sensitive changes require your approval')}</Text>
       </View>

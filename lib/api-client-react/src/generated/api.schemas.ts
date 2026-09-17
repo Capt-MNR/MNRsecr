@@ -109,6 +109,65 @@ export interface TurnInput {
   peer?: SecretaryChatPeer | null;
 }
 
+export type InputAssetProcessInputKind = typeof InputAssetProcessInputKind[keyof typeof InputAssetProcessInputKind];
+
+
+export const InputAssetProcessInputKind = {
+  voice: 'voice',
+  receipt: 'receipt',
+} as const;
+
+export interface InputAssetProcessInput {
+  kind: InputAssetProcessInputKind;
+  /** @maxLength 100 */
+  mimeType: string;
+  /**
+     * @minLength 1
+     * @maxLength 12000000
+     */
+  base64: string;
+}
+
+export type InputAssetProcessResponseKind = typeof InputAssetProcessResponseKind[keyof typeof InputAssetProcessResponseKind];
+
+
+export const InputAssetProcessResponseKind = {
+  voice: 'voice',
+  receipt: 'receipt',
+} as const;
+
+export type InputAssetProcessResponseReceipt = {
+  /** @nullable */
+  merchant: string | null;
+  /** @nullable */
+  amountMinor: number | null;
+  /** @nullable */
+  currency: string | null;
+  /** @nullable */
+  occurredAt: string | null;
+  /** @nullable */
+  description: string | null;
+  confidence: number;
+};
+
+export type InputAssetProcessResponseProcessing = {
+  provider: string;
+  model: string;
+  /** @nullable */
+  inputTokens: number | null;
+  /** @nullable */
+  outputTokens: number | null;
+  cacheHit: boolean;
+};
+
+export interface InputAssetProcessResponse {
+  inputId: string;
+  kind: InputAssetProcessResponseKind;
+  text: string;
+  receipt?: InputAssetProcessResponseReceipt;
+  processing: InputAssetProcessResponseProcessing;
+}
+
 export interface ActionResult { [key: string]: unknown }
 
 export type FinalResponseKind = typeof FinalResponseKind[keyof typeof FinalResponseKind];

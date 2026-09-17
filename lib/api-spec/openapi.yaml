@@ -446,6 +446,36 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /input-assets/process:
+    post:
+      operationId: processSecretaryInputAsset
+      tags: [secretary]
+      summary: Process one voice recording or receipt image into a compact reviewable input
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InputAssetProcessInput"
+      responses:
+        "200":
+          description: Processed input asset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InputAssetProcessResponse"
+        "400":
+          description: Invalid input asset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /approvals/{operationId}/approve:
     post:
       operationId: approveSecretaryOperation
@@ -1048,6 +1078,62 @@ components:
             - type: "null"
       required: [message, channel]
       additionalProperties: false
+    InputAssetProcessInput:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [voice, receipt]
+        mimeType:
+          type: string
+          maxLength: 100
+        base64:
+          type: string
+          minLength: 1
+          maxLength: 12000000
+      required: [kind, mimeType, base64]
+      additionalProperties: false
+    InputAssetProcessResponse:
+      type: object
+      properties:
+        inputId:
+          type: string
+        kind:
+          type: string
+          enum: [voice, receipt]
+        text:
+          type: string
+        receipt:
+          type: object
+          properties:
+            merchant:
+              type: ["string", "null"]
+            amountMinor:
+              type: ["integer", "null"]
+            currency:
+              type: ["string", "null"]
+            occurredAt:
+              type: ["string", "null"]
+            description:
+              type: ["string", "null"]
+            confidence:
+              type: number
+          required: [merchant, amountMinor, currency, occurredAt, description, confidence]
+        processing:
+          type: object
+          properties:
+            provider:
+              type: string
+            model:
+              type: string
+            inputTokens:
+              type: ["integer", "null"]
+            outputTokens:
+              type: ["integer", "null"]
+            cacheHit:
+              type: boolean
+          required: [provider, model, inputTokens, outputTokens, cacheHit]
+      required: [inputId, kind, text, processing]
     SecretaryChatContext:
       type: object
       properties:

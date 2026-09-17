@@ -17,7 +17,9 @@
     },
     "android": {
       "package": "com.captmnrs.personalsecretary",
-      "permissions": ["POST_NOTIFICATIONS"],
+      "permissions": [
+        "POST_NOTIFICATIONS"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon_2.png",
         "backgroundColor": "#f3f0e9"
@@ -31,7 +33,11 @@
         "projectId": "3362c583-eacf-4207-9432-43d35c43fa65"
       }
     },
-    "plugins": ["expo-router", "expo-notifications"],
+    "plugins": [
+      "expo-router",
+      "expo-notifications",
+      "expo-audio"
+    ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true

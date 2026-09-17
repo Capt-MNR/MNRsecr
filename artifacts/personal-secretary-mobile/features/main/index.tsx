@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors, type ThemePreference } from '@/hooks/useColors';
 import { useLanguage, type AppLanguage } from '@/hooks/useLanguage';
 import { useSecretaryChatService, type SecretaryChatContext } from '../../services/secretary-chat';
+import type { SecretaryInputResult, SecretaryInputState } from '../../services/secretary-input';
 import { MessageBubble } from '../message-bubble';
 export { default as MainWorkspace } from './MainWorkspace';
 export { MessageBubble };
@@ -699,6 +700,12 @@ type SecretaryChatProps = {
   context?: MobileRecordRow | null;
   smartSignal?: string;
   quickPrompts?: Array<{ label: string; value: string }>;
+  inputState?: SecretaryInputState;
+  onToggleVoice?: () => void;
+  onCaptureReceipt?: () => void;
+  onPickReceipt?: () => void;
+  inputReview?: SecretaryInputResult | null;
+  onClearInputReview?: () => void;
   compact?: boolean;
   expanded?: boolean;
   onToggleExpanded?: () => void;
@@ -723,6 +730,12 @@ function CentralSecretaryChat({
   compact = false,
   expanded = false,
   onToggleExpanded,
+  inputState = 'idle',
+  onToggleVoice,
+  onCaptureReceipt,
+  onPickReceipt,
+  inputReview,
+  onClearInputReview,
 }: SecretaryChatProps) {
   const { language } = useLanguage();
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
@@ -901,7 +914,80 @@ function CentralSecretaryChat({
         )}
       </ScrollView>
 
+      {inputReview && (
+        <View style={[styles.inputReview, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+          <View style={styles.inputReviewCopy}>
+            <Feather name={inputReview.kind === 'receipt' ? 'file-text' : 'mic'} size={14} color={colors.primary} />
+            <Text style={[styles.inputReviewTitle, { color: colors.foreground }]}>
+              {inputReview.kind === 'receipt'
+                ? localized(language, 'فاتورة جاهزة للمراجعة', 'Receipt ready to review')
+                : localized(language, 'نص صوتي جاهز للمراجعة', 'Voice text ready to review')}
+            </Text>
+            <Text style={[styles.inputReviewText, { color: colors.mutedForeground }]} numberOfLines={2}>
+              {inputReview.kind === 'receipt' && inputReview.receipt?.confidence !== undefined
+                ? `${inputReview.text} · ${Math.round(inputReview.receipt.confidence * 100)}% ${localized(language, 'ثقة', 'confidence')}`
+                : inputReview.text}
+            </Text>
+          </View>
+          {onClearInputReview && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={localized(language, 'إلغاء المرفق', 'Clear input')}
+              onPress={onClearInputReview}
+              style={({ pressed }) => ({ opacity: pressed ? 0.55 : 1, padding: 4 })}
+            >
+              <Feather name="x" size={15} color={colors.mutedForeground} />
+            </Pressable>
+          )}
+        </View>
+      )}
       <View style={[styles.centralChatComposer, expanded && styles.centralChatComposerExpanded, { backgroundColor: 'transparent', borderColor: 'transparent' }]}>
+        <View style={styles.centralChatInputActions}>
+          {onToggleVoice && (
+            <Pressable
+              testID={compact ? 'record-context-voice' : 'main-voice-input'}
+              accessibilityRole="button"
+              accessibilityLabel={inputState === 'recording'
+                ? localized(language, 'إيقاف التسجيل', 'Stop recording')
+                : localized(language, 'تسجيل طلب صوتي', 'Record a voice request')}
+              accessibilityState={{ busy: inputState === 'processing' }}
+              onPress={onToggleVoice}
+              disabled={inputState === 'processing'}
+              style={({ pressed }) => [
+                styles.centralChatInputAction,
+                { backgroundColor: inputState === 'recording' ? colors.destructive : colors.muted, opacity: pressed || inputState === 'processing' ? 0.6 : 1 },
+              ]}
+            >
+              {inputState === 'processing'
+                ? <ActivityIndicator size="small" color={colors.primary} />
+                : <Feather name={inputState === 'recording' ? 'square' : 'mic'} size={15} color={inputState === 'recording' ? colors.destructiveForeground : colors.primary} />}
+            </Pressable>
+          )}
+          {onCaptureReceipt && (
+            <Pressable
+              testID={compact ? 'record-context-receipt-camera' : 'main-receipt-camera'}
+              accessibilityRole="button"
+              accessibilityLabel={localized(language, 'تصوير فاتورة', 'Take a receipt photo')}
+              onPress={onCaptureReceipt}
+              disabled={inputState !== 'idle'}
+              style={({ pressed }) => [styles.centralChatInputAction, { backgroundColor: colors.muted, opacity: pressed || inputState !== 'idle' ? 0.6 : 1 }]}
+            >
+              <Feather name="camera" size={15} color={colors.primary} />
+            </Pressable>
+          )}
+          {onPickReceipt && (
+            <Pressable
+              testID={compact ? 'record-context-receipt-library' : 'main-receipt-library'}
+              accessibilityRole="button"
+              accessibilityLabel={localized(language, 'اختيار صورة فاتورة', 'Choose a receipt image')}
+              onPress={onPickReceipt}
+              disabled={inputState !== 'idle'}
+              style={({ pressed }) => [styles.centralChatInputAction, { backgroundColor: colors.muted, opacity: pressed || inputState !== 'idle' ? 0.6 : 1 }]}
+            >
+              <Feather name="image" size={15} color={colors.primary} />
+            </Pressable>
+          )}
+        </View>
         <TextInput
           testID={compact ? 'record-context-input' : 'main-message-input'}
           value={draft}
@@ -1013,6 +1099,12 @@ export function MainOffice({
   conversationSearch,
   onChangeConversationSearch,
   conversationsLoading,
+  inputState,
+  onToggleVoice,
+  onCaptureReceipt,
+  onPickReceipt,
+  inputReview,
+  onClearInputReview,
 }: {
   colors: ReturnType<typeof useColors>;
   language: AppLanguage;
@@ -1039,6 +1131,12 @@ export function MainOffice({
   conversationSearch: string;
   onChangeConversationSearch: (value: string) => void;
   conversationsLoading: boolean;
+  inputState?: SecretaryInputState;
+  onToggleVoice?: () => void;
+  onCaptureReceipt?: () => void;
+  onPickReceipt?: () => void;
+  inputReview?: SecretaryInputResult | null;
+  onClearInputReview?: () => void;
 }) {
   const todayQuery = useGetTodayContext({
     query: {
@@ -1295,6 +1393,12 @@ export function MainOffice({
         onOpenRecord={onOpenRecord}
         context={chatContext}
         smartSignal={smartSignal}
+        inputState={inputState}
+        onToggleVoice={onToggleVoice}
+        onCaptureReceipt={onCaptureReceipt}
+        onPickReceipt={onPickReceipt}
+        inputReview={inputReview}
+        onClearInputReview={onClearInputReview}
       />
 
       {!chatExpanded && !todayQuery.isLoading && !todayQuery.isError && contextData && (
@@ -3524,6 +3628,32 @@ export const styles = StyleSheet.create({
   centralChatTypingText: {
     fontSize: 11,
   },
+  inputReview: {
+    minHeight: 48,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+  },
+  inputReviewCopy: {
+    flex: 1,
+    alignItems: 'flex-end',
+    gap: 2,
+  },
+  inputReviewTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  inputReviewText: {
+    width: '100%',
+    fontSize: 10,
+    lineHeight: 15,
+    textAlign: 'right',
+  },
   centralChatComposer: {
     minHeight: 45,
     marginTop: 5,
@@ -3559,6 +3689,19 @@ export const styles = StyleSheet.create({
     height: 32,
     marginBottom: 5,
     borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  centralChatInputActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 5,
+  },
+  centralChatInputAction: {
+    width: 30,
+    height: 30,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },

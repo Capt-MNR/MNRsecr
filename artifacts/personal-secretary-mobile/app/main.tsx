@@ -11,6 +11,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors, useThemePreference } from '@/hooks/useColors';
 import { useLanguage } from '@/hooks/useLanguage';
 import { useSecretaryChatService } from '../services/secretary-chat';
+import {
+  receiptDraft,
+  useSecretaryInputCapture,
+  type SecretaryInputResult,
+} from '../services/secretary-input';
 import { initializeSecretaryPush } from '../services/mobile-push';
 import { isQuickNotificationResponse } from '../services/quick-notification';
 import {
@@ -106,6 +111,7 @@ export default function MainRoute() {
   const [hydrated, setHydrated] = useState(false);
   const [busyOperationId, setBusyOperationId] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [inputReview, setInputReview] = useState<SecretaryInputResult | null>(null);
   const [conversationToLoad, setConversationToLoad] = useState<string | null>(null);
   const [loadedConversationId, setLoadedConversationId] = useState<string | null>(null);
   const [conversationSearch, setConversationSearch] = useState('');
@@ -114,6 +120,15 @@ export default function MainRoute() {
   const secretaryChat = useSecretaryChatService(conversationToLoad, conversationSearch.trim(), true);
   const conversationQuery = secretaryChat.conversationQuery;
   const recentConversations = secretaryChat.conversationsQuery.data?.conversations ?? [];
+  const inputCapture = useSecretaryInputCapture(
+    (result) => {
+      setInputReview(result);
+      setDraft(result.kind === 'receipt' ? receiptDraft(result) : result.text);
+      setLocalError(null);
+      setTimeout(() => inputRef.current?.focus(), 0);
+    },
+    setLocalError,
+  );
 
   useEffect(() => {
     if (!params.recordId || !params.recordType || !params.recordTitle) return;
@@ -171,6 +186,7 @@ export default function MainRoute() {
     const message = value.trim();
     if (!message || secretaryChat.isSending || conversationQuery.isFetching) return;
     setDraft('');
+    setInputReview(null);
     setLocalError(null);
     appendMessage({ id: `user-${Date.now()}`, role: 'user', text: message, createdAt: new Date().toISOString() });
     try {
@@ -284,7 +300,7 @@ export default function MainRoute() {
           <MainDrawer colors={colors} language={language} themePreference={themePreference} open={drawerOpen} activeSection={mainSection} onClose={() => setDrawerOpen(false)} onSelect={openMainSection} onOpenQuick={() => router.replace('/')} onThemeChange={setThemePreference} onLanguageChange={setLanguage} assistantPreferences={assistantPreferences} onAssistantPreferencesChange={(patch) => setAssistantPreferences((current) => ({ ...current, ...patch }))} />
           {selectedRecord ? <RecordDetailView record={selectedRecord} colors={colors} onBack={() => setSelectedRecord(null)} onAskSecretary={askSecretaryAboutRecord} onOpenConversation={openConversation} onOpenRelatedRecord={openRecord} chatMessages={messages} chatDraft={draft} onChangeChatDraft={setDraft} onSendChat={() => void sendMessage()} chatBusy={secretaryChat.isSending || conversationQuery.isFetching} onApprove={(approval, args) => void updateApproval(approval, 'completed', args)} onReject={(approval) => void updateApproval(approval, 'rejected')} busyOperationId={busyOperationId} chatContext={chatContext} /> : (
             <>
-                {mainSection === 'office' && <MainOffice colors={colors} language={language} assistantPreferences={assistantPreferences} onOpenRecord={openRecord} onOpenRecords={() => openMainSection('records')} onOpenFinancial={() => openMainSection('financial')} onOpenConversation={openConversationById} onFocusChat={focusMainChat} onAskSecretary={(value) => { setDraft(value); setTimeout(() => inputRef.current?.focus(), 0); }} messages={messages} draft={draft} onChangeDraft={setDraft} onSend={() => void sendMessage()} inputRef={inputRef} isSending={secretaryChat.isSending || conversationQuery.isFetching} onApprove={(approval, args) => void updateApproval(approval, 'completed', args)} onReject={(approval) => void updateApproval(approval, 'rejected')} busyOperationId={busyOperationId} recordOrigins={recordOrigins} chatContext={chatContext} recentConversations={recentConversations} conversationSearch={conversationSearch} onChangeConversationSearch={setConversationSearch} conversationsLoading={secretaryChat.conversationsQuery.isFetching} pendingApprovals={messages.flatMap((message) => message.approval?.status === 'pending' ? [message.approval] : [])} />}
+                {mainSection === 'office' && <MainOffice colors={colors} language={language} assistantPreferences={assistantPreferences} onOpenRecord={openRecord} onOpenRecords={() => openMainSection('records')} onOpenFinancial={() => openMainSection('financial')} onOpenConversation={openConversationById} onFocusChat={focusMainChat} onAskSecretary={(value) => { setDraft(value); setInputReview(null); setTimeout(() => inputRef.current?.focus(), 0); }} messages={messages} draft={draft} onChangeDraft={setDraft} onSend={() => void sendMessage()} inputRef={inputRef} isSending={secretaryChat.isSending || conversationQuery.isFetching || inputCapture.state === 'processing'} onApprove={(approval, args) => void updateApproval(approval, 'completed', args)} onReject={(approval) => void updateApproval(approval, 'rejected')} busyOperationId={busyOperationId} recordOrigins={recordOrigins} chatContext={chatContext} recentConversations={recentConversations} conversationSearch={conversationSearch} onChangeConversationSearch={setConversationSearch} conversationsLoading={secretaryChat.conversationsQuery.isFetching} pendingApprovals={messages.flatMap((message) => message.approval?.status === 'pending' ? [message.approval] : [])} inputState={inputCapture.state} onToggleVoice={() => void inputCapture.toggleVoice()} onCaptureReceipt={() => void inputCapture.pickReceipt('camera')} onPickReceipt={() => void inputCapture.pickReceipt('library')} inputReview={inputReview} onClearInputReview={() => setInputReview(null)} />}
                 {mainSection === 'chat' && <ConversationHistoryView colors={colors} language={language} conversations={recentConversations} loading={secretaryChat.conversationsQuery.isFetching} onOpenConversation={openConversationById} onBack={() => openMainSection('office')} />}
               {mainSection === 'records' && <RecordsView colors={colors} onOpenSection={openRecordSection} onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}
               {mainSection === 'people' && <RecordsView colors={colors} onOpenSection={openRecordSection} title="الأشخاص" subtitle="الأشخاص وعلاقاتهم بالسجلات والمشاريع" sectionKeys={['people']} onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}
