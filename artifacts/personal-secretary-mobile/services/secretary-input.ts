@@ -10,6 +10,12 @@ import {
 export type SecretaryInputState = 'idle' | 'recording' | 'processing';
 
 export type SecretaryInputResult = InputAssetProcessResponse;
+type RetryableInputAsset = {
+  kind: 'voice' | 'receipt';
+  uri: string;
+  mimeType: string;
+  base64?: string;
+};
 
 export function receiptNeedsReview(result: SecretaryInputResult | null | undefined): boolean {
   if (!result || result.kind !== 'receipt' || !result.receipt) return false;
@@ -49,6 +55,21 @@ export function useSecretaryInputCapture(
 ) {
   const recorder = useAudioRecorder(RecordingPresets.LOW_QUALITY);
   const [state, setState] = useState<SecretaryInputState>('idle');
+  const [retryableAsset, setRetryableAsset] = useState<RetryableInputAsset | null>(null);
+
+  const processCapturedAsset = useCallback(async (asset: RetryableInputAsset, errorMessage: string) => {
+    setState('processing');
+    try {
+      const result = await processFile(asset.kind, asset.uri, asset.mimeType, asset.base64);
+      setRetryableAsset(null);
+      onResult(result);
+    } catch {
+      setRetryableAsset(asset);
+      onError(errorMessage);
+    } finally {
+      setState('idle');
+    }
+  }, [onError, onResult]);
 
   const toggleVoice = useCallback(async () => {
     if (state === 'processing') return;
@@ -57,11 +78,12 @@ export function useSecretaryInputCapture(
         await recorder.stop();
         const uri = recorder.uri;
         if (!uri) throw new Error('RECORDING_URI_MISSING');
-        setState('processing');
-        const result = await processFile('voice', uri, uri.endsWith('.webm') ? 'audio/webm' : 'audio/m4a');
-        onResult(result);
+        await processCapturedAsset(
+          { kind: 'voice', uri, mimeType: uri.endsWith('.webm') ? 'audio/webm' : 'audio/m4a' },
+          'تعذر تحويل التسجيل الصوتي. جرّب إعادة المحاولة.',
+        );
       } catch {
-        onError('تعذر تحويل التسجيل الصوتي. جرّب مرة أخرى.');
+        onError('تعذر إيقاف التسجيل الصوتي.');
       } finally {
         setState('idle');
       }
@@ -99,24 +121,37 @@ export function useSecretaryInputCapture(
           base64: true,
         });
       if (result.canceled || !result.assets[0]?.uri) return;
-      setState('processing');
       const asset = result.assets[0];
-      const processed = await processFile(
-        'receipt',
-        asset.uri,
-        asset.mimeType ?? 'image/jpeg',
-        asset.base64 ?? undefined,
+      await processCapturedAsset(
+        {
+          kind: 'receipt',
+          uri: asset.uri,
+          mimeType: asset.mimeType ?? 'image/jpeg',
+          ...(asset.base64 ? { base64: asset.base64 } : {}),
+        },
+        'تعذر قراءة صورة الفاتورة. جرّب إعادة المحاولة.',
       );
-      onResult(processed);
     } catch {
-      onError('تعذر قراءة صورة الفاتورة. جرّب صورة أوضح.');
+      onError('تعذر التقاط صورة الفاتورة.');
     } finally {
       setState('idle');
     }
-  }, [onError, onResult, state]);
+  }, [onError, onResult, processCapturedAsset, recorder, state]);
+
+  const retry = useCallback(async () => {
+    if (!retryableAsset || state !== 'idle') return;
+    await processCapturedAsset(
+      retryableAsset,
+      retryableAsset.kind === 'voice'
+        ? 'تعذر تحويل التسجيل الصوتي. جرّب إعادة المحاولة.'
+        : 'تعذر قراءة صورة الفاتورة. جرّب إعادة المحاولة.',
+    );
+  }, [processCapturedAsset, retryableAsset, state]);
 
   return {
     state,
+    canRetry: Boolean(retryableAsset) && state === 'idle',
+    retry,
     toggleVoice,
     pickReceipt,
   };

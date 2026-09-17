@@ -332,7 +332,26 @@ export default function MainRoute() {
           onOpenDrawer={() => setDrawerOpen(true)}
         />
       )}
-      {localError && <Text style={{ color: colors.destructive, padding: 12 }}>{localError}</Text>}
+      {localError && <View style={styles.errorRow}>
+        <Text style={{ color: colors.destructive, padding: 12, flex: 1 }}>{localError}</Text>
+        {inputCapture.canRetry && <Pressable onPress={() => void inputCapture.retry()} style={styles.retryButton}>
+          <Text style={{ color: colors.primaryForeground, fontWeight: '700' }}>{language === 'en' ? 'Retry' : 'إعادة المحاولة'}</Text>
+        </Pressable>}
+      </View>}
     </KeyboardAvoidingView>
   );
 }
+
+const styles = {
+  errorRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    paddingHorizontal: 8,
+  },
+  retryButton: {
+    backgroundColor: '#2b7a7f',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+};
