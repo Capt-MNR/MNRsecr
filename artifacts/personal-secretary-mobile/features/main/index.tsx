@@ -687,6 +687,7 @@ type SecretaryChatProps = {
   busyOperationId: string | null;
   onOpenRecord: (record: MobileRecordRow) => void;
   context?: MobileRecordRow | null;
+  smartSignal?: string;
   compact?: boolean;
 };
 
@@ -704,6 +705,7 @@ function CentralSecretaryChat({
   busyOperationId,
   onOpenRecord,
   context,
+  smartSignal,
   compact = false,
 }: SecretaryChatProps) {
   const { language } = useLanguage();
@@ -743,20 +745,28 @@ function CentralSecretaryChat({
               { backgroundColor: colors.primary, opacity: pressed ? 0.72 : 1 },
             ]}
           >
-            <Feather name="star" size={21} color={colors.primaryForeground} />
+            <Feather name="zap" size={21} color={colors.primaryForeground} />
           </Pressable>
         )}
         <View style={styles.centralChatHeadingCopy}>
           <Text style={[styles.centralChatTitle, { color: colors.foreground }]}>
             {context
               ? `${localized(language, 'السكرتير', 'Secretary')} · ${context.title}`
-              : localized(language, 'سكرتيرك الشخصي', 'Your personal secretary')}
+              : localized(language, 'سكرتيرك الذكي', 'Your intelligent secretary')}
           </Text>
           <Text style={[styles.centralChatHint, { color: colors.mutedForeground }]}>
-          {context
-            ? localized(language, 'اسأل عن هذا السياق أو علاقاته', 'Ask about this context or its relationships')
-            : localized(language, 'أنا هنا لأرتّب يومك وأحفظ ما يهمك', 'I’m here to organize your day and remember what matters')}
+            {context
+              ? localized(language, 'اسأل عن هذا السياق أو علاقاته', 'Ask about this context or its relationships')
+              : localized(language, 'أفهم طلبك وأقترح الخطوة التالية', 'I understand your request and suggest the next step')}
           </Text>
+          {!compact && (
+            <View style={styles.centralChatSignal}>
+              <View style={[styles.centralChatSignalDot, { backgroundColor: isSending ? colors.accent : colors.primary }]} />
+              <Text style={[styles.centralChatSignalText, { color: colors.primary }]} numberOfLines={1}>
+                {smartSignal ?? localized(language, 'جاهز لفهم طلبك', 'Ready to understand your request')}
+              </Text>
+            </View>
+          )}
         </View>
       </View>
 
@@ -1027,6 +1037,13 @@ export function MainOffice({
       + context.activeProjects.length
       + context.recentExpenses.length
     : 0;
+  const smartSignal = todayQuery.isFetching
+    ? localized(language, 'أقرأ موجز اليوم…', 'Reading today’s context…')
+    : pendingApprovals.length > 0
+      ? `${pendingApprovals.length} ${localized(language, 'موافقة تحتاج قرارك', 'approval needs your decision')}`
+      : context.pendingTasks.length + context.upcomingReminders.length > 0
+        ? `${context.pendingTasks.length + context.upcomingReminders.length} ${localized(language, 'عناصر رتّبها السكرتير اليوم', 'items organized for today')}`
+        : `${contextualRecordCount} ${localized(language, 'عنصرًا في سياقك اليوم', 'items in today’s context')}`;
   const summaryCards: Array<{
     key: string;
     label: string;
@@ -1074,10 +1091,10 @@ export function MainOffice({
     },
   ];
   const quickActions: Array<{ icon: FeatherName; label: string; labelEn: string; draft: string }> = [
-    { icon: 'plus-circle', label: 'إضافة مصروف', labelEn: 'Add expense', draft: 'دفعت لمحمد 500' },
-    { icon: 'check-square', label: 'إنشاء مهمة', labelEn: 'Create a task', draft: 'فكرني بكرة أكلم محمد' },
-    { icon: 'file-text', label: 'إضافة سجل', labelEn: 'Add a record', draft: 'أضف سجل جديد' },
-    { icon: 'bar-chart-2', label: 'عرض التقارير', labelEn: 'View reports', draft: 'اعرض مصروفاتي الأخيرة' },
+    { icon: 'bar-chart-2', label: 'حلّل مصروفاتي', labelEn: 'Analyze spending', draft: 'اعرض مصروفاتي الأخيرة' },
+    { icon: 'sun', label: 'رتّب يومي', labelEn: 'Organize my day', draft: 'اعرض ملخص اليوم ورتب أولوياتي' },
+    { icon: 'bell', label: 'ما الذي يستحق انتباهي؟', labelEn: 'What needs my attention?', draft: 'ما الذي يحتاج انتباهي اليوم؟' },
+    { icon: 'layers', label: 'لخّص سياقي', labelEn: 'Summarize my context', draft: 'لخص السجلات المرتبطة بي' },
   ];
 
   return (
@@ -1147,6 +1164,7 @@ export function MainOffice({
         busyOperationId={busyOperationId}
         onOpenRecord={onOpenRecord}
         context={chatContext}
+        smartSignal={smartSignal}
       />
 
       {!todayQuery.isLoading && !todayQuery.isError && contextData && (
@@ -3096,6 +3114,23 @@ export const styles = StyleSheet.create({
     width: '100%',
     marginTop: 2,
     fontSize: 10,
+    textAlign: 'right',
+  },
+  centralChatSignal: {
+    marginTop: 3,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    gap: 4,
+  },
+  centralChatSignalDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+  },
+  centralChatSignalText: {
+    fontSize: 8,
+    fontWeight: '700',
     textAlign: 'right',
   },
   chatContextChip: {

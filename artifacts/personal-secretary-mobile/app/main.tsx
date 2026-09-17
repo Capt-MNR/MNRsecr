@@ -273,7 +273,7 @@ export default function MainRoute() {
           >
             <View>
               <Text style={[styles.brandName, { color: colors.foreground }]}>صباح الخير، محمد</Text>
-              <Text style={[styles.availabilityText, { color: colors.mutedForeground }]}>إليك ما يحدث اليوم</Text>
+              <Text style={[styles.availabilityText, { color: colors.mutedForeground }]}>ملخصك الذكي جاهز</Text>
             </View>
           </Pressable>
           <View style={styles.headerActions}>
