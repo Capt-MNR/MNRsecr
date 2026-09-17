@@ -21,6 +21,7 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors, useThemePreference, type ThemePreference } from '@/hooks/useColors';
 import { useLanguage, type AppLanguage } from '@/hooks/useLanguage';
+import appColors from '@/constants/colors';
 import {
   useSecretaryChatService,
   type SecretaryChatContext,
@@ -53,8 +54,14 @@ import {
   styles as sharedStyles,
 } from '../features/shared';
 import type * as MainFeature from '../features/main';
+
+const mainWorkspaceColors = {
+  ...appColors.dark,
+  radius: appColors.radius,
+};
+
 export default function QuickSecretaryScreen() {
-  const colors = useColors();
+  const themeColors = useColors();
   const { language, setLanguage } = useLanguage();
   const { themePreference, setThemePreference } = useThemePreference();
   const insets = useSafeAreaInsets();
@@ -409,6 +416,7 @@ export default function QuickSecretaryScreen() {
   }, {});
   const topInset = insets.top + (Platform.OS === 'web' ? 67 : 0);
   const bottomInset = insets.bottom + (Platform.OS === 'web' ? 34 : 10);
+  const colors = activeView === 'home' ? mainWorkspaceColors : themeColors;
   const MainDrawer = MainModule?.MainDrawer as typeof MainFeature.MainDrawer;
   const MainOffice = MainModule?.MainOffice as typeof MainFeature.MainOffice;
   const RecordDetailView = MainModule?.RecordDetailView as typeof MainFeature.RecordDetailView;

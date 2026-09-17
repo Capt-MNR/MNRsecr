@@ -713,7 +713,7 @@ function CentralSecretaryChat({
       testID={compact ? 'record-context-chat' : 'main-central-chat'}
       style={[
         compact ? styles.recordChatPanel : styles.centralChatPanel,
-        { backgroundColor: colors.card, borderColor: colors.border },
+          { backgroundColor: colors.card, borderColor: compact ? colors.border : colors.primary },
       ]}
     >
       <View style={styles.centralChatHeading}>
@@ -724,12 +724,12 @@ function CentralSecretaryChat({
           <Text style={[styles.centralChatTitle, { color: colors.foreground }]}>
             {context
               ? `${localized(language, 'السكرتير', 'Secretary')} · ${context.title}`
-              : localized(language, 'السكرتير الشخصي', 'Personal Secretary')}
+              : localized(language, 'المحادثة الذكية', 'AI Chat')}
           </Text>
           <Text style={[styles.centralChatHint, { color: colors.mutedForeground }]}>
-            {context
-              ? localized(language, 'اسأل عن هذا السياق أو علاقاته', 'Ask about this context or its relationships')
-              : localized(language, 'تحدث، راجع، أو ابدأ إجراءً من داخل البرنامج', 'Talk, review, or start an action')}
+          {context
+            ? localized(language, 'اسأل عن هذا السياق أو علاقاته', 'Ask about this context or its relationships')
+            : localized(language, 'اسأل، راجع، أو ابدأ إجراءً من داخل البرنامج', 'Ask, review, or start an action')}
           </Text>
         </View>
       </View>
@@ -875,7 +875,15 @@ export function MainOffice({
       staleTime: 20_000,
     },
   });
-  const context = todayQuery.data?.context;
+  const contextData = todayQuery.data?.context;
+  const context: TodayContext = contextData ?? {
+    upcomingReminders: [],
+    recentExpenses: [],
+    activeProjects: [],
+    relevantPeople: [],
+    pendingTasks: [],
+    asOf: '',
+  };
   const recentTotal = context
     ? [...context.recentExpenses.reduce((totals, expense) => {
       totals.set(expense.currency, (totals.get(expense.currency) ?? 0) + expense.amountMinor);
@@ -957,6 +965,64 @@ export function MainOffice({
     ].join(' ').toLocaleLowerCase().includes(normalizedSearch))
     : latestEdits;
   const hasRecentActivity = recentConversations.length > 0 || filteredLatestEdits.length > 0;
+  const contextualRecordCount = contextData
+    ? context.pendingTasks.length
+      + context.upcomingReminders.length
+      + context.activeProjects.length
+      + context.recentExpenses.length
+    : 0;
+  const summaryCards: Array<{
+    key: string;
+    label: string;
+    labelEn: string;
+    value: string;
+    hint: string;
+    hintEn: string;
+    icon: FeatherName;
+  }> = [
+    {
+      key: 'tasks',
+      label: 'المهام',
+      labelEn: 'Tasks',
+      value: contextData ? String(context.pendingTasks.length) : '—',
+      hint: 'مفتوحة',
+      hintEn: 'Open',
+      icon: 'check-square',
+    },
+    {
+      key: 'appointments',
+      label: 'المواعيد',
+      labelEn: 'Appointments',
+      value: contextData ? String(context.upcomingReminders.length) : '—',
+      hint: 'قادمة',
+      hintEn: 'Upcoming',
+      icon: 'calendar',
+    },
+    {
+      key: 'accounts',
+      label: 'الحسابات',
+      labelEn: 'Accounts',
+      value: recentTotal || '—',
+      hint: 'آخر المصروفات',
+      hintEn: 'Recent spend',
+      icon: 'dollar-sign',
+    },
+    {
+      key: 'records',
+      label: 'السجلات',
+      labelEn: 'Records',
+      value: contextData ? String(contextualRecordCount) : '—',
+      hint: 'في موجز اليوم',
+      hintEn: 'In today’s view',
+      icon: 'file-text',
+    },
+  ];
+  const quickActions: Array<{ icon: FeatherName; label: string; labelEn: string; draft: string }> = [
+    { icon: 'plus-circle', label: 'إضافة مصروف', labelEn: 'Add expense', draft: 'دفعت لمحمد 500' },
+    { icon: 'check-square', label: 'إنشاء مهمة', labelEn: 'Create a task', draft: 'فكرني بكرة أكلم محمد' },
+    { icon: 'file-text', label: 'إضافة سجل', labelEn: 'Add a record', draft: 'أضف سجل جديد' },
+    { icon: 'bar-chart-2', label: 'عرض التقارير', labelEn: 'View reports', draft: 'اعرض مصروفاتي الأخيرة' },
+  ];
 
   return (
     <ScrollView
@@ -971,9 +1037,12 @@ export function MainOffice({
       )}
     >
       <View style={styles.officeIntro}>
+        <View style={[styles.officeIntroMark, { backgroundColor: colors.primary }]}>
+          <Feather name="sun" size={18} color={colors.primaryForeground} />
+        </View>
         <View style={styles.officeIntroCopy}>
           <Text style={[styles.officeEyebrow, { color: colors.primary }]}>
-            {localized(language, 'مكتب السكرتير', 'Secretary Office')}
+            {localized(language, 'مكتب السكرتير', 'Secretary workspace')}
           </Text>
           <Text style={[styles.officeGreeting, { color: colors.foreground }]}>
             {new Date().getHours() < 12
@@ -993,7 +1062,7 @@ export function MainOffice({
           onPress={() => void todayQuery.refetch()}
           style={({ pressed }) => [
             styles.officeRefresh,
-            { borderColor: colors.border, opacity: pressed || todayQuery.isFetching ? 0.6 : 1 },
+            { borderColor: colors.border, backgroundColor: colors.card, opacity: pressed || todayQuery.isFetching ? 0.6 : 1 },
           ]}
         >
           {todayQuery.isFetching ? (
@@ -1002,6 +1071,23 @@ export function MainOffice({
             <Feather name="refresh-cw" size={16} color={colors.foreground} />
           )}
         </Pressable>
+      </View>
+
+      <View testID="main-summary-cards" style={styles.officeSummaryGrid}>
+        {summaryCards.map((card) => (
+          <View key={card.key} style={[styles.officeSummaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.officeSummaryIcon, { backgroundColor: colors.muted }]}>
+              <Feather name={card.icon} size={14} color={colors.primary} />
+            </View>
+            <Text style={[styles.officeSummaryValue, { color: colors.foreground }]} numberOfLines={1}>{card.value}</Text>
+            <Text style={[styles.officeSummaryLabel, { color: colors.foreground }]}>
+              {localized(language, card.label, card.labelEn)}
+            </Text>
+            <Text style={[styles.officeSummaryHint, { color: colors.mutedForeground }]}>
+              {localized(language, card.hint, card.hintEn)}
+            </Text>
+          </View>
+        ))}
       </View>
 
       <CentralSecretaryChat
@@ -1017,6 +1103,109 @@ export function MainOffice({
         onOpenRecord={onOpenRecord}
         context={chatContext}
       />
+
+      {!todayQuery.isLoading && !todayQuery.isError && contextData && (
+        <>
+          <View style={styles.officeDashboardSplit}>
+            <View style={[styles.officeDashboardCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={styles.officeSectionHeading}>
+                <View>
+                  <Text style={[styles.officeSectionTitle, { color: colors.foreground }]}>
+                    {localized(language, 'اليوم', 'Today')}
+                  </Text>
+                  <Text style={[styles.officeSectionHint, { color: colors.mutedForeground }]}>
+                    {localized(language, 'القادم في موجزك', 'Upcoming items')}
+                  </Text>
+                </View>
+                <Feather name="calendar" size={16} color={colors.primary} />
+              </View>
+              <View style={styles.officeTodayList}>
+                {context.upcomingReminders.slice(0, 3).map((reminder) => (
+                  <Pressable key={`today-${reminder.id}`} onPress={() => openReminder(reminder)} style={styles.officeTodayRow}>
+                    <Text style={[styles.officeTodayTime, { color: colors.primary }]} numberOfLines={1}>{recordDate(reminder.dueAt)}</Text>
+                    <Text style={[styles.officeTodayText, { color: colors.foreground }]} numberOfLines={1}>{reminder.text}</Text>
+                  </Pressable>
+                ))}
+                {context.pendingTasks.slice(0, 3).map((task) => (
+                  <Pressable key={`today-task-${task.id}`} onPress={() => openTask(task)} style={styles.officeTodayRow}>
+                    <Text style={[styles.officeTodayTime, { color: colors.mutedForeground }]} numberOfLines={1}>
+                      {task.dueAt ? recordDate(task.dueAt) : localized(language, 'مفتوحة', 'Open')}
+                    </Text>
+                    <Text style={[styles.officeTodayText, { color: colors.foreground }]} numberOfLines={1}>{task.title}</Text>
+                  </Pressable>
+                ))}
+                {context.upcomingReminders.length === 0 && context.pendingTasks.length === 0 && (
+                  <Text style={[styles.officeEmptyLine, { color: colors.mutedForeground }]}>
+                    {localized(language, 'لا يوجد شيء مجدول الآن.', 'Nothing scheduled right now.')}
+                  </Text>
+                )}
+              </View>
+            </View>
+
+            <View style={[styles.officeDashboardCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={styles.officeSectionHeading}>
+                <View>
+                  <Text style={[styles.officeSectionTitle, { color: colors.foreground }]}>
+                    {localized(language, 'إجراءات سريعة', 'Quick Actions')}
+                  </Text>
+                  <Text style={[styles.officeSectionHint, { color: colors.mutedForeground }]}>
+                    {localized(language, 'ابدأ من المحادثة', 'Start from chat')}
+                  </Text>
+                </View>
+                <Feather name="zap" size={16} color={colors.accent} />
+              </View>
+              <View style={styles.officeQuickActions}>
+                {quickActions.map((action) => (
+                  <Pressable
+                    key={action.draft}
+                    testID={`office-quick-action-${action.icon}`}
+                    accessibilityRole="button"
+                    onPress={() => onAskSecretary(action.draft)}
+                    style={({ pressed }) => [
+                      styles.officeQuickAction,
+                      { borderBottomColor: colors.border, opacity: pressed ? 0.62 : 1 },
+                    ]}
+                  >
+                    <View style={[styles.officeQuickActionIcon, { backgroundColor: colors.muted }]}>
+                      <Feather name={action.icon} size={13} color={colors.primary} />
+                    </View>
+                    <Text style={[styles.officeQuickActionText, { color: colors.foreground }]} numberOfLines={1}>
+                      {localized(language, action.label, action.labelEn)}
+                    </Text>
+                    <Feather name="chevron-left" size={13} color={colors.mutedForeground} />
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          </View>
+
+          {attentionCount > 0 && (
+            <View style={[styles.officeAttentionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={[styles.officeAttentionIcon, { backgroundColor: colors.destructive }]}>
+                <Feather name="bell" size={14} color={colors.destructiveForeground} />
+              </View>
+              <View style={styles.officeAttentionCopy}>
+                <Text style={[styles.officeAttentionTitle, { color: colors.foreground }]}>
+                  {localized(language, 'يحتاج انتباهك', 'Needs your attention')}
+                </Text>
+                <Text style={[styles.officeAttentionText, { color: colors.mutedForeground }]}>
+                  {attentionCount} {localized(language, 'عناصر في انتظارك', 'items are waiting')}
+                </Text>
+              </View>
+              <Pressable
+                testID="office-attention-open-chat"
+                accessibilityRole="button"
+                onPress={() => onFocusChat()}
+                style={({ pressed }) => [styles.officeAttentionAction, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}
+              >
+                <Text style={[styles.officeAttentionActionText, { color: colors.primary }]}>
+                  {localized(language, 'فتح', 'Open')}
+                </Text>
+              </Pressable>
+            </View>
+          )}
+        </>
+      )}
 
       <View testID="recent-activity" style={styles.officeSection}>
         <View style={styles.officeSectionHeading}>
@@ -1141,7 +1330,7 @@ export function MainOffice({
         </View>
       )}
 
-      {!todayQuery.isLoading && !todayQuery.isError && context && (
+      {context && !todayQuery.isLoading && !todayQuery.isError && false && (
         <>
           <View style={[styles.officePulse, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.officePulseItem}>
@@ -2719,6 +2908,15 @@ export const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'space-between',
   },
+  officeIntroMark: {
+    width: 38,
+    height: 38,
+    marginTop: 2,
+    marginRight: 10,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   officeIntroCopy: {
     flex: 1,
     alignItems: 'flex-end',
@@ -2750,6 +2948,125 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  officeSummaryGrid: {
+    marginTop: 18,
+    flexDirection: 'row-reverse',
+    gap: 8,
+  },
+  officeSummaryCard: {
+    minHeight: 112,
+    flex: 1,
+    borderRadius: 17,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+    alignItems: 'flex-end',
+  },
+  officeSummaryIcon: {
+    width: 25,
+    height: 25,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  officeSummaryValue: {
+    width: '100%',
+    marginTop: 8,
+    fontSize: 20,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  officeSummaryLabel: {
+    width: '100%',
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'right',
+  },
+  officeSummaryHint: {
+    width: '100%',
+    marginTop: 2,
+    fontSize: 9,
+    textAlign: 'right',
+  },
+  officeDashboardSplit: {
+    marginTop: 20,
+    flexDirection: 'row-reverse',
+    gap: 10,
+  },
+  officeDashboardCard: {
+    flex: 1,
+    minHeight: 194,
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 12,
+  },
+  officeQuickActions: {
+    gap: 2,
+  },
+  officeQuickAction: {
+    minHeight: 34,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 6,
+  },
+  officeQuickActionIcon: {
+    width: 23,
+    height: 23,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  officeQuickActionText: {
+    flex: 1,
+    fontSize: 10,
+    fontWeight: '600',
+    textAlign: 'right',
+  },
+  officeAttentionCard: {
+    minHeight: 58,
+    marginTop: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 10,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+  },
+  officeAttentionIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  officeAttentionCopy: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  officeAttentionTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  officeAttentionText: {
+    marginTop: 2,
+    fontSize: 10,
+    textAlign: 'right',
+  },
+  officeAttentionAction: {
+    minWidth: 42,
+    minHeight: 30,
+    borderRadius: 9,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  officeAttentionActionText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   officeChatPanel: {
     marginTop: 18,
