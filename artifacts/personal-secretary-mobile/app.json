@@ -10,7 +10,10 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.captmnrs.personalsecretary"
+      "bundleIdentifier": "com.captmnrs.personalsecretary",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.captmnrs.personalsecretary",
