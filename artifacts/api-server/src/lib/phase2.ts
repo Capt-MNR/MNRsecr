@@ -93,6 +93,7 @@ export type Phase2TurnInput = {
   channel?: TurnInputChannel;
   context?: SecretaryChatContext | null;
   peer?: SecretaryChatPeer | null;
+  inputId?: string | null;
   requestId?: string;
 };
 

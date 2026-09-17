@@ -271,6 +271,7 @@ router.post("/turns", async (req, res): Promise<void> => {
       requestId: currentRequestId,
       provider: configuredProvider(),
       conversationId: parsed.data.conversationId ?? undefined,
+      inputId: parsed.data.inputId ?? undefined,
     }, "Secretary request started");
     const result = await agentRuntime.run(identity, {
       ...parsed.data,
@@ -281,6 +282,7 @@ router.post("/turns", async (req, res): Promise<void> => {
       provider: result.provider,
       model: result.model,
       conversationId: result.conversationId,
+      inputId: parsed.data.inputId ?? undefined,
     }, "Secretary request completed");
     const operationId = result.action?.type === "approval_required"
       && typeof result.action.operationId === "string"

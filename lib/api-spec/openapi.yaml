@@ -1076,6 +1076,9 @@ components:
           anyOf:
             - $ref: "#/components/schemas/SecretaryChatPeer"
             - type: "null"
+        inputId:
+          type: ["string", "null"]
+          maxLength: 100
       required: [message, channel]
       additionalProperties: false
     InputAssetProcessInput:

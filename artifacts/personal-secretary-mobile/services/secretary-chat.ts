@@ -38,6 +38,7 @@ export type SecretaryChatTurnInput = {
   channel: SecretaryChatChannel;
   context?: SecretaryChatContext | null;
   peer?: SecretaryChatPeer | null;
+  inputId?: string | null;
 };
 
 export type SecretaryApprovalArgs = Record<string, unknown>;
@@ -65,6 +66,7 @@ const apiTransport: SecretaryChatTransport = {
     channel: input.channel,
     context: input.context ?? null,
     peer: input.peer ?? null,
+    inputId: input.inputId ?? null,
   }),
   listConversations: (params) => listConversations(params),
   loadConversation: (conversationId) => getConversation(conversationId),
