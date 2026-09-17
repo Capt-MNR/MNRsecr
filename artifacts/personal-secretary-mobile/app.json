@@ -2,15 +2,18 @@
   "expo": {
     "name": "Personal Secretary Mobile",
     "slug": "personal-secretary-mobile",
+    "owner": "captmnrs-team",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon_2.png",
     "scheme": "personal-secretary-mobile",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "bundleIdentifier": "com.captmnrs.personalsecretary"
     },
     "android": {
+      "package": "com.captmnrs.personalsecretary",
       "permissions": ["POST_NOTIFICATIONS"],
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon_2.png",
