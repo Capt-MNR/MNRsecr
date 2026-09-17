@@ -13,6 +13,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
@@ -713,23 +714,37 @@ function CentralSecretaryChat({
       testID={compact ? 'record-context-chat' : 'main-central-chat'}
       style={[
         compact ? styles.recordChatPanel : styles.centralChatPanel,
-          { backgroundColor: colors.card, borderColor: compact ? colors.border : colors.primary },
+          {
+            backgroundColor: colors.card,
+            borderColor: compact ? colors.border : colors.primary,
+            shadowColor: colors.primary,
+            shadowOpacity: compact ? 0 : 0.2,
+            shadowRadius: compact ? 0 : 24,
+            shadowOffset: { width: 0, height: 10 },
+            elevation: compact ? 0 : 5,
+          },
       ]}
     >
+      {!compact && (
+        <View pointerEvents="none" style={styles.centralChatAmbient}>
+          <View style={[styles.centralChatAmbientOrb, { backgroundColor: colors.primary }]} />
+          <View style={[styles.centralChatAmbientOrbSmall, { backgroundColor: colors.accent }]} />
+        </View>
+      )}
       <View style={styles.centralChatHeading}>
-        <View style={[styles.centralChatIcon, { backgroundColor: colors.muted }]}>
-          <Feather name="message-circle" size={compact ? 15 : 17} color={colors.primary} />
+        <View style={[styles.centralChatIcon, !compact && styles.centralChatHeroIcon, { backgroundColor: colors.primary }]}>
+          <Feather name={compact ? 'message-circle' : 'star'} size={compact ? 15 : 21} color={colors.primaryForeground} />
         </View>
         <View style={styles.centralChatHeadingCopy}>
           <Text style={[styles.centralChatTitle, { color: colors.foreground }]}>
             {context
               ? `${localized(language, 'السكرتير', 'Secretary')} · ${context.title}`
-              : localized(language, 'المحادثة الذكية', 'AI Chat')}
+              : localized(language, 'سكرتيرك الشخصي', 'Your personal secretary')}
           </Text>
           <Text style={[styles.centralChatHint, { color: colors.mutedForeground }]}>
           {context
             ? localized(language, 'اسأل عن هذا السياق أو علاقاته', 'Ask about this context or its relationships')
-            : localized(language, 'اسأل، راجع، أو ابدأ إجراءً من داخل البرنامج', 'Ask, review, or start an action')}
+            : localized(language, 'أنا هنا لأرتّب يومك وأحفظ ما يهمك', 'I’m here to organize your day and remember what matters')}
           </Text>
         </View>
       </View>
@@ -867,6 +882,7 @@ export function MainOffice({
       staleTime: 30_000,
     },
   });
+  const { width } = useWindowDimensions();
   const [financialExpanded, setFinancialExpanded] = useState(false);
   const recordsQuery = useListRecords({
     query: {
@@ -1104,9 +1120,46 @@ export function MainOffice({
         context={chatContext}
       />
 
+      <Pressable
+        testID="office-records-network-entry"
+        accessibilityRole="button"
+        accessibilityLabel={localized(language, 'استكشاف السجلات والروابط', 'Explore records and connections')}
+        onPress={onOpenRecords}
+        style={({ pressed }) => [
+          styles.officeNetworkCard,
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+            opacity: pressed ? 0.72 : 1,
+            shadowColor: colors.primary,
+          },
+        ]}
+      >
+        <View style={[styles.officeNetworkIcon, { backgroundColor: colors.muted }]}>
+          <Feather name="share-2" size={18} color={colors.primary} />
+        </View>
+        <View style={styles.officeNetworkCopy}>
+          <Text style={[styles.officeNetworkEyebrow, { color: colors.primary }]}>
+            {localized(language, 'ذاكرة السكرتير', 'Secretary memory')}
+          </Text>
+          <Text style={[styles.officeNetworkTitle, { color: colors.foreground }]}>
+            {localized(language, 'استكشف سجلاتك وروابطها', 'Explore your records and connections')}
+          </Text>
+          <Text style={[styles.officeNetworkText, { color: colors.mutedForeground }]}>
+            {localized(language, 'افتح سجلًا وانتقل إلى الأشخاص والمشاريع والمصروفات المرتبطة.', 'Open a record and move through related people, projects, and expenses.')}
+          </Text>
+        </View>
+        <View style={styles.officeNetworkAction}>
+          <Feather name="arrow-left" size={17} color={colors.primary} />
+          <Text style={[styles.officeNetworkCount, { color: colors.primary }]}>
+            {contextData ? contextualRecordCount : '—'}
+          </Text>
+        </View>
+      </Pressable>
+
       {!todayQuery.isLoading && !todayQuery.isError && contextData && (
         <>
-          <View style={styles.officeDashboardSplit}>
+          <View style={[styles.officeDashboardSplit, width >= 600 && styles.officeDashboardSplitWide]}>
             <View style={[styles.officeDashboardCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={styles.officeSectionHeading}>
                 <View>
@@ -1833,7 +1886,6 @@ const detailStyles = StyleSheet.create({
     height: 7,
     marginTop: 5,
     borderRadius: 4,
-    backgroundColor: '#6b8f71',
   },
   timelineCopy: {
     flex: 1,
@@ -2086,7 +2138,7 @@ export function RecordDetailView({
             const event = objectValue(item);
             return (
               <View key={`${String(event.id ?? 'event')}-${index}`} style={[detailStyles.timelineRow, { borderBottomColor: colors.border }]}>
-                <View style={detailStyles.timelineDot} />
+                <View style={[detailStyles.timelineDot, { backgroundColor: colors.accent }]} />
                 <View style={detailStyles.timelineCopy}>
                   <Text style={[detailStyles.timelineTitle, { color: colors.foreground }]} numberOfLines={2}>
                     {stringValue(event.summary, stringValue(event.description, stringValue(event.type, 'نشاط مرتبط')))}
@@ -2173,6 +2225,70 @@ const mainNavigation: Array<{ key: MainSection; labelAr: string; labelEn: string
   { key: 'activity', labelAr: 'النشاط', labelEn: 'Activity', icon: 'activity' },
 ];
 
+export function MainBottomBar({
+  colors,
+  language,
+  activeSection,
+  onSelect,
+  onOpenChat,
+  onOpenDrawer,
+}: {
+  colors: ReturnType<typeof useColors>;
+  language: AppLanguage;
+  activeSection: MainSection;
+  onSelect: (section: MainSection) => void;
+  onOpenChat: () => void;
+  onOpenDrawer: () => void;
+}) {
+  const items: Array<{ key: 'office' | 'chat' | 'records' | 'tasks' | 'more'; labelAr: string; labelEn: string; icon: FeatherName }> = [
+    { key: 'office', labelAr: 'الرئيسية', labelEn: 'Home', icon: 'home' },
+    { key: 'chat', labelAr: 'المحادثة', labelEn: 'Chat', icon: 'message-circle' },
+    { key: 'records', labelAr: 'السجلات', labelEn: 'Records', icon: 'archive' },
+    { key: 'tasks', labelAr: 'المهام', labelEn: 'Tasks', icon: 'check-square' },
+    { key: 'more', labelAr: 'المزيد', labelEn: 'More', icon: 'more-horizontal' },
+  ];
+  return (
+    <View style={[styles.bottomBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
+      {items.map((item) => {
+        const selected = item.key === 'office'
+          ? activeSection === 'office'
+          : item.key === 'records'
+            ? activeSection === 'records'
+            : item.key === 'tasks'
+              ? activeSection === 'tasks'
+              : false;
+        return (
+          <Pressable
+            key={item.key}
+            testID={`main-bottom-${item.key}`}
+            accessibilityRole="button"
+            accessibilityState={{ selected }}
+            accessibilityLabel={localized(language, item.labelAr, item.labelEn)}
+            onPress={() => {
+              if (item.key === 'more') {
+                onOpenDrawer();
+              } else if (item.key === 'chat') {
+                onOpenChat();
+              } else {
+                onSelect(item.key);
+              }
+            }}
+            style={({ pressed }) => [styles.bottomBarItem, { opacity: pressed ? 0.62 : 1 }]}
+          >
+            <View style={[styles.bottomBarIcon, selected && { backgroundColor: colors.muted }]}>
+              <Feather name={item.icon} size={17} color={selected ? colors.primary : colors.mutedForeground} />
+            </View>
+            <Text style={[styles.bottomBarLabel, { color: selected ? colors.primary : colors.mutedForeground }]}>
+              {localized(language, item.labelAr, item.labelEn)}
+            </Text>
+            {selected && <View style={[styles.bottomBarDot, { backgroundColor: colors.primary }]} />}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 export function MainDrawer({
   colors,
   language,
@@ -2204,10 +2320,10 @@ export function MainDrawer({
         accessibilityRole="button"
         accessibilityLabel="إغلاق القائمة"
         onPress={onClose}
-        style={styles.drawerBackdrop}
+        style={[styles.drawerBackdrop, { backgroundColor: colors.foreground, opacity: 0.22 }]}
       />
       <ScrollView
-        style={[styles.drawerPanel, { backgroundColor: colors.card, borderLeftColor: colors.border }]}
+        style={[styles.drawerPanel, { backgroundColor: colors.card, borderLeftColor: colors.border, shadowColor: colors.foreground }]}
         contentContainerStyle={styles.drawerScrollContent}
         showsVerticalScrollIndicator
         keyboardShouldPersistTaps="handled"
@@ -2415,7 +2531,6 @@ export const styles = StyleSheet.create({
   },
   drawerBackdrop: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(15, 23, 42, 0.32)',
   },
   drawerPanel: {
     width: '82%',
@@ -2424,7 +2539,6 @@ export const styles = StyleSheet.create({
     paddingTop: 78,
     paddingHorizontal: 16,
     borderLeftWidth: 1,
-    shadowColor: '#000',
     shadowOpacity: 0.12,
     shadowRadius: 18,
     shadowOffset: { width: -4, height: 0 },
@@ -2794,6 +2908,8 @@ export const styles = StyleSheet.create({
     borderRadius: 19,
     borderWidth: 1,
     padding: 12,
+    overflow: 'hidden',
+    position: 'relative',
   },
   recordChatPanel: {
     marginTop: 14,
@@ -2812,6 +2928,32 @@ export const styles = StyleSheet.create({
     borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  centralChatHeroIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  centralChatAmbient: {
+    ...StyleSheet.absoluteFill,
+  },
+  centralChatAmbientOrb: {
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    top: -110,
+    left: -42,
+    borderRadius: 90,
+    opacity: 0.08,
+  },
+  centralChatAmbientOrbSmall: {
+    position: 'absolute',
+    width: 130,
+    height: 130,
+    bottom: -78,
+    right: -30,
+    borderRadius: 65,
+    opacity: 0.1,
   },
   centralChatHeadingCopy: {
     flex: 1,
@@ -2901,7 +3043,7 @@ export const styles = StyleSheet.create({
   officeList: {
     paddingHorizontal: 16,
     paddingTop: 18,
-    paddingBottom: 32,
+    paddingBottom: 112,
   },
   officeIntro: {
     flexDirection: 'row-reverse',
@@ -2992,8 +3134,11 @@ export const styles = StyleSheet.create({
   },
   officeDashboardSplit: {
     marginTop: 20,
-    flexDirection: 'row-reverse',
+    flexDirection: 'column',
     gap: 10,
+  },
+  officeDashboardSplitWide: {
+    flexDirection: 'row-reverse',
   },
   officeDashboardCard: {
     flex: 1,
@@ -3001,6 +3146,62 @@ export const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     padding: 12,
+  },
+  officeNetworkCard: {
+    minHeight: 94,
+    marginTop: 13,
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 10,
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2,
+  },
+  officeNetworkIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  officeNetworkCopy: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  officeNetworkEyebrow: {
+    width: '100%',
+    fontSize: 9,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  officeNetworkTitle: {
+    width: '100%',
+    marginTop: 2,
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  officeNetworkText: {
+    width: '100%',
+    marginTop: 3,
+    fontSize: 10,
+    lineHeight: 15,
+    textAlign: 'right',
+  },
+  officeNetworkAction: {
+    minWidth: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  officeNetworkCount: {
+    fontSize: 10,
+    fontWeight: '700',
   },
   officeQuickActions: {
     gap: 2,
@@ -3604,6 +3805,41 @@ export const styles = StyleSheet.create({
   officeExploreText: {
     fontSize: 13,
     fontWeight: '700',
+  },
+  bottomBar: {
+    minHeight: 76,
+    paddingHorizontal: 9,
+    paddingTop: 8,
+    paddingBottom: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+  },
+  bottomBarItem: {
+    minWidth: 52,
+    minHeight: 58,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  bottomBarIcon: {
+    width: 29,
+    height: 25,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bottomBarLabel: {
+    fontSize: 9,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  bottomBarDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 2,
+    marginTop: 1,
   },
   detailScreen: {
     flex: 1,
