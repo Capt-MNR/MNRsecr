@@ -702,6 +702,44 @@ export const conversationMemoryTable = pgTable(
   ],
 );
 
+export const inputAssetResultsTable = pgTable(
+  "input_asset_results",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    inputId: text("input_id").notNull(),
+    contentHash: text("content_hash").notNull(),
+    kind: text("kind").notNull(),
+    mimeType: text("mime_type").notNull(),
+    text: text("text").notNull(),
+    receipt: jsonb("receipt").$type<Record<string, unknown> | null>(),
+    provider: text("provider").notNull(),
+    model: text("model").notNull(),
+    inputTokens: integer("input_tokens"),
+    outputTokens: integer("output_tokens"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("input_asset_results_owner_hash_unique").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.contentHash,
+    ),
+    uniqueIndex("input_asset_results_owner_input_unique").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.inputId,
+    ),
+    index("input_asset_results_owner_expires_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.expiresAt,
+    ),
+  ],
+);
+
 export const learningSignalReviewsTable = pgTable(
   "learning_signal_reviews",
   {

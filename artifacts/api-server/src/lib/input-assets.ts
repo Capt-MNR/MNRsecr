@@ -1,4 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
+import { and, eq, gt, lt } from "drizzle-orm";
+import { db, inputAssetResultsTable } from "@workspace/db";
 import {
   providerExceptionError,
   providerResponseError,
@@ -74,6 +76,92 @@ function pruneInputCache(now = Date.now()): void {
   }
 }
 
+function resultFromStoredRow(row: typeof inputAssetResultsTable.$inferSelect): InputAssetProcessResult {
+  return {
+    inputId: row.inputId,
+    kind: row.kind as InputAssetKind,
+    text: row.text,
+    ...(row.receipt ? { receipt: normalizeReceipt(row.receipt) } : {}),
+    processing: {
+      provider: row.provider,
+      model: row.model,
+      inputTokens: row.inputTokens ?? null,
+      outputTokens: row.outputTokens ?? null,
+      cacheHit: true,
+    },
+  };
+}
+
+async function loadDurableCachedResult(
+  cacheKey: string,
+  scope: InputAssetScope,
+): Promise<InputAssetProcessResult | null> {
+  try {
+    await db.delete(inputAssetResultsTable).where(and(
+      eq(inputAssetResultsTable.tenantId, scope.tenantId),
+      eq(inputAssetResultsTable.ownerUserId, scope.userId),
+      lt(inputAssetResultsTable.expiresAt, new Date()),
+    ));
+    const [row] = await db.select().from(inputAssetResultsTable).where(and(
+      eq(inputAssetResultsTable.tenantId, scope.tenantId),
+      eq(inputAssetResultsTable.ownerUserId, scope.userId),
+      eq(inputAssetResultsTable.contentHash, cacheKey),
+      gt(inputAssetResultsTable.expiresAt, new Date()),
+    )).limit(1);
+    return row ? resultFromStoredRow(row) : null;
+  } catch (error) {
+    console.warn("Durable input-asset cache read failed; continuing with provider processing.", error);
+    return null;
+  }
+}
+
+async function persistDurableResult(
+  cacheKey: string,
+  scope: InputAssetScope,
+  input: InputAssetProcessInput,
+  result: InputAssetProcessResult,
+): Promise<void> {
+  try {
+    await db.insert(inputAssetResultsTable).values({
+      tenantId: scope.tenantId,
+      ownerUserId: scope.userId,
+      inputId: result.inputId,
+      contentHash: cacheKey,
+      kind: result.kind,
+      mimeType: input.mimeType,
+      text: result.text,
+      receipt: result.receipt ?? null,
+      provider: result.processing.provider,
+      model: result.processing.model,
+      inputTokens: result.processing.inputTokens,
+      outputTokens: result.processing.outputTokens,
+      expiresAt: new Date(Date.now() + INPUT_CACHE_TTL_MS),
+      updatedAt: new Date(),
+    }).onConflictDoUpdate({
+      target: [
+        inputAssetResultsTable.tenantId,
+        inputAssetResultsTable.ownerUserId,
+        inputAssetResultsTable.contentHash,
+      ],
+      set: {
+        inputId: result.inputId,
+        kind: result.kind,
+        mimeType: input.mimeType,
+        text: result.text,
+        receipt: result.receipt ?? null,
+        provider: result.processing.provider,
+        model: result.processing.model,
+        inputTokens: result.processing.inputTokens,
+        outputTokens: result.processing.outputTokens,
+        expiresAt: new Date(Date.now() + INPUT_CACHE_TTL_MS),
+        updatedAt: new Date(),
+      },
+    });
+  } catch (error) {
+    console.warn("Durable input-asset cache write failed; the in-memory result remains available.", error);
+  }
+}
+
 function parseJsonResponse(raw: string): Record<string, unknown> {
   const text = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
   try {
@@ -143,6 +231,7 @@ function inputPrompt(kind: InputAssetKind): string {
 
 async function processInputAssetUncached(
   input: InputAssetProcessInput,
+  scope: InputAssetScope,
   cacheKey: string,
 ): Promise<InputAssetProcessResult> {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -250,6 +339,7 @@ async function processInputAssetUncached(
       result,
       expiresAt: Date.now() + INPUT_CACHE_TTL_MS,
     });
+    await persistDurableResult(cacheKey, scope, input, result);
     return result;
   } catch (error) {
     if (error instanceof SecretaryError) throw error;
@@ -280,6 +370,15 @@ export async function processInputAsset(
   }
   if (cached) processedInputCache.delete(cacheKey);
 
+  const durableCached = await loadDurableCachedResult(cacheKey, scope);
+  if (durableCached) {
+    processedInputCache.set(cacheKey, {
+      result: durableCached,
+      expiresAt: Date.now() + INPUT_CACHE_TTL_MS,
+    });
+    return durableCached;
+  }
+
   const existingFlight = inputProcessingFlights.get(cacheKey);
   if (existingFlight) {
     const result = await existingFlight;
@@ -292,7 +391,7 @@ export async function processInputAsset(
     };
   }
 
-  const flight = processInputAssetUncached(input, cacheKey);
+  const flight = processInputAssetUncached(input, scope, cacheKey);
   inputProcessingFlights.set(cacheKey, flight);
   try {
     return await flight;

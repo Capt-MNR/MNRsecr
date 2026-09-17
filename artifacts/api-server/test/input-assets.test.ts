@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { processInputAsset } from "../src/lib/input-assets.ts";
 
@@ -37,7 +38,7 @@ test("processed input cache is tenant-scoped and avoids duplicate provider work"
   const input = {
     kind: "receipt" as const,
     mimeType: "image/jpeg",
-    base64: Buffer.from("receipt-fixture").toString("base64"),
+    base64: Buffer.from(`receipt-fixture-${randomUUID()}`).toString("base64"),
   };
   try {
     const first = await processInputAsset(input, { tenantId: "tenant-a", userId: "user-a" });
@@ -79,7 +80,7 @@ test("concurrent processing for the same scoped input shares one provider flight
   const input = {
     kind: "voice" as const,
     mimeType: "audio/m4a",
-    base64: Buffer.from("concurrent-voice-fixture").toString("base64"),
+    base64: Buffer.from(`concurrent-voice-fixture-${randomUUID()}`).toString("base64"),
   };
   try {
     const [first, second] = await Promise.all([
