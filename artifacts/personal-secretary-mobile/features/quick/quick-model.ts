@@ -1,6 +1,7 @@
 import { StyleSheet } from 'react-native';
 import type { AppLanguage } from '@/hooks/useLanguage';
 import type { SecretaryChatContext } from '../../services/secretary-chat';
+import type { LocalInputAttachment } from '../../services/local-input-assets';
 
 export type ApprovalStatus = 'pending' | 'executing' | 'completed' | 'rejected' | 'expired' | 'failed';
 export type Approval = {
@@ -33,6 +34,8 @@ export type LocalMessage = {
   text: string;
   createdAt: string;
   turnId?: string;
+  inputId?: string | null;
+  inputAttachment?: LocalInputAttachment | null;
   approval?: Approval;
   recordLink?: MobileRecordRow;
 };
@@ -130,7 +133,8 @@ export function messagesFromConversation(detail: unknown, conversationId: string
     const createdAt = typeof turn.createdAt === 'string' ? turn.createdAt : new Date().toISOString();
     const action = Object.keys(objectValue(turn.action)).length ? objectValue(turn.action) : undefined;
     const link = action && recordLinkFromAction(action);
-    if (typeof turn.userMessage === 'string') result.push({ id: `${conversationId}-${turnId}-user`, role: 'user', text: turn.userMessage, createdAt });
+    const inputId = typeof turn.inputId === 'string' ? turn.inputId : undefined;
+    if (typeof turn.userMessage === 'string') result.push({ id: `${conversationId}-${turnId}-user`, role: 'user', text: turn.userMessage, createdAt, ...(inputId ? { inputId } : {}) });
     if (typeof turn.assistantMessage === 'string') result.push({ id: `${conversationId}-${turnId}-assistant`, role: 'assistant', text: turn.assistantMessage, createdAt, approval: action ? approvalFromAction(action) : undefined, ...(link ? { recordLink: addOrigin(link, conversationId, typeof action?.operationId === 'string' ? action.operationId : null) } : {}) });
   });
   return result.length ? result : [starterMessage];

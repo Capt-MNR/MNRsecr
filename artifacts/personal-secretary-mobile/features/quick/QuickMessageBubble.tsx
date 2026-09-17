@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { useColors } from '@/hooks/useColors';
 import type { Approval, LocalMessage, MobileRecordRow } from './quick-model';
 import { starterMessage, styles } from './quick-model';
+import { LocalInputAttachmentView } from '../local-input-attachment';
 
 function messageTime(value: string) {
   if (value === starterMessage.createdAt) return 'الآن';
@@ -49,6 +50,7 @@ export function QuickMessageBubble({
         <Text style={[styles.messageText, { color: isUser ? colors.primaryForeground : colors.foreground }]}>
           {message.text}
         </Text>
+        {message.inputAttachment && <LocalInputAttachmentView attachment={message.inputAttachment} />}
         <Text style={[styles.messageTime, { color: isUser ? colors.primaryForeground : colors.mutedForeground }]}>
           {messageTime(message.createdAt)}
         </Text>

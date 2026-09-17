@@ -17,6 +17,7 @@ import {
   useSecretaryInputCapture,
   type SecretaryInputResult,
 } from '../services/secretary-input';
+import { hydrateLocalInputAttachments } from '../services/local-input-assets';
 import { initializeSecretaryPush } from '../services/mobile-push';
 import { isQuickNotificationResponse } from '../services/quick-notification';
 import {
@@ -196,9 +197,17 @@ export default function MainRoute() {
     }
     setDraft('');
     const submittedInputId = inputReview?.inputId ?? null;
+    const submittedInputAttachment = inputReview?.localAttachment ?? null;
     setInputReview(null);
     setLocalError(null);
-    appendMessage({ id: `user-${Date.now()}`, role: 'user', text: message, createdAt: new Date().toISOString() });
+    appendMessage({
+      id: `user-${Date.now()}`,
+      role: 'user',
+      text: message,
+      createdAt: new Date().toISOString(),
+      ...(submittedInputId ? { inputId: submittedInputId } : {}),
+      ...(submittedInputAttachment ? { inputAttachment: submittedInputAttachment } : {}),
+    });
     try {
        const result = await secretaryChat.sendTurn({ message, conversationId: conversationId ?? null, channel: chatContext ? 'record' : 'main', context: chatContext ? secretaryContextFromRecord(chatContext) : null, inputId: submittedInputId });
       setConversationId(result.conversationId);

@@ -6,10 +6,13 @@ import {
   processSecretaryInputAsset,
   type InputAssetProcessResponse,
 } from '@workspace/api-client-react';
+import { saveLocalInputAsset, type LocalInputAttachment } from './local-input-assets';
 
 export type SecretaryInputState = 'idle' | 'recording' | 'processing';
 
-export type SecretaryInputResult = InputAssetProcessResponse;
+export type SecretaryInputResult = InputAssetProcessResponse & {
+  localAttachment?: LocalInputAttachment;
+};
 type RetryableInputAsset = {
   kind: 'voice' | 'receipt';
   uri: string;
@@ -61,8 +64,22 @@ export function useSecretaryInputCapture(
     setState('processing');
     try {
       const result = await processFile(asset.kind, asset.uri, asset.mimeType, asset.base64);
-      setRetryableAsset(null);
-      onResult(result);
+      let localAttachment: LocalInputAttachment | undefined;
+      try {
+        localAttachment = (await saveLocalInputAsset({
+          inputId: result.inputId,
+          kind: asset.kind,
+          mimeType: asset.mimeType,
+          sourceUri: asset.uri,
+        })) ?? undefined;
+      } catch {
+        localAttachment = undefined;
+      }
+      setRetryableAsset(localAttachment ? null : asset);
+      onResult(localAttachment ? { ...result, localAttachment } : result);
+      if (!localAttachment) {
+        onError('تمت معالجة الإدخال، لكن تعذر حفظ الأصل على الجهاز. يمكنك استخدام النص الآن أو إعادة المحاولة لاحقًا.');
+      }
     } catch {
       setRetryableAsset(asset);
       onError(errorMessage);

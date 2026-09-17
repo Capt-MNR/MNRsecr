@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors, type ThemePreference } from '@/hooks/useColors';
 import { useLanguage, type AppLanguage } from '@/hooks/useLanguage';
 import { useSecretaryChatService, type SecretaryChatContext } from '../../services/secretary-chat';
+import type { LocalInputAttachment } from '../../services/local-input-assets';
 import { receiptNeedsReview, type SecretaryInputResult, type SecretaryInputState } from '../../services/secretary-input';
 import { MessageBubble } from '../message-bubble';
 import { ReceiptReviewCard } from '../receipt-review';
@@ -49,6 +50,8 @@ export type LocalMessage = {
   text: string;
   createdAt: string;
   turnId?: string;
+  inputId?: string | null;
+  inputAttachment?: LocalInputAttachment | null;
   approval?: Approval;
   recordLink?: MobileRecordRow;
 };
@@ -460,6 +463,7 @@ export function messagesFromConversation(detail: unknown, conversationId: string
     const action = Object.keys(objectValue(turn.action)).length > 0 ? objectValue(turn.action) : undefined;
     const recordLink = action ? recordLinkFromAction(action) : undefined;
     const linkedRecord = recordLink ? addOrigin(recordLink, conversationId, typeof action?.operationId === 'string' ? action.operationId : null) : undefined;
+    const inputId = typeof turn.inputId === 'string' ? turn.inputId : undefined;
 
     if (typeof turn.userMessage === 'string') {
       loadedMessages.push({
@@ -467,6 +471,7 @@ export function messagesFromConversation(detail: unknown, conversationId: string
         role: 'user',
         text: turn.userMessage,
         createdAt,
+        ...(inputId ? { inputId } : {}),
       });
     }
     if (typeof turn.assistantMessage === 'string') {

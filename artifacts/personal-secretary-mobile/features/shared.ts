@@ -1,6 +1,7 @@
 import { StyleSheet } from 'react-native';
 import type { AppLanguage } from '@/hooks/useLanguage';
 import type { SecretaryChatContext } from '../services/secretary-chat';
+import type { LocalInputAttachment } from '../services/local-input-assets';
 
 export type ApprovalStatus = 'pending' | 'executing' | 'completed' | 'rejected' | 'expired' | 'failed';
 export type ConfirmationMode = 'immediate_approval' | 'deferred_confirmation';
@@ -38,6 +39,8 @@ export type LocalMessage = {
   text: string;
   createdAt: string;
   turnId?: string;
+  inputId?: string | null;
+  inputAttachment?: LocalInputAttachment | null;
   approval?: Approval;
   recordLink?: MobileRecordRow;
 };

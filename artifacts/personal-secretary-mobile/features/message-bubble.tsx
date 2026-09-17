@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 
 import { useState } from 'react';
 import { useColors } from '@/hooks/useColors';
 import type { Approval, ApprovalArgs, ApprovalCandidate, LocalMessage, MobileRecordRow } from './shared';
+import { LocalInputAttachmentView } from './local-input-attachment';
 import { styles, starterMessage } from './shared';
 
 function messageTime(value: string) {
@@ -371,6 +372,7 @@ export function MessageBubble({
         <Text style={[styles.messageText, { color: isUser ? colors.primaryForeground : colors.foreground }]}>
           {message.text}
         </Text>
+        {message.inputAttachment && <LocalInputAttachmentView attachment={message.inputAttachment} />}
         <Text style={[styles.messageTime, { color: isUser ? colors.primaryForeground : colors.mutedForeground }]}>
           {messageTime(message.createdAt)}
         </Text>

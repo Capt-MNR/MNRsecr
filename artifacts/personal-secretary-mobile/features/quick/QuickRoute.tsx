@@ -27,6 +27,7 @@ import {
   useSecretaryInputCapture,
   type SecretaryInputResult,
 } from '../../services/secretary-input';
+import { hydrateLocalInputAttachments } from '../../services/local-input-assets';
 import { initializeSecretaryPush } from '../../services/mobile-push';
 import {
   initializeQuickNotification,
@@ -90,19 +91,24 @@ export default function QuickRoute() {
 
   useEffect(() => {
     let active = true;
-    void AsyncStorage.multiGet([STORAGE_MESSAGES, STORAGE_CONVERSATION]).then(([storedMessages, storedConversation]) => {
+    void AsyncStorage.multiGet([STORAGE_MESSAGES, STORAGE_CONVERSATION]).then(async ([storedMessages, storedConversation]) => {
       if (!active) return;
       if (storedMessages[1]) {
         try {
           const parsed = JSON.parse(storedMessages[1]) as LocalMessage[];
-          if (Array.isArray(parsed) && parsed.length > 0) setMessages(parsed);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const hydratedMessages = await hydrateLocalInputAttachments(parsed);
+            if (active) setMessages(hydratedMessages);
+          }
         } catch {
-          setMessages([starterMessage]);
+          if (active) setMessages([starterMessage]);
         }
       }
-      if (storedConversation[1]) setConversationId(storedConversation[1]);
-      setHydrated(true);
-    }).catch(() => setHydrated(true));
+      if (active && storedConversation[1]) setConversationId(storedConversation[1]);
+      if (active) setHydrated(true);
+    }).catch(() => {
+      if (active) setHydrated(true);
+    });
     void initializeQuickNotification();
     void initializeSecretaryPush();
     return () => {
@@ -120,7 +126,7 @@ export default function QuickRoute() {
 
   useEffect(() => {
     if (!conversationToLoad || loadedConversationId === conversationToLoad || !conversationQuery.data) return;
-    setMessages(messagesFromConversation(conversationQuery.data, conversationToLoad));
+    void hydrateLocalInputAttachments(messagesFromConversation(conversationQuery.data, conversationToLoad)).then(setMessages);
     setConversationId(conversationToLoad);
     setLoadedConversationId(conversationToLoad);
     setLocalError(null);
@@ -146,10 +152,18 @@ export default function QuickRoute() {
     }
     setDraft('');
     const submittedInputId = inputReview?.inputId ?? null;
+    const submittedInputAttachment = inputReview?.localAttachment ?? null;
     setInputReview(null);
     setLocalError(null);
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    appendMessage({ id: `user-${Date.now()}`, role: 'user', text: message, createdAt: new Date().toISOString() });
+    appendMessage({
+      id: `user-${Date.now()}`,
+      role: 'user',
+      text: message,
+      createdAt: new Date().toISOString(),
+      ...(submittedInputId ? { inputId: submittedInputId } : {}),
+      ...(submittedInputAttachment ? { inputAttachment: submittedInputAttachment } : {}),
+    });
     try {
       const result = await secretaryChat.sendTurn({
         message,
