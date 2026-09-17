@@ -4,6 +4,15 @@ This verification is required before the mobile architecture phase is complete.
 Use an Android internal APK and an iOS TestFlight build. Expo Go and web preview
 do not count as proof of remote notification delivery.
 
+## Current Android build
+
+- Status: `FINISHED`
+- EAS build ID: `b1665a7b-41bc-4fd0-b819-00abbbc6e629`
+- Git commit: `4a2234223f1ca2c15db6f9106a626db363ed38c9`
+- Expo SDK: `57.0.0`
+- Version: `1.0.0` (Android build `1`)
+- APK: https://expo.dev/artifacts/eas/PHBchjkzeVUOMvTTxdqGoDmJmj59uYn1yqnMHXl_01o.apk
+
 ## Preconditions
 
 - Install the current build on one physical Android device and one physical iPhone.
