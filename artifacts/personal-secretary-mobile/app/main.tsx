@@ -18,6 +18,7 @@ import {
   MainBottomBar,
   MainOffice,
   MainWorkspace,
+  ConversationHistoryView,
   RecordDetailView,
   RecordsView,
   addOrigin,
@@ -270,12 +271,9 @@ export default function MainRoute() {
             onPress={() => setDrawerOpen(true)}
             style={({ pressed }) => [styles.brandBlock, { opacity: pressed ? 0.7 : 1 }]}
           >
-            <View style={[styles.brandMark, { backgroundColor: colors.primary }]}>
-              <Feather name="grid" size={18} color={colors.primaryForeground} />
-            </View>
             <View>
-              <Text style={[styles.brandName, { color: colors.foreground }]}>مكتب السكرتير</Text>
-              <Text style={[styles.availabilityText, { color: colors.mutedForeground }]}>إدارة، استكشاف، ومراجعة</Text>
+              <Text style={[styles.brandName, { color: colors.foreground }]}>صباح الخير، محمد</Text>
+              <Text style={[styles.availabilityText, { color: colors.mutedForeground }]}>إليك ما يحدث اليوم</Text>
             </View>
           </Pressable>
           <View style={styles.headerActions}>
@@ -289,7 +287,8 @@ export default function MainRoute() {
           <MainDrawer colors={colors} language={language} themePreference={themePreference} open={drawerOpen} activeSection={mainSection} onClose={() => setDrawerOpen(false)} onSelect={openMainSection} onOpenQuick={() => router.replace('/')} onThemeChange={setThemePreference} onLanguageChange={setLanguage} />
           {selectedRecord ? <RecordDetailView record={selectedRecord} colors={colors} onBack={() => setSelectedRecord(null)} onAskSecretary={askSecretaryAboutRecord} onOpenConversation={openConversation} onOpenRelatedRecord={openRecord} chatMessages={messages} chatDraft={draft} onChangeChatDraft={setDraft} onSendChat={() => void sendMessage()} chatBusy={secretaryChat.isSending || conversationQuery.isFetching} onApprove={(approval, args) => void updateApproval(approval, 'completed', args)} onReject={(approval) => void updateApproval(approval, 'rejected')} busyOperationId={busyOperationId} chatContext={chatContext} /> : (
             <>
-               {mainSection === 'office' && <MainOffice colors={colors} language={language} onOpenRecord={openRecord} onOpenRecords={() => openMainSection('records')} onOpenConversation={openConversationById} onFocusChat={focusMainChat} onAskSecretary={(value) => { setDraft(value); setTimeout(() => inputRef.current?.focus(), 0); }} messages={messages} draft={draft} onChangeDraft={setDraft} onSend={() => void sendMessage()} inputRef={inputRef} isSending={secretaryChat.isSending || conversationQuery.isFetching} onApprove={(approval, args) => void updateApproval(approval, 'completed', args)} onReject={(approval) => void updateApproval(approval, 'rejected')} busyOperationId={busyOperationId} recordOrigins={recordOrigins} chatContext={chatContext} recentConversations={recentConversations} conversationSearch={conversationSearch} onChangeConversationSearch={setConversationSearch} conversationsLoading={secretaryChat.conversationsQuery.isFetching} pendingApprovals={messages.flatMap((message) => message.approval?.status === 'pending' ? [message.approval] : [])} />}
+                {mainSection === 'office' && <MainOffice colors={colors} language={language} onOpenRecord={openRecord} onOpenRecords={() => openMainSection('records')} onOpenFinancial={() => openMainSection('financial')} onOpenConversation={openConversationById} onFocusChat={focusMainChat} onAskSecretary={(value) => { setDraft(value); setTimeout(() => inputRef.current?.focus(), 0); }} messages={messages} draft={draft} onChangeDraft={setDraft} onSend={() => void sendMessage()} inputRef={inputRef} isSending={secretaryChat.isSending || conversationQuery.isFetching} onApprove={(approval, args) => void updateApproval(approval, 'completed', args)} onReject={(approval) => void updateApproval(approval, 'rejected')} busyOperationId={busyOperationId} recordOrigins={recordOrigins} chatContext={chatContext} recentConversations={recentConversations} conversationSearch={conversationSearch} onChangeConversationSearch={setConversationSearch} conversationsLoading={secretaryChat.conversationsQuery.isFetching} pendingApprovals={messages.flatMap((message) => message.approval?.status === 'pending' ? [message.approval] : [])} />}
+                {mainSection === 'chat' && <ConversationHistoryView colors={colors} language={language} conversations={recentConversations} loading={secretaryChat.conversationsQuery.isFetching} onOpenConversation={openConversationById} onBack={() => openMainSection('office')} />}
               {mainSection === 'records' && <RecordsView colors={colors} onOpenSection={openRecordSection} onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}
               {mainSection === 'people' && <RecordsView colors={colors} onOpenSection={openRecordSection} title="الأشخاص" subtitle="الأشخاص وعلاقاتهم بالسجلات والمشاريع" sectionKeys={['people']} onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}
               {mainSection === 'projects' && <RecordsView colors={colors} onOpenSection={openRecordSection} title="المشاريع" subtitle="المشاريع النشطة وسياقها المرتبط" sectionKeys={['projects']} onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}
@@ -307,7 +306,6 @@ export default function MainRoute() {
           language={language}
           activeSection={selectedRecord ? 'records' : mainSection}
           onSelect={openMainSection}
-          onOpenChat={focusMainChat}
           onOpenDrawer={() => setDrawerOpen(true)}
         />
       )}

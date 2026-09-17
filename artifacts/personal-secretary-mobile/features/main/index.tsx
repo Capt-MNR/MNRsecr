@@ -92,7 +92,7 @@ type MobileRecordSection = {
   data: MobileRecordRow[];
 };
 
-export type MainSection = 'office' | 'records' | 'people' | 'projects' | 'financial' | 'tasks' | 'reminders' | 'activity';
+export type MainSection = 'office' | 'chat' | 'records' | 'people' | 'projects' | 'financial' | 'tasks' | 'reminders' | 'activity';
 type ConversationSummary = ConversationListResponse['conversations'][number];
 
 type TodayContextReminder = TodayContext['upcomingReminders'][number];
@@ -707,6 +707,7 @@ function CentralSecretaryChat({
   compact = false,
 }: SecretaryChatProps) {
   const { language } = useLanguage();
+  const transcriptMessages = messages.length === 1 && messages[0]?.id === 'welcome' ? [] : messages;
   return (
     <View
       testID={compact ? 'record-context-chat' : 'main-central-chat'}
@@ -775,7 +776,7 @@ function CentralSecretaryChat({
         nestedScrollEnabled
         showsVerticalScrollIndicator={false}
       >
-        {messages.map((message) => (
+        {transcriptMessages.map((message) => (
           <MessageBubble
             key={message.id}
             message={message}
@@ -868,6 +869,7 @@ export function MainOffice({
   language,
   onOpenRecord,
   onOpenRecords,
+  onOpenFinancial,
   onOpenConversation,
   onFocusChat,
   onAskSecretary,
@@ -892,6 +894,7 @@ export function MainOffice({
   language: AppLanguage;
   onOpenRecord: (record: MobileRecordRow) => void;
   onOpenRecords: () => void;
+  onOpenFinancial: () => void;
   onOpenConversation: (conversationId: string) => void;
   onFocusChat: (record?: MobileRecordRow) => void;
   onAskSecretary: (draft: string) => void;
@@ -1089,40 +1092,6 @@ export function MainOffice({
         />
       )}
     >
-      <View style={styles.officeIntro}>
-        <View style={styles.officeIntroCopy}>
-          <Text style={[styles.officeEyebrow, { color: colors.primary }]}>
-            {localized(language, 'مكتب السكرتير', 'Secretary workspace')}
-          </Text>
-          <Text style={[styles.officeGreeting, { color: colors.foreground }]}>
-            {new Date().getHours() < 12
-              ? localized(language, 'صباح الخير', 'Good morning')
-              : new Date().getHours() < 17
-                ? localized(language, 'نهارك هادئ', 'Have a calm day')
-                : localized(language, 'مساء الخير', 'Good evening')}
-          </Text>
-          <Text style={[styles.officeSubtitle, { color: colors.mutedForeground }]}>
-            {localized(language, 'نظرة هادئة على ما يستحق انتباهك اليوم.', 'A calm view of what deserves your attention today.')}
-          </Text>
-        </View>
-        <Pressable
-          testID="refresh-office"
-          accessibilityRole="button"
-          accessibilityLabel="تحديث مكتب السكرتير"
-          onPress={() => void todayQuery.refetch()}
-          style={({ pressed }) => [
-            styles.officeRefresh,
-            { borderColor: colors.border, backgroundColor: colors.card, opacity: pressed || todayQuery.isFetching ? 0.6 : 1 },
-          ]}
-        >
-          {todayQuery.isFetching ? (
-            <ActivityIndicator size="small" color={colors.primary} />
-          ) : (
-            <Feather name="refresh-cw" size={16} color={colors.foreground} />
-          )}
-        </Pressable>
-      </View>
-
       <View testID="main-summary-cards" style={styles.officeSummaryGrid}>
         {summaryCards.map((card) => (
           <Pressable
@@ -1141,19 +1110,8 @@ export function MainOffice({
                 const reminder = context.upcomingReminders[0];
                 if (reminder) openReminder(reminder);
                 else onAskSecretary('اعرض مواعيدي القادمة');
-              } else {
-                const expense = context.recentExpenses[0];
-                if (expense) {
-                  onOpenRecord({
-                    id: expense.id,
-                    recordType: 'expense',
-                    title: expense.description,
-                    subtitle: [expense.personName ?? expense.projectName, recordDate(expense.occurredAt)].filter(Boolean).join(' · '),
-                    trailing: money(expense.amountMinor, expense.currency),
-                  });
-                } else {
-                  onAskSecretary('اعرض مصروفاتي الأخيرة');
-                }
+              } else if (card.key === 'accounts') {
+                onOpenFinancial();
               }
             }}
             style={({ pressed }) => [
@@ -1194,7 +1152,7 @@ export function MainOffice({
       {!todayQuery.isLoading && !todayQuery.isError && contextData && (
         <>
           <View style={styles.officeDashboardSplit}>
-            <View style={[styles.officeDashboardCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.officeDashboardCard, styles.officeTodayCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={styles.officeSectionHeading}>
                 <View>
                   <Text style={[styles.officeSectionTitle, { color: colors.foreground }]}>
@@ -1230,7 +1188,7 @@ export function MainOffice({
               </View>
             </View>
 
-            <View style={[styles.officeDashboardCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.officeDashboardCard, styles.officeQuickCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={styles.officeSectionHeading}>
                 <View>
                   <Text style={[styles.officeSectionTitle, { color: colors.foreground }]}>
@@ -1266,28 +1224,6 @@ export function MainOffice({
             </View>
           </View>
 
-          {attentionCount > 0 && (
-            <View style={[styles.officeAttentionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.officeAttentionCopy}>
-                <Text style={[styles.officeAttentionTitle, { color: colors.foreground }]}>
-                  {localized(language, 'يحتاج انتباهك', 'Needs your attention')}
-                </Text>
-                <Text style={[styles.officeAttentionText, { color: colors.mutedForeground }]}>
-                  {attentionCount} {localized(language, 'عناصر في انتظارك', 'items are waiting')}
-                </Text>
-              </View>
-              <Pressable
-                testID="office-attention-open-chat"
-                accessibilityRole="button"
-                onPress={() => onFocusChat()}
-                style={({ pressed }) => [styles.officeAttentionAction, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}
-              >
-                <Text style={[styles.officeAttentionActionText, { color: colors.primary }]}>
-                  {localized(language, 'فتح', 'Open')}
-                </Text>
-              </Pressable>
-            </View>
-          )}
         </>
       )}
 
@@ -2275,19 +2211,107 @@ const mainNavigation: Array<{ key: MainSection; labelAr: string; labelEn: string
   { key: 'activity', labelAr: 'النشاط', labelEn: 'Activity', icon: 'activity' },
 ];
 
+export function ConversationHistoryView({
+  colors,
+  language,
+  conversations,
+  loading,
+  onOpenConversation,
+  onBack,
+}: {
+  colors: ReturnType<typeof useColors>;
+  language: AppLanguage;
+  conversations: ConversationSummary[];
+  loading: boolean;
+  onOpenConversation: (conversationId: string) => void;
+  onBack: () => void;
+}) {
+  return (
+    <ScrollView testID="conversation-history" contentContainerStyle={styles.conversationHistory} showsVerticalScrollIndicator={false}>
+      <View style={styles.recordsIntro}>
+        <Pressable
+          testID="conversation-history-back"
+          accessibilityRole="button"
+          accessibilityLabel={localized(language, 'العودة للرئيسية', 'Back to home')}
+          onPress={onBack}
+          style={({ pressed }) => [
+            styles.iconButton,
+            { borderColor: colors.border, backgroundColor: colors.card, opacity: pressed ? 0.65 : 1 },
+          ]}
+        >
+          <Feather name="arrow-right" size={17} color={colors.foreground} />
+        </Pressable>
+        <View>
+          <Text style={[styles.recordsTitle, { color: colors.foreground }]}>
+            {localized(language, 'المحادثات السابقة', 'Previous conversations')}
+          </Text>
+          <Text style={[styles.recordsSubtitle, { color: colors.mutedForeground }]}>
+            {localized(language, 'افتح أي محادثة وتابعها من نفس السكرتير.', 'Open a conversation and continue with the same secretary.')}
+          </Text>
+        </View>
+      </View>
+      {loading && (
+        <View style={[styles.conversationHistoryState, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <ActivityIndicator color={colors.primary} />
+          <Text style={[styles.recordsLoadingText, { color: colors.mutedForeground }]}>
+            {localized(language, 'جاري تحميل المحادثات…', 'Loading conversations…')}
+          </Text>
+        </View>
+      )}
+      {!loading && conversations.length === 0 && (
+        <View style={[styles.conversationHistoryState, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.recordsEmptyTitle, { color: colors.foreground }]}>
+            {localized(language, 'لا توجد محادثات سابقة بعد', 'No previous conversations yet')}
+          </Text>
+          <Text style={[styles.recordsEmptyText, { color: colors.mutedForeground }]}>
+            {localized(language, 'ابدأ من الرئيسية، وستظهر المحادثات هنا بعد حفظها.', 'Start from Home and saved conversations will appear here.')}
+          </Text>
+        </View>
+      )}
+      {!loading && conversations.map((conversation) => (
+        <Pressable
+          key={conversation.conversationId}
+          testID={`conversation-history-${conversation.conversationId}`}
+          accessibilityRole="button"
+          accessibilityLabel={`${localized(language, 'فتح المحادثة', 'Open conversation')} ${conversation.title}`}
+          onPress={() => onOpenConversation(conversation.conversationId)}
+          style={({ pressed }) => [
+            styles.conversationHistoryRow,
+            { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.65 : 1 },
+          ]}
+        >
+          <View style={[styles.conversationHistoryIcon, { backgroundColor: colors.muted }]}>
+            <Feather name="message-circle" size={16} color={colors.primary} />
+          </View>
+          <View style={styles.conversationHistoryCopy}>
+            <Text style={[styles.conversationHistoryTitle, { color: colors.foreground }]} numberOfLines={1}>
+              {conversation.title}
+            </Text>
+            <Text style={[styles.conversationHistoryPreview, { color: colors.mutedForeground }]} numberOfLines={2}>
+              {conversation.preview}
+            </Text>
+            <Text style={[styles.conversationHistoryMeta, { color: colors.primary }]}>
+              {conversation.turnCount} {localized(language, 'رسائل', 'turns')}
+            </Text>
+          </View>
+          <Feather name="chevron-left" size={16} color={colors.mutedForeground} />
+        </Pressable>
+      ))}
+    </ScrollView>
+  );
+}
+
 export function MainBottomBar({
   colors,
   language,
   activeSection,
   onSelect,
-  onOpenChat,
   onOpenDrawer,
 }: {
   colors: ReturnType<typeof useColors>;
   language: AppLanguage;
   activeSection: MainSection;
   onSelect: (section: MainSection) => void;
-  onOpenChat: () => void;
   onOpenDrawer: () => void;
 }) {
   const items: Array<{ key: 'office' | 'chat' | 'records' | 'tasks' | 'more'; labelAr: string; labelEn: string; icon: FeatherName }> = [
@@ -2302,6 +2326,8 @@ export function MainBottomBar({
       {items.map((item) => {
         const selected = item.key === 'office'
           ? activeSection === 'office'
+          : item.key === 'chat'
+            ? activeSection === 'chat'
           : item.key === 'records'
             ? activeSection === 'records'
             : item.key === 'tasks'
@@ -2317,8 +2343,6 @@ export function MainBottomBar({
             onPress={() => {
               if (item.key === 'more') {
                 onOpenDrawer();
-              } else if (item.key === 'chat') {
-                onOpenChat();
               } else {
                 onSelect(item.key);
               }
@@ -2789,6 +2813,62 @@ export const styles = StyleSheet.create({
   recordsView: {
     flex: 1,
   },
+  conversationHistory: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 96,
+    gap: 8,
+  },
+  conversationHistoryState: {
+    minHeight: 150,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    gap: 8,
+  },
+  conversationHistoryRow: {
+    minHeight: 72,
+    borderRadius: 15,
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 9,
+  },
+  conversationHistoryIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  conversationHistoryCopy: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  conversationHistoryTitle: {
+    width: '100%',
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  conversationHistoryPreview: {
+    width: '100%',
+    marginTop: 3,
+    fontSize: 10,
+    lineHeight: 15,
+    textAlign: 'right',
+  },
+  conversationHistoryMeta: {
+    width: '100%',
+    marginTop: 3,
+    fontSize: 9,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
   recordsIntro: {
     paddingTop: 18,
     paddingBottom: 14,
@@ -2950,10 +3030,11 @@ export const styles = StyleSheet.create({
     textAlign: 'center',
   },
   centralChatPanel: {
-    marginTop: 18,
-    borderRadius: 19,
+    height: 198,
+    marginTop: 10,
+    borderRadius: 15,
     borderWidth: 1,
-    padding: 12,
+    padding: 10,
     overflow: 'hidden',
     position: 'relative',
   },
@@ -2976,9 +3057,9 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   centralChatHeroIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
   },
   centralChatAmbient: {
     ...StyleSheet.absoluteFill,
@@ -3033,15 +3114,16 @@ export const styles = StyleSheet.create({
     textAlign: 'right',
   },
   centralChatTranscript: {
-    maxHeight: 245,
-    marginTop: 8,
+    height: 45,
+    maxHeight: 45,
+    marginTop: 4,
   },
   recordChatTranscript: {
     maxHeight: 220,
   },
   centralChatTranscriptContent: {
-    paddingVertical: 3,
-    gap: 7,
+    paddingVertical: 1,
+    gap: 5,
   },
   centralChatTyping: {
     borderRadius: 12,
@@ -3055,9 +3137,9 @@ export const styles = StyleSheet.create({
     fontSize: 11,
   },
   centralChatComposer: {
-    minHeight: 48,
-    marginTop: 10,
-    borderRadius: 14,
+    minHeight: 38,
+    marginTop: 5,
+    borderRadius: 11,
     borderWidth: 1,
     paddingLeft: 6,
     paddingRight: 10,
@@ -3066,46 +3148,46 @@ export const styles = StyleSheet.create({
   },
   centralChatInput: {
     flex: 1,
-    maxHeight: 76,
-    paddingTop: 10,
-    paddingBottom: 9,
+    maxHeight: 58,
+    paddingTop: 7,
+    paddingBottom: 6,
     paddingHorizontal: 4,
-    fontSize: 13,
-    lineHeight: 20,
+    fontSize: 11,
+    lineHeight: 16,
   },
   centralChatSend: {
-    width: 32,
-    height: 32,
-    marginBottom: 6,
-    borderRadius: 11,
+    width: 27,
+    height: 27,
+    marginBottom: 5,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   centralChatFooter: {
-    paddingTop: 6,
-    fontSize: 9,
+    paddingTop: 3,
+    fontSize: 7,
     textAlign: 'center',
   },
   centralChatPromptRail: {
-    gap: 6,
-    paddingTop: 9,
+    gap: 5,
+    paddingTop: 5,
   },
   centralChatPrompt: {
-    minHeight: 28,
-    borderRadius: 14,
+    minHeight: 22,
+    borderRadius: 11,
     borderWidth: 1,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
   centralChatPromptText: {
-    fontSize: 10,
+    fontSize: 8,
     fontWeight: '600',
   },
   officeList: {
-    paddingHorizontal: 16,
-    paddingTop: 18,
-    paddingBottom: 112,
+    paddingHorizontal: 7,
+    paddingTop: 9,
+    paddingBottom: 88,
   },
   officeIntro: {
     flexDirection: 'row-reverse',
@@ -3126,22 +3208,22 @@ export const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   officeEyebrow: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
     textAlign: 'right',
   },
   officeGreeting: {
-    marginTop: 5,
-    fontSize: 26,
+    marginTop: 2,
+    fontSize: 22,
     fontWeight: '700',
     letterSpacing: -0.4,
     textAlign: 'right',
   },
   officeSubtitle: {
     maxWidth: 270,
-    marginTop: 5,
-    fontSize: 12,
-    lineHeight: 19,
+    marginTop: 3,
+    fontSize: 9,
+    lineHeight: 14,
     textAlign: 'right',
   },
   officeRefresh: {
@@ -3154,57 +3236,63 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   officeSummaryGrid: {
-    marginTop: 18,
-    flexDirection: 'row-reverse',
+    marginTop: 9,
+    flexDirection: 'row',
     gap: 8,
   },
   officeSummaryCard: {
-    minHeight: 112,
+    height: 76,
     flex: 1,
-    borderRadius: 17,
+    borderRadius: 12,
     borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 6,
     alignItems: 'flex-end',
   },
   officeSummaryIcon: {
-    width: 25,
-    height: 25,
-    borderRadius: 9,
+    width: 20,
+    height: 20,
+    borderRadius: 7,
     alignItems: 'center',
     justifyContent: 'center',
   },
   officeSummaryValue: {
     width: '100%',
-    marginTop: 8,
-    fontSize: 20,
+    marginTop: 3,
+    fontSize: 16,
     fontWeight: '700',
     textAlign: 'right',
   },
   officeSummaryLabel: {
     width: '100%',
-    marginTop: 2,
-    fontSize: 11,
+    marginTop: 0,
+    fontSize: 9,
     fontWeight: '600',
     textAlign: 'right',
   },
   officeSummaryHint: {
     width: '100%',
-    marginTop: 2,
-    fontSize: 9,
+    marginTop: 0,
+    fontSize: 7,
     textAlign: 'right',
   },
   officeDashboardSplit: {
-    marginTop: 20,
-    flexDirection: 'row-reverse',
-    gap: 10,
+    marginTop: 10,
+    flexDirection: 'row',
+    gap: 7,
   },
   officeDashboardCard: {
     flex: 1,
-    minHeight: 178,
-    borderRadius: 18,
+    minHeight: 126,
+    borderRadius: 12,
     borderWidth: 1,
-    padding: 12,
+    padding: 8,
+  },
+  officeTodayCard: {
+    flex: 1.15,
+  },
+  officeQuickCard: {
+    flex: 0.9,
   },
   officeNetworkCard: {
     minHeight: 94,
@@ -3266,22 +3354,22 @@ export const styles = StyleSheet.create({
     gap: 2,
   },
   officeQuickAction: {
-    minHeight: 34,
+    minHeight: 25,
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 6,
   },
   officeQuickActionIcon: {
-    width: 23,
-    height: 23,
-    borderRadius: 8,
+    width: 18,
+    height: 18,
+    borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
   },
   officeQuickActionText: {
     flex: 1,
-    fontSize: 10,
+    fontSize: 8,
     fontWeight: '600',
     textAlign: 'right',
   },
@@ -3457,10 +3545,10 @@ export const styles = StyleSheet.create({
     height: 36,
   },
   officeSection: {
-    marginTop: 27,
+    marginTop: 8,
   },
   officeSectionHeading: {
-    marginBottom: 11,
+    marginBottom: 5,
     flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -3509,28 +3597,28 @@ export const styles = StyleSheet.create({
     textAlign: 'right',
   },
   officeRecentActivityScroll: {
-    maxHeight: 300,
-    marginTop: 10,
-    borderRadius: 15,
+    maxHeight: 118,
+    marginTop: 5,
+    borderRadius: 10,
   },
   officeRecentActivityContent: {
-    gap: 8,
+    gap: 4,
     paddingBottom: 2,
   },
   officeRecentActivityRow: {
-    minHeight: 68,
-    borderRadius: 15,
+    minHeight: 34,
+    borderRadius: 9,
     borderWidth: 1,
-    paddingHorizontal: 11,
-    paddingVertical: 9,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: 9,
+    gap: 6,
   },
   officeRecentActivityIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
+    width: 21,
+    height: 21,
+    borderRadius: 7,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -3540,20 +3628,20 @@ export const styles = StyleSheet.create({
   },
   officeRecentActivityTitle: {
     width: '100%',
-    fontSize: 12,
+    fontSize: 9,
     fontWeight: '700',
     textAlign: 'right',
   },
   officeRecentActivityPreview: {
     width: '100%',
-    marginTop: 3,
-    fontSize: 10,
-    lineHeight: 15,
+    marginTop: 1,
+    fontSize: 7,
+    lineHeight: 10,
     textAlign: 'right',
   },
   officeRecentActivityMeta: {
-    maxWidth: 100,
-    fontSize: 10,
+    maxWidth: 72,
+    fontSize: 7,
     fontWeight: '700',
     textAlign: 'left',
   },
@@ -3699,24 +3787,24 @@ export const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   officeTodayRow: {
-    minHeight: 43,
+    minHeight: 25,
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: 10,
+    gap: 5,
   },
   officeTodayMarker: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
+    width: 5,
+    height: 5,
+    borderRadius: 3,
   },
   officeTodayTime: {
-    minWidth: 78,
-    fontSize: 10,
+    minWidth: 58,
+    fontSize: 8,
     textAlign: 'right',
   },
   officeTodayText: {
     flex: 1,
-    fontSize: 12,
+    fontSize: 9,
     textAlign: 'right',
   },
   officeActivityList: {

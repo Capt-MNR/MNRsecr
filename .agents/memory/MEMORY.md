@@ -33,3 +33,4 @@
 - [Mobile push delivery](mobile-push-delivery.md) — register tenant-scoped Expo tokens server-side; Expo relays approval events to FCM/APNs without provider credentials in the app.
 - [EAS native build environment](eas-native-build-environment.md) — Expo SDK 57 needs Node 20 and a Java 17 Android image; iOS remote signing still needs validated interactive credentials.
 - [Android build gate](android-build-gate.md) — batch meaningful mobile changes and verify production data before spending another EAS Android build.
+- [Main mockup geometry](main-mockup-geometry.md) — the approved Main mockup is the source of truth for composition and proportions, not only the color palette.
