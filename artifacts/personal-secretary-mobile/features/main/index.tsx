@@ -13,7 +13,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  useWindowDimensions,
   View,
 } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
@@ -539,9 +538,6 @@ export function RecordsView({
       renderSectionHeader={({ section }) => (
         <View style={[styles.recordSectionHeader, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
           <View style={styles.recordSectionTitle}>
-            <View style={[styles.recordIcon, { backgroundColor: colors.muted }]}>
-              <Feather name={section.icon} size={15} color={colors.primary} />
-            </View>
             <Text style={[styles.recordSectionName, { color: colors.foreground }]}>
               {recordSectionLabel(language, section.key, section.title)}
             </Text>
@@ -626,7 +622,6 @@ export function RecordsView({
 
           {recordsQuery.isError && (
             <View style={[styles.recordsError, { backgroundColor: colors.destructive, borderColor: colors.destructive }]}>
-              <Feather name="alert-circle" size={16} color={colors.destructiveForeground} />
               <View style={styles.recordsErrorCopy}>
                 <Text style={[styles.recordsErrorTitle, { color: colors.destructiveForeground }]}>
                   {localized(language, 'تعذر تحميل السجلات', 'Unable to load records')}
@@ -654,7 +649,6 @@ export function RecordsView({
 
           {!recordsQuery.isLoading && !recordsQuery.isError && totalRecords === 0 && (
             <View style={[styles.recordsEmpty, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Feather name="archive" size={26} color={colors.primary} />
               <Text style={[styles.recordsEmptyTitle, { color: colors.foreground }]}>
                 {localized(language, 'لا توجد سجلات بعد', 'No records yet')}
               </Text>
@@ -685,6 +679,8 @@ type SecretaryChatProps = {
   draft: string;
   onChangeDraft: (value: string) => void;
   onSend: () => void;
+  onQuickPrompt?: (value: string) => void;
+  onFocusChat?: () => void;
   isSending: boolean;
   onApprove: (approval: Approval, args?: Record<string, unknown>) => void;
   onReject: (approval: Approval) => void;
@@ -700,6 +696,8 @@ function CentralSecretaryChat({
   draft,
   onChangeDraft,
   onSend,
+  onQuickPrompt,
+  onFocusChat,
   isSending,
   onApprove,
   onReject,
@@ -732,9 +730,21 @@ function CentralSecretaryChat({
         </View>
       )}
       <View style={styles.centralChatHeading}>
-        <View style={[styles.centralChatIcon, !compact && styles.centralChatHeroIcon, { backgroundColor: colors.primary }]}>
-          <Feather name={compact ? 'message-circle' : 'star'} size={compact ? 15 : 21} color={colors.primaryForeground} />
-        </View>
+        {!compact && (
+          <Pressable
+            testID="main-chat-focus"
+            accessibilityRole="button"
+            accessibilityLabel={localized(language, 'فتح المحادثة', 'Focus secretary chat')}
+            onPress={onFocusChat}
+            style={({ pressed }) => [
+              styles.centralChatIcon,
+              styles.centralChatHeroIcon,
+              { backgroundColor: colors.primary, opacity: pressed ? 0.72 : 1 },
+            ]}
+          >
+            <Feather name="star" size={21} color={colors.primaryForeground} />
+          </Pressable>
+        )}
         <View style={styles.centralChatHeadingCopy}>
           <Text style={[styles.centralChatTitle, { color: colors.foreground }]}>
             {context
@@ -751,7 +761,6 @@ function CentralSecretaryChat({
 
       {context && (
         <View style={[styles.chatContextChip, { backgroundColor: colors.muted, borderColor: colors.border }]}>
-          <Feather name="crosshair" size={13} color={colors.primary} />
           <Text style={[styles.chatContextText, { color: colors.mutedForeground }]} numberOfLines={1}>
             {localized(language, 'السياق الحالي', 'Current context')}: {context.recordType} · {context.title}
           </Text>
@@ -820,6 +829,33 @@ function CentralSecretaryChat({
           <Feather name="arrow-up" size={17} color={colors.primaryForeground} />
         </Pressable>
       </View>
+      {!compact && onQuickPrompt && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.centralChatPromptRail}
+        >
+          {[
+            [localized(language, 'لخّص يومي', 'Summarize today'), 'اعرض ملخص اليوم'],
+            [localized(language, 'ابحث عن مصروف', 'Find an expense'), 'اعرض مصروفاتي الأخيرة'],
+            [localized(language, 'أضف مهمة', 'Add a task'), 'أنشئ مهمة جديدة'],
+          ].map(([label, value]) => (
+            <Pressable
+              key={value}
+              testID={`main-chat-prompt-${value}`}
+              accessibilityRole="button"
+              accessibilityLabel={label}
+              onPress={() => onQuickPrompt(value)}
+              style={({ pressed }) => [
+                styles.centralChatPrompt,
+                { backgroundColor: colors.muted, borderColor: colors.border, opacity: pressed ? 0.65 : 1 },
+              ]}
+            >
+              <Text style={[styles.centralChatPromptText, { color: colors.foreground }]}>{label}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      )}
       <Text style={[styles.centralChatFooter, { color: colors.mutedForeground }]}>
         {localized(language, 'نفس المحادثة والعمليات والموافقات · لا يتم الإرسال تلقائيًا', 'Same conversation, actions, and approvals · nothing is sent automatically')}
       </Text>
@@ -882,8 +918,9 @@ export function MainOffice({
       staleTime: 30_000,
     },
   });
-  const { width } = useWindowDimensions();
   const [financialExpanded, setFinancialExpanded] = useState(false);
+  const [recentSearchOpen, setRecentSearchOpen] = useState(false);
+  const recentSearchRef = useRef<TextInput>(null);
   const recordsQuery = useListRecords({
     query: {
       queryKey: getListRecordsQueryKey(),
@@ -1053,9 +1090,6 @@ export function MainOffice({
       )}
     >
       <View style={styles.officeIntro}>
-        <View style={[styles.officeIntroMark, { backgroundColor: colors.primary }]}>
-          <Feather name="sun" size={18} color={colors.primaryForeground} />
-        </View>
         <View style={styles.officeIntroCopy}>
           <Text style={[styles.officeEyebrow, { color: colors.primary }]}>
             {localized(language, 'مكتب السكرتير', 'Secretary workspace')}
@@ -1091,7 +1125,42 @@ export function MainOffice({
 
       <View testID="main-summary-cards" style={styles.officeSummaryGrid}>
         {summaryCards.map((card) => (
-          <View key={card.key} style={[styles.officeSummaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Pressable
+            key={card.key}
+            testID={`office-summary-${card.key}`}
+            accessibilityRole="button"
+            accessibilityLabel={localized(language, `فتح ${card.label}`, `Open ${card.labelEn}`)}
+            onPress={() => {
+              if (card.key === 'records') {
+                onOpenRecords();
+              } else if (card.key === 'tasks') {
+                const task = context.pendingTasks[0];
+                if (task) openTask(task);
+                else onAskSecretary('اعرض مهامي المفتوحة');
+              } else if (card.key === 'appointments') {
+                const reminder = context.upcomingReminders[0];
+                if (reminder) openReminder(reminder);
+                else onAskSecretary('اعرض مواعيدي القادمة');
+              } else {
+                const expense = context.recentExpenses[0];
+                if (expense) {
+                  onOpenRecord({
+                    id: expense.id,
+                    recordType: 'expense',
+                    title: expense.description,
+                    subtitle: [expense.personName ?? expense.projectName, recordDate(expense.occurredAt)].filter(Boolean).join(' · '),
+                    trailing: money(expense.amountMinor, expense.currency),
+                  });
+                } else {
+                  onAskSecretary('اعرض مصروفاتي الأخيرة');
+                }
+              }
+            }}
+            style={({ pressed }) => [
+              styles.officeSummaryCard,
+              { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.68 : 1 },
+            ]}
+          >
             <View style={[styles.officeSummaryIcon, { backgroundColor: colors.muted }]}>
               <Feather name={card.icon} size={14} color={colors.primary} />
             </View>
@@ -1102,7 +1171,7 @@ export function MainOffice({
             <Text style={[styles.officeSummaryHint, { color: colors.mutedForeground }]}>
               {localized(language, card.hint, card.hintEn)}
             </Text>
-          </View>
+          </Pressable>
         ))}
       </View>
 
@@ -1112,6 +1181,8 @@ export function MainOffice({
         draft={draft}
         onChangeDraft={onChangeDraft}
         onSend={onSend}
+        onQuickPrompt={onAskSecretary}
+        onFocusChat={onFocusChat}
         isSending={isSending}
         onApprove={onApprove}
         onReject={onReject}
@@ -1120,46 +1191,9 @@ export function MainOffice({
         context={chatContext}
       />
 
-      <Pressable
-        testID="office-records-network-entry"
-        accessibilityRole="button"
-        accessibilityLabel={localized(language, 'استكشاف السجلات والروابط', 'Explore records and connections')}
-        onPress={onOpenRecords}
-        style={({ pressed }) => [
-          styles.officeNetworkCard,
-          {
-            backgroundColor: colors.card,
-            borderColor: colors.border,
-            opacity: pressed ? 0.72 : 1,
-            shadowColor: colors.primary,
-          },
-        ]}
-      >
-        <View style={[styles.officeNetworkIcon, { backgroundColor: colors.muted }]}>
-          <Feather name="share-2" size={18} color={colors.primary} />
-        </View>
-        <View style={styles.officeNetworkCopy}>
-          <Text style={[styles.officeNetworkEyebrow, { color: colors.primary }]}>
-            {localized(language, 'ذاكرة السكرتير', 'Secretary memory')}
-          </Text>
-          <Text style={[styles.officeNetworkTitle, { color: colors.foreground }]}>
-            {localized(language, 'استكشف سجلاتك وروابطها', 'Explore your records and connections')}
-          </Text>
-          <Text style={[styles.officeNetworkText, { color: colors.mutedForeground }]}>
-            {localized(language, 'افتح سجلًا وانتقل إلى الأشخاص والمشاريع والمصروفات المرتبطة.', 'Open a record and move through related people, projects, and expenses.')}
-          </Text>
-        </View>
-        <View style={styles.officeNetworkAction}>
-          <Feather name="arrow-left" size={17} color={colors.primary} />
-          <Text style={[styles.officeNetworkCount, { color: colors.primary }]}>
-            {contextData ? contextualRecordCount : '—'}
-          </Text>
-        </View>
-      </Pressable>
-
       {!todayQuery.isLoading && !todayQuery.isError && contextData && (
         <>
-          <View style={[styles.officeDashboardSplit, width >= 600 && styles.officeDashboardSplitWide]}>
+          <View style={styles.officeDashboardSplit}>
             <View style={[styles.officeDashboardCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={styles.officeSectionHeading}>
                 <View>
@@ -1170,17 +1204,18 @@ export function MainOffice({
                     {localized(language, 'القادم في موجزك', 'Upcoming items')}
                   </Text>
                 </View>
-                <Feather name="calendar" size={16} color={colors.primary} />
               </View>
               <View style={styles.officeTodayList}>
                 {context.upcomingReminders.slice(0, 3).map((reminder) => (
                   <Pressable key={`today-${reminder.id}`} onPress={() => openReminder(reminder)} style={styles.officeTodayRow}>
+                    <View style={[styles.officeTodayMarker, { backgroundColor: colors.primary }]} />
                     <Text style={[styles.officeTodayTime, { color: colors.primary }]} numberOfLines={1}>{recordDate(reminder.dueAt)}</Text>
                     <Text style={[styles.officeTodayText, { color: colors.foreground }]} numberOfLines={1}>{reminder.text}</Text>
                   </Pressable>
                 ))}
                 {context.pendingTasks.slice(0, 3).map((task) => (
                   <Pressable key={`today-task-${task.id}`} onPress={() => openTask(task)} style={styles.officeTodayRow}>
+                    <View style={[styles.officeTodayMarker, { backgroundColor: colors.accent }]} />
                     <Text style={[styles.officeTodayTime, { color: colors.mutedForeground }]} numberOfLines={1}>
                       {task.dueAt ? recordDate(task.dueAt) : localized(language, 'مفتوحة', 'Open')}
                     </Text>
@@ -1205,7 +1240,6 @@ export function MainOffice({
                     {localized(language, 'ابدأ من المحادثة', 'Start from chat')}
                   </Text>
                 </View>
-                <Feather name="zap" size={16} color={colors.accent} />
               </View>
               <View style={styles.officeQuickActions}>
                 {quickActions.map((action) => (
@@ -1234,9 +1268,6 @@ export function MainOffice({
 
           {attentionCount > 0 && (
             <View style={[styles.officeAttentionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={[styles.officeAttentionIcon, { backgroundColor: colors.destructive }]}>
-                <Feather name="bell" size={14} color={colors.destructiveForeground} />
-              </View>
               <View style={styles.officeAttentionCopy}>
                 <Text style={[styles.officeAttentionTitle, { color: colors.foreground }]}>
                   {localized(language, 'يحتاج انتباهك', 'Needs your attention')}
@@ -1264,28 +1295,54 @@ export function MainOffice({
         <View style={styles.officeSectionHeading}>
           <View>
             <Text style={[styles.officeSectionTitle, { color: colors.foreground }]}>
-              {localized(language, 'آخر المحادثات والتعديلات', 'Recent conversations and updates')}
-            </Text>
-            <Text style={[styles.officeSectionHint, { color: colors.mutedForeground }]}>
-              {localized(language, 'اسحب القائمة وابحث داخل نصوص المحادثات', 'Swipe the list and search across conversation text')}
+              {localized(language, 'آخر النشاط', 'Recent activity')}
             </Text>
           </View>
-          <Feather name="search" size={18} color={colors.primary} />
+          <View style={styles.officeRecentHeadingActions}>
+            <Pressable
+              testID="recent-activity-search"
+              accessibilityRole="button"
+              accessibilityLabel={localized(language, recentSearchOpen ? 'إغلاق البحث' : 'فتح البحث', recentSearchOpen ? 'Close search' : 'Open search')}
+              onPress={() => {
+                setRecentSearchOpen((open) => !open);
+                setTimeout(() => recentSearchRef.current?.focus(), 0);
+              }}
+              style={({ pressed }) => [
+                styles.officeRecentSearchButton,
+                { borderColor: colors.border, opacity: pressed ? 0.62 : 1 },
+              ]}
+            >
+              <Feather name={recentSearchOpen ? 'x' : 'search'} size={14} color={colors.foreground} />
+            </Pressable>
+            <Pressable
+              testID="recent-activity-view-all"
+              accessibilityRole="button"
+              accessibilityLabel={localized(language, 'عرض كل السجلات', 'View all records')}
+              onPress={onOpenRecords}
+              style={({ pressed }) => ({ opacity: pressed ? 0.62 : 1 })}
+            >
+              <Text style={[styles.officeRecentViewAll, { color: colors.primary }]}>
+                {localized(language, 'عرض الكل', 'View all')}
+              </Text>
+            </Pressable>
+          </View>
         </View>
-        <View style={[styles.officeSearchBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Feather name="search" size={16} color={colors.mutedForeground} />
-          <TextInput
-            testID="recent-conversations-search"
-            value={conversationSearch}
-            onChangeText={onChangeConversationSearch}
-            placeholder={localized(language, 'ابحث في أي كلمة داخل المحادثة…', 'Search any word in a conversation…')}
-            placeholderTextColor={colors.mutedForeground}
-            returnKeyType="search"
-            clearButtonMode="while-editing"
-            style={[styles.officeSearchInput, { color: colors.foreground }]}
-          />
-          {conversationsLoading && <ActivityIndicator size="small" color={colors.primary} />}
-        </View>
+        {recentSearchOpen && (
+          <View style={[styles.officeSearchBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <TextInput
+              ref={recentSearchRef}
+              testID="recent-conversations-search"
+              value={conversationSearch}
+              onChangeText={onChangeConversationSearch}
+              placeholder={localized(language, 'ابحث في أي كلمة داخل المحادثة…', 'Search any word in a conversation…')}
+              placeholderTextColor={colors.mutedForeground}
+              returnKeyType="search"
+              clearButtonMode="while-editing"
+              style={[styles.officeSearchInput, { color: colors.foreground }]}
+            />
+            {conversationsLoading && <ActivityIndicator size="small" color={colors.primary} />}
+          </View>
+        )}
         <ScrollView
           testID="recent-activity-list"
           style={styles.officeRecentActivityScroll}
@@ -1366,7 +1423,6 @@ export function MainOffice({
 
       {todayQuery.isError && (
         <View style={[styles.officeError, { backgroundColor: colors.destructive, borderColor: colors.destructive }]}>
-          <Feather name="alert-circle" size={16} color={colors.destructiveForeground} />
           <Text style={[styles.officeErrorText, { color: colors.destructiveForeground }]}>
             تعذر تحميل موجز اليوم.
           </Text>
@@ -2056,9 +2112,6 @@ export function RecordDetailView({
       </View>
 
       <View style={[detailStyles.detailCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <View style={[detailStyles.detailIcon, { backgroundColor: colors.muted }]}>
-          <Feather name="file-text" size={20} color={colors.primary} />
-        </View>
         <Text style={[detailStyles.detailTitle, { color: colors.foreground }]}>{isEntity ? entityName : record.title}</Text>
         <Text style={[detailStyles.detailSubtitle, { color: colors.mutedForeground }]}>
           {isEntity ? entitySubtitle : record.subtitle}
@@ -2078,7 +2131,6 @@ export function RecordDetailView({
 
       {isEntity && entityQuery.isError && (
         <View style={[detailStyles.detailState, { backgroundColor: colors.destructive, borderColor: colors.destructive }]}>
-          <Feather name="alert-circle" size={16} color={colors.destructiveForeground} />
           <Text style={[detailStyles.detailStateText, { color: colors.destructiveForeground }]}>
             تعذر تحميل التفاصيل من السجل الحالي.
           </Text>
@@ -2132,7 +2184,6 @@ export function RecordDetailView({
         <View style={[detailStyles.timelineCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={detailStyles.timelineHeading}>
             <Text style={[detailStyles.relatedTitle, { color: colors.foreground }]}>النشاط المرتبط</Text>
-            <Feather name="activity" size={16} color={colors.primary} />
           </View>
           {timelineRows.map((item, index) => {
             const event = objectValue(item);
@@ -2172,7 +2223,6 @@ export function RecordDetailView({
       )}
 
       <View style={[detailStyles.detailContext, { backgroundColor: colors.muted, borderColor: colors.border }]}>
-        <Feather name="message-circle" size={17} color={colors.primary} />
         <View style={detailStyles.detailContextCopy}>
           <Text style={[detailStyles.detailContextTitle, { color: colors.foreground }]}>تحدث مع السكرتير عن هذا السجل</Text>
           <Text style={[detailStyles.detailContextText, { color: colors.mutedForeground }]}>
@@ -2329,9 +2379,6 @@ export function MainDrawer({
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.drawerHeading}>
-          <View style={[styles.drawerMark, { backgroundColor: colors.primary }]}>
-            <Feather name="grid" size={16} color={colors.primaryForeground} />
-          </View>
           <View style={styles.drawerHeadingCopy}>
             <Text style={[styles.drawerTitle, { color: colors.foreground }]}>Personal Secretary</Text>
             <Text style={[styles.drawerSubtitle, { color: colors.mutedForeground }]}>
@@ -2394,7 +2441,6 @@ export function MainDrawer({
             <Text style={[styles.drawerSettingsTitle, { color: colors.foreground }]}>
               {localized(language, 'الإعدادات', 'Settings')}
             </Text>
-            <Feather name="sliders" size={16} color={colors.primary} />
           </View>
           <Text style={[styles.drawerSettingLabel, { color: colors.mutedForeground }]}>
             {localized(language, 'الخلفية', 'Appearance')}
@@ -3040,6 +3086,22 @@ export const styles = StyleSheet.create({
     fontSize: 9,
     textAlign: 'center',
   },
+  centralChatPromptRail: {
+    gap: 6,
+    paddingTop: 9,
+  },
+  centralChatPrompt: {
+    minHeight: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  centralChatPromptText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
   officeList: {
     paddingHorizontal: 16,
     paddingTop: 18,
@@ -3134,15 +3196,12 @@ export const styles = StyleSheet.create({
   },
   officeDashboardSplit: {
     marginTop: 20,
-    flexDirection: 'column',
-    gap: 10,
-  },
-  officeDashboardSplitWide: {
     flexDirection: 'row-reverse',
+    gap: 10,
   },
   officeDashboardCard: {
     flex: 1,
-    minHeight: 194,
+    minHeight: 178,
     borderRadius: 18,
     borderWidth: 1,
     padding: 12,
@@ -3416,6 +3475,23 @@ export const styles = StyleSheet.create({
     fontSize: 11,
     textAlign: 'right',
   },
+  officeRecentViewAll: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  officeRecentHeadingActions: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 10,
+  },
+  officeRecentSearchButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   officeSearchBox: {
     minHeight: 44,
     marginTop: 12,
@@ -3624,10 +3700,14 @@ export const styles = StyleSheet.create({
   },
   officeTodayRow: {
     minHeight: 43,
-    borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 10,
+  },
+  officeTodayMarker: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
   },
   officeTodayTime: {
     minWidth: 78,

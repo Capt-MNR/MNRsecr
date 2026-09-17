@@ -39,9 +39,52 @@ import {
 } from '../features/main';
 
 export default function MainRoute() {
-  const colors = useColors();
   const { language, setLanguage } = useLanguage();
   const { themePreference, setThemePreference } = useThemePreference();
+  const baseColors = useColors();
+  const colors = themePreference === 'dark'
+    ? {
+      ...baseColors,
+      text: '#f5f7ff',
+      tint: '#7264ff',
+      background: '#081426',
+      foreground: '#f5f7ff',
+      card: '#11213c',
+      cardForeground: '#f5f7ff',
+      primary: '#7264ff',
+      primaryForeground: '#ffffff',
+      secondary: '#1b2f52',
+      secondaryForeground: '#f5f7ff',
+      muted: '#1a2c4b',
+      mutedForeground: '#a8b5d6',
+      accent: '#27c18c',
+      accentForeground: '#061323',
+      destructive: '#f17880',
+      destructiveForeground: '#061323',
+      border: '#263b5e',
+      input: '#1a2d4c',
+    }
+    : {
+      ...baseColors,
+      text: '#15213d',
+      tint: '#5257e8',
+      background: '#f5f8ff',
+      foreground: '#15213d',
+      card: '#ffffff',
+      cardForeground: '#15213d',
+      primary: '#5257e8',
+      primaryForeground: '#ffffff',
+      secondary: '#e9edff',
+      secondaryForeground: '#15213d',
+      muted: '#edf1ff',
+      mutedForeground: '#687594',
+      accent: '#22b887',
+      accentForeground: '#ffffff',
+      destructive: '#d85878',
+      destructiveForeground: '#ffffff',
+      border: '#dfe5f3',
+      input: '#e8edfa',
+    };
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const params = useLocalSearchParams<{
@@ -220,7 +263,21 @@ export default function MainRoute() {
     <KeyboardAvoidingView style={[styles.screen, { backgroundColor: colors.background }]} behavior="padding">
       <View style={[styles.header, { paddingTop: topInset + 5, borderBottomColor: colors.border, backgroundColor: colors.background }]}>
         <View style={styles.headerTop}>
-          <View style={styles.brandBlock}><View style={[styles.brandMark, { backgroundColor: colors.primary }]}><Feather name="grid" size={18} color={colors.primaryForeground} /></View><View><Text style={[styles.brandName, { color: colors.foreground }]}>مكتب السكرتير</Text><Text style={[styles.availabilityText, { color: colors.mutedForeground }]}>إدارة، استكشاف، ومراجعة</Text></View></View>
+          <Pressable
+            testID="open-main-drawer-from-brand"
+            accessibilityRole="button"
+            accessibilityLabel="فتح قائمة البرنامج"
+            onPress={() => setDrawerOpen(true)}
+            style={({ pressed }) => [styles.brandBlock, { opacity: pressed ? 0.7 : 1 }]}
+          >
+            <View style={[styles.brandMark, { backgroundColor: colors.primary }]}>
+              <Feather name="grid" size={18} color={colors.primaryForeground} />
+            </View>
+            <View>
+              <Text style={[styles.brandName, { color: colors.foreground }]}>مكتب السكرتير</Text>
+              <Text style={[styles.availabilityText, { color: colors.mutedForeground }]}>إدارة، استكشاف، ومراجعة</Text>
+            </View>
+          </Pressable>
           <View style={styles.headerActions}>
             <Pressable testID="open-main-drawer" accessibilityRole="button" accessibilityLabel="فتح قائمة البرنامج" onPress={() => setDrawerOpen(true)} style={({ pressed }) => [styles.iconButton, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}><Feather name="menu" size={18} color={colors.foreground} /></Pressable>
             <Pressable testID="main-quick-bubble" accessibilityRole="button" accessibilityLabel="فتح السكرتير بسرعة" onPress={() => router.replace('/')} style={({ pressed }) => [styles.quickAccessBubble, { backgroundColor: colors.primary, opacity: pressed ? 0.7 : 1 }]}><Feather name="message-circle" size={17} color={colors.primaryForeground} /></Pressable>
