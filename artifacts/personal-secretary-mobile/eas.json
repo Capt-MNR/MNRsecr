@@ -8,6 +8,9 @@
       "distribution": "internal",
       "corepack": true,
       "node": "20.19.1",
+      "env": {
+        "EXPO_PUBLIC_DOMAIN": "personal-ai-secretary.replit.app"
+      },
       "android": {
         "image": "sdk-57",
         "buildType": "apk"
@@ -16,6 +19,9 @@
     "production": {
       "corepack": true,
       "node": "20.19.1",
+      "env": {
+        "EXPO_PUBLIC_DOMAIN": "personal-ai-secretary.replit.app"
+      },
       "autoIncrement": true
     }
   },
