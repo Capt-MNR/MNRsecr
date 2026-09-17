@@ -29,3 +29,4 @@
 - [Expo Quick separation limits](expo-quick-separation.md) — Main evaluation can be deferred, but current Metro still emits one native launch bundle and RAM is unmeasured.
 - [Mobile preferences](mobile-preferences.md) — language and appearance are shared persisted preferences above Main and Quick.
 - [Quick confirmation boundary](quick-confirmation-boundary.md) — only simple expenses and reminders may be directly approved from Quick; complex or ambiguous writes stay in Main.
+- [Android Quick notification](android-quick-notification.md) — use one low-priority sticky local notification as an entry point; no device runtime, polling, or reboot receiver.

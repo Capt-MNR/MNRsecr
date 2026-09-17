@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import * as Notifications from 'expo-notifications';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type ComponentProps, type ComponentType, type ReactNode } from 'react';
 import {
@@ -26,6 +27,10 @@ import {
 } from '../services/secretary-chat';
 import QuickScreen from '../features/quick/QuickScreen';
 import { QuickMessageBubble } from '../features/quick/QuickMessageBubble';
+import {
+  initializeQuickNotification,
+  isQuickNotificationResponse,
+} from '../services/quick-notification';
 
 import {
   type Approval,
@@ -96,6 +101,32 @@ export default function QuickSecretaryScreen() {
       cancelled = true;
     };
   }, [MainModule, activeView]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    let active = true;
+    const openQuick = () => {
+      if (!active) return;
+      setActiveView('quick');
+      setSelectedRecord(null);
+      setChatContext(null);
+      setDrawerOpen(false);
+    };
+    const responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      if (!isQuickNotificationResponse(response)) return;
+      openQuick();
+    });
+    void Notifications.getLastNotificationResponseAsync().then((response) => {
+      if (!isQuickNotificationResponse(response)) return;
+      openQuick();
+      Notifications.clearLastNotificationResponse();
+    });
+    void initializeQuickNotification();
+    return () => {
+      active = false;
+      responseSubscription.remove();
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
