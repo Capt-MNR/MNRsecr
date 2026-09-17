@@ -3361,6 +3361,40 @@ export const styles = StyleSheet.create({
     height: 38,
     borderRadius: 19,
   },
+  centralChatPresenceMark: {
+    width: 38,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  centralChatPresenceGlow: {
+    position: 'absolute',
+    width: 31,
+    height: 31,
+    borderRadius: 16,
+    opacity: 0.2,
+  },
+  centralChatPresenceCore: {
+    width: 27,
+    height: 27,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  centralChatPresenceDot: {
+    position: 'absolute',
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+  },
+  centralChatPresenceDotTop: {
+    top: 1,
+    right: 5,
+  },
+  centralChatPresenceDotSide: {
+    bottom: 5,
+    left: 3,
+  },
   centralChatAmbient: {
     ...StyleSheet.absoluteFill,
   },
