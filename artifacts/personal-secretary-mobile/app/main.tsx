@@ -274,7 +274,7 @@ export default function MainRoute() {
     if (message.recordLink?.origin) origins[message.recordLink.id] = message.recordLink.origin;
     return origins;
   }, {});
-  const topInset = insets.top + (Platform.OS === 'web' ? 67 : 0);
+  const topInset = insets.top + (Platform.OS === 'web' ? 24 : 0);
 
   return (
     <KeyboardAvoidingView style={[styles.screen, { backgroundColor: colors.background }]} behavior="padding">

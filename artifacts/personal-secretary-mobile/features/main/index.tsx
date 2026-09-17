@@ -699,6 +699,8 @@ type SecretaryChatProps = {
   context?: MobileRecordRow | null;
   smartSignal?: string;
   compact?: boolean;
+  expanded?: boolean;
+  onToggleExpanded?: () => void;
 };
 
 function CentralSecretaryChat({
@@ -717,14 +719,18 @@ function CentralSecretaryChat({
   context,
   smartSignal,
   compact = false,
+  expanded = false,
+  onToggleExpanded,
 }: SecretaryChatProps) {
   const { language } = useLanguage();
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const transcriptMessages = messages.length === 1 && messages[0]?.id === 'welcome' ? [] : messages;
   return (
     <View
       testID={compact ? 'record-context-chat' : 'main-central-chat'}
       style={[
         compact ? styles.recordChatPanel : styles.centralChatPanel,
+        !compact && expanded && styles.centralChatExpanded,
           {
             backgroundColor: colors.card,
             borderColor: compact ? colors.border : colors.primary,
@@ -778,6 +784,40 @@ function CentralSecretaryChat({
             </View>
           )}
         </View>
+        {!compact && (
+          <View style={styles.centralChatHeaderActions}>
+            <Pressable
+              testID="main-chat-suggestions-toggle"
+              accessibilityRole="button"
+              accessibilityLabel={localized(language, 'فتح اقتراحات السكرتير', 'Open secretary suggestions')}
+              accessibilityState={{ expanded: suggestionsOpen }}
+              onPress={() => setSuggestionsOpen((open) => !open)}
+              style={({ pressed }) => [
+                styles.centralChatHeaderButton,
+                { backgroundColor: suggestionsOpen ? colors.muted : 'transparent', opacity: pressed ? 0.65 : 1 },
+              ]}
+            >
+              <Feather name="menu" size={18} color={colors.foreground} />
+            </Pressable>
+            {onToggleExpanded && (
+              <Pressable
+                testID="main-chat-expand-toggle"
+                accessibilityRole="button"
+                accessibilityLabel={expanded
+                  ? localized(language, 'تصغير المحادثة', 'Collapse chat')
+                  : localized(language, 'تكبير المحادثة', 'Expand chat')}
+                accessibilityState={{ expanded }}
+                onPress={onToggleExpanded}
+                style={({ pressed }) => [
+                  styles.centralChatHeaderButton,
+                  { opacity: pressed ? 0.65 : 1 },
+                ]}
+              >
+                <Feather name={expanded ? 'minimize-2' : 'maximize-2'} size={17} color={colors.foreground} />
+              </Pressable>
+            )}
+          </View>
+        )}
       </View>
 
       {context && (
@@ -790,7 +830,11 @@ function CentralSecretaryChat({
 
       <ScrollView
         testID={compact ? 'record-context-transcript' : 'main-chat-transcript'}
-        style={[styles.centralChatTranscript, compact && styles.recordChatTranscript]}
+        style={[
+          styles.centralChatTranscript,
+          compact && styles.recordChatTranscript,
+          !compact && expanded && styles.centralChatTranscriptExpanded,
+        ]}
         contentContainerStyle={styles.centralChatTranscriptContent}
         keyboardShouldPersistTaps="handled"
         nestedScrollEnabled
@@ -817,7 +861,7 @@ function CentralSecretaryChat({
         )}
       </ScrollView>
 
-      <View style={[styles.centralChatComposer, { backgroundColor: colors.background, borderColor: colors.input }]}>
+      <View style={[styles.centralChatComposer, expanded && styles.centralChatComposerExpanded, { backgroundColor: colors.background, borderColor: colors.input }]}>
         <TextInput
           testID={compact ? 'record-context-input' : 'main-message-input'}
           value={draft}
@@ -850,12 +894,8 @@ function CentralSecretaryChat({
           <Feather name="arrow-up" size={17} color={colors.primaryForeground} />
         </Pressable>
       </View>
-      {!compact && onQuickPrompt && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.centralChatPromptRail}
-        >
+      {!compact && onQuickPrompt && suggestionsOpen && (
+        <View style={styles.centralChatSuggestionMenu}>
           {[
             [localized(language, 'لخّص يومي', 'Summarize today'), 'اعرض ملخص اليوم'],
             [localized(language, 'ابحث عن مصروف', 'Find an expense'), 'اعرض مصروفاتي الأخيرة'],
@@ -869,13 +909,13 @@ function CentralSecretaryChat({
               onPress={() => onQuickPrompt(value)}
               style={({ pressed }) => [
                 styles.centralChatPrompt,
-                { backgroundColor: colors.muted, borderColor: colors.border, opacity: pressed ? 0.65 : 1 },
+                { backgroundColor: colors.muted, opacity: pressed ? 0.65 : 1 },
               ]}
             >
               <Text style={[styles.centralChatPromptText, { color: colors.foreground }]}>{label}</Text>
             </Pressable>
           ))}
-        </ScrollView>
+        </View>
       )}
       <Text style={[styles.centralChatFooter, { color: colors.mutedForeground }]}>
         {localized(language, 'نفس المحادثة والعمليات والموافقات · لا يتم الإرسال تلقائيًا', 'Same conversation, actions, and approvals · nothing is sent automatically')}
@@ -944,6 +984,7 @@ export function MainOffice({
     },
   });
   const [financialExpanded, setFinancialExpanded] = useState(false);
+  const [chatExpanded, setChatExpanded] = useState(true);
   const [recentSearchOpen, setRecentSearchOpen] = useState(false);
   const recentSearchRef = useRef<TextInput>(null);
   const recordsQuery = useListRecords({
@@ -990,6 +1031,11 @@ export function MainOffice({
       subtitle: task.dueAt ? `موعدها ${recordDate(task.dueAt)}` : 'مهمة مستمرة',
       trailing: statusLabel(task.status),
     });
+  }
+
+  function focusAndExpandChat() {
+    setChatExpanded(true);
+    onFocusChat();
   }
 
   const financialSections = recordSections(recordsQuery.data);
@@ -1142,10 +1188,10 @@ export function MainOffice({
             }}
             style={({ pressed }) => [
               styles.officeSummaryCard,
-              { backgroundColor: colors.muted, opacity: pressed ? 0.68 : 1 },
+              { opacity: pressed ? 0.68 : 1 },
             ]}
           >
-            <View style={[styles.officeSummaryIcon, { backgroundColor: colors.muted }]}>
+            <View style={styles.officeSummaryIcon}>
               <Feather name={card.icon} size={14} color={colors.primary} />
             </View>
             <Text style={[styles.officeSummaryValue, { color: colors.foreground }]} numberOfLines={1}>{card.value}</Text>
@@ -1166,7 +1212,9 @@ export function MainOffice({
         onChangeDraft={onChangeDraft}
         onSend={onSend}
         onQuickPrompt={onAskSecretary}
-        onFocusChat={onFocusChat}
+        onFocusChat={focusAndExpandChat}
+        expanded={chatExpanded}
+        onToggleExpanded={() => setChatExpanded((expanded) => !expanded)}
         isSending={isSending}
         onApprove={onApprove}
         onReject={onReject}
@@ -1176,7 +1224,7 @@ export function MainOffice({
         smartSignal={smartSignal}
       />
 
-      {!todayQuery.isLoading && !todayQuery.isError && contextData && (
+      {!chatExpanded && !todayQuery.isLoading && !todayQuery.isError && contextData && (
         <>
           <View style={styles.officeDashboardSplit}>
             <View style={[styles.officeDashboardCard, styles.officeTodayCard]}>
@@ -1254,7 +1302,7 @@ export function MainOffice({
         </>
       )}
 
-      <View testID="recent-activity" style={styles.officeSection}>
+      {!chatExpanded && <View testID="recent-activity" style={styles.officeSection}>
         <View style={styles.officeSectionHeading}>
           <View>
             <Text style={[styles.officeSectionTitle, { color: colors.foreground }]}>
@@ -1379,7 +1427,7 @@ export function MainOffice({
             </View>
           )}
         </View>
-      </View>
+      </View>}
 
       {todayQuery.isError && (
         <View style={[styles.officeError, { backgroundColor: colors.destructive, borderColor: colors.destructive }]}>
@@ -2658,7 +2706,7 @@ export const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    minHeight: 116,
+    minHeight: 92,
     paddingHorizontal: 18,
     paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -3187,11 +3235,19 @@ export const styles = StyleSheet.create({
   centralChatPanel: {
     height: 270,
     marginTop: 10,
-    borderRadius: 15,
+    borderRadius: 22,
     borderWidth: 0,
     padding: 10,
     overflow: 'hidden',
     position: 'relative',
+  },
+  centralChatExpanded: {
+    flex: 1,
+    height: undefined,
+    minHeight: 320,
+    marginTop: 8,
+    padding: 14,
+    borderRadius: 24,
   },
   recordChatPanel: {
     marginTop: 14,
@@ -3203,6 +3259,18 @@ export const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 9,
+  },
+  centralChatHeaderActions: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 3,
+  },
+  centralChatHeaderButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   centralChatIcon: {
     width: 32,
@@ -3243,7 +3311,7 @@ export const styles = StyleSheet.create({
   },
   centralChatTitle: {
     width: '100%',
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '700',
     textAlign: 'right',
   },
@@ -3290,6 +3358,12 @@ export const styles = StyleSheet.create({
     maxHeight: 72,
     marginTop: 4,
   },
+  centralChatTranscriptExpanded: {
+    flex: 1,
+    height: undefined,
+    maxHeight: undefined,
+    marginTop: 12,
+  },
   recordChatTranscript: {
     maxHeight: 220,
   },
@@ -3318,14 +3392,21 @@ export const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
     alignItems: 'flex-end',
   },
+  centralChatComposerExpanded: {
+    minHeight: 58,
+    marginTop: 10,
+    borderRadius: 18,
+    paddingLeft: 10,
+    paddingRight: 14,
+  },
   centralChatInput: {
     flex: 1,
     maxHeight: 58,
     paddingTop: 7,
     paddingBottom: 6,
     paddingHorizontal: 4,
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 13,
+    lineHeight: 19,
   },
   centralChatSend: {
     width: 32,
@@ -3344,17 +3425,22 @@ export const styles = StyleSheet.create({
     gap: 5,
     paddingTop: 5,
   },
+  centralChatSuggestionMenu: {
+    marginTop: 9,
+    gap: 5,
+  },
   centralChatPrompt: {
-    minHeight: 22,
-    borderRadius: 11,
+    minHeight: 34,
+    borderRadius: 17,
     borderWidth: 0,
-    paddingHorizontal: 8,
-    alignItems: 'center',
+    paddingHorizontal: 13,
+    alignItems: 'flex-end',
     justifyContent: 'center',
   },
   centralChatPromptText: {
-    fontSize: 8,
+    fontSize: 10,
     fontWeight: '600',
+    textAlign: 'right',
   },
   officeList: {
     paddingHorizontal: 7,
@@ -3365,7 +3451,7 @@ export const styles = StyleSheet.create({
     flex: 1,
     overflow: 'hidden',
     paddingHorizontal: 7,
-    paddingTop: 7,
+    paddingTop: 3,
     paddingBottom: 4,
   },
   officeIntro: {
@@ -3416,44 +3502,47 @@ export const styles = StyleSheet.create({
   },
   officeSummaryGrid: {
     marginTop: 0,
+    minHeight: 48,
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 5,
   },
   officeSummaryCard: {
-    height: 62,
+    height: 48,
     flex: 1,
-    borderRadius: 22,
+    borderRadius: 0,
     borderWidth: 0,
-    paddingHorizontal: 5,
-    paddingVertical: 5,
-    alignItems: 'flex-end',
+    paddingHorizontal: 2,
+    paddingVertical: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   officeSummaryIcon: {
-    width: 23,
-    height: 23,
-    borderRadius: 12,
+    width: 20,
+    height: 20,
+    borderRadius: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
   officeSummaryValue: {
     width: '100%',
-    marginTop: 1,
-    fontSize: 14,
+    marginTop: 0,
+    fontSize: 13,
     fontWeight: '700',
-    textAlign: 'right',
+    textAlign: 'center',
   },
   officeSummaryLabel: {
     width: '100%',
     marginTop: 0,
     fontSize: 8,
     fontWeight: '600',
-    textAlign: 'right',
+    textAlign: 'center',
   },
   officeSummaryHint: {
     width: '100%',
     marginTop: 0,
     fontSize: 6,
-    textAlign: 'right',
+    textAlign: 'center',
   },
   officeDashboardSplit: {
     marginTop: 8,
