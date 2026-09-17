@@ -252,11 +252,9 @@ export default function QuickRoute() {
       <View style={[styles.composerWrap, { paddingBottom: bottomInset, borderTopColor: colors.border, backgroundColor: colors.background }]}>
         {inputReview?.kind === 'receipt' && <ReceiptReviewCard result={inputReview} colors={colors} language={language} onChange={updateInputReview} onClear={() => setInputReview(null)} />}
         {inputReview && inputReview.kind !== 'receipt' && <View style={[styles.inputReview, { backgroundColor: colors.muted, borderColor: colors.border }]}>
-          <Feather name={inputReview.kind === 'receipt' ? 'file-text' : 'mic'} size={14} color={colors.primary} />
+          <Feather name="mic" size={14} color={colors.primary} />
           <Text style={[styles.inputReviewText, { color: colors.mutedForeground }]} numberOfLines={2}>
-            {inputReview.kind === 'receipt' && inputReview.receipt?.confidence !== undefined
-              ? `${inputReview.text} · ${Math.round(inputReview.receipt.confidence * 100)}% ثقة`
-              : inputReview.text}
+            {inputReview.text}
           </Text>
           <Pressable accessibilityRole="button" accessibilityLabel="إلغاء الإدخال" onPress={() => setInputReview(null)}><Feather name="x" size={15} color={colors.mutedForeground} /></Pressable>
         </View>}

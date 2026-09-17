@@ -929,16 +929,12 @@ function CentralSecretaryChat({
       {inputReview && inputReview.kind !== 'receipt' && (
         <View style={[styles.inputReview, { backgroundColor: colors.muted, borderColor: colors.border }]}>
           <View style={styles.inputReviewCopy}>
-            <Feather name={inputReview.kind === 'receipt' ? 'file-text' : 'mic'} size={14} color={colors.primary} />
+            <Feather name="mic" size={14} color={colors.primary} />
             <Text style={[styles.inputReviewTitle, { color: colors.foreground }]}>
-              {inputReview.kind === 'receipt'
-                ? localized(language, 'فاتورة جاهزة للمراجعة', 'Receipt ready to review')
-                : localized(language, 'نص صوتي جاهز للمراجعة', 'Voice text ready to review')}
+              {localized(language, 'نص صوتي جاهز للمراجعة', 'Voice text ready to review')}
             </Text>
             <Text style={[styles.inputReviewText, { color: colors.mutedForeground }]} numberOfLines={2}>
-              {inputReview.kind === 'receipt' && inputReview.receipt?.confidence !== undefined
-                ? `${inputReview.text} · ${Math.round(inputReview.receipt.confidence * 100)}% ${localized(language, 'ثقة', 'confidence')}`
-                : inputReview.text}
+              {inputReview.text}
             </Text>
           </View>
           {onClearInputReview && (
