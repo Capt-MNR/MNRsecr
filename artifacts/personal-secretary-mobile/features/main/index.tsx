@@ -741,9 +741,9 @@ function CentralSecretaryChat({
         !compact && expanded && styles.centralChatExpanded,
           {
             backgroundColor: colors.card,
-            borderColor: compact ? colors.border : colors.primary,
+            borderColor: compact ? colors.border : expanded ? 'transparent' : colors.primary,
             shadowColor: colors.primary,
-            shadowOpacity: compact ? 0 : 0.2,
+            shadowOpacity: compact || expanded ? 0 : 0.2,
             shadowRadius: compact ? 0 : 24,
             shadowOffset: { width: 0, height: 10 },
             elevation: compact ? 0 : 5,
@@ -869,7 +869,7 @@ function CentralSecretaryChat({
         )}
       </ScrollView>
 
-      <View style={[styles.centralChatComposer, expanded && styles.centralChatComposerExpanded, { backgroundColor: colors.background, borderColor: colors.input }]}>
+      <View style={[styles.centralChatComposer, expanded && styles.centralChatComposerExpanded, { backgroundColor: 'transparent', borderColor: 'transparent' }]}>
         <TextInput
           testID={compact ? 'record-context-input' : 'main-message-input'}
           value={draft}
@@ -3268,7 +3268,7 @@ export const styles = StyleSheet.create({
     textAlign: 'center',
   },
   centralChatPanel: {
-    height: 270,
+    minHeight: 270,
     marginTop: 10,
     borderRadius: 22,
     borderWidth: 0,
@@ -3278,12 +3278,15 @@ export const styles = StyleSheet.create({
   },
   centralChatExpanded: {
     flex: 1,
-    height: undefined,
-    minHeight: 320,
-    marginTop: 8,
-    padding: 14,
-    borderRadius: 24,
-    justifyContent: 'space-between',
+    minHeight: 0,
+    marginTop: -3,
+    marginBottom: -4,
+    marginHorizontal: -7,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
+    borderRadius: 0,
+    justifyContent: 'flex-start',
   },
   recordChatPanel: {
     marginTop: 14,
@@ -3398,8 +3401,9 @@ export const styles = StyleSheet.create({
     flex: 1,
     flexGrow: 1,
     flexShrink: 1,
-    height: undefined,
-    maxHeight: undefined,
+    height: 0,
+    maxHeight: 100000,
+    minHeight: 0,
     marginTop: 12,
   },
   recordChatTranscript: {
@@ -3423,23 +3427,23 @@ export const styles = StyleSheet.create({
   centralChatComposer: {
     minHeight: 45,
     marginTop: 5,
-    borderRadius: 11,
+    borderRadius: 0,
     borderWidth: 0,
-    paddingLeft: 6,
-    paddingRight: 10,
+    paddingLeft: 0,
+    paddingRight: 0,
     flexDirection: 'row-reverse',
     alignItems: 'flex-end',
   },
   centralChatComposerExpanded: {
-    minHeight: 58,
-    marginTop: 10,
-    borderRadius: 18,
-    paddingLeft: 10,
-    paddingRight: 14,
+    minHeight: 62,
+    marginTop: 12,
+    borderRadius: 0,
+    paddingLeft: 0,
+    paddingRight: 0,
   },
   centralChatInputExpanded: {
-    paddingTop: 11,
-    paddingBottom: 10,
+    paddingTop: 12,
+    paddingBottom: 11,
   },
   centralChatInput: {
     flex: 1,
