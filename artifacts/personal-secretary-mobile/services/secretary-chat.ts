@@ -40,11 +40,13 @@ export type SecretaryChatTurnInput = {
   peer?: SecretaryChatPeer | null;
 };
 
+export type SecretaryApprovalArgs = Record<string, unknown>;
+
 export interface SecretaryChatTransport {
-  sendTurn(input: { message: string; conversationId?: string | null }): Promise<TurnResponse>;
+  sendTurn(input: SecretaryChatTurnInput): Promise<TurnResponse>;
   listConversations(params?: ListConversationsParams): Promise<ConversationListResponse>;
   loadConversation(conversationId: string): Promise<ConversationDetail>;
-  approveOperation(operationId: string): Promise<ApprovalResponse>;
+  approveOperation(operationId: string, args?: SecretaryApprovalArgs): Promise<ApprovalResponse>;
   rejectOperation(operationId: string): Promise<ApprovalResponse>;
 }
 
@@ -52,15 +54,24 @@ export interface SecretaryChatService {
   sendTurn(input: SecretaryChatTurnInput): Promise<TurnResponse>;
   listConversations(params?: ListConversationsParams): Promise<ConversationListResponse>;
   loadConversation(conversationId: string): Promise<ConversationDetail>;
-  approveOperation(operationId: string): Promise<ApprovalResponse>;
+  approveOperation(operationId: string, args?: SecretaryApprovalArgs): Promise<ApprovalResponse>;
   rejectOperation(operationId: string): Promise<ApprovalResponse>;
 }
 
 const apiTransport: SecretaryChatTransport = {
-  sendTurn: ({ message, conversationId }) => createTurn({ message, conversationId: conversationId ?? null }),
+  sendTurn: (input) => createTurn({
+    message: input.message,
+    conversationId: input.conversationId ?? null,
+    channel: input.channel,
+    context: input.context ?? null,
+    peer: input.peer ?? null,
+  }),
   listConversations: (params) => listConversations(params),
   loadConversation: (conversationId) => getConversation(conversationId),
-  approveOperation: (operationId) => approveSecretaryOperation(operationId),
+  approveOperation: (operationId, args) => approveSecretaryOperation(
+    operationId,
+    args ? { args } : undefined,
+  ),
   rejectOperation: (operationId) => rejectSecretaryOperation(operationId),
 };
 
@@ -68,13 +79,7 @@ class ApiSecretaryChatService implements SecretaryChatService {
   constructor(private readonly transport: SecretaryChatTransport) {}
 
   sendTurn(input: SecretaryChatTurnInput) {
-    // The current HTTP contract accepts message and conversationId. Context,
-    // channel, and peer stay at this boundary so an A2A transport can carry
-    // them later without changing either chat surface.
-    return this.transport.sendTurn({
-      message: input.message,
-      conversationId: input.conversationId ?? null,
-    });
+    return this.transport.sendTurn(input);
   }
 
   listConversations(params?: ListConversationsParams) {
@@ -85,8 +90,8 @@ class ApiSecretaryChatService implements SecretaryChatService {
     return this.transport.loadConversation(conversationId);
   }
 
-  approveOperation(operationId: string) {
-    return this.transport.approveOperation(operationId);
+  approveOperation(operationId: string, args?: SecretaryApprovalArgs) {
+    return this.transport.approveOperation(operationId, args);
   }
 
   rejectOperation(operationId: string) {
@@ -96,12 +101,17 @@ class ApiSecretaryChatService implements SecretaryChatService {
 
 export const secretaryChatService: SecretaryChatService = new ApiSecretaryChatService(apiTransport);
 
-export function useSecretaryChatService(conversationId: string | null, conversationSearch = '') {
+export function useSecretaryChatService(
+  conversationId: string | null,
+  conversationSearch = '',
+  conversationsEnabled = true,
+) {
   const turnMutation = useMutation({
     mutationFn: (input: SecretaryChatTurnInput) => secretaryChatService.sendTurn(input),
   });
   const approveMutation = useMutation({
-    mutationFn: (operationId: string) => secretaryChatService.approveOperation(operationId),
+    mutationFn: ({ operationId, args }: { operationId: string; args?: SecretaryApprovalArgs }) =>
+      secretaryChatService.approveOperation(operationId, args),
   });
   const rejectMutation = useMutation({
     mutationFn: (operationId: string) => secretaryChatService.rejectOperation(operationId),
@@ -117,13 +127,15 @@ export function useSecretaryChatService(conversationId: string | null, conversat
     queryFn: () => secretaryChatService.listConversations(
       conversationSearch ? { search: conversationSearch } : undefined,
     ),
+    enabled: conversationsEnabled,
     staleTime: 20_000,
   });
 
   return {
     sendTurn: turnMutation.mutateAsync,
     isSending: turnMutation.isPending,
-    approveOperation: approveMutation.mutateAsync,
+    approveOperation: (operationId: string, args?: SecretaryApprovalArgs) =>
+      approveMutation.mutateAsync({ operationId, args }),
     rejectOperation: rejectMutation.mutateAsync,
     conversationsQuery,
     isApproving: approveMutation.isPending,

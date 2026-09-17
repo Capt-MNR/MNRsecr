@@ -354,6 +354,7 @@ console.log(JSON.stringify({
       message: "دفعت لمحمد اختبار 500 جنيه في مشروع السكرتير",
       conversationId: ids.conversation,
       idempotencyKey: `approval-fixture-first-${process.pid}`,
+      channel: "main",
     },
   },
   authHeader: "Bearer dev-user",

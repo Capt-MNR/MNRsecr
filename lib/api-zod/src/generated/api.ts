@@ -9,6 +9,45 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Register a mobile push token
+ */
+export const registerMobilePushTokenBodyTokenMin = 8;
+
+
+
+
+export const RegisterMobilePushTokenBody = zod.object({
+  "token": zod.string().min(registerMobilePushTokenBodyTokenMin),
+  "provider": zod.enum(['expo', 'fcm', 'apns']),
+  "platform": zod.enum(['android', 'ios']),
+  "appId": zod.string().min(1),
+  "deviceId": zod.string().nullish()
+})
+
+export const RegisterMobilePushTokenResponse = zod.object({
+  "registered": zod.boolean(),
+  "enabled": zod.boolean()
+})
+
+
+/**
+ * @summary Disable a mobile push token
+ */
+export const unregisterMobilePushTokenBodyTokenMin = 8;
+
+
+
+export const UnregisterMobilePushTokenBody = zod.object({
+  "token": zod.string().min(unregisterMobilePushTokenBodyTokenMin)
+})
+
+export const UnregisterMobilePushTokenResponse = zod.object({
+  "registered": zod.boolean(),
+  "enabled": zod.boolean()
+})
+
+
+/**
  * @summary Get a bounded entity detail graph
  */
 export const GetEntityGraphParams = zod.object({
@@ -65,6 +104,7 @@ export const CreateTypedRelationshipResponse = zod.object({
   "operationId": zod.string().uuid(),
   "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
   "conversationId": zod.string(),
+  "turnId": zod.string(),
   "assistantMessage": zod.string(),
   "action": zod.record(zod.string(), zod.unknown()).optional(),
   "response": zod.object({
@@ -98,6 +138,7 @@ export const DeleteTypedRelationshipResponse = zod.object({
   "operationId": zod.string().uuid(),
   "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
   "conversationId": zod.string(),
+  "turnId": zod.string(),
   "assistantMessage": zod.string(),
   "action": zod.record(zod.string(), zod.unknown()).optional(),
   "response": zod.object({
@@ -136,6 +177,7 @@ export const CreateFinancialPartyResponse = zod.object({
   "operationId": zod.string().uuid(),
   "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
   "conversationId": zod.string(),
+  "turnId": zod.string(),
   "assistantMessage": zod.string(),
   "action": zod.record(zod.string(), zod.unknown()).optional(),
   "response": zod.object({
@@ -187,6 +229,7 @@ export const CreateFinancialObligationResponse = zod.object({
   "operationId": zod.string().uuid(),
   "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
   "conversationId": zod.string(),
+  "turnId": zod.string(),
   "assistantMessage": zod.string(),
   "action": zod.record(zod.string(), zod.unknown()).optional(),
   "response": zod.object({
@@ -221,6 +264,7 @@ export const SettleFinancialObligationResponse = zod.object({
   "operationId": zod.string().uuid(),
   "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
   "conversationId": zod.string(),
+  "turnId": zod.string(),
   "assistantMessage": zod.string(),
   "action": zod.record(zod.string(), zod.unknown()).optional(),
   "response": zod.object({
@@ -259,6 +303,7 @@ export const CreateFinancialPaymentResponse = zod.object({
   "operationId": zod.string().uuid(),
   "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
   "conversationId": zod.string(),
+  "turnId": zod.string(),
   "assistantMessage": zod.string(),
   "action": zod.record(zod.string(), zod.unknown()).optional(),
   "response": zod.object({
@@ -293,6 +338,7 @@ export const UpdateFinancialObligationResponse = zod.object({
   "operationId": zod.string().uuid(),
   "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
   "conversationId": zod.string(),
+  "turnId": zod.string(),
   "assistantMessage": zod.string(),
   "action": zod.record(zod.string(), zod.unknown()).optional(),
   "response": zod.object({
@@ -327,6 +373,7 @@ export const UpdateFinancialPaymentResponse = zod.object({
   "operationId": zod.string().uuid(),
   "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
   "conversationId": zod.string(),
+  "turnId": zod.string(),
   "assistantMessage": zod.string(),
   "action": zod.record(zod.string(), zod.unknown()).optional(),
   "response": zod.object({
@@ -361,6 +408,7 @@ export const UpdateDonationResponse = zod.object({
   "operationId": zod.string().uuid(),
   "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
   "conversationId": zod.string(),
+  "turnId": zod.string(),
   "assistantMessage": zod.string(),
   "action": zod.record(zod.string(), zod.unknown()).optional(),
   "response": zod.object({
@@ -395,6 +443,7 @@ export const UpdateIncomeReceivableResponse = zod.object({
   "operationId": zod.string().uuid(),
   "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
   "conversationId": zod.string(),
+  "turnId": zod.string(),
   "assistantMessage": zod.string(),
   "action": zod.record(zod.string(), zod.unknown()).optional(),
   "response": zod.object({
@@ -433,6 +482,7 @@ export const CreateDonationResponse = zod.object({
   "operationId": zod.string().uuid(),
   "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
   "conversationId": zod.string(),
+  "turnId": zod.string(),
   "assistantMessage": zod.string(),
   "action": zod.record(zod.string(), zod.unknown()).optional(),
   "response": zod.object({
@@ -471,6 +521,7 @@ export const CreateIncomeReceivableResponse = zod.object({
   "operationId": zod.string().uuid(),
   "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
   "conversationId": zod.string(),
+  "turnId": zod.string(),
   "assistantMessage": zod.string(),
   "action": zod.record(zod.string(), zod.unknown()).optional(),
   "response": zod.object({
@@ -509,6 +560,7 @@ export const CreatePaymentLinkResponse = zod.object({
   "operationId": zod.string().uuid(),
   "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
   "conversationId": zod.string(),
+  "turnId": zod.string(),
   "assistantMessage": zod.string(),
   "action": zod.record(zod.string(), zod.unknown()).optional(),
   "response": zod.object({
@@ -580,16 +632,54 @@ export const GetTodayContextResponse = zod.object({
  * @summary Send a natural-language message to the secretary
  */
 
+export const createTurnBodyContextOneRecordTypeMax = 80;
+
+export const createTurnBodyContextOneRecordIdMax = 200;
+
+export const createTurnBodyContextOneTitleMax = 200;
+
+export const createTurnBodyContextOneSourceConversationIdMax = 200;
+
+export const createTurnBodyContextOneSourceTurnIdMax = 200;
+
+export const createTurnBodyContextOneSourceOperationIdMax = 200;
+
+export const createTurnBodyPeerOneAgentIdMax = 200;
+
+export const createTurnBodyPeerOneDisplayNameMax = 200;
+
+export const createTurnBodyPeerOneProtocolMax = 80;
+
+export const createTurnBodyPeerOneCapabilitiesItemMax = 100;
+
+export const createTurnBodyPeerOneCapabilitiesMax = 32;
+
 
 
 export const CreateTurnBody = zod.object({
   "message": zod.string().min(1),
   "conversationId": zod.string().nullish(),
-  "idempotencyKey": zod.string().nullish()
+  "idempotencyKey": zod.string().nullish(),
+  "channel": zod.enum(['main', 'quick', 'record']),
+  "context": zod.union([zod.object({
+  "recordType": zod.string().min(1).max(createTurnBodyContextOneRecordTypeMax),
+  "recordId": zod.string().min(1).max(createTurnBodyContextOneRecordIdMax),
+  "title": zod.string().min(1).max(createTurnBodyContextOneTitleMax),
+  "sourceConversationId": zod.string().max(createTurnBodyContextOneSourceConversationIdMax).nullish(),
+  "sourceTurnId": zod.string().max(createTurnBodyContextOneSourceTurnIdMax).nullish(),
+  "sourceOperationId": zod.string().max(createTurnBodyContextOneSourceOperationIdMax).nullish()
+}),zod.null()]).optional(),
+  "peer": zod.union([zod.object({
+  "agentId": zod.string().min(1).max(createTurnBodyPeerOneAgentIdMax),
+  "displayName": zod.string().max(createTurnBodyPeerOneDisplayNameMax).optional(),
+  "protocol": zod.string().max(createTurnBodyPeerOneProtocolMax).optional(),
+  "capabilities": zod.array(zod.string().max(createTurnBodyPeerOneCapabilitiesItemMax)).max(createTurnBodyPeerOneCapabilitiesMax).optional()
+}),zod.null()]).optional()
 })
 
 export const CreateTurnResponse = zod.object({
   "conversationId": zod.string(),
+  "turnId": zod.string(),
   "assistantMessage": zod.string(),
   "action": zod.record(zod.string(), zod.unknown()).optional(),
   "response": zod.object({
@@ -622,6 +712,7 @@ export const ApproveSecretaryOperationResponse = zod.object({
   "operationId": zod.string().uuid(),
   "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
   "conversationId": zod.string(),
+  "turnId": zod.string(),
   "assistantMessage": zod.string(),
   "action": zod.record(zod.string(), zod.unknown()).optional(),
   "response": zod.object({
@@ -671,6 +762,7 @@ export const RejectSecretaryOperationResponse = zod.object({
   "operationId": zod.string().uuid(),
   "status": zod.enum(['pending', 'executing', 'completed', 'rejected', 'expired', 'failed']),
   "conversationId": zod.string(),
+  "turnId": zod.string(),
   "assistantMessage": zod.string(),
   "action": zod.record(zod.string(), zod.unknown()).optional(),
   "response": zod.object({

@@ -18,6 +18,7 @@ export type OperationDisplay = {
 
 export type OperationExecutionResult = {
   conversationId: string;
+  turnId?: string;
   assistantMessage: string;
   action?: Record<string, unknown>;
   response?: Record<string, unknown>;

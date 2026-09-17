@@ -45,6 +45,7 @@ import {
 import {
   createPendingOperation,
 } from "./secretary-operations";
+import { annotateApprovalAction, approvalMessage } from "./secretary-confirmation";
 import {
   deterministicExpensePeriod,
   isBroadExpenseReportRequest,
@@ -81,6 +82,7 @@ import {
   updateIncomeReceivable,
 } from "./financial-graph";
 import { createTypedRelationship, deleteTypedRelationship } from "./relationship-graph";
+import type { SecretaryChatContext, SecretaryChatPeer, TurnInputChannel } from "@workspace/api-zod";
 
 const db = database;
 
@@ -88,6 +90,9 @@ export type Phase2TurnInput = {
   message: string;
   conversationId?: string | null;
   idempotencyKey?: string | null;
+  channel?: TurnInputChannel;
+  context?: SecretaryChatContext | null;
+  peer?: SecretaryChatPeer | null;
   requestId?: string;
 };
 
@@ -1032,6 +1037,23 @@ async function findProjects(identity: Identity, name: string): Promise<Project[]
     .limit(10);
 }
 
+async function listApprovalCandidates(identity: Identity) {
+  const [people, projects] = await Promise.all([
+    db.select({ id: peopleTable.id, name: peopleTable.name })
+      .from(peopleTable)
+      .where(identityWhere(identity, peopleTable))
+      .orderBy(asc(peopleTable.name)),
+    db.select({ id: projectsTable.id, name: projectsTable.name })
+      .from(projectsTable)
+      .where(identityWhere(identity, projectsTable))
+      .orderBy(asc(projectsTable.name)),
+  ]);
+  return {
+    personCandidates: people,
+    projectCandidates: projects,
+  };
+}
+
 type CairoDateParts = { year: number; month: number; day: number };
 
 function cairoDateParts(date: Date): CairoDateParts {
@@ -1331,6 +1353,7 @@ async function executeTool(
     conversationId?: string | null;
     sourceTurnId?: string | null;
     idempotencyKey?: string | null;
+    channel?: TurnInputChannel;
     approvedOperationId?: string;
     transactionExecutor?: DbExecutor;
     activityWriter?: typeof recordToolActivity;
@@ -1370,12 +1393,15 @@ async function executeTool(
   }
 
   if (WRITE_TOOLS.has(name) && !options.approvedOperationId) {
+    const operationArgs = name === "record_expense" && options.channel !== "quick"
+      ? { ...args, ...(await listApprovalCandidates(identity)) }
+      : args;
     const pending = await createPendingOperation(identity, {
       conversationId: options.conversationId,
       sourceTurnId: options.sourceTurnId ?? options.requestId,
       idempotencyKey: options.idempotencyKey,
       toolName: name,
-      args,
+      args: operationArgs,
     });
     const result: ToolResult = {
       ok: true,
@@ -2337,6 +2363,7 @@ export async function executeStructuredTool(
     conversationId?: string | null;
     sourceTurnId?: string | null;
     idempotencyKey?: string | null;
+    channel?: TurnInputChannel;
     approvedOperationId?: string;
     activityWriter?: typeof recordToolActivity;
   } = { requestId: crypto.randomUUID() },
@@ -4206,6 +4233,7 @@ async function deterministicPreflight(
     conversationId: string;
     idempotencyKey?: string | null;
     dryRun?: boolean;
+    channel?: TurnInputChannel;
     metrics: DeterministicRequestMetrics;
   },
 ): Promise<DeterministicPreflightResult | null> {
@@ -4339,6 +4367,7 @@ async function deterministicPreflight(
       dryRun: options.dryRun,
       conversationId: options.conversationId,
       idempotencyKey: options.idempotencyKey,
+      channel: options.channel,
     });
     return deterministicApprovalResponse("record_expense", result) ?? {
       response: {
@@ -4439,6 +4468,27 @@ export class Phase2AgentRuntime {
       : null;
     const messages: ConversationMessage[] = [
       ...conversationContextMessages(conversationMemory),
+      ...(input.context
+        ? [{
+            role: "system" as const,
+            text: `[سياق سكرتير محدود]\n${JSON.stringify({
+              channel: input.channel ?? "main",
+              context: input.context,
+              ...(input.peer ? { peer: input.peer } : {}),
+            })}`,
+          }]
+        : input.peer
+          ? [{
+              role: "system" as const,
+              text: `[بيانات قناة سكرتير مستقبلية]\n${JSON.stringify({
+                channel: input.channel ?? "main",
+                peer: input.peer,
+              })}`,
+            }]
+          : [{
+              role: "system" as const,
+              text: `[قناة السكرتير: ${input.channel ?? "main"}]`,
+            }]),
       ...(relationshipContext && !relationshipContext.response
         ? [{
             role: "system" as const,
@@ -4644,6 +4694,7 @@ export class Phase2AgentRuntime {
             conversationId,
             idempotencyKey: input.idempotencyKey,
             dryRun: options.dryRun,
+            channel: input.channel,
             metrics: deterministicMetrics,
           });
           if (preflight) {
@@ -4996,6 +5047,7 @@ export class Phase2AgentRuntime {
               dryRun: options.dryRun,
               conversationId,
               idempotencyKey: input.idempotencyKey,
+              channel: input.channel,
             });
           } catch (error) {
             setDiagnosticDecision(diagnosticCall, {
@@ -5038,17 +5090,21 @@ export class Phase2AgentRuntime {
               nextCallKind: null,
               nextScope: activeToolScope.name,
             });
-            action = {
+            action = annotateApprovalAction({
               type: "approval_required",
               operationId: approval.operationId,
               status: approval.status,
               toolName: approval.toolName,
               display: { title, details },
               args: approval.args,
-            };
+            }, input.channel);
             return persistResult({
               kind: "clarification",
-              message: `قبل ما أنفذ ${title}${details.length > 0 ? ` (${details.join(" — ")})` : ""}، هل توافق؟`,
+              message: approvalMessage(
+                action,
+                `قبل ما أنفذ ${title}${details.length > 0 ? ` (${details.join(" — ")})` : ""}، هل توافق؟`,
+                input.channel,
+              ),
             });
           }
           messages.push({

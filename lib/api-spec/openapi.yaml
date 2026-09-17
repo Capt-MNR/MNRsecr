@@ -20,7 +20,54 @@ tags:
     description: Structured memory records operations
   - name: financial
     description: Financial graph operations
+  - name: notifications
+    description: Mobile notification registration and delivery operations
 paths:
+  /push-tokens:
+    post:
+      operationId: registerMobilePushToken
+      tags: [notifications]
+      summary: Register a mobile push token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterMobilePushTokenInput"
+      responses:
+        "200":
+          description: Token registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MobilePushTokenResponse"
+        "400":
+          description: Invalid token registration
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    delete:
+      operationId: unregisterMobilePushToken
+      tags: [notifications]
+      summary: Disable a mobile push token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UnregisterMobilePushTokenInput"
+      responses:
+        "200":
+          description: Token disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MobilePushTokenResponse"
+        "400":
+          description: Invalid token registration
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
   /entities/{entityType}/{entityId}:
     get:
       operationId: getEntityGraph
@@ -988,7 +1035,66 @@ components:
           type: ["string", "null"]
         idempotencyKey:
           type: ["string", "null"]
-      required: [message]
+        channel:
+          type: string
+          enum: [main, quick, record]
+        context:
+          anyOf:
+            - $ref: "#/components/schemas/SecretaryChatContext"
+            - type: "null"
+        peer:
+          anyOf:
+            - $ref: "#/components/schemas/SecretaryChatPeer"
+            - type: "null"
+      required: [message, channel]
+      additionalProperties: false
+    SecretaryChatContext:
+      type: object
+      properties:
+        recordType:
+          type: string
+          minLength: 1
+          maxLength: 80
+        recordId:
+          type: string
+          minLength: 1
+          maxLength: 200
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        sourceConversationId:
+          type: ["string", "null"]
+          maxLength: 200
+        sourceTurnId:
+          type: ["string", "null"]
+          maxLength: 200
+        sourceOperationId:
+          type: ["string", "null"]
+          maxLength: 200
+      required: [recordType, recordId, title]
+      additionalProperties: false
+    SecretaryChatPeer:
+      type: object
+      properties:
+        agentId:
+          type: string
+          minLength: 1
+          maxLength: 200
+        displayName:
+          type: string
+          maxLength: 200
+        protocol:
+          type: string
+          maxLength: 80
+        capabilities:
+          type: array
+          maxItems: 32
+          items:
+            type: string
+            maxLength: 100
+      required: [agentId]
+      additionalProperties: false
     ActionResult:
       type: object
       additionalProperties: true
@@ -1021,6 +1127,8 @@ components:
       properties:
         conversationId:
           type: string
+        turnId:
+          type: string
         assistantMessage:
           type: string
         action:
@@ -1031,7 +1139,7 @@ components:
           type: string
         model:
           type: string
-      required: [conversationId, assistantMessage, provider, model]
+      required: [conversationId, turnId, assistantMessage, provider, model]
     ApprovalResponse:
       type: object
       properties:
@@ -1043,6 +1151,8 @@ components:
           enum: [pending, executing, completed, rejected, expired, failed]
         conversationId:
           type: string
+        turnId:
+          type: string
         assistantMessage:
           type: string
         action:
@@ -1053,7 +1163,7 @@ components:
           type: string
         model:
           type: string
-      required: [operationId, status, conversationId, assistantMessage, provider, model]
+      required: [operationId, status, conversationId, turnId, assistantMessage, provider, model]
     ApprovalInput:
       type: object
       properties:
@@ -1091,6 +1201,41 @@ components:
           type: string
           format: date-time
       required: [operationId, toolName, args, display, status, updatedAt]
+    RegisterMobilePushTokenInput:
+      type: object
+      properties:
+        token:
+          type: string
+          minLength: 8
+        provider:
+          type: string
+          enum: [expo, fcm, apns]
+        platform:
+          type: string
+          enum: [android, ios]
+        appId:
+          type: string
+          minLength: 1
+        deviceId:
+          type: ["string", "null"]
+      required: [token, provider, platform, appId]
+      additionalProperties: false
+    UnregisterMobilePushTokenInput:
+      type: object
+      properties:
+        token:
+          type: string
+          minLength: 8
+      required: [token]
+      additionalProperties: false
+    MobilePushTokenResponse:
+      type: object
+      properties:
+        registered:
+          type: boolean
+        enabled:
+          type: boolean
+      required: [registered, enabled]
     Candidate:
       type: object
       properties:

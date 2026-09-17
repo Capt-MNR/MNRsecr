@@ -1,0 +1,588 @@
+We have completed an architecture audit of the current Personal AI Secretary implementation.
+
+The current architecture is largely correct:
+
+- Main Mode and Quick Chat use the same SecretaryChatService.
+- Conversation continuity exists between Main and Quick.
+- Operations, approvals, provenance, and structured records remain server-authoritative.
+- There are extension points for channel/context/peer and future A2A.
+
+However, the audit identified one important issue:
+
+CRITICAL FINDING
+
+Quick Chat is currently functionally lightweight, but it is NOT yet proven to be runtime/bundle/memory lightweight.
+
+The current implementation places Main and Quick inside the same large frontend application/module tree and switches between them at runtime.
+
+Therefore:
+
+- "simpler UI" does NOT equal "lower RAM usage"
+- deferred API queries do NOT equal "lower JavaScript memory"
+- having fewer visible components does NOT equal "smaller loaded bundle"
+- having a lightweight screen does NOT prove lower device RAM usage
+
+Do not claim that Quick Chat is RAM-light unless this is actually implemented and measured.
+
+We need to address this carefully without rewriting the application.
+
+---
+
+OBJECTIVE
+
+Perform ONE final architecture-hardening pass covering TWO independent concerns:
+
+A. Secretary Chat API boundary
+
+Make Secretary Chat a clean, explicit backend capability shared by Main, Quick, Record/Entity Chat, and future external/A2A clients.
+
+B. Real Quick Chat runtime separation
+
+Make Quick Chat genuinely lightweight where the Expo/React Native architecture supports it, using code organization, deferred loading, and bounded data fetching.
+
+The goal is NOT to create two different applications.
+
+The goal is:
+
+ONE Secretary
++
+ONE backend
++
+ONE conversation/operation/provenance system
++
+TWO client experiences with different runtime loading characteristics.
+
+---
+
+PART A — SECRETARY CHAT API BOUNDARY
+
+1. AUDIT CURRENT IMPLEMENTATION FIRST
+
+Before modifying anything, identify the actual:
+
+- SecretaryChatService
+- HTTP chat/turn endpoint
+- Main Mode chat client
+- Quick Chat client
+- Record/Entity contextual chat client
+- conversation state
+- turn creation
+- operation creation
+- approval flow
+- provenance
+- agentRuntime boundary
+
+Do not assume filenames.
+
+Preserve existing behavior unless a change is strictly required.
+
+---
+
+2. DEFINE AN EXPLICIT SECRETARY CHAT CONTRACT
+
+Create a small typed server-side contract/interface.
+
+It should conceptually support:
+
+- conversationId
+- message
+- channel
+- bounded context
+- optional peer metadata
+- stable turnId
+- response
+- operation/approval references where applicable
+
+Do NOT expose database models.
+
+Do NOT expose AgentRuntime internals.
+
+Clients depend on Secretary Chat, not AgentRuntime.
+
+---
+
+3. MAKE THE HTTP CONTRACT REAL
+
+The Secretary Chat HTTP endpoint must be capable of receiving:
+
+- message
+- conversationId
+- channel
+- bounded context
+- optional peer metadata
+
+Use the existing Zod/OpenAPI conventions.
+
+Do not make optional concepts unnecessarily mandatory.
+
+The important requirement is:
+
+The HTTP boundary must not silently discard channel/context/peer information.
+
+---
+
+PART B — REAL QUICK CHAT LIGHTWEIGHT RUNTIME
+
+This section is equally important.
+
+4. CURRENT STATE MUST NOT BE MISREPRESENTED
+
+Do NOT describe Quick Chat as "RAM optimized" merely because:
+
+- it displays fewer components
+- it fetches fewer APIs
+- it has a smaller UI
+- Main data is deferred
+
+Those are useful optimizations, but they do not prove lower memory consumption.
+
+---
+
+5. SEPARATE QUICK AND MAIN MODULE TREES WHERE PRACTICAL
+
+Refactor the frontend so that Quick Chat and Main Mode are separate screen/module boundaries.
+
+The current large shared screen/module should NOT remain the place where the entire Main application and Quick Chat are defined together if that prevents effective deferred loading.
+
+Target conceptually:
+
+App Shell
+├── Quick Chat entry
+│   └── Quick Chat module
+│       ├── conversation
+│       ├── composer
+│       ├── approvals
+│       └── lightweight record links
+│
+└── Main entry
+└── Main module
+├── dashboard
+├── records
+├── people
+├── projects
+├── financial
+├── tasks
+├── reminders
+├── activity
+└── entity hubs
+
+Do not duplicate Secretary Chat logic.
+
+Only separate frontend loading boundaries.
+
+---
+
+6. USE REAL LAZY/DEFERRED LOADING WHERE EXPO/REACT NATIVE SUPPORTS IT
+
+Determine what is actually supported by the project's Expo/React Native/Metro configuration.
+
+Use the appropriate supported mechanism for:
+
+- deferred module loading
+- dynamic imports where supported
+- route-level separation
+- component-level lazy loading where supported
+- code splitting if actually supported by the current build/runtime
+
+Do NOT invent a web-only solution that does not work in native Expo.
+
+Do NOT claim code splitting exists if Metro produces one runtime bundle in the current production configuration.
+
+If true bundle splitting is not supported or not effective in this Expo setup, say so explicitly and implement the strongest practical alternative:
+
+- separate modules
+- deferred imports where supported
+- route isolation
+- avoid importing Main-only dependencies from Quick
+- avoid mounting Main-only component trees
+- avoid Main-only providers/query hooks in Quick
+
+---
+
+7. QUICK MUST NOT IMPORT MAIN-ONLY HEAVY MODULES UNNECESSARILY
+
+Quick Chat should not eagerly import:
+
+- Main dashboard
+- Records workspace
+- entity hub UI
+- financial workspace
+- large activity/timeline components
+- Main-only visualization components
+- Main-only navigation components
+
+unless required when navigating from Quick into Main.
+
+Do not duplicate these components.
+
+Use navigation/deferred loading boundaries instead.
+
+---
+
+8. QUICK DATA FETCHING
+
+Quick startup should only fetch what it needs.
+
+At minimum:
+
+- conversation state
+- necessary Quick suggestions if enabled
+- pending approval state when required
+- minimal recent context if required
+
+Do NOT automatically fetch:
+
+- full records
+- full people lists
+- projects
+- financial graph
+- activity timeline
+- dashboard aggregates
+
+unless the user explicitly navigates to Main or requests them.
+
+Existing bounded query behavior should remain intact.
+
+---
+
+9. PROVIDER / STATE ISOLATION
+
+Quick should not initialize Main-only providers, subscriptions, or expensive state unnecessarily.
+
+Audit:
+
+- React Query observers
+- navigation state
+- dashboard hooks
+- record hooks
+- entity hooks
+- activity hooks
+- global listeners
+- timers
+- polling
+- subscriptions
+
+Quick should initialize only the state required for Quick.
+
+Do NOT create a second global Secretary state system.
+
+Conversation state must remain shared at the appropriate persistence/API level.
+
+---
+
+10. RAM CLAIM MUST BE MEASURED, NOT ASSUMED
+
+This is critical.
+
+After implementing the separation, do NOT say:
+
+"Quick uses less RAM."
+
+unless you actually have a measurement.
+
+At minimum report:
+
+Quick startup
+
+- JS modules/components initialized
+- API requests triggered
+- active query observers
+- mounted component count if measurable
+- memory/RAM measurement if the environment exposes a reliable metric
+
+Main startup
+
+Same measurements.
+
+Quick → Main
+
+Measure what gets initialized after navigating from Quick to Main.
+
+If device RAM cannot be measured reliably from the current Expo environment, explicitly report:
+
+"Runtime RAM reduction could not be directly verified in this environment."
+
+In that case, report the objective architectural evidence instead:
+
+- imports separated
+- Main modules not mounted
+- Main queries not started
+- Main-only providers not initialized
+- deferred modules loaded only when entering Main
+
+Do NOT convert those facts into an unsupported RAM percentage.
+
+---
+
+11. PERFORMANCE TARGET
+
+The target is NOT an arbitrary RAM percentage.
+
+The target is:
+
+Quick should have the smallest practical frontend runtime footprint while retaining the full Secretary capabilities through the same backend.
+
+Avoid premature micro-optimization.
+
+Do not sacrifice:
+
+- conversation continuity
+- approvals
+- provenance
+- security
+- navigation
+- A2A readiness
+
+---
+
+12. MAIN MODE REMAINS THE FULL APPLICATION
+
+Do not interpret "Quick lightweight" as "Main should become simpler."
+
+Main Mode remains the complete Personal AI Secretary application:
+
+- Home
+- Records
+- People
+- Projects
+- Financial
+- Tasks
+- Reminders
+- Activity
+- Entity relationships
+- contextual Secretary Chat
+- original conversation/provenance
+- approvals
+- full navigation
+
+Quick is a fast-access door to the same Secretary.
+
+When the user is already inside Main, they must NOT need Quick to perform normal Secretary functions.
+
+---
+
+13. PRESERVE OPERATIONS / APPROVALS / PROVENANCE
+
+The Chat API is not an authority boundary.
+
+Preserve:
+
+User intent
+→ resolution
+→ canonical operation
+→ validation
+→ approval
+→ execution
+→ activity event
+→ provenance
+
+Never trust client-supplied:
+
+- tenantId
+- ownerUserId
+- permissions
+- approval status
+- record ownership
+
+Preserve:
+
+- sourceConversationId
+- sourceTurnId
+- sourceOperationId
+
+---
+
+14. A2A READINESS
+
+Add only the minimum clean extension point.
+
+Optional peer metadata may exist in the Secretary Chat contract.
+
+Do NOT build A2A now.
+
+Do NOT build:
+
+- agent discovery
+- registry
+- marketplace
+- autonomous delegation
+- external agent authentication
+- agent-to-agent tool bypass
+- direct database access
+
+Future architecture:
+
+A2A Gateway
+→ Secretary Chat Contract
+→ Secretary Runtime
+→ existing Operations/Approval architecture
+
+---
+
+15. TOKEN EFFICIENCY
+
+This change must NOT increase LLM calls.
+
+Do NOT automatically send large context.
+
+Do NOT automatically load the entire graph.
+
+Keep context identifier-based and bounded.
+
+Do NOT reopen previous token-optimization audits.
+
+---
+
+16. UI SCOPE
+
+This is NOT the visual redesign phase.
+
+Do NOT redesign:
+
+- colors
+- typography
+- cards
+- layout
+- animations
+- Secretary visual identity
+- Main dashboard appearance
+- Quick hero design
+
+Only perform the structural changes required for runtime separation and API consumption.
+
+The visual/product design will be handled afterward.
+
+---
+
+17. TESTS
+
+Add/update tests for:
+
+Secretary Chat
+
+- request contract validation
+- channel
+- bounded context
+- optional peer
+- Main client
+- Quick client
+- Record contextual client
+
+Conversation
+
+- Main → Quick continuity
+- Quick → Main continuity
+
+Operations
+
+- approval
+- execution
+- provenance
+- duplicate protection
+
+Security
+
+- tenant isolation
+- ownership
+- permissions
+
+Quick runtime
+
+Verify that Quick startup does NOT initialize Main-only:
+
+- queries
+- providers
+- component trees
+- subscriptions
+- expensive modules
+
+Verify that Main modules initialize when entering Main.
+
+Verify Quick → Main transition still works.
+
+---
+
+18. BUILD / VERIFICATION
+
+Run:
+
+- TypeScript typecheck
+- unit tests
+- integration/API tests
+- approval tests
+- provenance tests
+- OpenAPI/codegen if applicable
+- Expo build
+- production build
+
+If possible, collect runtime startup measurements.
+
+Do not report unverified RAM numbers.
+
+---
+
+19. FINAL REPORT
+
+Return a concise but concrete report containing:
+
+1. Files changed.
+2. Secretary Chat contract.
+3. HTTP request/response boundary.
+4. Main/Quick/Record Chat architecture.
+5. Conversation continuity.
+6. Operations/approval/provenance preservation.
+7. A2A extension point.
+8. Quick runtime separation:
+   - what is now deferred
+   - what is no longer eagerly imported
+   - what Main-only queries/providers are avoided
+9. Build/runtime limitations.
+10. Measurements, if available.
+11. Tests and results.
+12. Any remaining architectural limitation.
+
+IMPORTANT:
+
+If the current Expo/Metro environment cannot provide true bundle splitting, state that clearly.
+
+Do NOT claim:
+
+"Quick has lower RAM"
+
+unless measured.
+
+Instead distinguish between:
+
+- architectural separation
+- reduced API/data initialization
+- reduced mounted component tree
+- deferred module loading
+- actual measured RAM reduction
+
+These are NOT the same thing.
+
+---
+
+FINAL STOP CONDITION
+
+Once this work is complete and verified:
+
+STOP architectural changes.
+
+Do not add new intelligence features.
+
+Do not reopen token optimization.
+
+Do not redesign the UI.
+
+The next phase will be a dedicated UI/UX design phase where Main Mode and Quick Chat will receive their final visual identities and interaction design.
+
+The intended final product remains:
+
+ONE Personal AI Secretary
+→ ONE Secretary backend
+→ ONE conversation/operation/provenance system
+→ FULL Main Mode
+→ LIGHTWEIGHT Quick Chat
+→ future external channels
+→ future A2A

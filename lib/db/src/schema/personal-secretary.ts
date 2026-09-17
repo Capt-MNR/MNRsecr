@@ -647,6 +647,35 @@ export const secretaryOperationsTable = pgTable(
   ],
 );
 
+export const mobilePushTokensTable = pgTable(
+  "mobile_push_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    token: text("token").notNull(),
+    provider: text("provider").notNull().default("expo"),
+    platform: text("platform").notNull(),
+    appId: text("app_id").notNull(),
+    deviceId: text("device_id"),
+    enabled: integer("enabled").notNull().default(1),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("mobile_push_tokens_owner_token_unique").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.token,
+    ),
+    index("mobile_push_tokens_owner_enabled_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.enabled,
+    ),
+  ],
+);
+
 export const conversationMemoryTable = pgTable(
   "conversation_memory",
   {
@@ -800,6 +829,7 @@ export type Commitment = typeof commitmentsTable.$inferSelect;
 export type ConversationMemory = typeof conversationMemoryTable.$inferSelect;
 export type LearningSignalReview = typeof learningSignalReviewsTable.$inferSelect;
 export type SecretaryOperation = typeof secretaryOperationsTable.$inferSelect;
+export type MobilePushToken = typeof mobilePushTokensTable.$inferSelect;
 export type Purpose = typeof purposesTable.$inferSelect;
 export type FinancialParty = typeof financialPartiesTable.$inferSelect;
 export type FinancialPartyPerson = typeof financialPartyPeopleTable.$inferSelect;

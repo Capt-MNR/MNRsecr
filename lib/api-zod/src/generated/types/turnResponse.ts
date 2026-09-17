@@ -10,6 +10,7 @@ import type { FinalResponse } from './finalResponse';
 
 export interface TurnResponse {
   conversationId: string;
+  turnId: string;
   assistantMessage: string;
   action?: ActionResult;
   response?: FinalResponse;
