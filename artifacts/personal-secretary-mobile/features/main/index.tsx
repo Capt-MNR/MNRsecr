@@ -22,6 +22,7 @@ import { useLanguage, type AppLanguage } from '@/hooks/useLanguage';
 import { useSecretaryChatService, type SecretaryChatContext } from '../../services/secretary-chat';
 import type { SecretaryInputResult, SecretaryInputState } from '../../services/secretary-input';
 import { MessageBubble } from '../message-bubble';
+import { ReceiptReviewCard } from '../receipt-review';
 export { default as MainWorkspace } from './MainWorkspace';
 export { MessageBubble };
 
@@ -705,6 +706,7 @@ type SecretaryChatProps = {
   onCaptureReceipt?: () => void;
   onPickReceipt?: () => void;
   inputReview?: SecretaryInputResult | null;
+  onChangeInputReview?: (result: SecretaryInputResult) => void;
   onClearInputReview?: () => void;
   compact?: boolean;
   expanded?: boolean;
@@ -735,6 +737,7 @@ function CentralSecretaryChat({
   onCaptureReceipt,
   onPickReceipt,
   inputReview,
+  onChangeInputReview,
   onClearInputReview,
 }: SecretaryChatProps) {
   const { language } = useLanguage();
@@ -914,7 +917,16 @@ function CentralSecretaryChat({
         )}
       </ScrollView>
 
-      {inputReview && (
+      {inputReview?.kind === 'receipt' && onChangeInputReview && onClearInputReview && (
+        <ReceiptReviewCard
+          result={inputReview}
+          colors={colors}
+          language={language}
+          onChange={onChangeInputReview}
+          onClear={onClearInputReview}
+        />
+      )}
+      {inputReview && inputReview.kind !== 'receipt' && (
         <View style={[styles.inputReview, { backgroundColor: colors.muted, borderColor: colors.border }]}>
           <View style={styles.inputReviewCopy}>
             <Feather name={inputReview.kind === 'receipt' ? 'file-text' : 'mic'} size={14} color={colors.primary} />
@@ -1104,6 +1116,7 @@ export function MainOffice({
   onCaptureReceipt,
   onPickReceipt,
   inputReview,
+  onChangeInputReview,
   onClearInputReview,
 }: {
   colors: ReturnType<typeof useColors>;
@@ -1136,6 +1149,7 @@ export function MainOffice({
   onCaptureReceipt?: () => void;
   onPickReceipt?: () => void;
   inputReview?: SecretaryInputResult | null;
+  onChangeInputReview?: (result: SecretaryInputResult) => void;
   onClearInputReview?: () => void;
 }) {
   const todayQuery = useGetTodayContext({
@@ -1398,6 +1412,7 @@ export function MainOffice({
         onCaptureReceipt={onCaptureReceipt}
         onPickReceipt={onPickReceipt}
         inputReview={inputReview}
+        onChangeInputReview={onChangeInputReview}
         onClearInputReview={onClearInputReview}
       />
 

@@ -33,6 +33,7 @@ import {
 } from '../../services/quick-notification';
 import QuickScreen from './QuickScreen';
 import { QuickMessageBubble } from './QuickMessageBubble';
+import { ReceiptReviewCard } from '../receipt-review';
 import {
   addOrigin,
   approvalFromAction,
@@ -81,6 +82,10 @@ export default function QuickRoute() {
     },
     setLocalError,
   );
+  function updateInputReview(result: SecretaryInputResult) {
+    setInputReview(result);
+    setDraft(result.kind === 'receipt' ? receiptDraft(result) : result.text);
+  }
 
   useEffect(() => {
     let active = true;
@@ -245,7 +250,8 @@ export default function QuickRoute() {
       {localError && <View style={[styles.errorBanner, { backgroundColor: colors.destructive }]}><Feather name="alert-circle" size={15} color={colors.destructiveForeground} /><Text style={[styles.errorText, { color: colors.destructiveForeground }]}>{localError}</Text></View>}
       {conversationQuery.isError && <View style={[styles.errorBanner, { backgroundColor: colors.destructive }]}><Text style={[styles.errorText, { color: colors.destructiveForeground }]}>{localized(language, 'تعذر فتح المحادثة الأصلية.', 'Unable to open the original conversation.')}</Text></View>}
       <View style={[styles.composerWrap, { paddingBottom: bottomInset, borderTopColor: colors.border, backgroundColor: colors.background }]}>
-        {inputReview && <View style={[styles.inputReview, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+        {inputReview?.kind === 'receipt' && <ReceiptReviewCard result={inputReview} colors={colors} language={language} onChange={updateInputReview} onClear={() => setInputReview(null)} />}
+        {inputReview && inputReview.kind !== 'receipt' && <View style={[styles.inputReview, { backgroundColor: colors.muted, borderColor: colors.border }]}>
           <Feather name={inputReview.kind === 'receipt' ? 'file-text' : 'mic'} size={14} color={colors.primary} />
           <Text style={[styles.inputReviewText, { color: colors.mutedForeground }]} numberOfLines={2}>
             {inputReview.kind === 'receipt' && inputReview.receipt?.confidence !== undefined
