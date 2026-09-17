@@ -3,6 +3,7 @@ import type { InputAssetProcessResponse } from '@workspace/api-client-react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import type { AppLanguage } from '@/hooks/useLanguage';
 import { useColors } from '@/hooks/useColors';
+import { receiptNeedsReview } from '../services/secretary-input';
 
 type ReceiptReviewProps = {
   result: InputAssetProcessResponse;
@@ -72,6 +73,11 @@ export function ReceiptReviewCard({
       </View>
 
       <View style={styles.fields}>
+        {receiptNeedsReview(result) && (
+          <Text style={[styles.warning, { color: colors.destructive }]}>
+            {copy(language, 'أكمل المبلغ والعملة قبل الإرسال.', 'Add the amount and currency before sending.')}
+          </Text>
+        )}
         <View style={styles.field}>
           <Text style={[styles.label, { color: colors.mutedForeground }]}>{copy(language, 'التاجر', 'Merchant')}</Text>
           <TextInput
@@ -177,6 +183,11 @@ const styles = {
   },
   fields: {
     gap: 7,
+  },
+  warning: {
+    fontSize: 10,
+    lineHeight: 15,
+    textAlign: 'right' as const,
   },
   row: {
     flexDirection: 'row' as const,

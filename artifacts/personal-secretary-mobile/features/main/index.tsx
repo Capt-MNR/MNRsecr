@@ -20,7 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors, type ThemePreference } from '@/hooks/useColors';
 import { useLanguage, type AppLanguage } from '@/hooks/useLanguage';
 import { useSecretaryChatService, type SecretaryChatContext } from '../../services/secretary-chat';
-import type { SecretaryInputResult, SecretaryInputState } from '../../services/secretary-input';
+import { receiptNeedsReview, type SecretaryInputResult, type SecretaryInputState } from '../../services/secretary-input';
 import { MessageBubble } from '../message-bubble';
 import { ReceiptReviewCard } from '../receipt-review';
 export { default as MainWorkspace } from './MainWorkspace';
@@ -740,6 +740,7 @@ function CentralSecretaryChat({
   onChangeInputReview,
   onClearInputReview,
 }: SecretaryChatProps) {
+  const inputBlocked = receiptNeedsReview(inputReview);
   const { language } = useLanguage();
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [inputHeight, setInputHeight] = useState(30);
@@ -1020,10 +1021,10 @@ function CentralSecretaryChat({
             ? localized(language, 'إرسال سؤال عن السجل', 'Send a question about the record')
             : localized(language, 'إرسال طلب إلى السكرتير', 'Send a request to the secretary')}
           onPress={onSend}
-          disabled={!draft.trim() || isSending}
+           disabled={!draft.trim() || isSending || inputBlocked}
           style={({ pressed }) => [
             styles.centralChatSend,
-            { backgroundColor: colors.primary, opacity: !draft.trim() || isSending ? 0.4 : pressed ? 0.7 : 1 },
+             { backgroundColor: colors.primary, opacity: !draft.trim() || isSending || inputBlocked ? 0.4 : pressed ? 0.7 : 1 },
           ]}
         >
           <Feather name="arrow-up" size={17} color={colors.primaryForeground} />

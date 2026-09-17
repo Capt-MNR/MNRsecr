@@ -11,6 +11,13 @@ export type SecretaryInputState = 'idle' | 'recording' | 'processing';
 
 export type SecretaryInputResult = InputAssetProcessResponse;
 
+export function receiptNeedsReview(result: SecretaryInputResult | null | undefined): boolean {
+  if (!result || result.kind !== 'receipt' || !result.receipt) return false;
+  return result.receipt.amountMinor === null
+    || result.receipt.amountMinor <= 0
+    || !result.receipt.currency?.trim();
+}
+
 export function receiptDraft(result: SecretaryInputResult): string {
   if (result.kind !== 'receipt' || !result.receipt) return result.text;
   const { amountMinor, currency, merchant, description, occurredAt } = result.receipt;

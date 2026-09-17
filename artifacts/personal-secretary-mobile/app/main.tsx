@@ -13,6 +13,7 @@ import { useLanguage } from '@/hooks/useLanguage';
 import { useSecretaryChatService } from '../services/secretary-chat';
 import {
   receiptDraft,
+  receiptNeedsReview,
   useSecretaryInputCapture,
   type SecretaryInputResult,
 } from '../services/secretary-input';
@@ -189,6 +190,10 @@ export default function MainRoute() {
   async function sendMessage(value = draft) {
     const message = value.trim();
     if (!message || secretaryChat.isSending || conversationQuery.isFetching) return;
+    if (receiptNeedsReview(inputReview)) {
+      setLocalError('أكمل مبلغ الفاتورة والعملة قبل إرسال المسودة.');
+      return;
+    }
     setDraft('');
     const submittedInputId = inputReview?.inputId ?? null;
     setInputReview(null);

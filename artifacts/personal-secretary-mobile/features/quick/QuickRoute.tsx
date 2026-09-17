@@ -23,6 +23,7 @@ import {
 } from '../../services/secretary-chat';
 import {
   receiptDraft,
+  receiptNeedsReview,
   useSecretaryInputCapture,
   type SecretaryInputResult,
 } from '../../services/secretary-input';
@@ -139,6 +140,10 @@ export default function QuickRoute() {
   async function sendMessage(value = draft) {
     const message = value.trim();
     if (!message || secretaryChat.isSending || conversationQuery.isFetching) return;
+    if (receiptNeedsReview(inputReview)) {
+      setLocalError('أكمل مبلغ الفاتورة والعملة قبل إرسال المسودة.');
+      return;
+    }
     setDraft('');
     const submittedInputId = inputReview?.inputId ?? null;
     setInputReview(null);
@@ -267,7 +272,7 @@ export default function QuickRoute() {
             <Pressable testID="quick-receipt-library" accessibilityRole="button" accessibilityLabel="اختيار صورة فاتورة" onPress={() => void inputCapture.pickReceipt('library')} disabled={inputCapture.state !== 'idle'} style={({ pressed }) => [styles.inputAction, { backgroundColor: colors.muted, opacity: pressed || inputCapture.state !== 'idle' ? 0.6 : 1 }]}><Feather name="image" size={14} color={colors.primary} /></Pressable>
           </View>
           <TextInput ref={inputRef} testID="quick-message-input" value={draft} onChangeText={setDraft} onSubmitEditing={() => void sendMessage()} placeholder={localized(language, 'اكتب طلبك بسرعة…', 'Write a quick request…')} placeholderTextColor={colors.mutedForeground} multiline maxLength={1000} returnKeyType="send" blurOnSubmit={false} textAlign="right" style={[styles.input, { color: colors.foreground }]} />
-          <Pressable testID="send-message" accessibilityRole="button" accessibilityLabel={localized(language, 'إرسال الطلب', 'Send request')} onPress={() => void sendMessage()} disabled={!draft.trim() || secretaryChat.isSending || conversationQuery.isFetching || inputCapture.state !== 'idle'} style={({ pressed }) => [styles.sendButton, { backgroundColor: colors.primary, opacity: !draft.trim() || secretaryChat.isSending || conversationQuery.isFetching || inputCapture.state !== 'idle' ? 0.4 : pressed ? 0.7 : 1 }]}><Feather name="arrow-up" size={18} color={colors.primaryForeground} /></Pressable>
+          <Pressable testID="send-message" accessibilityRole="button" accessibilityLabel={localized(language, 'إرسال الطلب', 'Send request')} onPress={() => void sendMessage()} disabled={!draft.trim() || secretaryChat.isSending || conversationQuery.isFetching || inputCapture.state !== 'idle' || receiptNeedsReview(inputReview)} style={({ pressed }) => [styles.sendButton, { backgroundColor: colors.primary, opacity: !draft.trim() || secretaryChat.isSending || conversationQuery.isFetching || inputCapture.state !== 'idle' || receiptNeedsReview(inputReview) ? 0.4 : pressed ? 0.7 : 1 }]}><Feather name="arrow-up" size={18} color={colors.primaryForeground} /></Pressable>
         </View>
         <Text style={[styles.composerHint, { color: colors.mutedForeground }]}>{localized(language, 'للمحادثات السريعة فقط · أي تغيير حساس سيطلب موافقتك', 'Quick conversations only · sensitive changes require your approval')}</Text>
       </View>
