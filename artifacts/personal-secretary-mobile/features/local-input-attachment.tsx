@@ -1,12 +1,33 @@
 import { Feather } from '@expo/vector-icons';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { useAudioPlayer, useAudioPlayerStatus, type AudioPlayer } from 'expo-audio';
+import { useEffect, useState } from 'react';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useColors } from '@/hooks/useColors';
 import { useLanguage } from '@/hooks/useLanguage';
 import type { LocalInputAttachment } from '../services/local-input-assets';
 
+let activeAudioPlayer: AudioPlayer | null = null;
+
 export function LocalInputAttachmentView({ attachment }: { attachment: LocalInputAttachment }) {
   const { language } = useLanguage();
   const colors = useColors();
+  const player = useAudioPlayer(attachment.kind === 'voice' ? attachment.localUri : null);
+  const status = useAudioPlayerStatus(player);
+  const [playbackError, setPlaybackError] = useState(false);
+
+  useEffect(() => {
+    if (!status.didJustFinish || activeAudioPlayer !== player) return;
+    activeAudioPlayer = null;
+    void player.seekTo(0);
+  }, [player, status.didJustFinish]);
+
+  useEffect(() => () => {
+    if (activeAudioPlayer === player) {
+      player.pause();
+      activeAudioPlayer = null;
+    }
+  }, [player]);
+
   if (attachment.kind === 'receipt') {
     return (
       <View style={[styles.wrapper, { borderColor: colors.border }]}>
@@ -26,17 +47,62 @@ export function LocalInputAttachmentView({ attachment }: { attachment: LocalInpu
     );
   }
 
+  function togglePlayback() {
+    setPlaybackError(false);
+    try {
+      if (status.playing) {
+        player.pause();
+        if (activeAudioPlayer === player) activeAudioPlayer = null;
+        return;
+      }
+      if (activeAudioPlayer && activeAudioPlayer !== player) activeAudioPlayer.pause();
+      activeAudioPlayer = player;
+      if (status.didJustFinish || (status.duration > 0 && status.currentTime >= status.duration)) {
+        void player.seekTo(0);
+      }
+      player.play();
+    } catch {
+      if (activeAudioPlayer === player) activeAudioPlayer = null;
+      setPlaybackError(true);
+    }
+  }
+
+  const playbackLabel = playbackError
+    ? (language === 'en' ? 'Audio unavailable' : 'التسجيل غير متاح')
+    : status.isBuffering
+      ? (language === 'en' ? 'Preparing audio…' : 'جاري تجهيز التسجيل…')
+      : status.playing
+        ? (language === 'en' ? 'Pause recording' : 'إيقاف التسجيل')
+        : (language === 'en' ? 'Play recording' : 'تشغيل التسجيل');
+
   return (
     <View style={[styles.audioCard, { borderColor: colors.border, backgroundColor: colors.muted }]}>
-      <Feather name="mic" size={16} color={colors.primary} />
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={playbackLabel}
+        accessibilityState={{ busy: status.isBuffering }}
+        disabled={status.isBuffering}
+        onPress={togglePlayback}
+        style={({ pressed }) => [
+          styles.audioButton,
+          { backgroundColor: colors.primary, opacity: pressed || status.isBuffering ? 0.6 : 1 },
+        ]}
+      >
+        <Feather name={status.playing ? 'pause' : 'play'} size={14} color={colors.primaryForeground} />
+      </Pressable>
       <View style={styles.audioCopy}>
         <Text style={[styles.audioTitle, { color: colors.foreground }]}>
           {language === 'en' ? 'Voice recording' : 'تسجيل صوتي'}
         </Text>
         <Text style={[styles.audioText, { color: colors.mutedForeground }]}>
-          {language === 'en' ? 'Saved on this device for retry' : 'محفوظ على الجهاز لإعادة المحاولة'}
+          {playbackError
+            ? (language === 'en' ? 'The local file is unavailable' : 'الملف المحلي غير متاح')
+            : language === 'en'
+              ? 'Saved on this device'
+              : 'محفوظ على الجهاز'}
         </Text>
       </View>
+      <Feather name="mic" size={16} color={colors.primary} />
     </View>
   );
 }
@@ -47,6 +113,7 @@ const styles = StyleSheet.create({
   caption: { minHeight: 28, paddingHorizontal: 8, flexDirection: 'row-reverse', alignItems: 'center', gap: 5, backgroundColor: '#f7f8fc' },
   captionText: { fontSize: 10, color: '#687594', textAlign: 'right' },
   audioCard: { marginTop: 9, minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: '#dfe5f3', paddingHorizontal: 10, flexDirection: 'row-reverse', alignItems: 'center', gap: 8, backgroundColor: '#f7f8fc' },
+  audioButton: { width: 28, height: 28, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   audioCopy: { flex: 1, gap: 2 },
   audioTitle: { fontSize: 11, fontWeight: '700', color: '#15213d', textAlign: 'right' },
   audioText: { fontSize: 10, color: '#687594', textAlign: 'right' },
