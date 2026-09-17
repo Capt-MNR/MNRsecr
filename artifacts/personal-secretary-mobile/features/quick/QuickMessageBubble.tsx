@@ -22,6 +22,8 @@ export function QuickMessageBubble({
   onReject,
   onOpenMain,
   onOpenRecord,
+  onRetryInput,
+  retryingInput = false,
   busyOperationId,
 }: {
   message: LocalMessage;
@@ -30,6 +32,8 @@ export function QuickMessageBubble({
   onReject: (approval: Approval) => void;
   onOpenMain?: () => void;
   onOpenRecord: (record: MobileRecordRow) => void;
+  onRetryInput?: (attachment: LocalMessage['inputAttachment']) => void;
+  retryingInput?: boolean;
   busyOperationId: string | null;
 }) {
   const isUser = message.role === 'user';
@@ -50,7 +54,13 @@ export function QuickMessageBubble({
         <Text style={[styles.messageText, { color: isUser ? colors.primaryForeground : colors.foreground }]}>
           {message.text}
         </Text>
-        {message.inputAttachment && <LocalInputAttachmentView attachment={message.inputAttachment} />}
+        {message.inputAttachment && (
+          <LocalInputAttachmentView
+            attachment={message.inputAttachment}
+            onRetry={onRetryInput ? () => onRetryInput(message.inputAttachment) : undefined}
+            retrying={retryingInput}
+          />
+        )}
         <Text style={[styles.messageTime, { color: isUser ? colors.primaryForeground : colors.mutedForeground }]}>
           {messageTime(message.createdAt)}
         </Text>

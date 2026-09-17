@@ -502,6 +502,8 @@ export function RecordsView({
 }: {
   colors: ReturnType<typeof useColors>;
   onOpenRecord: (record: MobileRecordRow) => void;
+  onRetryInput?: (attachment: LocalMessage['inputAttachment']) => void;
+  retryingInput?: boolean;
   onOpenSection?: (sectionKey: string) => void;
   onBack?: () => void;
   sectionKeys?: string[];
@@ -731,6 +733,8 @@ function CentralSecretaryChat({
   onReject,
   busyOperationId,
   onOpenRecord,
+  onRetryInput,
+  retryingInput = false,
   context,
   smartSignal,
   quickPrompts,
@@ -910,6 +914,8 @@ function CentralSecretaryChat({
             onApprove={onApprove}
             onReject={onReject}
             onOpenRecord={onOpenRecord}
+            onRetryInput={onRetryInput}
+            retryingInput={retryingInput}
             busyOperationId={busyOperationId}
           />
         ))}
@@ -1124,6 +1130,8 @@ export function MainOffice({
   colors: ReturnType<typeof useColors>;
   language: AppLanguage;
   onOpenRecord: (record: MobileRecordRow) => void;
+  onRetryInput?: (attachment: LocalMessage['inputAttachment']) => void;
+  retryingInput?: boolean;
   onOpenRecords: () => void;
   onOpenFinancial: () => void;
   assistantPreferences: AssistantPreferences;
@@ -1407,6 +1415,8 @@ export function MainOffice({
         onReject={onReject}
         busyOperationId={busyOperationId}
         onOpenRecord={onOpenRecord}
+        onRetryInput={onRetryInput}
+        retryingInput={retryingInput}
         context={chatContext}
         smartSignal={smartSignal}
         inputState={inputState}

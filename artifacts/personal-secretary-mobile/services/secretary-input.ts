@@ -165,10 +165,25 @@ export function useSecretaryInputCapture(
     );
   }, [processCapturedAsset, retryableAsset, state]);
 
+  const retryAttachment = useCallback(async (attachment: LocalInputAttachment) => {
+    if (state !== 'idle') return;
+    await processCapturedAsset(
+      {
+        kind: attachment.kind,
+        uri: attachment.localUri,
+        mimeType: attachment.mimeType,
+      },
+      attachment.kind === 'voice'
+        ? 'تعذر إعادة تحويل التسجيل الصوتي. جرّب مرة أخرى.'
+        : 'تعذر إعادة قراءة صورة الفاتورة. جرّب مرة أخرى.',
+    );
+  }, [processCapturedAsset, state]);
+
   return {
     state,
     canRetry: Boolean(retryableAsset) && state === 'idle',
     retry,
+    retryAttachment,
     toggleVoice,
     pickReceipt,
   };
