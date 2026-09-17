@@ -776,7 +776,14 @@ function CentralSecretaryChat({
               { backgroundColor: colors.primary, opacity: pressed ? 0.72 : 1 },
             ]}
           >
-            <Feather name="zap" size={21} color={colors.primaryForeground} />
+            <View style={styles.centralChatPresenceMark}>
+              <View style={[styles.centralChatPresenceGlow, { backgroundColor: colors.primaryForeground }]} />
+              <View style={[styles.centralChatPresenceCore, { backgroundColor: colors.primary }]}>
+                <Feather name={isSending ? 'loader' : 'zap'} size={18} color={colors.primaryForeground} />
+              </View>
+              <View style={[styles.centralChatPresenceDot, styles.centralChatPresenceDotTop, { backgroundColor: colors.accent }]} />
+              <View style={[styles.centralChatPresenceDot, styles.centralChatPresenceDotSide, { backgroundColor: colors.primaryForeground }]} />
+            </View>
           </Pressable>
         )}
         <View style={styles.centralChatHeadingCopy}>
