@@ -101,7 +101,11 @@ class ApiSecretaryChatService implements SecretaryChatService {
 
 export const secretaryChatService: SecretaryChatService = new ApiSecretaryChatService(apiTransport);
 
-export function useSecretaryChatService(conversationId: string | null, conversationSearch = '') {
+export function useSecretaryChatService(
+  conversationId: string | null,
+  conversationSearch = '',
+  conversationsEnabled = true,
+) {
   const turnMutation = useMutation({
     mutationFn: (input: SecretaryChatTurnInput) => secretaryChatService.sendTurn(input),
   });
@@ -123,6 +127,7 @@ export function useSecretaryChatService(conversationId: string | null, conversat
     queryFn: () => secretaryChatService.listConversations(
       conversationSearch ? { search: conversationSearch } : undefined,
     ),
+    enabled: conversationsEnabled,
     staleTime: 20_000,
   });
 

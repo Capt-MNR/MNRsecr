@@ -72,7 +72,11 @@ export default function QuickSecretaryScreen() {
   const [MainWorkspace, setMainWorkspace] = useState<ComponentType<{ children: ReactNode }> | null>(null);
   const [MainModule, setMainModule] = useState<typeof MainFeature | null>(null);
   const queryClient = useQueryClient();
-  const secretaryChat = useSecretaryChatService(conversationToLoad, conversationSearch.trim());
+  const secretaryChat = useSecretaryChatService(
+    conversationToLoad,
+    conversationSearch.trim(),
+    activeView === 'home',
+  );
   const conversationQuery = secretaryChat.conversationQuery;
   const recentConversations = secretaryChat.conversationsQuery.data?.conversations ?? [];
   const visibleSuggestions = language === 'en'
