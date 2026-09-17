@@ -56,3 +56,44 @@ test("processed input cache is tenant-scoped and avoids duplicate provider work"
     else process.env.GEMINI_API_KEY = originalApiKey;
   }
 });
+
+test("concurrent processing for the same scoped input shares one provider flight", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalApiKey = process.env.GEMINI_API_KEY;
+  let fetchCount = 0;
+  process.env.GEMINI_API_KEY = "test-key";
+  globalThis.fetch = async () => {
+    fetchCount += 1;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    return new Response(JSON.stringify({
+      candidates: [{
+        content: {
+          parts: [{
+            text: JSON.stringify({ text: "تسجيل صوتي تجريبي" }),
+          }],
+        },
+      }],
+    }), { status: 200 });
+  };
+
+  const input = {
+    kind: "voice" as const,
+    mimeType: "audio/m4a",
+    base64: Buffer.from("concurrent-voice-fixture").toString("base64"),
+  };
+  try {
+    const [first, second] = await Promise.all([
+      processInputAsset(input, { tenantId: "tenant-concurrent", userId: "user-a" }),
+      processInputAsset(input, { tenantId: "tenant-concurrent", userId: "user-a" }),
+    ]);
+
+    assert.equal(fetchCount, 1);
+    assert.equal(first.inputId, second.inputId);
+    assert.equal(first.processing.cacheHit, false);
+    assert.equal(second.processing.cacheHit, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalApiKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = originalApiKey;
+  }
+});
