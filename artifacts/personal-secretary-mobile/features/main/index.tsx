@@ -718,6 +718,7 @@ type SecretaryChatProps = {
   compact?: boolean;
   expanded?: boolean;
   onToggleExpanded?: () => void;
+  onOpenPearlSheet?: (tab: 'records' | 'context') => void;
 };
 
 function CentralSecretaryChat({
@@ -741,6 +742,7 @@ function CentralSecretaryChat({
   compact = false,
   expanded = false,
   onToggleExpanded,
+  onOpenPearlSheet,
   inputState = 'idle',
   onToggleVoice,
   onCaptureReceipt,
@@ -844,15 +846,15 @@ function CentralSecretaryChat({
             <Pressable
               testID="main-chat-suggestions-toggle"
               accessibilityRole="button"
-              accessibilityLabel={localized(language, 'فتح اقتراحات السكرتير', 'Open secretary suggestions')}
-              accessibilityState={{ expanded: suggestionsOpen }}
-              onPress={() => setSuggestionsOpen((open) => !open)}
+              accessibilityLabel={localized(language, onOpenPearlSheet ? 'فتح السجلات' : 'فتح اقتراحات السكرتير', onOpenPearlSheet ? 'Open records' : 'Open secretary suggestions')}
+              accessibilityState={onOpenPearlSheet ? undefined : { expanded: suggestionsOpen }}
+              onPress={() => onOpenPearlSheet ? onOpenPearlSheet('records') : setSuggestionsOpen((open) => !open)}
               style={({ pressed }) => [
                 styles.centralChatHeaderButton,
-                { backgroundColor: suggestionsOpen ? colors.muted : 'transparent', opacity: pressed ? 0.65 : 1 },
+                { backgroundColor: suggestionsOpen && !onOpenPearlSheet ? colors.muted : 'transparent', opacity: pressed ? 0.65 : 1 },
               ]}
             >
-              <Feather name="menu" size={18} color={colors.foreground} />
+              <Feather name={onOpenPearlSheet ? 'archive' : 'menu'} size={17} color={colors.foreground} />
             </Pressable>
             {onToggleExpanded && (
               <Pressable
@@ -1217,6 +1219,8 @@ export function MainOffice({
   });
   const [financialExpanded, setFinancialExpanded] = useState(false);
   const [chatExpanded, setChatExpanded] = useState(true);
+  const [pearlSheetOpen, setPearlSheetOpen] = useState(false);
+  const [pearlSheetTab, setPearlSheetTab] = useState<'records' | 'context'>('records');
   const [recentSearchOpen, setRecentSearchOpen] = useState(false);
   const recentSearchRef = useRef<TextInput>(null);
   const recordsQuery = useListRecords({
@@ -1270,6 +1274,11 @@ export function MainOffice({
     onFocusChat();
   }
 
+  function openPearlSheet(tab: 'records' | 'context') {
+    setPearlSheetTab(tab);
+    setPearlSheetOpen(true);
+  }
+
   const financialSections = recordSections(recordsQuery.data);
   const commitmentSection = financialSections.find((section) => section.key === 'commitments');
   const latestEdits = context ? [
@@ -1311,6 +1320,7 @@ export function MainOffice({
       meta: localized(language, 'تذكير محدث', 'Reminder updated'),
     })),
   ].slice(0, 5) : [];
+  const pearlSheetRecords = latestEdits.slice(0, 3);
   const normalizedSearch = conversationSearch.trim().toLocaleLowerCase();
   const filteredLatestEdits = normalizedSearch
     ? latestEdits.filter((edit) => [
@@ -1498,7 +1508,110 @@ export function MainOffice({
         inputReview={inputReview}
         onChangeInputReview={onChangeInputReview}
         onClearInputReview={onClearInputReview}
+        onOpenPearlSheet={openPearlSheet}
       />
+
+      <View
+        testID="pearl-record-sheet"
+        style={[
+          styles.pearlSheet,
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+            shadowColor: colors.foreground,
+            transform: [{ translateY: pearlSheetOpen ? 0 : 238 }],
+          },
+        ]}
+      >
+        <Pressable
+          testID="pearl-sheet-handle"
+          accessibilityRole="button"
+          accessibilityLabel={pearlSheetOpen ? localized(language, 'تصغير السجلات والسياق', 'Collapse records and context') : localized(language, 'فتح السجلات والسياق', 'Open records and context')}
+          onPress={() => setPearlSheetOpen((open) => !open)}
+          style={styles.pearlSheetHandleZone}
+        >
+          <View style={[styles.pearlSheetHandle, { backgroundColor: colors.mutedForeground }]} />
+        </Pressable>
+        <View style={styles.pearlSheetHeading}>
+          <View style={styles.pearlSheetHeadingCopy}>
+            <Text style={[styles.pearlSheetTitle, { color: colors.foreground }]}>
+              {localized(language, 'السجلات والسياق', 'Records & context')}
+            </Text>
+            <Text style={[styles.pearlSheetHint, { color: colors.mutedForeground }]}>
+              {localized(language, 'اربط ما قيل بما حُفظ', 'Connect what was said to what was saved')}
+            </Text>
+          </View>
+          <Text style={[styles.pearlSheetCount, { color: colors.mutedForeground, backgroundColor: colors.muted }]}>
+            {contextualRecordCount} {localized(language, 'عناصر', 'items')}
+          </Text>
+        </View>
+        {pearlSheetOpen && (
+          <>
+            <View style={styles.pearlSheetTabs}>
+              {(['records', 'context'] as const).map((tab) => (
+                <Pressable
+                  key={tab}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: pearlSheetTab === tab }}
+                  onPress={() => setPearlSheetTab(tab)}
+                  style={[
+                    styles.pearlSheetTab,
+                    pearlSheetTab === tab && { backgroundColor: colors.muted },
+                  ]}
+                >
+                  <Text style={[styles.pearlSheetTabText, { color: pearlSheetTab === tab ? colors.foreground : colors.mutedForeground }]}>
+                    {tab === 'records' ? localized(language, 'السجلات', 'Records') : localized(language, 'الصورة الأكبر', 'Bigger picture')}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            {pearlSheetTab === 'records' ? (
+              <View style={styles.pearlSheetRecordList}>
+                {pearlSheetRecords.length > 0 ? pearlSheetRecords.map((item) => (
+                  <Pressable
+                    key={item.id}
+                    accessibilityRole="button"
+                    onPress={() => {
+                      setPearlSheetOpen(false);
+                      onOpenRecord(item.record);
+                    }}
+                    style={({ pressed }) => [
+                      styles.pearlSheetRecord,
+                      { backgroundColor: colors.muted, borderColor: colors.border, opacity: pressed ? 0.68 : 1 },
+                    ]}
+                  >
+                    <View style={[styles.pearlSheetRecordIcon, { backgroundColor: colors.card }]}>
+                      <Feather name={item.icon} size={14} color={colors.primary} />
+                    </View>
+                    <View style={styles.pearlSheetRecordCopy}>
+                      <Text style={[styles.pearlSheetRecordTitle, { color: colors.foreground }]} numberOfLines={1}>{item.record.title}</Text>
+                      <Text style={[styles.pearlSheetRecordMeta, { color: colors.mutedForeground }]} numberOfLines={1}>{item.meta} · {item.record.subtitle}</Text>
+                    </View>
+                    <Text style={[styles.pearlSheetRecordTrailing, { color: colors.mutedForeground }]} numberOfLines={1}>{item.record.trailing ?? ''}</Text>
+                    <Feather name="chevron-left" size={14} color={colors.mutedForeground} />
+                  </Pressable>
+                )) : (
+                  <Text style={[styles.pearlSheetEmpty, { color: colors.mutedForeground }]}>
+                    {localized(language, 'ستظهر السجلات المرتبطة هنا بعد أول تحديث.', 'Linked records will appear here after the first update.')}
+                  </Text>
+                )}
+              </View>
+            ) : (
+              <View style={[styles.pearlSheetContext, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+                <View style={[styles.pearlSheetContextIcon, { backgroundColor: colors.card }]}>
+                  <Feather name="shield" size={15} color={colors.primary} />
+                </View>
+                <Text style={[styles.pearlSheetContextTitle, { color: colors.foreground }]}>
+                  {localized(language, 'خريطة اليوم كما فهمها السكرتير', 'Today’s context map')}
+                </Text>
+                <Text style={[styles.pearlSheetContextText, { color: colors.mutedForeground }]}>
+                  {localized(language, `${contextualRecordCount} عناصر مرتبطة بالمحادثة الحالية.`, `${contextualRecordCount} items are linked to the current conversation.`)}
+                </Text>
+              </View>
+            )}
+          </>
+        )}
+      </View>
 
       {!chatExpanded && !todayQuery.isLoading && !todayQuery.isError && contextData && (
         <>
@@ -3781,10 +3894,14 @@ export const styles = StyleSheet.create({
   centralChatComposerExpanded: {
     minHeight: 58,
     marginTop: 10,
+    marginBottom: 38,
     borderRadius: 17,
     borderWidth: 1,
     paddingLeft: 7,
     paddingRight: 8,
+    position: 'relative',
+    zIndex: 15,
+    elevation: 15,
   },
   centralChatInputExpanded: {
     paddingTop: 12,
@@ -3881,6 +3998,158 @@ export const styles = StyleSheet.create({
   centralChatPromptText: {
     fontSize: 10,
     fontWeight: '600',
+    textAlign: 'right',
+  },
+  pearlSheet: {
+    position: 'absolute',
+    right: 7,
+    bottom: 0,
+    left: 7,
+    zIndex: 8,
+    height: 300,
+    borderRadius: 27,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+    shadowOpacity: 0.16,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: -8 },
+    elevation: 8,
+  },
+  pearlSheetHandleZone: {
+    height: 31,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pearlSheetHandle: {
+    width: 42,
+    height: 4,
+    borderRadius: 4,
+    opacity: 0.42,
+  },
+  pearlSheetHeading: {
+    minHeight: 47,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  pearlSheetHeadingCopy: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  pearlSheetTitle: {
+    width: '100%',
+    fontSize: 13,
+    fontWeight: '800',
+    textAlign: 'right',
+  },
+  pearlSheetHint: {
+    width: '100%',
+    marginTop: 2,
+    fontSize: 8,
+    textAlign: 'right',
+  },
+  pearlSheetCount: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    overflow: 'hidden',
+    fontSize: 8,
+    textAlign: 'center',
+  },
+  pearlSheetTabs: {
+    paddingTop: 4,
+    paddingBottom: 7,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(120, 115, 140, 0.18)',
+    flexDirection: 'row-reverse',
+    gap: 5,
+  },
+  pearlSheetTab: {
+    minHeight: 28,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pearlSheetTabText: {
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  pearlSheetRecordList: {
+    paddingTop: 9,
+    gap: 6,
+  },
+  pearlSheetRecord: {
+    minHeight: 49,
+    paddingHorizontal: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pearlSheetRecordIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pearlSheetRecordCopy: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  pearlSheetRecordTitle: {
+    width: '100%',
+    fontSize: 10,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  pearlSheetRecordMeta: {
+    width: '100%',
+    marginTop: 2,
+    fontSize: 8,
+    textAlign: 'right',
+  },
+  pearlSheetRecordTrailing: {
+    maxWidth: 66,
+    fontSize: 8,
+    textAlign: 'right',
+  },
+  pearlSheetEmpty: {
+    paddingTop: 15,
+    fontSize: 10,
+    lineHeight: 17,
+    textAlign: 'center',
+  },
+  pearlSheetContext: {
+    marginTop: 10,
+    padding: 12,
+    borderRadius: 15,
+    borderWidth: 1,
+    alignItems: 'flex-end',
+  },
+  pearlSheetContextIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    marginBottom: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pearlSheetContextTitle: {
+    width: '100%',
+    fontSize: 11,
+    fontWeight: '800',
+    textAlign: 'right',
+  },
+  pearlSheetContextText: {
+    width: '100%',
+    marginTop: 5,
+    fontSize: 9,
+    lineHeight: 16,
     textAlign: 'right',
   },
   officeList: {

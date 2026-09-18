@@ -307,9 +307,15 @@ export default function MainRoute() {
             onPress={() => setDrawerOpen(true)}
             style={({ pressed }) => [styles.brandBlock, { opacity: pressed ? 0.7 : 1 }]}
           >
+            <View style={[styles.brandMark, { backgroundColor: colors.primary }]}>
+              <Feather name="zap" size={17} color={colors.primaryForeground} />
+            </View>
             <View>
-              <Text style={[styles.brandName, { color: colors.foreground }]}>صباح الخير، محمد</Text>
-              <Text style={[styles.availabilityText, { color: colors.mutedForeground }]}>ملخصك الذكي جاهز</Text>
+              <Text style={[styles.brandName, { color: colors.foreground }]}>سكرتيرك الذكي</Text>
+              <View style={styles.availability}>
+                <View style={[styles.statusDot, { backgroundColor: colors.accent }]} />
+                <Text style={[styles.availabilityText, { color: colors.mutedForeground }]}>حاضر في سياقك · يتعلم من الحديث</Text>
+              </View>
             </View>
           </Pressable>
           <View style={styles.headerActions}>
