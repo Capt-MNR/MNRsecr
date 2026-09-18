@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import {
   ListSecondBrainMemoriesResponse,
+  ListSecondBrainMemoriesQueryParams,
   ArchiveSecondBrainMemoryParams,
   ArchiveSecondBrainMemoryResponse,
 } from "@workspace/api-zod";
@@ -17,7 +18,12 @@ router.get("/memories", async (req, res): Promise<void> => {
   const identity = requireIdentity(req, res);
   if (!identity) return;
   try {
-    const memories = await listSecondBrainMemories(identity);
+    const parsedQuery = ListSecondBrainMemoriesQueryParams.safeParse(req.query);
+    if (!parsedQuery.success) {
+      sendRouteError(req, res, 400, "فلاتر الذاكرة غير صالحة.", "INVALID_MEMORY_FILTERS");
+      return;
+    }
+    const memories = await listSecondBrainMemories(identity, parsedQuery.data);
     res.json(ListSecondBrainMemoriesResponse.parse({
       memories: memories.map(publicSecondBrainMemory),
     }));

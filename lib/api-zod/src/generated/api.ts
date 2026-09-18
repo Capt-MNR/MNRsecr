@@ -631,6 +631,16 @@ export const GetTodayContextResponse = zod.object({
 /**
  * @summary List active personal Second Brain memories
  */
+export const listSecondBrainMemoriesQuerySearchMax = 160;
+
+export const listSecondBrainMemoriesQueryStatusDefault = `active`;
+
+export const ListSecondBrainMemoriesQueryParams = zod.object({
+  "search": zod.coerce.string().max(listSecondBrainMemoriesQuerySearchMax).optional().describe('Search memory values and keys'),
+  "kind": zod.enum(['fact', 'preference', 'alias']).optional(),
+  "status": zod.enum(['active', 'archived']).default(listSecondBrainMemoriesQueryStatusDefault)
+})
+
 export const ListSecondBrainMemoriesResponse = zod.object({
   "memories": zod.array(zod.object({
   "id": zod.string().uuid(),

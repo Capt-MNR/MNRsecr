@@ -931,6 +931,33 @@ export type CreateTypedRelationshipParams = {
 relation: string;
 };
 
+export type ListSecondBrainMemoriesParams = {
+/**
+ * Search memory values and keys
+ * @maxLength 160
+ */
+search?: string;
+kind?: ListSecondBrainMemoriesKind;
+status?: ListSecondBrainMemoriesStatus;
+};
+
+export type ListSecondBrainMemoriesKind = typeof ListSecondBrainMemoriesKind[keyof typeof ListSecondBrainMemoriesKind];
+
+
+export const ListSecondBrainMemoriesKind = {
+  fact: 'fact',
+  preference: 'preference',
+  alias: 'alias',
+} as const;
+
+export type ListSecondBrainMemoriesStatus = typeof ListSecondBrainMemoriesStatus[keyof typeof ListSecondBrainMemoriesStatus];
+
+
+export const ListSecondBrainMemoriesStatus = {
+  active: 'active',
+  archived: 'archived',
+} as const;
+
 export type ListConversationsParams = {
 search?: string;
 };

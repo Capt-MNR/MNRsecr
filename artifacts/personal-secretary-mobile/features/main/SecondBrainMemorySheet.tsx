@@ -1,5 +1,6 @@
 import {
   getListSecondBrainMemoriesQueryKey,
+  type ListSecondBrainMemoriesParams,
   useArchiveSecondBrainMemory,
   useListSecondBrainMemories,
   type SecondBrainMemory,
@@ -13,6 +14,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
@@ -51,9 +53,18 @@ export function SecondBrainMemorySheet({
 }) {
   const queryClient = useQueryClient();
   const [archivingId, setArchivingId] = useState<string | null>(null);
-  const memoriesQuery = useListSecondBrainMemories({
+  const [searchDraft, setSearchDraft] = useState('');
+  const [search, setSearch] = useState('');
+  const [kind, setKind] = useState<ListSecondBrainMemoriesParams['kind']>();
+  const [status, setStatus] = useState<NonNullable<ListSecondBrainMemoriesParams['status']>>('active');
+  const filters: ListSecondBrainMemoriesParams = {
+    ...(search ? { search } : {}),
+    ...(kind ? { kind } : {}),
+    status,
+  };
+  const memoriesQuery = useListSecondBrainMemories(filters, {
     query: {
-      queryKey: getListSecondBrainMemoriesQueryKey(),
+      queryKey: getListSecondBrainMemoriesQueryKey(filters),
       enabled: visible,
       staleTime: 0,
     },
@@ -128,14 +139,100 @@ export function SecondBrainMemorySheet({
                   'Remove a memory without changing conversations or official records.',
                 )}
               </Text>
+              <View style={[styles.searchBox, { borderColor: colors.border, backgroundColor: colors.card }]}>
+                <Feather name="search" size={15} color={colors.mutedForeground} />
+                <TextInput
+                  value={searchDraft}
+                  onChangeText={setSearchDraft}
+                  onSubmitEditing={() => setSearch(searchDraft.trim())}
+                  returnKeyType="search"
+                  placeholder={localized(language, 'ابحث في الذاكرة', 'Search memory')}
+                  placeholderTextColor={colors.mutedForeground}
+                  style={[styles.searchInput, { color: colors.foreground }]}
+                  accessibilityLabel={localized(language, 'البحث في الذاكرة', 'Search personal memory')}
+                />
+                {searchDraft.length > 0 && (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={localized(language, 'مسح البحث', 'Clear search')}
+                    onPress={() => {
+                      setSearchDraft('');
+                      setSearch('');
+                    }}
+                    style={styles.clearSearch}
+                  >
+                    <Feather name="x" size={14} color={colors.mutedForeground} />
+                  </Pressable>
+                )}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={localized(language, 'تطبيق البحث', 'Apply search')}
+                  onPress={() => setSearch(searchDraft.trim())}
+                  style={[styles.searchButton, { backgroundColor: colors.primary }]}
+                >
+                  <Text style={[styles.searchButtonText, { color: colors.primaryForeground }]}>
+                    {localized(language, 'بحث', 'Search')}
+                  </Text>
+                </Pressable>
+              </View>
+              <View style={styles.filterRow}>
+                {([
+                  [undefined, 'الكل', 'All'],
+                  ['fact', 'معلومات', 'Facts'],
+                  ['preference', 'تفضيلات', 'Preferences'],
+                  ['alias', 'أسماء بديلة', 'Aliases'],
+                ] as const).map(([value, arabicLabel, englishLabel]) => (
+                  <Pressable
+                    key={value ?? 'all'}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: kind === value }}
+                    onPress={() => setKind(value)}
+                    style={[
+                      styles.filterChip,
+                      { borderColor: colors.border, backgroundColor: kind === value ? colors.primary : colors.muted },
+                    ]}
+                  >
+                    <Text style={[styles.filterChipText, { color: kind === value ? colors.primaryForeground : colors.mutedForeground }]}>
+                      {localized(language, arabicLabel, englishLabel)}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              <View style={styles.filterRow}>
+                {([
+                  ['active', 'النشطة', 'Active'],
+                  ['archived', 'الأرشيف', 'Archived'],
+                ] as const).map(([value, arabicLabel, englishLabel]) => (
+                  <Pressable
+                    key={value}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: status === value }}
+                    onPress={() => setStatus(value)}
+                    style={[
+                      styles.filterChip,
+                      { borderColor: colors.border, backgroundColor: status === value ? colors.foreground : colors.muted },
+                    ]}
+                  >
+                    <Text style={[styles.filterChipText, { color: status === value ? colors.background : colors.mutedForeground }]}>
+                      {localized(language, arabicLabel, englishLabel)}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
               {memories.length === 0 ? (
                 <View style={[styles.empty, { borderColor: colors.border }]}>
                   <Feather name="star" size={20} color={colors.primary} />
                   <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
-                    {localized(language, 'لا توجد ذاكرة محفوظة', 'No saved memories')}
+                    {search || kind
+                      ? localized(language, 'لا توجد نتائج مطابقة', 'No matching memories')
+                      : status === 'archived'
+                        ? localized(language, 'لا توجد ذاكرة مؤرشفة', 'No archived memories')
+                        : localized(language, 'لا توجد ذاكرة محفوظة', 'No saved memories')}
                   </Text>
                   <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
-                    {localized(language, 'قل: «افتكر إني بفضل الردود المختصرة».', 'Say: “Remember that I prefer concise replies.”')}
+                    {search || kind
+                      ? localized(language, 'جرّب تغيير البحث أو التصفية.', 'Try changing the search or filter.')
+                      : localized(language, 'قل: «افتكر إني بفضل الردود المختصرة».', 'Say: “Remember that I prefer concise replies.”')}
                   </Text>
                 </View>
               ) : memories.map((memory) => {
@@ -147,7 +244,7 @@ export function SecondBrainMemorySheet({
                         <Text style={[styles.kind, { color: colors.primary }]}>{kindLabel(language, memory.kind)}</Text>
                         <Text style={[styles.value, { color: colors.foreground }]}>{memory.value}</Text>
                       </View>
-                      <Pressable
+                      {status === 'active' && <Pressable
                         accessibilityRole="button"
                         accessibilityLabel={localized(language, `إزالة ${memory.value}`, `Remove ${memory.value}`)}
                         disabled={archiveMutation.isPending}
@@ -157,10 +254,11 @@ export function SecondBrainMemorySheet({
                         {isArchiving
                           ? <ActivityIndicator size="small" color={colors.destructive} />
                           : <Feather name="trash-2" size={15} color={colors.destructive} />}
-                      </Pressable>
+                      </Pressable>}
                     </View>
                     <Text style={[styles.meta, { color: colors.mutedForeground }]}>
                       {localized(language, 'آخر تأكيد', 'Confirmed')} · {formatDate(language, memory.lastConfirmedAt)}
+                      {status === 'archived' ? ` · ${localized(language, 'مؤرشفة', 'Archived')}` : ''}
                     </Text>
                   </View>
                 );
@@ -235,6 +333,48 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 20,
     marginBottom: 3,
+  },
+  searchBox: {
+    minHeight: 44,
+    borderWidth: 1,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 10,
+  },
+  searchInput: {
+    flex: 1,
+    minHeight: 40,
+    fontSize: 13,
+    textAlign: 'right',
+  },
+  clearSearch: {
+    padding: 4,
+  },
+  searchButton: {
+    borderRadius: 9,
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+  },
+  searchButtonText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  filterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
+  },
+  filterChip: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+  },
+  filterChipText: {
+    fontSize: 10,
+    fontWeight: '700',
   },
   card: {
     borderWidth: 1,

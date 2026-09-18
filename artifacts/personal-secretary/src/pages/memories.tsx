@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { ArrowRight, Brain, Clock3, LoaderCircle, RotateCcw, ShieldCheck, Sparkles, Trash2 } from 'lucide-react';
+import { ArrowRight, ArchiveRestore, Brain, Clock3, LoaderCircle, RotateCcw, Search, ShieldCheck, SlidersHorizontal, Sparkles, Trash2, X } from 'lucide-react';
 import { Link } from 'wouter';
 import {
   getListSecondBrainMemoriesQueryKey,
+  type ListSecondBrainMemoriesParams,
   useArchiveSecondBrainMemory,
   useListSecondBrainMemories,
 } from '@workspace/api-client-react';
@@ -31,10 +32,19 @@ function aliasLabel(key: string) {
 
 export default function Memories() {
   const queryClient = useQueryClient();
+  const [searchDraft, setSearchDraft] = useState('');
+  const [search, setSearch] = useState('');
+  const [kind, setKind] = useState<ListSecondBrainMemoriesParams['kind']>();
+  const [status, setStatus] = useState<NonNullable<ListSecondBrainMemoriesParams['status']>>('active');
   const [archivingId, setArchivingId] = useState<string | null>(null);
-  const memoriesQuery = useListSecondBrainMemories({
+  const filters: ListSecondBrainMemoriesParams = {
+    ...(search ? { search } : {}),
+    ...(kind ? { kind } : {}),
+    status,
+  };
+  const memoriesQuery = useListSecondBrainMemories(filters, {
     query: {
-      queryKey: getListSecondBrainMemoriesQueryKey(),
+      queryKey: getListSecondBrainMemoriesQueryKey(filters),
       staleTime: 0,
       refetchOnMount: 'always',
     },
@@ -50,6 +60,7 @@ export default function Memories() {
   });
 
   const memories = memoriesQuery.data?.memories ?? [];
+  const hasFilters = Boolean(search || kind || status === 'archived');
 
   function archiveMemory(id: string) {
     if (archiveMutation.isPending) return;
@@ -85,7 +96,7 @@ export default function Memories() {
         <div className="mt-6 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <ShieldCheck className="size-4 text-chart-3" />
-            <span>{memories.length} ذاكرة نشطة</span>
+            <span>{memories.length} {status === 'active' ? 'ذاكرة نشطة' : 'ذاكرة مؤرشفة'}</span>
           </div>
           <button
             type="button"
@@ -97,6 +108,78 @@ export default function Memories() {
             تحديث
           </button>
         </div>
+
+        <form
+          className="mt-5 rounded-2xl border border-border/70 bg-card/60 p-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setSearch(searchDraft.trim());
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <Search className="size-4 shrink-0 text-muted-foreground" />
+            <input
+              value={searchDraft}
+              onChange={(event) => setSearchDraft(event.target.value)}
+              placeholder="ابحث في الذاكرة..."
+              className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/65"
+              aria-label="البحث في الذاكرة"
+            />
+            {searchDraft && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchDraft('');
+                  setSearch('');
+                }}
+                className="rounded-md p-1 text-muted-foreground hover:bg-muted"
+                aria-label="مسح البحث"
+              >
+                <X className="size-4" />
+              </button>
+            )}
+            <button type="submit" className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground">
+              بحث
+            </button>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <SlidersHorizontal className="size-3.5 text-muted-foreground" />
+            {[
+              [undefined, 'الكل'],
+              ['fact', 'معلومات'],
+              ['preference', 'تفضيلات'],
+              ['alias', 'أسماء بديلة'],
+            ].map(([value, label]) => (
+              <button
+                key={value ?? 'all'}
+                type="button"
+                onClick={() => setKind(value as ListSecondBrainMemoriesParams['kind'])}
+                className={`rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors ${
+                  kind === value ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+            <span className="mx-1 h-4 w-px bg-border" />
+            {[
+              ['active', 'النشطة'],
+              ['archived', 'الأرشيف'],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setStatus(value as NonNullable<ListSecondBrainMemoriesParams['status']>)}
+                className={`rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors ${
+                  status === value ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {value === 'archived' && <ArchiveRestore className="ml-1 inline size-3" />}
+                {label}
+              </button>
+            ))}
+          </div>
+        </form>
 
         {memoriesQuery.isLoading && (
           <div className="mt-8 space-y-3">
@@ -116,9 +199,11 @@ export default function Memories() {
         {!memoriesQuery.isLoading && !memoriesQuery.isError && memories.length === 0 && (
           <div className="mt-8 rounded-2xl border border-dashed border-border bg-card/40 p-10 text-center">
             <Sparkles className="mx-auto size-6 text-primary" />
-            <h2 className="mt-3 font-serif text-xl">لا توجد ذاكرة محفوظة</h2>
+            <h2 className="mt-3 font-serif text-xl">
+              {hasFilters ? 'لا توجد نتائج مطابقة' : status === 'archived' ? 'لا توجد ذاكرة مؤرشفة' : 'لا توجد ذاكرة محفوظة'}
+            </h2>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              قل للسكرتير مثلًا: «افتكر إني بفضل الردود المختصرة».
+              {hasFilters ? 'جرّب تغيير البحث أو التصفية.' : 'قل للسكرتير مثلًا: «افتكر إني بفضل الردود المختصرة».'}
             </p>
           </div>
         )}
@@ -140,6 +225,7 @@ export default function Memories() {
                       </div>
                       <p className="mt-3 text-[15px] leading-7 text-foreground">{memory.value}</p>
                     </div>
+                    {status === 'active' && (
                     <button
                       type="button"
                       onClick={() => archiveMemory(memory.id)}
@@ -150,6 +236,7 @@ export default function Memories() {
                       {isArchiving ? <LoaderCircle className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
                       <span className="hidden sm:inline">إزالة</span>
                     </button>
+                    )}
                   </div>
                   <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border/60 pt-3 text-[11px] text-muted-foreground">
                     <span className="inline-flex items-center gap-1.5">
@@ -158,6 +245,7 @@ export default function Memories() {
                     </span>
                     <span>الثقة: {Math.round(memory.confidence * 100)}٪</span>
                     <span>تحدّثت: {formatDate(memory.updatedAt)}</span>
+                    {status === 'archived' && <span className="text-muted-foreground/80">مؤرشفة</span>}
                   </div>
                 </article>
               );

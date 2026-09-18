@@ -42,6 +42,7 @@ import type {
   LearningSignalReviewInput,
   LearningSignalReviewResponse,
   ListConversationsParams,
+  ListSecondBrainMemoriesParams,
   ListTypedRelationshipsParams,
   MobilePushTokenResponse,
   PersonGraphResponse,
@@ -2270,20 +2271,27 @@ export function useGetTodayContext<TData = Awaited<ReturnType<typeof getTodayCon
 
 
 
-export const getListSecondBrainMemoriesUrl = () => {
+export const getListSecondBrainMemoriesUrl = (params?: ListSecondBrainMemoriesParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/memories`
+  return stringifiedParams.length > 0 ? `/api/memories?${stringifiedParams}` : `/api/memories`
 }
 
 /**
  * @summary List active personal Second Brain memories
  */
-export const listSecondBrainMemories = async ( options?: Parameters<typeof customFetch>[1]): Promise<SecondBrainMemoryListResponse> => {
+export const listSecondBrainMemories = async (params?: ListSecondBrainMemoriesParams, options?: Parameters<typeof customFetch>[1]): Promise<SecondBrainMemoryListResponse> => {
 
-  return customFetch<SecondBrainMemoryListResponse>(getListSecondBrainMemoriesUrl(),
+  return customFetch<SecondBrainMemoryListResponse>(getListSecondBrainMemoriesUrl(params),
   {
     ...options,
     method: 'GET'
@@ -2296,23 +2304,23 @@ export const listSecondBrainMemories = async ( options?: Parameters<typeof custo
 
 
 
-export const getListSecondBrainMemoriesQueryKey = () => {
+export const getListSecondBrainMemoriesQueryKey = (params?: ListSecondBrainMemoriesParams,) => {
     return [
-    `/api/memories`
+    `/api/memories`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getListSecondBrainMemoriesQueryOptions = <TData = Awaited<ReturnType<typeof listSecondBrainMemories>>, TError = ErrorType<ErrorResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSecondBrainMemories>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getListSecondBrainMemoriesQueryOptions = <TData = Awaited<ReturnType<typeof listSecondBrainMemories>>, TError = ErrorType<ErrorResponse>>(params?: ListSecondBrainMemoriesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSecondBrainMemories>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getListSecondBrainMemoriesQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getListSecondBrainMemoriesQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSecondBrainMemories>>> = ({ signal }) => listSecondBrainMemories({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSecondBrainMemories>>> = ({ signal }) => listSecondBrainMemories(params, { signal, ...requestOptions });
 
 
 
@@ -2330,11 +2338,11 @@ export type ListSecondBrainMemoriesQueryError = ErrorType<ErrorResponse>
  */
 
 export function useListSecondBrainMemories<TData = Awaited<ReturnType<typeof listSecondBrainMemories>>, TError = ErrorType<ErrorResponse>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSecondBrainMemories>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: ListSecondBrainMemoriesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSecondBrainMemories>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getListSecondBrainMemoriesQueryOptions(options)
+  const queryOptions = getListSecondBrainMemoriesQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
