@@ -883,6 +883,36 @@ function CentralSecretaryChat({
         </View>
       )}
 
+      {!compact && expanded && onQuickPrompt && (
+        <ScrollView
+          horizontal
+          style={styles.centralChatPromptScroll}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.centralChatPromptRail}
+          keyboardShouldPersistTaps="handled"
+        >
+          {promptOptions.map(({ label, value }) => (
+            <Pressable
+              key={`rail-${value}`}
+              testID={`main-chat-prompt-rail-${value}`}
+              accessibilityRole="button"
+              accessibilityLabel={label}
+              onPress={() => onQuickPrompt(value)}
+              style={({ pressed }) => [
+                styles.centralChatPrompt,
+                {
+                  backgroundColor: colors.muted,
+                  borderColor: colors.border,
+                  opacity: pressed ? 0.65 : 1,
+                },
+              ]}
+            >
+              <Text style={[styles.centralChatPromptText, { color: colors.foreground }]}>{label}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      )}
+
       <ScrollView
         testID={compact ? 'record-context-transcript' : 'main-chat-transcript'}
         ref={transcriptRef}
@@ -969,7 +999,14 @@ function CentralSecretaryChat({
           )}
         </View>
       )}
-      <View style={[styles.centralChatComposer, expanded && styles.centralChatComposerExpanded, { backgroundColor: 'transparent', borderColor: 'transparent' }]}>
+      <View style={[
+        styles.centralChatComposer,
+        expanded && styles.centralChatComposerExpanded,
+        {
+          backgroundColor: expanded ? colors.card : 'transparent',
+          borderColor: expanded ? colors.border : 'transparent',
+        },
+      ]}>
         <View style={styles.centralChatInputActions}>
           {onToggleVoice && (
             <Pressable
@@ -1304,6 +1341,14 @@ export function MainOffice({
     : assistantPreferences.intelligence === 'fast'
       ? localized(language, 'رد سريع', 'fast response')
       : localized(language, 'سياق متوازن', 'balanced context')}`;
+  const parsedContextDate = contextData?.asOf ? new Date(contextData.asOf) : null;
+  const pearlDateLabel = parsedContextDate && !Number.isNaN(parsedContextDate.getTime())
+    ? new Intl.DateTimeFormat(language === 'en' ? 'en-US' : 'ar-EG', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+    }).format(parsedContextDate)
+    : localized(language, 'اليوم', 'Today');
   const summaryCards: Array<{
     key: string;
     label: string;
@@ -1405,6 +1450,23 @@ export function MainOffice({
           </Pressable>
         ))}
       </View>}
+
+      <View style={styles.pearlDateStrip}>
+        <View style={styles.pearlDateCopy}>
+          <Text style={[styles.pearlDateTitle, { color: colors.foreground }]}>{pearlDateLabel}</Text>
+          <Text style={[styles.pearlDateHint, { color: colors.mutedForeground }]}>
+            {localized(language, 'نواصل من آخر ما قيل، لا من شاشة جديدة', 'Continue from where you left off')}
+          </Text>
+        </View>
+        <View style={[styles.pearlLivePill, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+          <View style={[styles.pearlLiveDot, { backgroundColor: todayQuery.isFetching ? colors.primary : colors.accent }]} />
+          <Text style={[styles.pearlLiveText, { color: todayQuery.isFetching ? colors.primary : colors.accent }]}>
+            {todayQuery.isFetching
+              ? localized(language, 'يحدّث السياق', 'Updating context')
+              : localized(language, 'السياق حي', 'Context live')}
+          </Text>
+        </View>
+      </View>
 
       <CentralSecretaryChat
         colors={colors}
@@ -3765,7 +3827,13 @@ export const styles = StyleSheet.create({
   },
   centralChatPromptRail: {
     gap: 5,
-    paddingTop: 5,
+    paddingVertical: 4,
+    alignItems: 'center',
+  },
+  centralChatPromptScroll: {
+    height: 42,
+    flexGrow: 0,
+    flexShrink: 0,
   },
   centralChatSuggestionMenu: {
     marginTop: 9,
@@ -3879,6 +3947,49 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
+  },
+  pearlDateStrip: {
+    minHeight: 46,
+    paddingHorizontal: 2,
+    paddingVertical: 7,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  pearlDateCopy: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  pearlDateTitle: {
+    width: '100%',
+    fontSize: 13,
+    fontWeight: '800',
+    textAlign: 'right',
+  },
+  pearlDateHint: {
+    width: '100%',
+    marginTop: 2,
+    fontSize: 8,
+    textAlign: 'right',
+  },
+  pearlLivePill: {
+    minHeight: 27,
+    paddingHorizontal: 9,
+    borderRadius: 11,
+    borderWidth: 1,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 5,
+  },
+  pearlLiveDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+  },
+  pearlLiveText: {
+    fontSize: 8,
+    fontWeight: '800',
   },
   officeSummaryCard: {
     height: 48,
