@@ -30,3 +30,59 @@ storage_uri = "gcs://replit-rams-assets-worf/rams/assets/conversation:5384c018-5
 storage_version_token = "1789136498591521"
 content_type = "text/markdown"
 source_uri = "file://docs/architecture/rls-design.md"
+
+[[outputs]]
+id = "Cr2tBl0iZP6ZLEkc_8rmy"
+uri = "file://screenshots/main-populated-real-402.png"
+type = "image"
+title = "Main populated approval — 402×874"
+description = "Real Main conversation loaded from the isolated approval fixture before approval, with the approval editor visible."
+logical_id = "a26456c9-f626-4d59-84b9-a58b14471918"
+content_hash = "sha256:263d489704f8685e915a8ff7063b4baf5067e62885a53bbd05126a7248eca758"
+size = 110976
+mtime_ms = 1789739157164
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:2788b6d1-f4b6-41df-8786-d25333ca860d/a26456c9-f626-4d59-84b9-a58b14471918/18229751-7720-423d-9175-c016d24b588b"
+storage_version_token = "1789739339327753"
+content_type = "image/png"
+
+[[outputs]]
+id = "_PQHk_QSU4tol_u9osLt3"
+uri = "file://screenshots/main-populated-real-375.png"
+type = "image"
+title = "Main populated approval — 375×720"
+description = "Real Main conversation loaded from the isolated approval fixture before approval at the narrower viewport."
+logical_id = "85eabc3d-5e0a-4fac-96ca-b8420a01d2cc"
+content_hash = "sha256:bb263ec8f2f214ec63b5c91d793441f3b20ceb7669f06d04836afe0df867e30a"
+size = 100940
+mtime_ms = 1789739158264
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:2788b6d1-f4b6-41df-8786-d25333ca860d/85eabc3d-5e0a-4fac-96ca-b8420a01d2cc/241f57f4-d32e-4c00-abfd-f26795d8fd64"
+storage_version_token = "1789739339861135"
+content_type = "image/png"
+
+[[outputs]]
+id = "4DPwZhc6m_-L6iDi_PZc0"
+uri = "file://screenshots/main-populated-real-approved-402.png"
+type = "image"
+title = "Main completed approval — 402×874"
+description = "Real Main conversation after approving the record_expense operation through the existing UI."
+logical_id = "01ea14dc-e00c-417b-a1ed-d8ab829ab91b"
+content_hash = "sha256:cbc06f1507f1ca5a58dbb6318e2c20008ad9c3de7a0cf17eab11a0c5ff995fef"
+size = 119388
+mtime_ms = 1789739301257
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:2788b6d1-f4b6-41df-8786-d25333ca860d/01ea14dc-e00c-417b-a1ed-d8ab829ab91b/ae633dc5-477b-4df1-a4bb-20c1415d525f"
+storage_version_token = "1789739341087066"
+content_type = "image/png"
+
+[[outputs]]
+id = "xenqFPaViVU8gkzbnp3V6"
+uri = "file://screenshots/main-populated-real-approved-375.png"
+type = "image"
+title = "Main completed approval — 375×720"
+description = "Real Main conversation after approval at the narrower viewport."
+logical_id = "c21a31c8-a331-424d-b24e-dd7475585385"
+content_hash = "sha256:a46bae98b8eef0cb7df72178f5ecf333cdf7a6c3580a78231038ab454de606b7"
+size = 107610
+mtime_ms = 1789739301813
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:2788b6d1-f4b6-41df-8786-d25333ca860d/c21a31c8-a331-424d-b24e-dd7475585385/6e70b753-9dd0-4ca4-9270-e33325dad93d"
+storage_version_token = "1789739341603944"
+content_type = "image/png"
