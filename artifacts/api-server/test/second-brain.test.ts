@@ -5,9 +5,11 @@ import {
   conversationMemoryTable,
   db,
   peopleTable,
+  secondBrainCandidatesTable,
   secondBrainMemoriesTable,
 } from "@workspace/db";
 import {
+  parseSecondBrainCandidate,
   parseSecondBrainCommand,
   rememberSecondBrain,
   searchSecondBrain,
@@ -25,6 +27,14 @@ const otherIdentity = {
 };
 
 async function cleanup() {
+  await db.delete(secondBrainCandidatesTable).where(and(
+    eq(secondBrainCandidatesTable.tenantId, identity.tenantId),
+    eq(secondBrainCandidatesTable.ownerUserId, identity.userId),
+  ));
+  await db.delete(secondBrainCandidatesTable).where(and(
+    eq(secondBrainCandidatesTable.tenantId, otherIdentity.tenantId),
+    eq(secondBrainCandidatesTable.ownerUserId, otherIdentity.userId),
+  ));
   await db.delete(secondBrainMemoriesTable).where(and(
     eq(secondBrainMemoriesTable.tenantId, identity.tenantId),
     eq(secondBrainMemoriesTable.ownerUserId, identity.userId),
@@ -39,9 +49,19 @@ async function cleanup() {
   ));
 }
 
-test("parses explicit remember, preference, and recall commands", () => {
+test("parses explicit remember, inferred preference candidates, and recall commands", () => {
   assert.deepEqual(parseSecondBrainCommand("افتكر إني بحب الردود المختصرة")?.type, "remember");
-  assert.deepEqual(parseSecondBrainCommand("أنا بفضل الفواتير بالجنيه")?.type, "remember");
+  assert.equal(parseSecondBrainCommand("أنا بفضل الفواتير بالجنيه"), null);
+  assert.deepEqual(parseSecondBrainCandidate("أنا بفضل الفواتير بالجنيه"), {
+    memoryKind: "preference",
+    key: "preference:انا بفضل الفواتير بالجنيه",
+    value: "أنا بفضل الفواتير بالجنيه",
+    confidenceBps: 7000,
+    metadata: {
+      source: "inferred_user_statement",
+      suggestionType: "preference",
+    },
+  });
   assert.deepEqual(parseSecondBrainCommand("افتكر إن اسم ميدو هو محمد أحمد"), {
     type: "remember",
     memoryKind: "alias",
@@ -105,7 +125,12 @@ test("uses an explicit personal alias only for the owner's matching entity", asy
     memoryKind: "alias",
     key: "alias:ميدو",
     value: "محمد أحمد",
-    metadata: { alias: "ميدو", canonical: "محمد أحمد" },
+    metadata: {
+      alias: "ميدو",
+      canonical: "محمد أحمد",
+      entityType: "person",
+      entityId: person.id,
+    },
   });
 
   const own = await resolveEntity(identity, "person", "ميدو");
@@ -138,8 +163,8 @@ test("handles memory commands without calling the model gateway", async () => {
   };
   const runtime = new Phase2AgentRuntime(gateway);
   const conversationId = "memory-command-conversation";
-  const saved = await runtime.run(identity, {
-    message: "افتكر إني بفضل الردود المختصرة",
+  const suggested = await runtime.run(identity, {
+    message: "أنا بفضل الردود المختصرة",
     conversationId,
     requestId: "memory-command-save",
   });
@@ -149,8 +174,8 @@ test("handles memory commands without calling the model gateway", async () => {
     requestId: "memory-command-recall",
   });
 
-  assert.equal(saved.action?.type, "second_brain_memory_saved");
-  assert.match(recalled.assistantMessage, /الردود المختصرة/);
+  assert.equal(suggested.action?.type, "second_brain_memory_candidate_created");
+  assert.equal(recalled.assistantMessage, "لسه ما عنديش ملاحظات شخصية محفوظة عنك.");
   assert.equal(gatewayCalls, 0);
   await cleanup();
 });
