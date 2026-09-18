@@ -962,6 +962,7 @@ function CentralSecretaryChat({
             onRetryInput={onRetryInput}
             retryingInput={retryingInput}
             busyOperationId={busyOperationId}
+            pearlStyle={!compact}
           />
         ))}
         {isSending && (
@@ -3856,7 +3857,7 @@ export const styles = StyleSheet.create({
   },
   centralChatTitle: {
     width: '100%',
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '700',
     textAlign: 'right',
   },
@@ -3937,15 +3938,15 @@ export const styles = StyleSheet.create({
   },
   centralChatEmptyTitle: {
     marginTop: 12,
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
     textAlign: 'center',
   },
   centralChatEmptyText: {
     maxWidth: 280,
     marginTop: 6,
-    fontSize: 12,
-    lineHeight: 19,
+    fontSize: 11,
+    lineHeight: 18,
     textAlign: 'center',
   },
   centralChatTyping: {
@@ -4103,7 +4104,7 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   centralChatPromptText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '600',
     textAlign: 'right',
   },

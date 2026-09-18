@@ -343,6 +343,7 @@ export function MessageBubble({
   retryingInput = false,
   busyOperationId,
   compact = false,
+  pearlStyle = false,
 }: {
   message: LocalMessage;
   colors: ReturnType<typeof useColors>;
@@ -354,6 +355,7 @@ export function MessageBubble({
   retryingInput?: boolean;
   busyOperationId: string | null;
   compact?: boolean;
+  pearlStyle?: boolean;
 }) {
   const isUser = message.role === 'user';
   const approvalBusy = message.approval && busyOperationId === message.approval.operationId;
@@ -369,11 +371,16 @@ export function MessageBubble({
 
   return (
     <View style={[styles.messageRow, isUser ? styles.userRow : styles.assistantRow]}>
-      <View style={[styles.messageBubble, {
-        backgroundColor: isUser ? colors.primary : colors.card,
-        borderColor: isUser ? colors.primary : colors.border,
-      }]}>
-        <Text style={[styles.messageText, { color: isUser ? colors.primaryForeground : colors.foreground }]}>
+      <View style={[
+        styles.messageBubble,
+        pearlStyle && styles.pearlMessageBubble,
+        pearlStyle && (isUser ? styles.pearlUserMessageBubble : styles.pearlAssistantMessageBubble),
+        {
+          backgroundColor: isUser ? (pearlStyle ? colors.muted : colors.primary) : colors.card,
+          borderColor: colors.border,
+        },
+      ]}>
+        <Text style={[styles.messageText, pearlStyle && styles.pearlMessageText, { color: isUser && !pearlStyle ? colors.primaryForeground : colors.foreground }]}>
           {message.text}
         </Text>
         {message.inputAttachment && (
@@ -383,17 +390,17 @@ export function MessageBubble({
             retrying={retryingInput}
           />
         )}
-        <Text style={[styles.messageTime, { color: isUser ? colors.primaryForeground : colors.mutedForeground }]}>
+        <Text style={[styles.messageTime, { color: isUser && !pearlStyle ? colors.primaryForeground : colors.mutedForeground }]}>
           {messageTime(message.createdAt)}
         </Text>
         {message.approval && (
-          <View style={[styles.approvalCard, { backgroundColor: colors.muted, borderColor: colors.border }]}>
-            <View style={styles.approvalHeading}>
+          <View style={[styles.approvalCard, pearlStyle && styles.pearlApprovalCard, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+            <View style={[styles.approvalHeading, pearlStyle && styles.pearlApprovalHeading]}>
               <Feather name="shield" size={15} color={colors.primary} />
-              <Text style={[styles.approvalTitle, { color: colors.foreground }]}>{message.approval.title}</Text>
+              <Text style={[styles.approvalTitle, pearlStyle && styles.pearlApprovalTitle, { color: colors.foreground }]}>{message.approval.title}</Text>
             </View>
             {message.approval.details.map((detail) => (
-              <Text key={detail} style={[styles.approvalDetail, { color: colors.mutedForeground }]}>{detail}</Text>
+              <Text key={detail} style={[styles.approvalDetail, pearlStyle && styles.pearlApprovalDetail, { color: colors.mutedForeground }]}>{detail}</Text>
             ))}
             {isResolved ? (
               <View style={styles.resolvedRow}>
@@ -415,7 +422,7 @@ export function MessageBubble({
                   onApprove={onApprove}
                 />
               )}
-              <View style={styles.approvalActions}>
+              <View style={[styles.approvalActions, pearlStyle && styles.pearlApprovalActions]}>
                 {canQuickApprove ? (
                   <Pressable
                     testID={`quick-approve-${message.approval.operationId}`}
@@ -423,10 +430,10 @@ export function MessageBubble({
                     accessibilityLabel="اعتماد العملية سريعًا"
                     onPress={() => onApprove(message.approval as Approval)}
                     disabled={Boolean(approvalBusy)}
-                    style={({ pressed }) => [styles.approveButton, { backgroundColor: colors.primary, opacity: pressed || approvalBusy ? 0.65 : 1 }]}
+                   style={({ pressed }) => [styles.approveButton, pearlStyle && styles.pearlApproveButton, { backgroundColor: colors.primary, opacity: pressed || approvalBusy ? 0.65 : 1 }]}
                   >
                     {approvalBusy ? <ActivityIndicator size="small" color={colors.primaryForeground} /> : <Feather name="check" size={16} color={colors.primaryForeground} />}
-                    <Text style={[styles.approveText, { color: colors.primaryForeground }]}>اعتماد</Text>
+                   <Text style={[styles.approveText, pearlStyle && styles.pearlApproveText, { color: colors.primaryForeground }]}>اعتماد</Text>
                   </Pressable>
                 ) : !compact ? <Pressable
                   testID={`approve-${message.approval.operationId}`}
@@ -434,10 +441,10 @@ export function MessageBubble({
                   accessibilityLabel="اعتماد العملية"
                    onPress={() => onApprove(message.approval as Approval)}
                   disabled={Boolean(approvalBusy)}
-                  style={({ pressed }) => [styles.approveButton, { backgroundColor: colors.primary, opacity: pressed || approvalBusy ? 0.65 : 1 }]}
+                   style={({ pressed }) => [styles.approveButton, pearlStyle && styles.pearlApproveButton, { backgroundColor: colors.primary, opacity: pressed || approvalBusy ? 0.65 : 1 }]}
                 >
                   {approvalBusy ? <ActivityIndicator size="small" color={colors.primaryForeground} /> : <Feather name="check" size={16} color={colors.primaryForeground} />}
-                  <Text style={[styles.approveText, { color: colors.primaryForeground }]}>اعتماد</Text>
+                  <Text style={[styles.approveText, pearlStyle && styles.pearlApproveText, { color: colors.primaryForeground }]}>اعتماد</Text>
                 </Pressable> : null}
                 {compact && !canQuickApprove && onOpenMain && (
                   <Pressable
@@ -458,10 +465,10 @@ export function MessageBubble({
                   accessibilityLabel="رفض العملية"
                   onPress={() => onReject(message.approval as Approval)}
                   disabled={Boolean(approvalBusy)}
-                  style={({ pressed }) => [styles.rejectButton, { borderColor: colors.border, opacity: pressed || approvalBusy ? 0.65 : 1 }]}
+                   style={({ pressed }) => [styles.rejectButton, pearlStyle && styles.pearlRejectButton, { borderColor: colors.border, opacity: pressed || approvalBusy ? 0.65 : 1 }]}
                 >
                   <Feather name="x" size={16} color={colors.mutedForeground} />
-                  <Text style={[styles.rejectText, { color: colors.mutedForeground }]}>رفض</Text>
+                  <Text style={[styles.rejectText, pearlStyle && styles.pearlRejectText, { color: colors.mutedForeground }]}>رفض</Text>
                 </Pressable>
               </View>
               </>

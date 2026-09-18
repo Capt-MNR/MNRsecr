@@ -73,9 +73,9 @@ and receipt input flow.
 | Element | Pearl value | Main target / implemented value | Difference |
 | --- | --- | --- | --- |
 | Message stack | flex column, gap 11, padding `17px 14px 174px` | real `MessageBubble` list in the expanded transcript with bottom reservation for the composer | Same vertical intent; bubble internals remain owned by the existing real component |
-| Bubble width | `max-width: 91%` | `MessageBubble` controls native width and text wrapping | Existing component boundary retained |
-| Bubble type | 12px text, 1.85 line-height, asymmetric 17/5 radius | real bubble styling and approval states remain active | Visual translation, not mock data replacement |
-| Approval card | 14px padding, 18px radius, pink glass gradient, action row | real approval card remains attached to the operation ID and approval callbacks | Exact color/gradient is theme-translated; behavior is real |
+| Bubble width | `max-width: 91%` | Main passes a Pearl-only message variant with 91% width and native text wrapping | Matched for Main without changing Record Detail or Quick |
+| Bubble type | 12px text, 1.85 line-height, asymmetric 17/5 radius | Main messages use 12px/22 line-height, asymmetric 17/5 radii, and a muted user surface | Close native translation; real message content remains authoritative |
+| Approval card | 14px padding, 18px radius, pink glass gradient, action row | real approval card remains attached to the operation ID and approval callbacks; Main uses Pearl spacing and compact action geometry | Exact color/gradient is theme-translated; behavior is real |
 | Records entry | Archive icon opens sheet at snap point 43 | Main chat heading archive action opens `pearlSheet` records tab | Matched interaction |
 | Live data | mockup uses three hardcoded records | Main uses `TodayContext` latest edits, bounded to three sheet rows | Data intentionally differs; geometry is preserved |
 
@@ -144,6 +144,8 @@ The current implementation in
 - 27px chat-card radius and expanded chat layout.
 - “حديثنا اليوم” heading and Pearl description.
 - Prompt rail with horizontal scrolling and touch-sized controls.
+- Pearl message/approval spacing for populated Main conversations, isolated from
+  Record Detail and Quick message styling.
 - Screen-level composer layering above the sheet.
 - Sheet radius, handle, tab, row, icon, and count geometry.
 - Sheet above bottom navigation, with composer above the sheet.
@@ -175,7 +177,7 @@ The current implementation in
 
 - `pnpm --filter @workspace/personal-secretary-mobile run typecheck` — passed.
 - `git diff --check` — passed.
-- Main was rendered at a 402×874 mobile viewport after the Pearl pass.
+- Main was rendered at 402×874 after the message-style pass.
 - Main was also rendered at 375×720 to check small-screen proportions.
 - The rendered check confirmed the sheet begins near the bottom at its 80% snap
   position, the composer sits above it with Pearl-like clearance, and the sheet
@@ -184,6 +186,8 @@ The current implementation in
   uses the measured rendered height rather than a fixed pixel offset.
 - Background, chat, and sheet surfaces now use `expo-linear-gradient` with
   theme-derived colors.
+- The empty state remained live and data-backed during both captures; no Pearl
+  demo messages or approval records were copied into Main.
 - No new JavaScript console errors were observed in that rendered check.
 - Dark-theme and direct drag/keyboard interaction coverage remain follow-up
   verification work because the available preview capture is static.
