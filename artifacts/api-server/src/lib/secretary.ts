@@ -33,6 +33,7 @@ import {
 import {
   createPendingOperation,
   displayForOperation,
+  rejectPendingOperationForConversation,
   type OperationExecutionResult,
   type PendingOperation,
 } from "./secretary-operations";
@@ -1107,6 +1108,34 @@ export class DeterministicAgentRuntime {
     const turnId = input.requestId ?? randomUUID();
     const conversationMemory = await loadConversationMemory(identity, conversationId);
     const message = input.message.trim();
+    if (/(?:غيرت\s+رأيي|غيرت\s+رايي|مش\s+عايز|لا\s+خلاص|تراجعت)/u.test(message)) {
+      const rejected = await rejectPendingOperationForConversation(identity, conversationId);
+      if (rejected) {
+        const result: TurnResult = {
+          conversationId,
+          turnId,
+          assistantMessage: "تم إلغاء العملية، ولن يتم تنفيذ أي تغيير.",
+          action: {
+            type: "approval_rejected",
+            operationId: rejected.operationId,
+            status: rejected.status,
+            toolName: rejected.toolName,
+          },
+          provider: "server",
+          model: "approval-operation",
+        };
+        await saveConversationTurn(identity, conversationMemory, {
+          turnId,
+          userMessage: message,
+          assistantMessage: result.assistantMessage,
+          action: result.action,
+        });
+        if (input.idempotencyKey) {
+          await this.persistence.saveIdempotentResponse(identity, input.idempotencyKey, result);
+        }
+        return result;
+      }
+    }
     const secondBrainSuggestion = parseSecondBrainCandidate(message);
     if (secondBrainSuggestion) {
       const candidate = await createSecondBrainCandidate(identity, {
@@ -1590,6 +1619,18 @@ function operationNumberArg(operation: PendingOperation, key: string): number | 
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
+function mutationVerification(toolResult: Record<string, unknown>): Record<string, unknown> {
+  const verification = toolResult.verification;
+  if (!verification || typeof verification !== "object" || Array.isArray(verification)) {
+    throw new Error("تعذر التحقق من نتيجة التغيير بعد التنفيذ.");
+  }
+  const record = verification as Record<string, unknown>;
+  if (record.state !== "verified") {
+    throw new Error("تعذر التحقق من نتيجة التغيير بعد التنفيذ.");
+  }
+  return record;
+}
+
 export async function executeApprovedOperation(
   identity: Identity,
   operation: PendingOperation,
@@ -1607,6 +1648,7 @@ export async function executeApprovedOperation(
   if (!toolResult.ok || toolResult.pendingApproval) {
     throw new Error(typeof toolResult.error === "string" ? toolResult.error : "تعذر تنفيذ العملية.");
   }
+  const verification = mutationVerification(toolResult);
   const resultRecord = (key: string) => {
     const value = toolResult[key];
     return value && typeof value === "object" && !Array.isArray(value)
@@ -1632,6 +1674,7 @@ export async function executeApprovedOperation(
       ...(Array.isArray(operation.args.projectCandidates)
         ? { projectCandidates: operation.args.projectCandidates }
         : {}),
+      verification,
     };
   } else if (operation.toolName === "create_project" && project) {
     assistantMessage = `تمام، سجلت مشروع ${String(project.name)}.`;
@@ -1656,6 +1699,7 @@ export async function executeApprovedOperation(
       personName: operationStringArg(operation, "personName"),
       projectName: operationStringArg(operation, "projectName"),
       description: expense.description,
+      verification,
     };
   } else if (operation.toolName === "create_person_and_link_person_to_project" && person) {
     assistantMessage = `تمام، ربطت ${String(person.name)} بالمشروع المحدد.`;
@@ -1667,6 +1711,7 @@ export async function executeApprovedOperation(
       projectId: operation.args.projectId,
       projectName: operation.args.projectName,
       relationship: operation.args.relationship,
+      verification,
     };
   } else if (operation.toolName === "create_reminder" && reminder) {
     assistantMessage = `حاضر، هفكرك: ${String(reminder.text)}.`;
@@ -1675,6 +1720,7 @@ export async function executeApprovedOperation(
       operationId: operation.operationId,
       reminderId: reminder.id,
       dueAt: reminder.dueAt instanceof Date ? reminder.dueAt.toISOString() : reminder.dueAt,
+      verification,
     };
   } else {
     assistantMessage = "تم تنفيذ التغيير المطلوب.";
@@ -1683,6 +1729,7 @@ export async function executeApprovedOperation(
       operationId: operation.operationId,
       toolName: operation.toolName,
       toolResult,
+      verification,
     };
   }
 
@@ -1702,8 +1749,10 @@ export async function saveApprovedOperationTurn(
 ): Promise<void> {
   if (!operation.conversationId) return;
   const memory = await loadConversationMemory(identity, operation.conversationId);
+  const turnId = `approval:${operation.operationId}`;
+  if (memory.recentTurns.some((turn) => turn.turnId === turnId)) return;
   await saveConversationTurn(identity, memory, {
-    turnId: crypto.randomUUID(),
+    turnId,
     userMessage: "موافقة على العملية",
     assistantMessage: result.assistantMessage,
     action: result.action,

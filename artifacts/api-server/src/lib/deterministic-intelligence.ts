@@ -110,6 +110,7 @@ const WRITE_WORDS = /سجل|سجّل|دفعت|دفع|صرف|اديت|أديت|ا
 
 const SYNONYMS: Array<[RegExp, string]> = [
   [/(?:النهارده|نهارده|اليوم|اليوم ده)/gu, "اليوم"],
+  [/(?:امبارح|أمبارح|امس|أمس|البارحه|البارحة)/gu, "امبارح"],
   [/(?:بعد بكره|بعد بكرة|بعد غدا|بعد غدًا|بعد غداً)/gu, "بعد بكره"],
   [/(?:بكره|بكرة|بكرا|باچر|باجر|باكر|غدا|غدًا|غداً)/gu, "بكره"],
   [/(?:الأسبوع ده|الاسبوع ده|الأسبوع الحالي|الاسبوع الحالي)/gu, "الاسبوع الحالي"],
@@ -285,7 +286,9 @@ function cairoLocalDate(
 
 export function parseArabicDateTime(value: string, now = new Date()): ParsedDateTime | null {
   const normalized = canonicalizeArabicText(value);
-  const dayOffset = normalized.includes("بعد بكره")
+  const dayOffset = normalized.includes("امبارح")
+    ? -1
+    : normalized.includes("بعد بكره")
     ? 2
     : normalized.includes("بكره")
       ? 1

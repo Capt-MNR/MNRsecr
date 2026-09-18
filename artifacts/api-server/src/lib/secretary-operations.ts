@@ -1,4 +1,4 @@
-import { and, eq, gt, isNull, lte, or } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, lte, or } from "drizzle-orm";
 import { db, secretaryOperationsTable, type SecretaryOperation } from "@workspace/db";
 import type { Identity } from "./secretary";
 import { persistedApprovalArgs } from "./approval-schemas";
@@ -304,6 +304,25 @@ export async function rejectOperation(
   const operation = await getOperation(identity, operationId);
   if (!operation) throw new Error("Pending operation was not found.");
   return operation;
+}
+
+export async function rejectPendingOperationForConversation(
+  identity: Identity,
+  conversationId: string,
+): Promise<PendingOperation | null> {
+  const [row] = await db.select().from(secretaryOperationsTable)
+    .where(and(
+      eq(secretaryOperationsTable.tenantId, identity.tenantId),
+      eq(secretaryOperationsTable.ownerUserId, identity.userId),
+      eq(secretaryOperationsTable.conversationId, conversationId),
+      eq(secretaryOperationsTable.status, "pending"),
+    ))
+    .orderBy(desc(secretaryOperationsTable.updatedAt))
+    .limit(1);
+  if (!row) return null;
+  const operation = await getOperation(identity, row.id);
+  if (!operation || operation.status !== "pending") return null;
+  return rejectOperation(identity, operation.operationId);
 }
 
 export async function completeOperation(

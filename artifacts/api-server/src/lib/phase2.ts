@@ -60,6 +60,7 @@ import {
 } from "./error-contract";
 import {
   createPendingOperation,
+  rejectPendingOperationForConversation,
 } from "./secretary-operations";
 import { annotateApprovalAction, approvalMessage } from "./secretary-confirmation";
 import {
@@ -99,6 +100,12 @@ import {
 } from "./financial-graph";
 import { createTypedRelationship, deleteTypedRelationship } from "./relationship-graph";
 import type { SecretaryChatContext, SecretaryChatPeer, TurnInputChannel } from "@workspace/api-zod";
+import {
+  brainLogFields,
+  createBrainDecisionEnvelope,
+  type BrainDecisionEnvelope,
+  type BrainVerificationState,
+} from "./brain-contract";
 
 const db = database;
 
@@ -1486,6 +1493,186 @@ function expenseDateRange(args: Record<string, unknown>): { from?: Date; to?: Da
   }
 }
 
+type MutationVerification = {
+  state: "verified" | "failed" | "unknown";
+  checks: string[];
+  entityId?: string;
+  reason?: string;
+};
+
+async function verifyMutationResult(
+  identity: Identity,
+  toolName: string,
+  result: ToolResult,
+  executor: DbExecutor,
+): Promise<MutationVerification> {
+  if (!result.ok || !WRITE_TOOLS.has(toolName)) {
+    return { state: "unknown", checks: [] };
+  }
+
+  const resourceByTool: Record<string, {
+    key: string;
+    table: typeof expensesTable | typeof remindersTable | typeof peopleTable | typeof projectsTable | typeof tasksTable | typeof commitmentsTable;
+  }> = {
+    record_expense: { key: "expense", table: expensesTable },
+    update_expense: { key: "expense", table: expensesTable },
+    delete_expense: { key: "expense", table: expensesTable },
+    create_reminder: { key: "reminder", table: remindersTable },
+    update_reminder: { key: "reminder", table: remindersTable },
+    delete_reminder: { key: "reminder", table: remindersTable },
+    create_person: { key: "person", table: peopleTable },
+    update_person: { key: "person", table: peopleTable },
+    delete_person: { key: "person", table: peopleTable },
+    create_project: { key: "project", table: projectsTable },
+    update_project: { key: "project", table: projectsTable },
+    delete_project: { key: "project", table: projectsTable },
+    create_task: { key: "task", table: tasksTable },
+    update_task: { key: "task", table: tasksTable },
+    delete_task: { key: "task", table: tasksTable },
+    create_commitment: { key: "commitment", table: commitmentsTable },
+    update_commitment: { key: "commitment", table: commitmentsTable },
+    delete_commitment: { key: "commitment", table: commitmentsTable },
+  };
+  const resource = resourceByTool[toolName];
+  const payload = resource
+    ? result[resource.key]
+      ?? result[`deleted${resource.key.slice(0, 1).toUpperCase()}${resource.key.slice(1)}`]
+    : undefined;
+  const entityId = payload && typeof payload === "object" && !Array.isArray(payload)
+    && typeof (payload as Record<string, unknown>).id === "string"
+    ? (payload as Record<string, unknown>).id as string
+    : undefined;
+
+  if (!resource || !entityId) {
+    const returnedEntity = Object.values(result).find((value) =>
+      value && typeof value === "object" && !Array.isArray(value)
+      && typeof (value as Record<string, unknown>).id === "string",
+    ) as Record<string, unknown> | undefined;
+    if (returnedEntity || result.deleted === true) {
+      return {
+        state: "verified",
+        checks: ["authoritative_write_result"],
+        ...(typeof returnedEntity?.id === "string" ? { entityId: returnedEntity.id } : {}),
+      };
+    }
+    return {
+      state: "failed",
+      checks: ["authoritative_write_result"],
+      reason: "write_result_has_no_authoritative_entity",
+    };
+  }
+
+  let row: { id: string } | undefined;
+  switch (toolName) {
+    case "record_expense":
+    case "update_expense":
+    case "delete_expense":
+      [row] = await executor.select({ id: expensesTable.id }).from(expensesTable)
+        .where(and(identityWhere(identity, expensesTable), eq(expensesTable.id, entityId))).limit(1);
+      break;
+    case "create_reminder":
+    case "update_reminder":
+    case "delete_reminder":
+      [row] = await executor.select({ id: remindersTable.id }).from(remindersTable)
+        .where(and(identityWhere(identity, remindersTable), eq(remindersTable.id, entityId))).limit(1);
+      break;
+    case "create_person":
+    case "update_person":
+    case "delete_person":
+      [row] = await executor.select({ id: peopleTable.id }).from(peopleTable)
+        .where(and(identityWhere(identity, peopleTable), eq(peopleTable.id, entityId))).limit(1);
+      break;
+    case "create_project":
+    case "update_project":
+    case "delete_project":
+      [row] = await executor.select({ id: projectsTable.id }).from(projectsTable)
+        .where(and(identityWhere(identity, projectsTable), eq(projectsTable.id, entityId))).limit(1);
+      break;
+    case "create_task":
+    case "update_task":
+    case "delete_task":
+      [row] = await executor.select({ id: tasksTable.id }).from(tasksTable)
+        .where(and(identityWhere(identity, tasksTable), eq(tasksTable.id, entityId))).limit(1);
+      break;
+    case "create_commitment":
+    case "update_commitment":
+    case "delete_commitment":
+      [row] = await executor.select({ id: commitmentsTable.id }).from(commitmentsTable)
+        .where(and(identityWhere(identity, commitmentsTable), eq(commitmentsTable.id, entityId))).limit(1);
+      break;
+  }
+  if (!row && !toolName.startsWith("delete_")) {
+    return {
+      state: "failed",
+      checks: ["authoritative_write_result", "post_mutation_read"],
+      entityId,
+      reason: "post_mutation_read_did_not_find_entity",
+    };
+  }
+  return {
+    state: toolName.startsWith("delete_")
+      ? row ? "failed" : "verified"
+      : row ? "verified" : "failed",
+    checks: ["authoritative_write_result", "post_mutation_read"],
+    entityId,
+    ...(toolName.startsWith("delete_") && row
+      ? { reason: "deleted_entity_still_exists" }
+      : {}),
+  };
+}
+
+async function captureExpectedRowVersion(
+  identity: Identity,
+  toolName: string,
+  args: Record<string, unknown>,
+  executor: DbExecutor,
+): Promise<Record<string, unknown>> {
+  if (!toolName.startsWith("update_") || args.expectedRowVersion !== undefined) return args;
+  const resourceByTool: Record<string, {
+    key: string;
+    table: typeof expensesTable | typeof remindersTable | typeof peopleTable | typeof projectsTable | typeof tasksTable | typeof commitmentsTable;
+  }> = {
+    update_expense: { key: "expenseId", table: expensesTable },
+    update_reminder: { key: "reminderId", table: remindersTable },
+    update_person: { key: "personId", table: peopleTable },
+    update_project: { key: "projectId", table: projectsTable },
+    update_task: { key: "taskId", table: tasksTable },
+    update_commitment: { key: "commitmentId", table: commitmentsTable },
+  };
+  const resource = resourceByTool[toolName];
+  const idValue = resource ? args[resource.key] : undefined;
+  const id = typeof idValue === "string" ? idValue : undefined;
+  if (!resource || !id) return args;
+  let row: { rowVersion: number } | undefined;
+  switch (toolName) {
+    case "update_expense":
+      [row] = await executor.select({ rowVersion: expensesTable.rowVersion }).from(expensesTable)
+        .where(and(identityWhere(identity, expensesTable), eq(expensesTable.id, id))).limit(1);
+      break;
+    case "update_reminder":
+      [row] = await executor.select({ rowVersion: remindersTable.rowVersion }).from(remindersTable)
+        .where(and(identityWhere(identity, remindersTable), eq(remindersTable.id, id))).limit(1);
+      break;
+    case "update_person":
+      [row] = await executor.select({ rowVersion: peopleTable.rowVersion }).from(peopleTable)
+        .where(and(identityWhere(identity, peopleTable), eq(peopleTable.id, id))).limit(1);
+      break;
+    case "update_project":
+      [row] = await executor.select({ rowVersion: projectsTable.rowVersion }).from(projectsTable)
+        .where(and(identityWhere(identity, projectsTable), eq(projectsTable.id, id))).limit(1);
+      break;
+    case "update_task":
+      [row] = await executor.select({ rowVersion: tasksTable.rowVersion }).from(tasksTable)
+        .where(and(identityWhere(identity, tasksTable), eq(tasksTable.id, id))).limit(1);
+      break;
+    case "update_commitment":
+      [row] = await executor.select({ rowVersion: commitmentsTable.rowVersion }).from(commitmentsTable)
+        .where(and(identityWhere(identity, commitmentsTable), eq(commitmentsTable.id, id))).limit(1);
+      break;
+  }
+  return row ? { ...args, expectedRowVersion: row.rowVersion } : args;
+}
+
 async function executeTool(
   identity: Identity,
   name: string,
@@ -1537,9 +1724,10 @@ async function executeTool(
   }
 
   if (WRITE_TOOLS.has(name) && !options.approvedOperationId) {
+    const versionedArgs = await captureExpectedRowVersion(identity, name, args, db);
     const operationArgs = name === "record_expense" && options.channel !== "quick"
-      ? { ...args, ...(await listApprovalCandidates(identity)) }
-      : args;
+      ? { ...versionedArgs, ...(await listApprovalCandidates(identity)) }
+      : versionedArgs;
     const pending = await createPendingOperation(identity, {
       conversationId: options.conversationId,
       sourceTurnId: options.sourceTurnId ?? options.requestId,
@@ -2485,6 +2673,8 @@ async function executeTool(
   if (result.ok && WRITE_TOOLS.has(name)) {
     const activityWriter = options.activityWriter ?? recordToolActivity;
     await activityWriter(identity, name, args, result, db);
+    const verification = await verifyMutationResult(identity, name, result, db);
+    result = { ...result, verification };
   }
 
   logger.info({
@@ -4202,7 +4392,11 @@ function finalResponseFromText(text: string, history: ToolHistoryEntry[]): Final
 function recoveryResponseAfterSuccessfulWrite(history: ToolHistoryEntry[]): FinalResponse | null {
   const successfulWrite = [...history]
     .reverse()
-    .find((entry) => WRITE_TOOLS.has(entry.name) && entry.result.ok);
+    .find((entry) =>
+      WRITE_TOOLS.has(entry.name)
+      && entry.result.ok
+      && (entry.result.verification as { state?: string } | undefined)?.state === "verified",
+    );
   if (!successfulWrite) return null;
 
   if (successfulWrite.name === "record_expense") {
@@ -4589,6 +4783,51 @@ export class Phase2AgentRuntime {
 
     const conversationId = input.conversationId || crypto.randomUUID();
     const conversationMemory = await loadConversationMemory(identity, conversationId);
+    if (!options.dryRun && /(?:غيرت\s+رأيي|غيرت\s+رايي|مش\s+عايز|لا\s+خلاص|تراجعت)/u.test(input.message)) {
+      const rejected = await rejectPendingOperationForConversation(identity, conversationId);
+      if (rejected) {
+        const result: Phase2TurnResult = {
+          conversationId,
+          turnId: requestId,
+          assistantMessage: "تم إلغاء العملية، ولن يتم تنفيذ أي تغيير.",
+          response: {
+            kind: "answer",
+            message: "تم إلغاء العملية، ولن يتم تنفيذ أي تغيير.",
+          },
+          action: {
+            type: "approval_rejected",
+            operationId: rejected.operationId,
+            status: rejected.status,
+            toolName: rejected.toolName,
+          },
+          provider: "server",
+          model: "approval-operation",
+        };
+        await saveConversationTurn(identity, conversationMemory, {
+          turnId: requestId,
+          userMessage: input.message.trim(),
+          assistantMessage: result.assistantMessage,
+          action: result.action,
+        });
+        if (input.idempotencyKey) await saveIdempotent(identity, input.idempotencyKey, result);
+        logger.info({
+          requestId,
+          conversationId,
+          ...brainLogFields(createBrainDecisionEnvelope({
+            requestId,
+            conversationId,
+            message: input.message,
+            semanticParse: featureFlags.deterministicIntelligence()
+              ? parseSemanticRequest(input.message)
+              : null,
+            hasConversationContext: true,
+            state: "rejected",
+            verification: { state: "not_required", required: false, checks: ["pending_operation_rejected"] },
+          })),
+        }, "secretary brain decision");
+        return result;
+      }
+    }
     const secondBrainCommand = parseSecondBrainCommand(input.message);
     if (secondBrainCommand?.type === "remember") {
       if (secondBrainCommand.memoryKind === "alias") {
@@ -4690,6 +4929,16 @@ export class Phase2AgentRuntime {
       governedSecondBrain.trace,
     );
     const secondBrainContext = formatSecondBrainContext(secondBrainMemories);
+    const initialBrainEnvelope = createBrainDecisionEnvelope({
+      requestId,
+      conversationId,
+      message: input.message,
+      semanticParse,
+      relationshipContext,
+      secondBrainTrace: governedSecondBrain.trace,
+      hasConversationContext: conversationMemory.recentTurns.length > 0 || Boolean(conversationMemory.summary),
+      state: "understanding",
+    });
     const financialFollowupAdjustment = featureFlags.deterministicIntelligence()
       ? parseFinancialFollowupAdjustment(input.message, conversationMemory.state)
       : null;
@@ -4725,6 +4974,15 @@ export class Phase2AgentRuntime {
       ...(secondBrainContext
         ? [{ role: "system" as const, text: secondBrainContext }]
         : []),
+      {
+        role: "system" as const,
+        text: `[قرار Brain v1 transient — ليس مصدرًا قانونيًا]\n${JSON.stringify({
+          strategy: initialBrainEnvelope.strategy,
+          intent: initialBrainEnvelope.intent,
+          context: initialBrainEnvelope.context,
+          risk: initialBrainEnvelope.risk,
+        })}`,
+      },
       { role: "user", text: input.message.trim() },
     ];
     let activeToolScope = classifyToolScope(semanticParse?.normalizedText ?? input.message);
@@ -4803,6 +5061,42 @@ export class Phase2AgentRuntime {
             patternExpenses,
           )
         : [];
+      const latestVerification = [...toolHistory]
+        .reverse()
+        .map((entry) => entry.result.verification)
+        .find((value) => value && typeof value === "object") as
+        | { state?: BrainVerificationState; required?: boolean; checks?: string[] }
+        | undefined;
+      const brainState = action?.type === "approval_required"
+        ? "awaiting_approval" as const
+        : finalResponse.kind === "error"
+          ? "failed" as const
+          : finalResponse.kind === "clarification"
+            ? "clarification" as const
+            : "completed" as const;
+      const brainEnvelope: BrainDecisionEnvelope = createBrainDecisionEnvelope({
+        requestId,
+        conversationId,
+        message: input.message,
+        semanticParse,
+        relationshipContext,
+        secondBrainTrace: governedSecondBrain.trace,
+        hasConversationContext: conversationMemory.recentTurns.length > 0 || Boolean(conversationMemory.summary),
+        toolCalls,
+        llmCalls,
+        state: brainState,
+        ...(latestVerification
+          ? { verification: latestVerification }
+          : action?.type === "approval_required"
+            ? {
+                verification: {
+                  state: "pending" as const,
+                  required: true,
+                  checks: ["approval_required", "authoritative_structured_result"],
+                },
+              }
+            : {}),
+      });
       const finalAction = {
         ...(compactActionForMemory(action) ?? {
           type: "llm_response",
@@ -4849,6 +5143,11 @@ export class Phase2AgentRuntime {
         latencyMs: Date.now() - startedAt,
         dryRun: options.dryRun ?? false,
       }, "agent final response");
+      logger.info({
+        requestId,
+        conversationId,
+        ...brainLogFields(brainEnvelope),
+      }, "secretary brain decision");
       logger.info({
         requestId,
         conversationId,
@@ -5384,6 +5683,19 @@ export class Phase2AgentRuntime {
     } catch (error) {
       const recovered = recoveryResponseAfterSuccessfulWrite(toolHistory);
       if (recovered) return persistResult(recovered);
+      if (error instanceof SecretaryError && isTransientProviderFailure(error)) {
+        logger.warn({
+          requestId,
+          conversationId,
+          errorCode: error.code,
+          toolCalls,
+          llmCalls,
+        }, "agent provider failure before verified mutation");
+        return persistResult({
+          kind: "error",
+          message: "لم يكتمل الطلب بسبب عطل مؤقت في الخدمة، ولم يتم تغيير أي بيانات. حاول مرة أخرى.",
+        });
+      }
       throw error;
     } finally {
       finishRequestInstrumentation();

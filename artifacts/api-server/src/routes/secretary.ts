@@ -38,6 +38,11 @@ import {
 } from "../lib/error-contract";
 import { dispatchMobilePush } from "../lib/mobile-push";
 import { processInputAsset } from "../lib/input-assets";
+import {
+  brainLogFields,
+  createBrainDecisionEnvelope,
+} from "../lib/brain-contract";
+import { parseSemanticRequest } from "../lib/deterministic-intelligence";
 
 const router: IRouter = Router();
 
@@ -159,6 +164,15 @@ async function executeExpenseApproval(
   if (!toolResult.ok || toolResult.pendingApproval) {
     throw new Error(typeof toolResult.error === "string" ? toolResult.error : "تعذر تنفيذ العملية.");
   }
+  const verification = toolResult.verification;
+  if (
+    !verification
+    || typeof verification !== "object"
+    || Array.isArray(verification)
+    || (verification as Record<string, unknown>).state !== "verified"
+  ) {
+    throw new Error("تعذر التحقق من نتيجة التغيير بعد التنفيذ.");
+  }
   const expense = toolResult.expense as Record<string, unknown> | undefined;
   return {
     conversationId: operation.conversationId ?? "",
@@ -173,6 +187,7 @@ async function executeExpenseApproval(
       ...(Array.isArray(operation.args.projectCandidates)
         ? { projectCandidates: operation.args.projectCandidates }
         : {}),
+      verification,
       args,
     },
     provider: "server",
@@ -284,6 +299,32 @@ router.post("/turns", async (req, res): Promise<void> => {
       conversationId: result.conversationId,
       inputId: parsed.data.inputId ?? undefined,
     }, "Secretary request completed");
+    if (result.provider === "development") {
+      const legacyBrain = createBrainDecisionEnvelope({
+        requestId: currentRequestId,
+        conversationId: result.conversationId,
+        message: parsed.data.message,
+        semanticParse: parseSemanticRequest(parsed.data.message),
+        hasConversationContext: Boolean(parsed.data.conversationId),
+        state: result.action?.type === "approval_required"
+          ? "awaiting_approval"
+          : result.action?.type === "approval_rejected"
+            ? "rejected"
+          : result.action?.type === "clarification_needed"
+              ? "clarification"
+              : "completed",
+        ...(result.action?.type === "approval_required"
+          ? {
+              verification: {
+                state: "pending" as const,
+                required: true,
+                checks: ["approval_required", "authoritative_structured_result"],
+              },
+            }
+          : {}),
+      });
+      req.log.info(brainLogFields(legacyBrain), "secretary brain decision");
+    }
     const operationId = result.action?.type === "approval_required"
       && typeof result.action.operationId === "string"
       ? result.action.operationId
@@ -412,6 +453,16 @@ router.post("/approvals/:operationId/approve", async (req, res): Promise<void> =
 
     const claim = await claimOperation(identity, operationId, argsOverride);
     if (claim.kind === "existing") {
+      if (claim.operation.status === "completed" && claim.operation.result) {
+        try {
+          await saveApprovedOperationTurn(identity, claim.operation, claim.operation.result);
+        } catch (error) {
+          req.log.warn({
+            operationId,
+            error: error instanceof Error ? error.message : "APPROVAL_RECONCILIATION_FAILED",
+          }, "Completed approval turn reconciliation failed");
+        }
+      }
       res.json(operationResultResponse(claim.operation));
       return;
     }
@@ -437,7 +488,14 @@ router.post("/approvals/:operationId/approve", async (req, res): Promise<void> =
     }
 
     const completed = await completeOperation(identity, operationId, result);
-    await saveApprovedOperationTurn(identity, claim.operation, result);
+    try {
+      await saveApprovedOperationTurn(identity, completed, result);
+    } catch (error) {
+      req.log.warn({
+        operationId,
+        error: error instanceof Error ? error.message : "APPROVAL_RECONCILIATION_FAILED",
+      }, "Completed approval turn reconciliation failed");
+    }
     res.json(operationResultResponse(completed));
   } catch (error) {
     sendError(req, res, error instanceof Error && error.message === "Pending operation was not found."
