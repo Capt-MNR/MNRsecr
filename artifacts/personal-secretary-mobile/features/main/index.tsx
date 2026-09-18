@@ -811,7 +811,7 @@ function CentralSecretaryChat({
           <View style={[styles.centralChatAmbientOrbSmall, { backgroundColor: colors.accent }]} />
         </View>
       )}
-      <View style={[styles.centralChatHeading, { borderBottomColor: colors.border }]}>
+         <View style={[styles.centralChatHeading, !compact && styles.centralChatHeadingPearl, { borderBottomColor: colors.border }]}>
         {!compact && (
           <Pressable
             testID="main-chat-focus"
@@ -895,7 +895,7 @@ function CentralSecretaryChat({
           horizontal
           style={styles.centralChatPromptScroll}
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.centralChatPromptRail}
+           contentContainerStyle={[styles.centralChatPromptRail, !compact && styles.centralChatPromptRailPearl]}
           keyboardShouldPersistTaps="handled"
         >
           {promptOptions.map(({ label, value }) => (
@@ -930,7 +930,9 @@ function CentralSecretaryChat({
         ]}
         contentContainerStyle={[
           styles.centralChatTranscriptContent,
+           !compact && styles.centralChatTranscriptContentPearl,
           !compact && expanded && transcriptMessages.length === 0 && styles.centralChatTranscriptEmptyContent,
+           !compact && expanded && transcriptMessages.length === 0 && styles.centralChatTranscriptEmptyContentPearl,
         ]}
         keyboardShouldPersistTaps="handled"
         nestedScrollEnabled
@@ -1071,7 +1073,7 @@ function CentralSecretaryChat({
           onSubmitEditing={onSend}
           placeholder={context
             ? localized(language, 'اكتب سؤالك عن هذا السياق…', 'Ask about this context…')
-            : localized(language, 'اكتب للسكرتير…', 'Write to your secretary…')}
+            : localized(language, 'أكمل حديثك هنا…', 'Continue your thought…')}
           placeholderTextColor={colors.mutedForeground}
           multiline
           maxLength={1000}
@@ -3193,13 +3195,13 @@ export const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    minHeight: 92,
+    minHeight: 70,
     paddingHorizontal: 18,
-    paddingBottom: 12,
+    paddingBottom: 0,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   headerTop: {
-    minHeight: 46,
+    minHeight: 40,
     flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -3210,14 +3212,14 @@ export const styles = StyleSheet.create({
     gap: 10,
   },
   brandMark: {
-    width: 36,
-    height: 36,
-    borderRadius: 13,
+    width: 34,
+    height: 34,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   brandName: {
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: '700',
     textAlign: 'right',
   },
@@ -3233,13 +3235,13 @@ export const styles = StyleSheet.create({
     borderRadius: 3,
   },
   availabilityText: {
-    fontSize: 11,
+    fontSize: 9,
     textAlign: 'right',
   },
   iconButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 13,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
@@ -3250,9 +3252,9 @@ export const styles = StyleSheet.create({
     gap: 8,
   },
   quickAccessBubble: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -3745,13 +3747,16 @@ export const styles = StyleSheet.create({
   },
   centralChatExpanded: {
     flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    height: 0,
     minHeight: 0,
-    marginTop: 8,
-    marginBottom: 6,
+    marginTop: 0,
+    marginBottom: 0,
     marginHorizontal: 0,
-    paddingHorizontal: 14,
-    paddingTop: 14,
-    paddingBottom: 10,
+    paddingHorizontal: 0,
+    paddingTop: 0,
+    paddingBottom: 0,
     borderRadius: 27,
     borderWidth: 1,
     justifyContent: 'flex-start',
@@ -3768,6 +3773,11 @@ export const styles = StyleSheet.create({
     gap: 9,
     paddingBottom: 11,
     borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  centralChatHeadingPearl: {
+    paddingHorizontal: 14,
+    paddingTop: 16,
+    paddingBottom: 13,
   },
   centralChatHeaderActions: {
     flexDirection: 'row-reverse',
@@ -3789,27 +3799,27 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   centralChatHeroIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 32,
+    height: 32,
+    borderRadius: 11,
   },
   centralChatPresenceMark: {
-    width: 38,
-    height: 38,
+    width: 32,
+    height: 32,
     alignItems: 'center',
     justifyContent: 'center',
   },
   centralChatPresenceGlow: {
     position: 'absolute',
-    width: 31,
-    height: 31,
-    borderRadius: 16,
-    opacity: 0.2,
-  },
-  centralChatPresenceCore: {
     width: 27,
     height: 27,
     borderRadius: 14,
+    opacity: 0.2,
+  },
+  centralChatPresenceCore: {
+    width: 23,
+    height: 23,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -3820,12 +3830,12 @@ export const styles = StyleSheet.create({
     borderRadius: 3,
   },
   centralChatPresenceDotTop: {
-    top: 1,
-    right: 5,
+    top: 0,
+    right: 3,
   },
   centralChatPresenceDotSide: {
-    bottom: 5,
-    left: 3,
+    bottom: 3,
+    left: 2,
   },
   centralChatAmbient: {
     ...StyleSheet.absoluteFill,
@@ -3911,8 +3921,8 @@ export const styles = StyleSheet.create({
     height: 0,
     maxHeight: 100000,
     minHeight: 0,
-    marginTop: 9,
-    paddingBottom: 88,
+    marginTop: 0,
+    paddingBottom: 174,
   },
   recordChatTranscript: {
     maxHeight: 220,
@@ -3921,32 +3931,41 @@ export const styles = StyleSheet.create({
     paddingVertical: 1,
     gap: 5,
   },
+  centralChatTranscriptContentPearl: {
+    paddingHorizontal: 14,
+    paddingTop: 17,
+    gap: 11,
+  },
   centralChatTranscriptEmptyContent: {
     flexGrow: 1,
     justifyContent: 'center',
   },
+  centralChatTranscriptEmptyContentPearl: {
+    justifyContent: 'flex-start',
+    paddingTop: 24,
+  },
   centralChatEmpty: {
     alignItems: 'center',
-    paddingHorizontal: 28,
+    paddingHorizontal: 22,
   },
   centralChatEmptyIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
   centralChatEmptyTitle: {
-    marginTop: 12,
-    fontSize: 16,
+    marginTop: 9,
+    fontSize: 13,
     fontWeight: '700',
     textAlign: 'center',
   },
   centralChatEmptyText: {
-    maxWidth: 280,
-    marginTop: 6,
-    fontSize: 11,
-    lineHeight: 18,
+    maxWidth: 270,
+    marginTop: 5,
+    fontSize: 10,
+    lineHeight: 16,
     textAlign: 'center',
   },
   centralChatTyping: {
@@ -3997,13 +4016,13 @@ export const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   centralChatComposerExpanded: {
-    minHeight: 58,
+    minHeight: 52,
     marginTop: 0,
     marginBottom: 0,
     borderRadius: 17,
     borderWidth: 1,
-    paddingLeft: 7,
-    paddingRight: 8,
+    paddingLeft: 6,
+    paddingRight: 7,
     position: 'absolute',
     left: 12,
     right: 12,
@@ -4012,12 +4031,12 @@ export const styles = StyleSheet.create({
     elevation: 40,
   },
   centralChatInputExpanded: {
-    paddingTop: 12,
-    paddingBottom: 11,
+    paddingTop: 7,
+    paddingBottom: 7,
   },
   centralChatInput: {
     flex: 1,
-    maxHeight: 58,
+    maxHeight: 50,
     paddingTop: 7,
     paddingBottom: 6,
     paddingHorizontal: 4,
@@ -4054,6 +4073,9 @@ export const styles = StyleSheet.create({
     gap: 5,
     paddingVertical: 4,
     alignItems: 'center',
+  },
+  centralChatPromptRailPearl: {
+    paddingHorizontal: 14,
   },
   centralChatPromptScroll: {
     height: 42,
@@ -4271,6 +4293,10 @@ export const styles = StyleSheet.create({
   },
   officeHome: {
     flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    height: '100%',
+    minHeight: 0,
     overflow: 'visible',
     paddingHorizontal: 15,
     paddingTop: 0,

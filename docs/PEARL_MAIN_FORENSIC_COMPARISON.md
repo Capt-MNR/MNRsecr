@@ -53,7 +53,7 @@ and receipt input flow.
 | --- | --- | --- | --- | --- |
 | Pearl header | `min-height: 70px`, `padding: 0 15px`, sticky glass header | Main product header was separate and dashboard-like | Product header remains for real navigation; internal Main hierarchy now starts with the Pearl date strip and chat surface | Mockup lines 202–207; `app/main.tsx` lines 295–326 |
 | Date strip | `padding: 17px 1px 14px` | No equivalent Pearl date/context strip | `pearlDateStrip`: min-height 46, padding 7px 2px, live date from `TodayContext` | Mockup lines 226–230; `index.tsx` styles |
-| Main chat title | `حديثنا اليوم`, 12px / 900 | Main title and extra status/actions competed with the chat | `حديثنا اليوم`, 15px / 700 in native rendering, with Pearl description and real records affordance | Mockup lines 347–354; `index.tsx` lines 825–835 |
+| Main chat title | `حديثنا اليوم`, 12px / 900 | Main title and extra status/actions competed with the chat | `حديثنا اليوم`, 13px native title with Pearl heading inset, description, and real records affordance | Mockup lines 347–354; `index.tsx` lines 825–835 |
 | Extra actions | Pearl has one records icon in the chat head | Main previously exposed expansion and quick actions in the Pearl state | Expansion and Quick actions are hidden when Pearl sheet integration is active; records remains meaningful | `index.tsx` lines 837–870 and 1085–1130 |
 | Visual hierarchy | Chat surface is the primary object | Main previously presented dashboard cards as a competing primary object | Chat is primary when expanded; dashboard summary remains available when collapsed rather than being deleted | Hierarchy |
 
@@ -64,15 +64,15 @@ and receipt input flow.
 | Chat radius | `27px` | `centralChatPanel.borderRadius: 27` and expanded radius 27 | Matched |
 | Chat surface | translucent radial/linear gradients, border, shadow, blur | Native semantic card colors with ambient orbs, border, and shadow | Geometry matched; exact gradient/backdrop blur translated to theme-safe native surfaces |
 | Chat height | `min-height: calc(100dvh - 186px)` | collapsed min-height 270; expanded flexes to available height | Equivalent responsive behavior, not a copied CSS viewport calculation |
-| Chat padding | heading `16px 14px 13px`; prompts/messages `14px` horizontal | native panel padding 14; heading and transcript have matching internal rhythm | Matched within React Native layout constraints |
-| Heading icon | `32px` spark tile, 11px asymmetric radius | native hero icon is 38px and uses a live secretary mark | Functionally meaningful icon retained; size is slightly larger to fit the existing native focus affordance |
-| Prompts | gap 7, padding `12px 14px 0`, 9px text | native rail height 42, gap 5, prompt min-height 34, 10px text | Close geometry; native text metrics require a slightly larger touch target |
+| Chat padding | heading `16px 14px 13px`; prompts/messages `14px` horizontal | expanded Main removes the extra outer panel padding; heading, prompt rail, and transcript each own the Pearl insets | Matched |
+| Heading icon | `32px` spark tile, 11px asymmetric radius | native hero icon is 32px and uses a live secretary mark | Matched geometry; glyph remains Feather |
+| Prompts | gap 7, padding `12px 14px 0`, 9px text | native rail uses 14px horizontal inset, gap 5, prompt min-height 34, 9px text | Close geometry; native touch target retained |
 
 ### 4. Messages, approval, and records entry
 
 | Element | Pearl value | Main target / implemented value | Difference |
 | --- | --- | --- | --- |
-| Message stack | flex column, gap 11, padding `17px 14px 174px` | real `MessageBubble` list in the expanded transcript with bottom reservation for the composer | Same vertical intent; bubble internals remain owned by the existing real component |
+| Message stack | flex column, gap 11, padding `17px 14px 174px` | real `MessageBubble` list uses Pearl insets/gap and reserves 174px below the screen-level composer | Matched for the Main transcript |
 | Bubble width | `max-width: 91%` | Main passes a Pearl-only message variant with 91% width and native text wrapping | Matched for Main without changing Record Detail or Quick |
 | Bubble type | 12px text, 1.85 line-height, asymmetric 17/5 radius | Main messages use 12px/22 line-height, asymmetric 17/5 radii, and a muted user surface | Close native translation; real message content remains authoritative |
 | Approval card | 14px padding, 18px radius, pink glass gradient, action row | real approval card remains attached to the operation ID and approval callbacks; Main uses Pearl spacing and compact action geometry | Exact color/gradient is theme-translated; behavior is real |
@@ -84,7 +84,7 @@ and receipt input flow.
 | Element | Pearl value | Main target / implemented value | Difference |
 | --- | --- | --- | --- |
 | Composer anchoring | `position: fixed`, left/right 12px, bottom `78px + safe-area + keyboard inset`, z-index 10 | expanded composer uses left/right 12px, absolute screen-level placement, z-index/elevation 40 | Matched layering intent; native parent layout replaces browser fixed positioning |
-| Composer size | min-height 58, padding 7/8, radius 17 | min-height 58, radius 17, native padding and row layout | Matched |
+| Composer size | min-height 58, padding 7/8, radius 17 | min-height 52, radius 17, reduced native padding and row layout | Partially matched: thinner native geometry preserves multiline input and receipt controls |
 | Input | 11px web input, 34px send button | multiline native input, max-height 58, 32px send button | Native input is multiline to preserve existing real Secretary Chat behavior |
 | Input actions | paperclip, voice, send | voice, camera, library, send | Main actions remain real and are not replaced by mockup-only paperclip behavior |
 | Keyboard | `visualViewport` calculates `--keyboard-inset` | `KeyboardAvoidingView` from `react-native-keyboard-controller` and safe-area offset | Platform-specific equivalent |
@@ -134,6 +134,24 @@ and receipt input flow.
   required because changing only a descendant z-index did not reliably keep it
   above the sheet.
 
+## SECOND VISUAL IMPLEMENTATION PASS
+
+This pass addresses the composition mismatch called out by the visual review.
+It changes the real Main layout rather than copying Pearl demo content.
+
+| Area | Status | Concrete result |
+| --- | --- | --- |
+| Composition | **MATCHED** | Main starts with the compact context strip, then gives the expanded real Secretary Chat the dominant flex region; collapsed dashboard summaries remain reachable through the existing toggle. |
+| Today/chat section | **MATCHED** | The expanded chat removes the extra outer padding and uses Pearl-owned heading, prompt, and transcript insets. “حديثنا اليوم” is a compact section heading, not a separate dashboard block. |
+| Chat viewport | **MATCHED** | The transcript starts at the top with 17px content inset, 11px message spacing, 174px composer clearance, and a flex/height contract that keeps the surface and its contents together. |
+| Empty state | **MATCHED** | The existing data-backed empty state is compact and top-positioned; it no longer centers a large hero inside the chat and cannot be mistaken for demo conversation content. |
+| Message geometry | **MATCHED** | Main-only Pearl styling applies 91% width, 12px/22px text, asymmetric radii, muted user surface, and timestamps outside the bubble. Record Detail and Quick retain their existing styles. |
+| Approval card | **PARTIALLY MATCHED** | Real approval data and server-authoritative callbacks remain intact, with Pearl spacing, radius, compact typography, and action sizing. The approval is still nested in the existing real MessageBubble boundary rather than copied as a separate mock component. |
+| Composer | **PARTIALLY MATCHED** | Composer height and internal padding are reduced and its placeholder follows Pearl. Camera/library controls remain because they are real receipt inputs; Pearl’s paperclip is not substituted with a fake action. |
+| Records/context | **MATCHED** | The sheet remains secondary at the collapsed snap, uses live bounded records/context, and keeps the existing record-detail path. |
+| Header | **PARTIALLY MATCHED** | Header height, icon sizes, and typography are reduced toward Pearl. The product’s real drawer and Quick actions remain because replacing them would remove Main functionality. |
+| Responsive layout | **MATCHED** | 375px and 402px captures use the same percentage/flex hierarchy; the expanded chat surface fills the available region without transcript overflow. |
+
 ## Implemented geometry
 
 The current implementation in
@@ -141,11 +159,17 @@ The current implementation in
 
 - Pearl horizontal inset and date-strip rhythm in `officeHome` and
   `pearlDateStrip`.
-- 27px chat-card radius and expanded chat layout.
+- 27px chat-card radius and expanded chat layout with explicit flex/height
+  sizing.
 - “حديثنا اليوم” heading and Pearl description.
 - Prompt rail with horizontal scrolling and touch-sized controls.
+- Chat-owned 14px horizontal insets, 17px transcript top inset, 11px message
+  gap, and 174px composer clearance.
+- Compact top-positioned empty state instead of a centered dashboard hero.
 - Pearl message/approval spacing for populated Main conversations, isolated from
   Record Detail and Quick message styling.
+- Message timestamps outside Pearl bubbles in Main.
+- Reduced 70px-class product header geometry and thinner 52px Main composer.
 - Screen-level composer layering above the sheet.
 - Sheet radius, handle, tab, row, icon, and count geometry.
 - Sheet above bottom navigation, with composer above the sheet.
@@ -155,9 +179,7 @@ The current implementation in
 
 ## Remaining differences and limitations
 
-1. The native sheet has open/collapse behavior, but not the mockup's
-   pointer-drag snap points `0 / 43 / 80`. This is the main interaction gap.
-2. React Native does not reproduce browser `backdrop-filter`, CSS pseudo-element
+1. React Native does not reproduce browser `backdrop-filter`, CSS pseudo-element
    highlights, and radial multi-stop gradients identically on every supported device;
    the implementation now uses `expo-linear-gradient` plus native shadows and ambient
    layers rather than a flat fallback.
@@ -177,12 +199,12 @@ The current implementation in
 
 - `pnpm --filter @workspace/personal-secretary-mobile run typecheck` — passed.
 - `git diff --check` — passed.
-- Main was rendered at 402×874 after the message-style pass.
+- Main was rendered at 402×874 after the second composition pass.
 - Main was also rendered at 375×720 to check small-screen proportions.
 - The rendered check confirmed the sheet begins near the bottom at its 80% snap
   position, the composer sits above it with Pearl-like clearance, and the sheet
   can cover the floating bottom navigation.
-- The sheet implementation now has native snap calculations for 0/43/80 and
+- The sheet implementation has native snap calculations for 0/43/80 and
   uses the measured rendered height rather than a fixed pixel offset.
 - Background, chat, and sheet surfaces now use `expo-linear-gradient` with
   theme-derived colors.

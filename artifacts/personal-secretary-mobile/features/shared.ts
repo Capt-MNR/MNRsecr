@@ -186,6 +186,7 @@ export const styles = StyleSheet.create({
   pearlAssistantMessageBubble: { borderTopLeftRadius: 17, borderTopRightRadius: 17, borderBottomRightRadius: 5, borderBottomLeftRadius: 17 },
   pearlUserMessageBubble: { borderTopLeftRadius: 17, borderTopRightRadius: 17, borderBottomRightRadius: 17, borderBottomLeftRadius: 5 },
   pearlMessageText: { fontSize: 12, lineHeight: 22 },
+  pearlMessageTime: { marginTop: 4, marginHorizontal: 7, fontSize: 8, textAlign: 'right' },
   messageText: { fontSize: 15, lineHeight: 24, textAlign: 'right' }, messageTime: { marginTop: 5, fontSize: 10, textAlign: 'right', opacity: 0.78 },
   approvalCard: { marginTop: 10, borderRadius: 15, borderWidth: 1, padding: 10 }, approvalHeading: { flexDirection: 'row-reverse', alignItems: 'center', gap: 7 },
   pearlApprovalCard: { marginTop: 6, borderRadius: 18, padding: 14 },

@@ -390,9 +390,11 @@ export function MessageBubble({
             retrying={retryingInput}
           />
         )}
-        <Text style={[styles.messageTime, { color: isUser && !pearlStyle ? colors.primaryForeground : colors.mutedForeground }]}>
-          {messageTime(message.createdAt)}
-        </Text>
+        {!pearlStyle && (
+          <Text style={[styles.messageTime, { color: isUser ? colors.primaryForeground : colors.mutedForeground }]}>
+            {messageTime(message.createdAt)}
+          </Text>
+        )}
         {message.approval && (
           <View style={[styles.approvalCard, pearlStyle && styles.pearlApprovalCard, { backgroundColor: colors.muted, borderColor: colors.border }]}>
             <View style={[styles.approvalHeading, pearlStyle && styles.pearlApprovalHeading]}>
@@ -488,6 +490,11 @@ export function MessageBubble({
           </Pressable>
         )}
       </View>
+      {pearlStyle && (
+        <Text style={[styles.messageTime, styles.pearlMessageTime, { color: colors.mutedForeground }]}>
+          {messageTime(message.createdAt)}
+        </Text>
+      )}
     </View>
   );
 }
