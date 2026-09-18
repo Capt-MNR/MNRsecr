@@ -152,6 +152,8 @@ async function persistSecondBrainCommand(
     ? await retrieveSecondBrain(identity, command.query, {
         mode: "explicit_recall",
         queryDomain: "memory_recall",
+        requestId,
+        conversationId,
       })
     : null;
   const memories = retrieval?.memories ?? [];
@@ -4665,10 +4667,15 @@ export class Phase2AgentRuntime {
     const secondBrainRetrieval = shouldSearchSecondBrain(input.message)
       ? await retrieveSecondBrain(identity, input.message, {
           queryDomain: classifySecondBrainQuery(input.message),
+          requestId,
+          conversationId,
         })
       : {
           memories: [],
-          trace: emptyRetrievalTrace(input.message, false, classifySecondBrainQuery(input.message)),
+          trace: emptyRetrievalTrace(input.message, false, classifySecondBrainQuery(input.message), {
+            requestId,
+            conversationId,
+          }),
         };
     const governedSecondBrain = applySecondBrainPolicy(
       secondBrainRetrieval.memories,

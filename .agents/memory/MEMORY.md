@@ -41,3 +41,4 @@
 - [Quick initial layout](quick-initial-layout.md) — render the intro state normally; invert Quick only after real conversation messages exist.
 - [Explicit Second Brain aliases](second-brain-aliases.md) — resolve only explicitly saved aliases against a same-tenant canonical entity; never infer aliases from ordinary text.
 - [Second Brain candidate lifecycle](second-brain-candidate-lifecycle.md) — candidates stay outside retrieval until approval, and promotion/status changes must be atomic.
+- [Second Brain retrieval trace](second-brain-retrieval-trace.md) — correlate each decision to request/conversation and distinguish database candidates from LLM-selected context.

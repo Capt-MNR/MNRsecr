@@ -22,6 +22,8 @@ export type SecondBrainRetrievalMode = "none" | "lexical_v1" | "explicit_recall"
 
 export type SecondBrainRetrievalTrace = {
   traceId: string;
+  requestId: string | null;
+  conversationId: string | null;
   strategy: SecondBrainRetrievalMode;
   triggered: boolean;
   queryDomain: SecondBrainQueryDomain;
@@ -31,6 +33,15 @@ export type SecondBrainRetrievalTrace = {
     kind: SecondBrainKind;
     relevanceScore: number;
     confidence: number;
+    association: {
+      entityType: string;
+      entityId: string;
+    } | null;
+    provenance: {
+      sourceType: string;
+      sourceConversationId: string | null;
+      sourceTurnId: string | null;
+    };
     sourceConversationId: string | null;
     sourceTurnId: string | null;
   }>;
@@ -237,9 +248,15 @@ export function emptyRetrievalTrace(
   message: string,
   triggered: boolean,
   queryDomain = classifySecondBrainQuery(message),
+  options: {
+    requestId?: string | null;
+    conversationId?: string | null;
+  } = {},
 ): SecondBrainRetrievalTrace {
   return {
     traceId: crypto.randomUUID(),
+    requestId: options.requestId ?? null,
+    conversationId: options.conversationId ?? null,
     strategy: triggered ? "lexical_v1" : "none",
     triggered,
     queryDomain,
@@ -529,6 +546,7 @@ export async function searchSecondBrain(
   const result = await retrieveSecondBrain(identity, query, {
     limit,
     mode: "explicit_recall",
+    queryDomain: "memory_recall",
   });
   return result.memories;
 }
@@ -540,6 +558,8 @@ export async function retrieveSecondBrain(
     limit?: number;
     mode?: SecondBrainRetrievalMode;
     queryDomain?: SecondBrainQueryDomain;
+    requestId?: string | null;
+    conversationId?: string | null;
   } = {},
 ): Promise<SecondBrainRetrievalResult> {
   const limit = Math.max(1, Math.min(options.limit ?? 8, 8));
@@ -591,7 +611,10 @@ export async function retrieveSecondBrain(
     .filter((item) => terms.length === 0 || broadRecall || item.score > 0)
     .sort((left, right) => right.score - left.score)
   const selected = matching.slice(0, limit);
-  const trace = emptyRetrievalTrace(query, true, queryDomain);
+  const trace = emptyRetrievalTrace(query, true, queryDomain, {
+    requestId: options.requestId,
+    conversationId: options.conversationId,
+  });
   trace.strategy = mode;
   trace.consideredCount = rows.length;
   trace.excluded.push(
@@ -611,6 +634,20 @@ export async function retrieveSecondBrain(
     kind: item.memory.kind as SecondBrainKind,
     relevanceScore: Math.max(0, Math.min(1, item.score / 10)),
     confidence: item.memory.confidenceBps / 10000,
+    association: typeof item.memory.metadata?.entityId === "string"
+      && typeof item.memory.metadata?.entityType === "string"
+      ? {
+          entityType: item.memory.metadata.entityType,
+          entityId: item.memory.metadata.entityId,
+        }
+      : null,
+    provenance: {
+      sourceType: typeof item.memory.metadata?.source === "string"
+        ? item.memory.metadata.source
+        : "unknown",
+      sourceConversationId: item.memory.sourceConversationId,
+      sourceTurnId: item.memory.sourceTurnId,
+    },
     sourceConversationId: item.memory.sourceConversationId,
     sourceTurnId: item.memory.sourceTurnId,
   }));
