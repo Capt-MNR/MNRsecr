@@ -704,6 +704,132 @@ export const RestoreSecondBrainMemoryResponse = zod.object({
 
 
 /**
+ * @summary List reviewable Second Brain memory candidates
+ */
+export const ListSecondBrainCandidatesQueryParams = zod.object({
+  "status": zod.enum(['pending_review', 'approved', 'rejected', 'needs_context']).optional()
+})
+
+export const ListSecondBrainCandidatesResponse = zod.object({
+  "candidates": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "kind": zod.enum(['fact', 'preference', 'alias']),
+  "key": zod.string(),
+  "value": zod.string(),
+  "confidence": zod.number(),
+  "status": zod.enum(['pending_review', 'approved', 'rejected', 'needs_context']),
+  "sourceConversationId": zod.string().nullable(),
+  "sourceTurnId": zod.string().nullable(),
+  "reviewerNote": zod.string().nullable(),
+  "promotedMemoryId": zod.string().uuid().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "reviewedAt": zod.coerce.date().nullable()
+}))
+})
+
+
+/**
+ * @summary Create a review-only Second Brain memory candidate
+ */
+export const createSecondBrainCandidateBodyKeyMax = 200;
+
+export const createSecondBrainCandidateBodyValueMax = 320;
+
+export const createSecondBrainCandidateBodyConfidenceMin = 0;
+export const createSecondBrainCandidateBodyConfidenceMax = 1;
+
+
+
+export const CreateSecondBrainCandidateBody = zod.object({
+  "kind": zod.enum(['fact', 'preference', 'alias']),
+  "key": zod.string().min(1).max(createSecondBrainCandidateBodyKeyMax),
+  "value": zod.string().min(1).max(createSecondBrainCandidateBodyValueMax),
+  "confidence": zod.number().min(createSecondBrainCandidateBodyConfidenceMin).max(createSecondBrainCandidateBodyConfidenceMax),
+  "sourceConversationId": zod.string().nullish(),
+  "sourceTurnId": zod.string().nullish(),
+  "metadata": zod.record(zod.string(), zod.unknown()).optional()
+})
+
+export const CreateSecondBrainCandidateResponse = zod.object({
+  "candidate": zod.object({
+  "id": zod.string().uuid(),
+  "kind": zod.enum(['fact', 'preference', 'alias']),
+  "key": zod.string(),
+  "value": zod.string(),
+  "confidence": zod.number(),
+  "status": zod.enum(['pending_review', 'approved', 'rejected', 'needs_context']),
+  "sourceConversationId": zod.string().nullable(),
+  "sourceTurnId": zod.string().nullable(),
+  "reviewerNote": zod.string().nullable(),
+  "promotedMemoryId": zod.string().uuid().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "reviewedAt": zod.coerce.date().nullable()
+}),
+  "memory": zod.union([zod.object({
+  "id": zod.string().uuid(),
+  "kind": zod.enum(['fact', 'preference', 'alias']),
+  "key": zod.string(),
+  "value": zod.string(),
+  "confidence": zod.number(),
+  "status": zod.enum(['active', 'archived']),
+  "sourceConversationId": zod.string().nullable(),
+  "sourceTurnId": zod.string().nullable(),
+  "updatedAt": zod.coerce.date(),
+  "lastConfirmedAt": zod.coerce.date().nullable()
+}),zod.null()])
+})
+
+
+/**
+ * @summary Review or promote one Second Brain memory candidate
+ */
+export const ReviewSecondBrainCandidateParams = zod.object({
+  "candidateId": zod.coerce.string().uuid()
+})
+
+export const reviewSecondBrainCandidateBodyNoteMax = 1000;
+
+
+
+export const ReviewSecondBrainCandidateBody = zod.object({
+  "status": zod.enum(['approved', 'rejected', 'needs_context']),
+  "note": zod.string().max(reviewSecondBrainCandidateBodyNoteMax).nullish()
+})
+
+export const ReviewSecondBrainCandidateResponse = zod.object({
+  "candidate": zod.object({
+  "id": zod.string().uuid(),
+  "kind": zod.enum(['fact', 'preference', 'alias']),
+  "key": zod.string(),
+  "value": zod.string(),
+  "confidence": zod.number(),
+  "status": zod.enum(['pending_review', 'approved', 'rejected', 'needs_context']),
+  "sourceConversationId": zod.string().nullable(),
+  "sourceTurnId": zod.string().nullable(),
+  "reviewerNote": zod.string().nullable(),
+  "promotedMemoryId": zod.string().uuid().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "reviewedAt": zod.coerce.date().nullable()
+}),
+  "memory": zod.union([zod.object({
+  "id": zod.string().uuid(),
+  "kind": zod.enum(['fact', 'preference', 'alias']),
+  "key": zod.string(),
+  "value": zod.string(),
+  "confidence": zod.number(),
+  "status": zod.enum(['active', 'archived']),
+  "sourceConversationId": zod.string().nullable(),
+  "sourceTurnId": zod.string().nullable(),
+  "updatedAt": zod.coerce.date(),
+  "lastConfirmedAt": zod.coerce.date().nullable()
+}),zod.null()])
+})
+
+
+/**
  * @summary Send a natural-language message to the secretary
  */
 

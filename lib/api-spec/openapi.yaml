@@ -517,6 +517,103 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /memory-candidates:
+    get:
+      operationId: listSecondBrainCandidates
+      tags: [secretary]
+      summary: List reviewable Second Brain memory candidates
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending_review, approved, rejected, needs_context]
+      responses:
+        "200":
+          description: Memory candidates
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SecondBrainCandidateListResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createSecondBrainCandidate
+      tags: [secretary]
+      summary: Create a review-only Second Brain memory candidate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SecondBrainCandidateInput"
+      responses:
+        "201":
+          description: Candidate created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SecondBrainCandidateResponse"
+        "400":
+          description: Invalid candidate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /memory-candidates/{candidateId}/review:
+    post:
+      operationId: reviewSecondBrainCandidate
+      tags: [secretary]
+      summary: Review or promote one Second Brain memory candidate
+      parameters:
+        - name: candidateId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SecondBrainCandidateReviewInput"
+      responses:
+        "200":
+          description: Candidate review saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SecondBrainCandidateResponse"
+        "400":
+          description: Invalid candidate review
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Candidate not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /turns:
     post:
       operationId: createTurn
@@ -1570,6 +1667,97 @@ components:
         memory:
           $ref: "#/components/schemas/SecondBrainMemory"
       required: [memory]
+    SecondBrainCandidate:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum: [fact, preference, alias]
+        key:
+          type: string
+        value:
+          type: string
+        confidence:
+          type: number
+        status:
+          type: string
+          enum: [pending_review, approved, rejected, needs_context]
+        sourceConversationId:
+          type: ["string", "null"]
+        sourceTurnId:
+          type: ["string", "null"]
+        reviewerNote:
+          type: ["string", "null"]
+        promotedMemoryId:
+          type: ["string", "null"]
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        reviewedAt:
+          type: ["string", "null"]
+          format: date-time
+      required: [id, kind, key, value, confidence, status, sourceConversationId, sourceTurnId, reviewerNote, promotedMemoryId, createdAt, updatedAt, reviewedAt]
+    SecondBrainCandidateInput:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [fact, preference, alias]
+        key:
+          type: string
+          minLength: 1
+          maxLength: 200
+        value:
+          type: string
+          minLength: 1
+          maxLength: 320
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        sourceConversationId:
+          type: ["string", "null"]
+        sourceTurnId:
+          type: ["string", "null"]
+        metadata:
+          type: object
+          additionalProperties: true
+      required: [kind, key, value, confidence]
+    SecondBrainCandidateReviewInput:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [approved, rejected, needs_context]
+        note:
+          type: ["string", "null"]
+          maxLength: 1000
+      required: [status]
+    SecondBrainCandidateResponse:
+      type: object
+      properties:
+        candidate:
+          $ref: "#/components/schemas/SecondBrainCandidate"
+        memory:
+          oneOf:
+            - $ref: "#/components/schemas/SecondBrainMemory"
+            - type: "null"
+      required: [candidate, memory]
+    SecondBrainCandidateListResponse:
+      type: object
+      properties:
+        candidates:
+          type: array
+          items:
+            $ref: "#/components/schemas/SecondBrainCandidate"
+      required: [candidates]
     ConversationTurn:
       type: object
       additionalProperties: true

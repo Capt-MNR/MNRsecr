@@ -36,9 +36,12 @@ import {
 import { detectLearningSignal } from "./learning-signals";
 import {
   formatSecondBrainContext,
+  applySecondBrainPolicy,
+  classifySecondBrainQuery,
+  emptyRetrievalTrace,
   parseSecondBrainCommand,
   rememberSecondBrain,
-  searchSecondBrain,
+  retrieveSecondBrain,
   secondBrainRecallMessage,
   shouldSearchSecondBrain,
   type SecondBrainCommand,
@@ -142,9 +145,13 @@ async function persistSecondBrainCommand(
         type: "second_brain_recall",
         query: command.query,
       };
-  const memories = command.type === "recall"
-    ? await searchSecondBrain(identity, command.query)
-    : [];
+  const retrieval = command.type === "recall"
+    ? await retrieveSecondBrain(identity, command.query, {
+        mode: "explicit_recall",
+        queryDomain: "memory_recall",
+      })
+    : null;
+  const memories = retrieval?.memories ?? [];
   const result: Phase2TurnResult = {
     conversationId,
     turnId: requestId,
@@ -159,7 +166,11 @@ async function persistSecondBrainCommand(
     },
     action: command.type === "remember"
       ? action
-      : { ...action, memories: memories.map((memory) => memory.id) },
+      : {
+          ...action,
+          memories: memories.map((memory) => memory.id),
+          secondBrainRetrievalTrace: retrieval?.trace,
+        },
     provider: "second-brain",
     model: "deterministic-memory-v1",
   };
@@ -4559,9 +4570,19 @@ export class Phase2AgentRuntime {
           return null;
         })
       : null;
-    const secondBrainMemories = shouldSearchSecondBrain(input.message)
-      ? await searchSecondBrain(identity, input.message)
-      : [];
+    const secondBrainRetrieval = shouldSearchSecondBrain(input.message)
+      ? await retrieveSecondBrain(identity, input.message, {
+          queryDomain: classifySecondBrainQuery(input.message),
+        })
+      : {
+          memories: [],
+          trace: emptyRetrievalTrace(input.message, false, classifySecondBrainQuery(input.message)),
+        };
+    const governedSecondBrain = applySecondBrainPolicy(
+      secondBrainRetrieval.memories,
+      secondBrainRetrieval.trace,
+    );
+    const secondBrainMemories = governedSecondBrain.memories;
     const secondBrainContext = formatSecondBrainContext(secondBrainMemories);
     const financialFollowupAdjustment = featureFlags.deterministicIntelligence()
       ? parseFinancialFollowupAdjustment(input.message, conversationMemory.state)
@@ -4684,6 +4705,7 @@ export class Phase2AgentRuntime {
         ...(input.inputId ? { inputId: input.inputId } : {}),
         deterministicIntelligence: deterministicMetrics,
         ...(learningSignal ? { learningSignal } : {}),
+        secondBrainRetrievalTrace: governedSecondBrain.trace,
         ...(patternInsights.length > 0 ? { patternInsights } : {}),
         llmCalls,
         toolCalls,

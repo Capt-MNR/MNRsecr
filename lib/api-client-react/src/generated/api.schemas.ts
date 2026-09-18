@@ -407,6 +407,108 @@ export interface SecondBrainMemoryResponse {
   memory: SecondBrainMemory;
 }
 
+export type SecondBrainCandidateKind = typeof SecondBrainCandidateKind[keyof typeof SecondBrainCandidateKind];
+
+
+export const SecondBrainCandidateKind = {
+  fact: 'fact',
+  preference: 'preference',
+  alias: 'alias',
+} as const;
+
+export type SecondBrainCandidateStatus = typeof SecondBrainCandidateStatus[keyof typeof SecondBrainCandidateStatus];
+
+
+export const SecondBrainCandidateStatus = {
+  pending_review: 'pending_review',
+  approved: 'approved',
+  rejected: 'rejected',
+  needs_context: 'needs_context',
+} as const;
+
+export interface SecondBrainCandidate {
+  id: string;
+  kind: SecondBrainCandidateKind;
+  key: string;
+  value: string;
+  confidence: number;
+  status: SecondBrainCandidateStatus;
+  /** @nullable */
+  sourceConversationId: string | null;
+  /** @nullable */
+  sourceTurnId: string | null;
+  /** @nullable */
+  reviewerNote: string | null;
+  /** @nullable */
+  promotedMemoryId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /** @nullable */
+  reviewedAt: string | null;
+}
+
+export type SecondBrainCandidateInputKind = typeof SecondBrainCandidateInputKind[keyof typeof SecondBrainCandidateInputKind];
+
+
+export const SecondBrainCandidateInputKind = {
+  fact: 'fact',
+  preference: 'preference',
+  alias: 'alias',
+} as const;
+
+export type SecondBrainCandidateInputMetadata = { [key: string]: unknown };
+
+export interface SecondBrainCandidateInput {
+  kind: SecondBrainCandidateInputKind;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  key: string;
+  /**
+     * @minLength 1
+     * @maxLength 320
+     */
+  value: string;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  confidence: number;
+  /** @nullable */
+  sourceConversationId?: string | null;
+  /** @nullable */
+  sourceTurnId?: string | null;
+  metadata?: SecondBrainCandidateInputMetadata;
+}
+
+export type SecondBrainCandidateReviewInputStatus = typeof SecondBrainCandidateReviewInputStatus[keyof typeof SecondBrainCandidateReviewInputStatus];
+
+
+export const SecondBrainCandidateReviewInputStatus = {
+  approved: 'approved',
+  rejected: 'rejected',
+  needs_context: 'needs_context',
+} as const;
+
+export interface SecondBrainCandidateReviewInput {
+  status: SecondBrainCandidateReviewInputStatus;
+  /**
+     * @maxLength 1000
+     * @nullable
+     */
+  note?: string | null;
+}
+
+export interface SecondBrainCandidateResponse {
+  candidate: SecondBrainCandidate;
+  memory: SecondBrainMemory | null;
+}
+
+export interface SecondBrainCandidateListResponse {
+  candidates: SecondBrainCandidate[];
+}
+
 export type ConversationTurnAction = { [key: string]: unknown };
 
 export interface ConversationTurn {
@@ -956,6 +1058,20 @@ export type ListSecondBrainMemoriesStatus = typeof ListSecondBrainMemoriesStatus
 export const ListSecondBrainMemoriesStatus = {
   active: 'active',
   archived: 'archived',
+} as const;
+
+export type ListSecondBrainCandidatesParams = {
+status?: ListSecondBrainCandidatesStatus;
+};
+
+export type ListSecondBrainCandidatesStatus = typeof ListSecondBrainCandidatesStatus[keyof typeof ListSecondBrainCandidatesStatus];
+
+
+export const ListSecondBrainCandidatesStatus = {
+  pending_review: 'pending_review',
+  approved: 'approved',
+  rejected: 'rejected',
+  needs_context: 'needs_context',
 } as const;
 
 export type ListConversationsParams = {

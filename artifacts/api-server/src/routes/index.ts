@@ -8,6 +8,7 @@ import financialGraphRouter from "./financial-graph";
 import relationshipsRouter from "./relationships";
 import pushTokensRouter from "./push-tokens";
 import memoriesRouter from "./memories";
+import memoryCandidatesRouter from "./memory-candidates";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(financialGraphRouter);
 router.use(relationshipsRouter);
 router.use(pushTokensRouter);
 router.use(memoriesRouter);
+router.use(memoryCandidatesRouter);
 
 export default router;

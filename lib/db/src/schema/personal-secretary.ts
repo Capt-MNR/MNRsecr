@@ -741,6 +741,42 @@ export const secondBrainMemoriesTable = pgTable(
   ],
 );
 
+export const secondBrainCandidatesTable = pgTable(
+  "second_brain_candidates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    kind: text("kind").notNull(),
+    key: text("key").notNull(),
+    value: text("value").notNull(),
+    normalizedValue: text("normalized_value").notNull(),
+    confidenceBps: integer("confidence_bps").notNull(),
+    status: text("status").notNull().default("pending_review"),
+    sourceConversationId: text("source_conversation_id"),
+    sourceTurnId: text("source_turn_id"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+    reviewerNote: text("reviewer_note"),
+    promotedMemoryId: uuid("promoted_memory_id"),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("second_brain_candidates_owner_status_updated_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.status,
+      table.updatedAt,
+    ),
+    index("second_brain_candidates_owner_source_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.sourceConversationId,
+      table.sourceTurnId,
+    ),
+  ],
+);
+
 export const inputAssetResultsTable = pgTable(
   "input_asset_results",
   {
@@ -905,6 +941,7 @@ export type ProjectPerson = typeof projectPeopleTable.$inferSelect;
 export type Commitment = typeof commitmentsTable.$inferSelect;
 export type ConversationMemory = typeof conversationMemoryTable.$inferSelect;
 export type SecondBrainMemory = typeof secondBrainMemoriesTable.$inferSelect;
+export type SecondBrainCandidate = typeof secondBrainCandidatesTable.$inferSelect;
 export type LearningSignalReview = typeof learningSignalReviewsTable.$inferSelect;
 export type SecretaryOperation = typeof secretaryOperationsTable.$inferSelect;
 export type MobilePushToken = typeof mobilePushTokensTable.$inferSelect;

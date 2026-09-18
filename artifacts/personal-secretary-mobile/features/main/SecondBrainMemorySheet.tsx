@@ -1,8 +1,11 @@
 import {
+  getListSecondBrainCandidatesQueryKey,
   getListSecondBrainMemoriesQueryKey,
   type ListSecondBrainMemoriesParams,
   useArchiveSecondBrainMemory,
+  useListSecondBrainCandidates,
   useListSecondBrainMemories,
+  useReviewSecondBrainCandidate,
   useRestoreSecondBrainMemory,
   type SecondBrainMemory,
 } from '@workspace/api-client-react';
@@ -55,6 +58,7 @@ export function SecondBrainMemorySheet({
   const queryClient = useQueryClient();
   const [archivingId, setArchivingId] = useState<string | null>(null);
   const [restoringId, setRestoringId] = useState<string | null>(null);
+  const [reviewingCandidateId, setReviewingCandidateId] = useState<string | null>(null);
   const [searchDraft, setSearchDraft] = useState('');
   const [search, setSearch] = useState('');
   const [kind, setKind] = useState<ListSecondBrainMemoriesParams['kind']>();
@@ -89,6 +93,25 @@ export function SecondBrainMemorySheet({
       onError: () => setRestoringId(null),
     },
   });
+  const candidatesQuery = useListSecondBrainCandidates({ status: 'pending_review' }, {
+    query: {
+      queryKey: getListSecondBrainCandidatesQueryKey({ status: 'pending_review' }),
+      enabled: visible,
+      staleTime: 0,
+    },
+  });
+  const reviewCandidateMutation = useReviewSecondBrainCandidate({
+    mutation: {
+      onSuccess: async () => {
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: getListSecondBrainCandidatesQueryKey() }),
+          queryClient.invalidateQueries({ queryKey: getListSecondBrainMemoriesQueryKey() }),
+        ]);
+        setReviewingCandidateId(null);
+      },
+      onError: () => setReviewingCandidateId(null),
+    },
+  });
 
   function archiveMemory(id: string) {
     if (archiveMutation.isPending || restoreMutation.isPending) return;
@@ -100,6 +123,12 @@ export function SecondBrainMemorySheet({
     if (archiveMutation.isPending || restoreMutation.isPending) return;
     setRestoringId(id);
     restoreMutation.mutate({ memoryId: id });
+  }
+
+  function reviewCandidate(id: string, status: 'approved' | 'rejected' | 'needs_context') {
+    if (reviewCandidateMutation.isPending) return;
+    setReviewingCandidateId(id);
+    reviewCandidateMutation.mutate({ candidateId: id, data: { status } });
   }
 
   const memories = memoriesQuery.data?.memories ?? [];
@@ -236,6 +265,72 @@ export function SecondBrainMemorySheet({
                   </Pressable>
                 ))}
               </View>
+              <View style={[styles.candidatePanel, { borderColor: colors.primary + '35', backgroundColor: colors.primary + '0D' }]}>
+                <View style={styles.candidateHeader}>
+                  <View style={styles.cardCopy}>
+                    <Text style={[styles.candidateEyebrow, { color: colors.primary }]}>Review queue</Text>
+                    <Text style={[styles.candidateTitle, { color: colors.foreground }]}>
+                      {localized(language, 'اقتراحات تحتاج مراجعة', 'Suggestions to review')}
+                    </Text>
+                    <Text style={[styles.meta, { color: colors.mutedForeground }]}>
+                      {localized(language, 'لا تدخل السياق قبل موافقتك.', 'They stay out of context until approved.')}
+                    </Text>
+                  </View>
+                  <Text style={[styles.countBadge, { color: colors.primary, backgroundColor: colors.primary + '1A' }]}>
+                    {candidatesQuery.data?.candidates.length ?? 0}
+                  </Text>
+                </View>
+                {candidatesQuery.isLoading ? (
+                  <ActivityIndicator color={colors.primary} />
+                ) : candidatesQuery.isError ? (
+                  <Text style={[styles.meta, { color: colors.destructive }]}>
+                    {localized(language, 'تعذر تحميل الاقتراحات.', 'Could not load suggestions.')}
+                  </Text>
+                ) : (candidatesQuery.data?.candidates.length ?? 0) === 0 ? (
+                  <Text style={[styles.meta, { color: colors.mutedForeground }]}>
+                    {localized(language, 'لا توجد اقتراحات معلقة.', 'No pending suggestions.')}
+                  </Text>
+                ) : candidatesQuery.data?.candidates.map((candidate) => (
+                  <View key={candidate.id} style={[styles.candidateCard, { borderColor: colors.border, backgroundColor: colors.background }]}>
+                    <Text style={[styles.kind, { color: colors.primary }]}>{kindLabel(language, candidate.kind)}</Text>
+                    <Text style={[styles.value, { color: colors.foreground }]}>{candidate.value}</Text>
+                    <Text style={[styles.meta, { color: colors.mutedForeground }]}>
+                      {localized(language, 'الثقة', 'Confidence')} · {Math.round(candidate.confidence * 100)}٪
+                    </Text>
+                    <View style={styles.candidateActions}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={localized(language, 'اعتماد الاقتراح', 'Approve suggestion')}
+                        disabled={reviewCandidateMutation.isPending}
+                        onPress={() => reviewCandidate(candidate.id, 'approved')}
+                        style={[styles.candidateButton, { backgroundColor: colors.primary, opacity: reviewCandidateMutation.isPending ? 0.55 : 1 }]}
+                      >
+                        {reviewingCandidateId === candidate.id && reviewCandidateMutation.isPending
+                          ? <ActivityIndicator size="small" color={colors.primaryForeground} />
+                          : <Text style={[styles.candidateButtonText, { color: colors.primaryForeground }]}>{localized(language, 'اعتماد', 'Approve')}</Text>}
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={localized(language, 'يحتاج الاقتراح إلى توضيح', 'Request more context')}
+                        disabled={reviewCandidateMutation.isPending}
+                        onPress={() => reviewCandidate(candidate.id, 'needs_context')}
+                        style={[styles.candidateButton, { borderColor: colors.border, borderWidth: 1, opacity: reviewCandidateMutation.isPending ? 0.55 : 1 }]}
+                      >
+                        <Text style={[styles.candidateButtonText, { color: colors.mutedForeground }]}>{localized(language, 'توضيح', 'Context')}</Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={localized(language, 'رفض الاقتراح', 'Reject suggestion')}
+                        disabled={reviewCandidateMutation.isPending}
+                        onPress={() => reviewCandidate(candidate.id, 'rejected')}
+                        style={[styles.candidateButton, { borderColor: colors.destructive + '45', borderWidth: 1, opacity: reviewCandidateMutation.isPending ? 0.55 : 1 }]}
+                      >
+                        <Text style={[styles.candidateButtonText, { color: colors.destructive }]}>{localized(language, 'رفض', 'Reject')}</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ))}
+              </View>
               {memories.length === 0 ? (
                 <View style={[styles.empty, { borderColor: colors.border }]}>
                   <Feather name="star" size={20} color={colors.primary} />
@@ -355,6 +450,57 @@ const styles = StyleSheet.create({
     padding: 20,
     gap: 12,
     paddingBottom: 34,
+  },
+  candidatePanel: {
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 14,
+    gap: 10,
+  },
+  candidateHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  candidateEyebrow: {
+    fontSize: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    fontWeight: '700',
+  },
+  candidateTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  countBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  candidateCard: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    gap: 6,
+  },
+  candidateActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
+    marginTop: 3,
+  },
+  candidateButton: {
+    minHeight: 32,
+    borderRadius: 9,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  candidateButtonText: {
+    fontSize: 10,
+    fontWeight: '700',
   },
   explainer: {
     fontSize: 12,

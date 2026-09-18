@@ -42,6 +42,7 @@ import type {
   LearningSignalReviewInput,
   LearningSignalReviewResponse,
   ListConversationsParams,
+  ListSecondBrainCandidatesParams,
   ListSecondBrainMemoriesParams,
   ListTypedRelationshipsParams,
   MobilePushTokenResponse,
@@ -55,6 +56,10 @@ import type {
   RegisterMobilePushTokenInput,
   RelationshipListResponse,
   RelationshipMutationInput,
+  SecondBrainCandidateInput,
+  SecondBrainCandidateListResponse,
+  SecondBrainCandidateResponse,
+  SecondBrainCandidateReviewInput,
   SecondBrainMemoryListResponse,
   SecondBrainMemoryResponse,
   TodayContextResponse,
@@ -2501,6 +2506,267 @@ export const useRestoreSecondBrainMemory = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getRestoreSecondBrainMemoryMutationOptions(options));
+    }
+
+export const getListSecondBrainCandidatesUrl = (params?: ListSecondBrainCandidatesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/memory-candidates?${stringifiedParams}` : `/api/memory-candidates`
+}
+
+/**
+ * @summary List reviewable Second Brain memory candidates
+ */
+export const listSecondBrainCandidates = async (params?: ListSecondBrainCandidatesParams, options?: Parameters<typeof customFetch>[1]): Promise<SecondBrainCandidateListResponse> => {
+
+  return customFetch<SecondBrainCandidateListResponse>(getListSecondBrainCandidatesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListSecondBrainCandidatesQueryKey = (params?: ListSecondBrainCandidatesParams,) => {
+    return [
+    `/api/memory-candidates`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListSecondBrainCandidatesQueryOptions = <TData = Awaited<ReturnType<typeof listSecondBrainCandidates>>, TError = ErrorType<ErrorResponse>>(params?: ListSecondBrainCandidatesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSecondBrainCandidates>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListSecondBrainCandidatesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSecondBrainCandidates>>> = ({ signal }) => listSecondBrainCandidates(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSecondBrainCandidates>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListSecondBrainCandidatesQueryResult = NonNullable<Awaited<ReturnType<typeof listSecondBrainCandidates>>>
+export type ListSecondBrainCandidatesQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary List reviewable Second Brain memory candidates
+ */
+
+export function useListSecondBrainCandidates<TData = Awaited<ReturnType<typeof listSecondBrainCandidates>>, TError = ErrorType<ErrorResponse>>(
+ params?: ListSecondBrainCandidatesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSecondBrainCandidates>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListSecondBrainCandidatesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateSecondBrainCandidateUrl = () => {
+
+
+
+
+  return `/api/memory-candidates`
+}
+
+/**
+ * @summary Create a review-only Second Brain memory candidate
+ */
+export const createSecondBrainCandidate = async (secondBrainCandidateInput: SecondBrainCandidateInput, options?: Parameters<typeof customFetch>[1]): Promise<SecondBrainCandidateResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<SecondBrainCandidateResponse>(getCreateSecondBrainCandidateUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(secondBrainCandidateInput)
+  }
+);}
+
+
+
+
+
+export const getCreateSecondBrainCandidateMutationKey = () => ['createSecondBrainCandidate'] as const;
+
+export const getCreateSecondBrainCandidateMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSecondBrainCandidate>>, TError,CreateSecondBrainCandidateMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createSecondBrainCandidate>>, TError,CreateSecondBrainCandidateMutationVariables, TContext> => {
+
+const mutationKey = getCreateSecondBrainCandidateMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createSecondBrainCandidate>>, CreateSecondBrainCandidateMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createSecondBrainCandidate(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateSecondBrainCandidateMutationResult = NonNullable<Awaited<ReturnType<typeof createSecondBrainCandidate>>>
+    export type CreateSecondBrainCandidateMutationBody = BodyType<SecondBrainCandidateInput>
+    export type CreateSecondBrainCandidateMutationError = ErrorType<ErrorResponse>
+    export type CreateSecondBrainCandidateMutationVariables = {data: BodyType<SecondBrainCandidateInput>}
+
+    /**
+ * @summary Create a review-only Second Brain memory candidate
+ */
+export const useCreateSecondBrainCandidate = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSecondBrainCandidate>>, TError,CreateSecondBrainCandidateMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createSecondBrainCandidate>>,
+        TError,
+        CreateSecondBrainCandidateMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateSecondBrainCandidateMutationOptions(options));
+    }
+
+export const getReviewSecondBrainCandidateUrl = (candidateId: string,) => {
+
+
+
+
+  return `/api/memory-candidates/${candidateId}/review`
+}
+
+/**
+ * @summary Review or promote one Second Brain memory candidate
+ */
+export const reviewSecondBrainCandidate = async (candidateId: string,
+    secondBrainCandidateReviewInput: SecondBrainCandidateReviewInput, options?: Parameters<typeof customFetch>[1]): Promise<SecondBrainCandidateResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<SecondBrainCandidateResponse>(getReviewSecondBrainCandidateUrl(candidateId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(secondBrainCandidateReviewInput)
+  }
+);}
+
+
+
+
+
+export const getReviewSecondBrainCandidateMutationKey = () => ['reviewSecondBrainCandidate'] as const;
+
+export const getReviewSecondBrainCandidateMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reviewSecondBrainCandidate>>, TError,ReviewSecondBrainCandidateMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reviewSecondBrainCandidate>>, TError,ReviewSecondBrainCandidateMutationVariables, TContext> => {
+
+const mutationKey = getReviewSecondBrainCandidateMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reviewSecondBrainCandidate>>, ReviewSecondBrainCandidateMutationVariables> = (props) => {
+          const {candidateId,data} = props ?? {};
+
+          return  reviewSecondBrainCandidate(candidateId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReviewSecondBrainCandidateMutationResult = NonNullable<Awaited<ReturnType<typeof reviewSecondBrainCandidate>>>
+    export type ReviewSecondBrainCandidateMutationBody = BodyType<SecondBrainCandidateReviewInput>
+    export type ReviewSecondBrainCandidateMutationError = ErrorType<ErrorResponse>
+    export type ReviewSecondBrainCandidateMutationVariables = {candidateId: string;data: BodyType<SecondBrainCandidateReviewInput>}
+
+    /**
+ * @summary Review or promote one Second Brain memory candidate
+ */
+export const useReviewSecondBrainCandidate = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reviewSecondBrainCandidate>>, TError,ReviewSecondBrainCandidateMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reviewSecondBrainCandidate>>,
+        TError,
+        ReviewSecondBrainCandidateMutationVariables,
+        TContext
+      > => {
+      return useMutation(getReviewSecondBrainCandidateMutationOptions(options));
     }
 
 export const getCreateTurnUrl = () => {
