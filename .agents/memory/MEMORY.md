@@ -43,3 +43,4 @@
 - [Second Brain candidate lifecycle](second-brain-candidate-lifecycle.md) — candidates stay outside retrieval until approval, and promotion/status changes must be atomic.
 - [Second Brain retrieval trace](second-brain-retrieval-trace.md) — correlate each decision to request/conversation and distinguish database candidates from LLM-selected context.
 - [Brain envelope boundary](brain-envelope-boundary.md) — keep Brain decisions transient and require verified structured results before approval reconciliation can claim success.
+- [Brain evaluation baseline](brain-evaluation-baseline.md) — separate deterministic envelope comparisons from blocked provider, operation, verification, and proactive scenarios.
