@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, ilike, or } from "drizzle-orm";
 import {
   db,
   secondBrainMemoriesTable,
@@ -258,14 +258,35 @@ export async function searchSecondBrain(
 
 export async function listSecondBrainMemories(
   identity: Identity,
+  options: {
+    search?: string;
+    kind?: SecondBrainKind;
+    status?: "active" | "archived";
+  } = {},
 ): Promise<SecondBrainMemory[]> {
+  const search = options.search?.trim();
+  const normalizedSearch = search ? normalize(search) : "";
+  const searchPattern = normalizedSearch
+    ? `%${normalizedSearch.replaceAll("%", "\\%").replaceAll("_", "\\_")}%`
+    : null;
+  const valuePattern = search
+    ? `%${search.replaceAll("%", "\\%").replaceAll("_", "\\_")}%`
+    : null;
   return db
     .select()
     .from(secondBrainMemoriesTable)
     .where(and(
       eq(secondBrainMemoriesTable.tenantId, identity.tenantId),
       eq(secondBrainMemoriesTable.ownerUserId, identity.userId),
-      eq(secondBrainMemoriesTable.status, "active"),
+      eq(secondBrainMemoriesTable.status, options.status ?? "active"),
+      ...(options.kind ? [eq(secondBrainMemoriesTable.kind, options.kind)] : []),
+      ...(searchPattern && valuePattern
+        ? [or(
+            ilike(secondBrainMemoriesTable.normalizedValue, searchPattern),
+            ilike(secondBrainMemoriesTable.value, valuePattern),
+            ilike(secondBrainMemoriesTable.key, searchPattern),
+          )]
+        : []),
     ))
     .orderBy(desc(secondBrainMemoriesTable.updatedAt))
     .limit(100);

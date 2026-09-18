@@ -421,6 +421,27 @@ paths:
       operationId: listSecondBrainMemories
       tags: [secretary]
       summary: List active personal Second Brain memories
+      parameters:
+        - name: search
+          in: query
+          required: false
+          description: Search memory values and keys
+          schema:
+            type: string
+            maxLength: 160
+        - name: kind
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [fact, preference, alias]
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [active, archived]
+            default: active
       responses:
         "200":
           description: Active personal memories
