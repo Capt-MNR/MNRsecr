@@ -1,0 +1,368 @@
+The latest rendered Main screen is still NOT matching the Pearl/Canva composition.
+
+Do not create another audit report.
+Do not make another cosmetic styling pass.
+
+I need you to fix the actual layout structure now.
+
+The current implementation still has this incorrect mental model:
+
+Header
+→ Context
+→ "حديثنا اليوم" LARGE CARD
+→ Empty State inside the card
+→ Large Composer
+→ Records Card
+
+This is NOT the Pearl composition.
+
+The target composition is:
+
+Header
+→ compact context/date
+→ "حديثنا اليوم" COMPACT SECTION HEADER
+→ CONVERSATION VIEWPORT
+→ messages / assistant responses / approval cards
+→ compact composer
+→ Records/Context below
+
+==================================================
+CRITICAL STRUCTURAL CHANGE
+==================================================
+
+"حديثنا اليوم" MUST NOT be a large fixed-height dashboard card.
+
+It is a SECTION HEADER for the conversation.
+
+The bordered/rounded surface must belong to the conversation workspace only if Pearl actually uses one.
+
+Do not create a huge empty bordered card simply to contain the empty state.
+
+The conversation viewport must be the actual primary content region.
+
+==================================================
+CURRENT SCREEN PROBLEM
+==================================================
+
+The current screen has an enormous empty area between:
+
+"حديثنا اليوم"
+
+and
+
+the composer.
+
+That empty area is visually interpreted as a large dashboard card.
+
+This is exactly what must change.
+
+When there are real messages:
+
+messages must occupy that region naturally.
+
+When there are no messages:
+
+the empty state may occupy the conversation viewport,
+but it must NOT create a visually dominant dashboard card.
+
+==================================================
+TARGET VISUAL HIERARCHY
+==================================================
+
+The visual hierarchy must be:
+
+1. Secretary identity/header
+2. Conversation
+3. Composer
+4. Records/context
+5. Secondary navigation/actions
+
+NOT:
+
+1. Huge Today card
+2. Huge empty space
+3. Huge composer
+4. Records card
+
+==================================================
+HEADER
+==================================================
+
+Reduce the Main header to the same visual proportions as Pearl.
+
+Match the Pearl implementation's:
+
+- height
+- horizontal padding
+- title size
+- subtitle size
+- icon dimensions
+- icon spacing
+- vertical alignment
+
+Do not simply scale the existing header.
+
+==================================================
+DATE / CONTEXT
+==================================================
+
+Make the date/context region compact.
+
+It should provide context without becoming another large visual block.
+
+Match Pearl's vertical rhythm.
+
+==================================================
+TODAY SECTION
+==================================================
+
+Keep:
+
+"حديثنا اليوم"
+
+and the useful existing actions.
+
+But make this a compact section header.
+
+Do NOT assign it a large fixed/minimum height.
+
+Do NOT let it consume the majority of the viewport.
+
+==================================================
+CONVERSATION VIEWPORT
+==================================================
+
+The conversation viewport should be the dominant region.
+
+It should be a scrollable area between the contextual header and composer.
+
+Use the EXISTING Secretary Chat data.
+
+Do not hardcode Pearl's sample messages.
+
+Do not add mock data.
+
+When real messages exist, they should render here using the Pearl geometry.
+
+==================================================
+EMPTY STATE
+==================================================
+
+The current empty state is causing the layout to look like a dashboard.
+
+Fix this.
+
+The empty state should be centered within the available conversation viewport, but should NOT define the viewport's card dimensions.
+
+Do not wrap it in an unnecessarily large standalone card.
+
+==================================================
+COMPOSER
+==================================================
+
+The current composer is still visually too large.
+
+Match Pearl's actual composer geometry.
+
+Preserve all existing functionality:
+
+- send
+- microphone
+- camera
+- image/attachment
+- text input
+- keyboard behavior
+
+But make the visual shell compact.
+
+Do not increase API calls.
+
+==================================================
+RECORDS
+==================================================
+
+Records must remain available and functional.
+
+However, visually it is secondary to the conversation.
+
+Do not allow the Records section to compete with the conversation for primary visual attention.
+
+==================================================
+IMPORTANT IMPLEMENTATION PRINCIPLE
+==================================================
+
+Preserve functionality.
+
+Change composition.
+
+You are allowed to restructure the Main React component hierarchy if necessary.
+
+Do NOT preserve the current dashboard composition merely because it already exists.
+
+The existing functionality is sacred.
+The existing visual layout is NOT.
+
+==================================================
+DO NOT TOUCH
+==================================================
+
+Do not modify:
+
+- Secretary Runtime
+- LLM provider architecture
+- memory
+- tools
+- approvals backend
+- API contracts
+- Quick architecture
+- notification architecture
+- token optimization
+
+This is a frontend composition correction.
+
+==================================================
+VISUAL ACCEPTANCE TEST
+==================================================
+
+After implementation, render the Main screen.
+
+Compare it against the Pearl/Canva reference.
+
+The result must visibly satisfy:
+
+HEADER
+↓
+COMPACT CONTEXT
+↓
+COMPACT "حديثنا اليوم"
+↓
+REAL CHAT VIEWPORT
+↓
+COMPACT COMPOSER
+↓
+RECORDS
+
+If the screen still visually reads as:
+
+"large Today card + empty dashboard"
+
+then the implementation is NOT complete.
+
+Do not stop at typecheck.
+
+Do not stop because the code is technically valid.
+
+The acceptance criterion is the rendered composition.
+
+==================================================
+ONE MORE IMPORTANT POINT
+==================================================
+
+Do NOT interpret the Canva presentation's centered phone/mockup frame as part of the application's layout.
+
+Normalize the reference to the actual phone viewport.
+
+We are matching the UI INSIDE the phone, not the Canva artboard around it.
+
+==================================================
+FINAL
+==================================================
+
+Make the structural correction now.
+
+Do not redesign.
+Do not invent.
+Do not document another audit.
+
+Change the REAL Main composition so that the conversation is the primary workspace rather than a large empty dashboard card.
+==================================================
+CRITICAL BUG: HAMBURGER MENU IS BEHIND THE CONTENT
+==================================================
+
+There is also a real UI layering bug visible in the latest Main render.
+
+When the user taps the hamburger/menu button (three horizontal lines) in the header, the menu opens BEHIND the large content/card area.
+
+Parts of the menu are therefore hidden/covered by the Today/Conversation surface.
+
+This MUST be fixed as part of this implementation.
+
+This is not optional visual polish.
+
+==================================================
+MENU LAYERING REQUIREMENT
+==================================================
+
+The hamburger menu must render above ALL Main content surfaces.
+
+Required stacking order:
+
+System / modal layer
+        ↑
+Hamburger menu / drawer
+        ↑
+Header
+        ↑
+Conversation / Today / Records surfaces
+
+The menu must never be visually covered by:
+
+- Today section
+- conversation surface
+- cards
+- composer
+- Records section
+- bottom navigation
+
+Inspect the actual component hierarchy to determine why this happens.
+
+Do NOT blindly increase zIndex without checking the parent stacking contexts.
+
+Specifically inspect:
+
+- zIndex
+- elevation on Android
+- position
+- overflow
+- parent stacking contexts
+- absolute positioning
+- portal/modal usage if applicable
+
+If a parent uses:
+
+overflow: hidden
+
+and this is clipping the menu, restructure the relevant UI so the menu can render outside that clipping boundary.
+
+If the menu is currently rendered inside a content/card container, move its rendering layer to the appropriate Main/root overlay level while preserving its existing functionality.
+
+==================================================
+IMPORTANT
+==================================================
+
+Do NOT create a second menu implementation.
+
+Do NOT duplicate navigation logic.
+
+Do NOT change what the menu does.
+
+Only fix its rendering/layering so that the existing menu is fully visible and tappable above the Main content.
+
+Verify on Android specifically, because zIndex/elevation/overflow behavior can differ from web.
+
+==================================================
+ACCEPTANCE TEST
+==================================================
+
+Tap the three-line hamburger button.
+
+The complete menu must:
+
+1. appear above the Main content,
+2. not be clipped by any card/container,
+3. not be hidden behind the Today/conversation surface,
+4. remain fully tappable,
+5. close correctly,
+6. preserve all existing menu actions.
+
+Test this after the Main composition changes, not before.
