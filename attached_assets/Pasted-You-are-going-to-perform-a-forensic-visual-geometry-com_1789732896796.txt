@@ -1,0 +1,512 @@
+You are going to perform a forensic visual/geometry comparison and then implement the approved Pearl design into the REAL Main application.
+
+IMPORTANT:
+This is NOT a request to create a new design.
+This is NOT a request for inspiration.
+This is NOT a request to redesign the current Main screen.
+The existing Pearl mockup is the VISUAL SOURCE OF TRUTH.
+
+==================================================
+1. SOURCE OF TRUTH
+==================================================
+
+Use this existing mockup as the authoritative visual reference:
+
+artifacts/mockup-sandbox/src/components/mockups/personal-secretary/OpalescentPearlSecretaryMobileKeyboard.tsx
+
+Also inspect every directly related stylesheet/component/token used by that mockup.
+
+Do NOT rely on a screenshot alone when the original React/CSS implementation contains exact values.
+
+The Pearl mockup is the source of truth for:
+
+- geometry
+- spacing
+- dimensions
+- positioning
+- typography
+- colors
+- gradients
+- opacity
+- shadows
+- blur
+- border radius
+- borders
+- layering
+- safe-area behavior
+- keyboard behavior
+- visual hierarchy
+- component proportions
+- bottom navigation geometry
+- composer geometry
+- message bubble geometry
+- cards
+- sheets
+- backgrounds
+- decorative surfaces
+- interaction affordances
+
+The REAL Main application remains the source of truth for:
+
+- business logic
+- data
+- API calls
+- Secretary Chat
+- Secretary Runtime
+- tools
+- memory
+- Records
+- Graph/Network
+- Tasks
+- appointments
+- expenses
+- approvals
+- permissions
+- authentication
+- navigation logic
+- backend behavior
+- existing working functionality
+
+==================================================
+2. FIRST: FORENSIC AUDIT — DO NOT MODIFY CODE YET
+==================================================
+
+Before changing anything, perform a forensic comparison between:
+
+A) Pearl mockup:
+artifacts/mockup-sandbox/src/components/mockups/personal-secretary/OpalescentPearlSecretaryMobileKeyboard.tsx
+and all of its directly related styles/components/tokens
+
+B) The current REAL Main application implementation.
+
+Identify the exact Main components/files responsible for the current Home/Main UI.
+
+Do NOT modify production/Main code during this first phase.
+
+Create a written forensic comparison report in the repository, for example:
+
+docs/PEARL_MAIN_FORENSIC_COMPARISON.md
+
+The report MUST compare the two implementations element-by-element.
+
+At minimum analyze:
+
+1. Screen/container
+2. Overall page padding
+3. Safe-area handling
+4. Header
+5. Greeting/title
+6. Main visual hierarchy
+7. Cards
+8. Card width/height
+9. Card internal padding
+10. Card radius
+11. Card spacing
+12. Chat/composer area
+13. Message bubbles
+14. Records/Network entry
+15. Today/Tasks/appointments area
+16. Recent activity
+17. Quick actions
+18. Bottom navigation
+19. Background
+20. Gradients
+21. Blur/glass effects
+22. Borders
+23. Shadows
+24. Typography
+25. Icon sizes
+26. Icon placement
+27. Interactive affordances
+28. Layering/z-index
+29. Keyboard behavior
+30. Scrolling behavior
+31. Responsive behavior
+32. Light theme
+33. Dark theme
+
+For every meaningful visual element, record:
+
+- Pearl value
+- Current Main value
+- Difference
+- Target value
+- Source file
+- Source code location when practical
+- Whether the difference is geometric, typographic, color, spacing, hierarchy, or behavioral
+
+Do not use vague descriptions such as:
+"make the card slightly smaller."
+
+Use measurable values whenever the source code allows it.
+
+Example:
+
+BAD:
+"Reduce card size."
+
+GOOD:
+"Pearl card uses width: calc(100% - 24px), while Main currently uses X.
+Target Main geometry should match Pearl's 12px horizontal inset."
+
+==================================================
+3. IMPORTANT: DETERMINE THE ACTUAL GEOMETRY
+==================================================
+
+Do not assume that matching colors means matching the design.
+
+The previous implementation problem was that visual colors were changed while the actual card shapes, sizes, proportions, spacing and hierarchy remained different.
+
+Therefore prioritize geometry FIRST:
+
+- x/y position
+- width
+- height
+- margins
+- padding
+- gaps
+- alignment
+- radius
+- component proportions
+- vertical rhythm
+- bottom offsets
+- navigation height
+- composer height
+- content width
+- scroll viewport
+
+Then typography.
+
+Then visual effects.
+
+Then colors.
+
+==================================================
+4. COMPONENT MAPPING
+==================================================
+
+Create an explicit mapping:
+
+PEARL COMPONENT
+        ↓
+REAL MAIN COMPONENT
+
+For example:
+
+Pearl Header
+→ Main Header
+
+Pearl primary surface
+→ Main corresponding surface
+
+Pearl composer
+→ Main Secretary Chat area
+
+Pearl bottom navigation
+→ Main bottom navigation
+
+etc.
+
+If a Pearl component does not have a direct equivalent in Main, document it before implementing.
+
+If Main has functionality that Pearl does not have, DO NOT remove it merely because Pearl does not show it.
+
+Instead, determine where that functionality belongs visually while preserving the Pearl hierarchy.
+
+==================================================
+5. DO NOT COPY PEARL'S DATA OR BUSINESS LOGIC
+==================================================
+
+The Pearl mockup is a visual/design reference.
+
+Do NOT copy mockup-only:
+
+- fake data
+- mock handlers
+- demo state
+- fake navigation
+- mock API
+- mock records
+- mock chat logic
+- placeholder business logic
+
+The real Main must continue using its existing real data and services.
+
+Especially preserve:
+
+- useSecretaryChatService
+- Secretary Chat API
+- Secretary Runtime
+- Records
+- Record Detail
+- Related Entities
+- Tasks
+- appointments
+- expenses
+- approvals
+- existing navigation
+- existing theme system
+
+==================================================
+6. IMPLEMENTATION RULE
+==================================================
+
+After completing the forensic report, implement the Pearl geometry and visual system into the REAL Main application.
+
+Do NOT rewrite the Main application from scratch.
+
+Do NOT create a second Main.
+
+Do NOT duplicate Secretary Chat.
+
+Do NOT create another API.
+
+Do NOT create another state store.
+
+Do NOT move Main functionality into Quick.
+
+Do NOT modify Quick unless absolutely required for a shared visual token/component, and if so document it first.
+
+The implementation target is the existing REAL Main screen.
+
+==================================================
+7. VISUAL FIDELITY REQUIREMENT
+==================================================
+
+The goal is:
+
+PEARL MOCKUP
+        ↓
+same visual geometry
+        ↓
+REAL MAIN
+
+Not:
+
+CURRENT MAIN
+        ↓
+"make it look similar to Pearl"
+
+Every major visual dimension should be intentionally matched.
+
+If Pearl uses a particular card:
+
+- use the same width relationship
+- same height relationship
+- same radius
+- same internal padding
+- same spacing
+- same typography hierarchy
+- same visual weight
+
+Do not substitute generic dashboard cards.
+
+Do not redesign the cards.
+
+Do not invent alternative layouts.
+
+Do not "improve" the Pearl design.
+
+Do not introduce extra visual elements just because they seem useful.
+
+==================================================
+8. INTERACTION RULE
+==================================================
+
+Every visible interactive-looking element must correspond to real functionality.
+
+No fake buttons.
+
+No decorative icons that look tappable.
+
+No dead navigation items.
+
+If an icon/action exists in Pearl but the real Main has no corresponding functionality:
+
+- do NOT invent functionality.
+- either connect it to an existing real function if appropriate,
+- or simplify/remove the affordance.
+
+Preserve the user's existing requirement:
+
+"Every visible icon/action should be meaningful and interactive."
+
+==================================================
+9. MAIN CHAT MUST REMAIN REAL
+==================================================
+
+The central AI Chat/Secretary Chat area must use the EXISTING real Secretary Chat implementation.
+
+Do NOT replace it with mock chat.
+
+Do NOT create a separate LLM call.
+
+Do NOT create additional API calls.
+
+Do NOT add additional tool schemas.
+
+Do NOT add additional conversation queries.
+
+Do NOT increase token consumption.
+
+The UI redesign must not alter the existing LLM/token optimization architecture.
+
+==================================================
+10. LIGHT + DARK THEMES
+==================================================
+
+The final Main implementation MUST support both Light and Dark themes.
+
+Use the existing theme system/tokens.
+
+Pearl geometry must remain consistent between themes.
+
+Do not hardcode one theme only.
+
+Where Pearl uses visual effects, translate them into the existing theme architecture without breaking theme switching.
+
+Do not sacrifice geometry just because colors differ between themes.
+
+==================================================
+11. RESPONSIVE / DEVICE BEHAVIOR
+==================================================
+
+Do not blindly copy desktop dimensions.
+
+Analyze how Pearl behaves across viewport sizes.
+
+Determine:
+
+- horizontal constraints
+- max widths
+- mobile widths
+- safe areas
+- bottom inset
+- keyboard inset
+- scrolling
+- bottom navigation positioning
+
+Then implement equivalent behavior in Main.
+
+The design should remain faithful on:
+
+- small Android phones
+- normal Android phones
+- larger phones/tablets where the existing app supports them
+
+Do not distort the Pearl proportions merely to fill space.
+
+==================================================
+12. PRESERVE ARCHITECTURE
+==================================================
+
+This task is VISUAL implementation only.
+
+Do not modify:
+
+- backend architecture
+- Secretary Runtime
+- agent runtime
+- provider routing
+- memory system
+- deterministic parser
+- tool execution
+- approval authorization
+- tenant ownership
+- Quick architecture
+- notification architecture
+- API contracts
+
+unless a tiny UI integration change is technically unavoidable.
+
+If you discover an architectural problem, DOCUMENT it instead of silently changing it.
+
+==================================================
+13. VERIFICATION
+==================================================
+
+After implementation:
+
+1. Run typecheck.
+2. Run existing tests.
+3. Run git diff --check.
+4. Verify Main in Light Mode.
+5. Verify Main in Dark Mode.
+6. Verify Quick still works.
+7. Verify Secretary Chat still works.
+8. Verify Records navigation still works.
+9. Verify Record Detail still works.
+10. Verify Related Entities still works.
+11. Verify Tasks/appointments still work.
+12. Verify approvals still work.
+13. Verify no new unnecessary API requests were introduced.
+14. Verify no new LLM calls were introduced.
+15. Verify no Main functionality was moved into Quick.
+
+==================================================
+14. VISUAL QA
+==================================================
+
+Do not stop at "typecheck passed."
+
+Actually inspect the rendered Main UI.
+
+Compare it against Pearl.
+
+Pay special attention to:
+
+- card shapes
+- card sizes
+- spacing
+- vertical rhythm
+- central Chat prominence
+- Records/Network prominence
+- bottom navigation
+- header proportions
+- composer position
+- typography
+- whitespace
+- visual hierarchy
+
+If the implementation still looks like the OLD dashboard with Pearl colors applied on top, the task is NOT complete.
+
+The test for success is not:
+
+"Does it use the same colors?"
+
+The test is:
+
+"Would a person looking at both screens recognize that they share the same underlying layout system and geometry?"
+
+==================================================
+15. BEFORE/AFTER EVIDENCE
+==================================================
+
+After implementation, update:
+
+docs/PEARL_MAIN_FORENSIC_COMPARISON.md
+
+with:
+
+- original mismatch
+- target geometry
+- implemented geometry
+- files changed
+- verification results
+- remaining differences, if any
+
+If there are differences that cannot be reproduced exactly because of React Native/platform constraints, explicitly document them instead of pretending they match.
+
+==================================================
+16. CRITICAL STOP CONDITIONS
+==================================================
+
+STOP and report before implementing if:
+
+- the Pearl source is missing
+- the actual Main implementation cannot be identified
+- a major visual element has no identifiable source
+- matching Pearl would require changing backend behavior
+- matching Pearl would require moving functionality into Quick
+- a proposed change would increase LLM calls/token usage
+- you discover that
