@@ -1685,6 +1685,8 @@ components:
         status:
           type: string
           enum: [pending_review, approved, rejected, needs_context]
+        entityAssociated:
+          type: boolean
         sourceConversationId:
           type: ["string", "null"]
         sourceTurnId:
@@ -1703,7 +1705,7 @@ components:
         reviewedAt:
           type: ["string", "null"]
           format: date-time
-      required: [id, kind, key, value, confidence, status, sourceConversationId, sourceTurnId, reviewerNote, promotedMemoryId, createdAt, updatedAt, reviewedAt]
+      required: [id, kind, key, value, confidence, status, entityAssociated, sourceConversationId, sourceTurnId, reviewerNote, promotedMemoryId, createdAt, updatedAt, reviewedAt]
     SecondBrainCandidateInput:
       type: object
       properties:

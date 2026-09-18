@@ -292,6 +292,10 @@ export function SecondBrainMemorySheet({
                   </Text>
                 ) : candidatesQuery.data?.candidates.map((candidate) => (
                   <View key={candidate.id} style={[styles.candidateCard, { borderColor: colors.border, backgroundColor: colors.background }]}>
+                    {(() => {
+                      const aliasNeedsAssociation = candidate.kind === 'alias' && !candidate.entityAssociated;
+                      return (
+                      <>
                     <Text style={[styles.kind, { color: colors.primary }]}>{kindLabel(language, candidate.kind)}</Text>
                     <Text style={[styles.value, { color: colors.foreground }]}>{candidate.value}</Text>
                     <Text style={[styles.meta, { color: colors.mutedForeground }]}>
@@ -301,13 +305,15 @@ export function SecondBrainMemorySheet({
                       <Pressable
                         accessibilityRole="button"
                         accessibilityLabel={localized(language, 'اعتماد الاقتراح', 'Approve suggestion')}
-                        disabled={reviewCandidateMutation.isPending}
+                        disabled={reviewCandidateMutation.isPending || aliasNeedsAssociation}
                         onPress={() => reviewCandidate(candidate.id, 'approved')}
-                        style={[styles.candidateButton, { backgroundColor: colors.primary, opacity: reviewCandidateMutation.isPending ? 0.55 : 1 }]}
+                        style={[styles.candidateButton, { backgroundColor: colors.primary, opacity: reviewCandidateMutation.isPending || aliasNeedsAssociation ? 0.55 : 1 }]}
                       >
                         {reviewingCandidateId === candidate.id && reviewCandidateMutation.isPending
                           ? <ActivityIndicator size="small" color={colors.primaryForeground} />
-                          : <Text style={[styles.candidateButtonText, { color: colors.primaryForeground }]}>{localized(language, 'اعتماد', 'Approve')}</Text>}
+                          : <Text style={[styles.candidateButtonText, { color: colors.primaryForeground }]}>
+                            {aliasNeedsAssociation ? localized(language, 'اربطه بكيان أولًا', 'Link an entity first') : localized(language, 'اعتماد', 'Approve')}
+                          </Text>}
                       </Pressable>
                       <Pressable
                         accessibilityRole="button"
@@ -328,6 +334,9 @@ export function SecondBrainMemorySheet({
                         <Text style={[styles.candidateButtonText, { color: colors.destructive }]}>{localized(language, 'رفض', 'Reject')}</Text>
                       </Pressable>
                     </View>
+                      </>
+                      );
+                    })()}
                   </View>
                 ))}
               </View>

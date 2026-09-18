@@ -251,6 +251,9 @@ export default function Memories() {
             <div className="mt-4 space-y-3">
               {candidatesQuery.data?.candidates.map((candidate) => (
                 <article key={candidate.id} className="rounded-xl border border-border/60 bg-card/70 p-3">
+                  {(() => {
+                    const aliasNeedsAssociation = candidate.kind === 'alias' && !candidate.entityAssociated;
+                    return (
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <span className="rounded-full bg-muted px-2 py-1 text-[10px] font-semibold text-muted-foreground">
@@ -265,10 +268,12 @@ export default function Memories() {
                       <button
                         type="button"
                         onClick={() => reviewCandidate(candidate.id, 'approved')}
-                        disabled={reviewCandidateMutation.isPending}
+                        disabled={reviewCandidateMutation.isPending || aliasNeedsAssociation}
                         className="rounded-lg bg-primary px-3 py-2 text-[11px] font-semibold text-primary-foreground disabled:opacity-50"
                       >
-                        {reviewingCandidateId === candidate.id && reviewCandidateMutation.isPending ? <LoaderCircle className="size-3.5 animate-spin" /> : 'اعتماد'}
+                        {reviewingCandidateId === candidate.id && reviewCandidateMutation.isPending
+                          ? <LoaderCircle className="size-3.5 animate-spin" />
+                          : aliasNeedsAssociation ? 'اربطه بكيان أولًا' : 'اعتماد'}
                       </button>
                       <button
                         type="button"
@@ -288,6 +293,8 @@ export default function Memories() {
                       </button>
                     </div>
                   </div>
+                    );
+                  })()}
                 </article>
               ))}
             </div>

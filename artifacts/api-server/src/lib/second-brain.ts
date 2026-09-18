@@ -805,6 +805,7 @@ export function publicSecondBrainCandidate(candidate: SecondBrainCandidate) {
     value: candidate.value,
     confidence: candidate.confidenceBps / 10000,
     status: candidate.status,
+    entityAssociated: typeof candidate.metadata?.entityId === "string",
     sourceConversationId: candidate.sourceConversationId,
     sourceTurnId: candidate.sourceTurnId,
     reviewerNote: candidate.reviewerNote,

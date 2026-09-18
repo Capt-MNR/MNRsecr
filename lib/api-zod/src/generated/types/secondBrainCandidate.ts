@@ -15,6 +15,7 @@ export interface SecondBrainCandidate {
   value: string;
   confidence: number;
   status: SecondBrainCandidateStatus;
+  entityAssociated: boolean;
   /** @nullable */
   sourceConversationId: string | null;
   /** @nullable */
