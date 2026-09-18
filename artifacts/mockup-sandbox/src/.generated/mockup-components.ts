@@ -7,6 +7,7 @@ export const modules: ModuleMap = {
   "./components/mockups/personal-secretary/DragSheetSecretaryMobile.tsx": () => import("../components/mockups/personal-secretary/DragSheetSecretaryMobile.tsx"),
   "./components/mockups/personal-secretary/InboxSecretaryCalmPriority.tsx": () => import("../components/mockups/personal-secretary/InboxSecretaryCalmPriority.tsx"),
   "./components/mockups/personal-secretary/InboxSecretaryMobile.tsx": () => import("../components/mockups/personal-secretary/InboxSecretaryMobile.tsx"),
+  "./components/mockups/personal-secretary/OpalescentPearlSecretaryElevatedKeyboard.tsx": () => import("../components/mockups/personal-secretary/OpalescentPearlSecretaryElevatedKeyboard.tsx"),
   "./components/mockups/personal-secretary/OpalescentPearlSecretaryMobile.tsx": () => import("../components/mockups/personal-secretary/OpalescentPearlSecretaryMobile.tsx"),
   "./components/mockups/personal-secretary/OpalescentPearlSecretaryMobileKeyboard.tsx": () => import("../components/mockups/personal-secretary/OpalescentPearlSecretaryMobileKeyboard.tsx"),
   "./components/mockups/personal-secretary/SecretaryCommandCenter.tsx": () => import("../components/mockups/personal-secretary/SecretaryCommandCenter.tsx"),

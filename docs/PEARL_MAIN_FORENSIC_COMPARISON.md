@@ -95,19 +95,19 @@ and receipt input flow.
 | Element | Pearl value | Main target / implemented value | Difference |
 | --- | --- | --- | --- |
 | Bottom nav | fixed, left/right 15px, bottom 17px, z-index 4, radius 19 | existing `MainBottomBar` remains the real navigation surface | Navigation cannot be replaced with mock labels; Pearl sheet is layered above it |
-| Sheet position | fixed, bottom -1px, min-height 66dvh, z-index 5, radius 30 top corners | `pearlSheet`: absolute bottom 0, height 420, radius 30, z-index 20; closed state translates down 395px | Same visual layer ordering; native fixed/viewport height is translated to screen-relative height |
+| Sheet position | fixed, bottom -1px, min-height 66dvh, z-index 5, radius 30 top corners | `pearlSheet`: absolute bottom 0, height `66%`, radius 30, z-index 20; position is translated from measured sheet height | Same visual layer ordering and responsive height; native fixed/viewport height is translated to screen-relative height |
 | Sheet handle | width 43, height 4, zone padding 11/10 | width 42, height 4, 31px handle zone | Matched |
 | Sheet heading | title 13px, hint 9px, count pill | native title 13px, hint 8px, count pill | Close typography |
 | Sheet tabs | gap 5, 9px text, bottom border | native gap 5, min-height 28, 9px text, bottom border | Matched |
 | Sheet records | gap 7, row padding 10px 9px, radius 14, icon 31px | native row min-height 49, padding 8px, radius 14, icon 30px, gap 8 | Matched within touch-target constraints |
-| Sheet interaction | pointer drag snaps to 0/43/80 | Main currently toggles the handle open/closed and switches tabs | Remaining behavioral gap: native drag/snap has not been ported |
-| Layering | sheet covers bottom nav; composer remains above both | sheet z-index 20; composer z-index/elevation 40; bottom nav is below sheet | Matched |
+| Sheet interaction | pointer drag snaps to 0/43/80 | Main handle uses native `PanResponder`, measured-height translation, and snaps to 0/43/80; tap still toggles between collapsed and partial | Matched interaction intent |
+| Layering | sheet covers bottom nav; composer remains above both | Main office stacking parent is above the bottom bar; sheet is above the bar and composer is screen-level with a Pearl-like 78px bottom offset | Matched |
 
 ### 7. Background, effects, colors, typography, and icons
 
 | Element | Pearl source value | Main implementation | Status |
 | --- | --- | --- | --- |
-| Light background | pink/blue/lilac radial gradients over `#f2eff1 → #e8edf0 → #eee9f2` | light semantic theme uses Pearl-compatible base colors and ambient native orbs | Geometry/effect translated; exact CSS gradient is not available in the same form |
+| Light background | pink/blue/lilac radial gradients over `#f2eff1 → #e8edf0 → #eee9f2` | `expo-linear-gradient` uses live Light semantic tokens, with native ambient orbs retained | Close native translation; exact CSS radial/backdrop rendering differs by platform |
 | Light primary | `#ae7188` / rose | light `colors.primary: #ae7188` | Matched |
 | Light muted text | `#7a7b8e` | light `colors.mutedForeground: #7a7b8e` | Matched |
 | Light accent | `#769c8e` | light `colors.accent: #769c8e` | Matched |
@@ -156,7 +156,9 @@ The current implementation in
 1. The native sheet has open/collapse behavior, but not the mockup's
    pointer-drag snap points `0 / 43 / 80`. This is the main interaction gap.
 2. React Native does not reproduce browser `backdrop-filter`, CSS pseudo-element
-   highlights, and multi-stop gradients identically on every supported device.
+   highlights, and radial multi-stop gradients identically on every supported device;
+   the implementation now uses `expo-linear-gradient` plus native shadows and ambient
+   layers rather than a flat fallback.
 3. The existing Main route header and bottom navigation own real product
    navigation, so they cannot be replaced by the mockup's isolated header/nav
    without removing functionality.
@@ -164,17 +166,24 @@ The current implementation in
 5. The real `MessageBubble` and approval components support more states and
    longer content than the mockup's fixed demo messages. Their content height
    can therefore differ while preserving the Pearl spacing and layering rules.
-6. The current visual check covered the empty Main state and the partially
-   lowered sheet. Populated conversation and visible approval-card comparison
-   remain a separate verification item.
+6. The final static visual check covers the empty Main state at 402×874 and
+   375×720. Populated conversation, visible approval-card, dark-theme rendering,
+   and direct drag/keyboard interaction still need device/browser interaction
+   coverage.
 
 ## Verification
 
 - `pnpm --filter @workspace/personal-secretary-mobile run typecheck` — passed.
 - `git diff --check` — passed.
 - Main was rendered at a 402×874 mobile viewport after the Pearl pass.
-- The rendered check confirmed the composer is above the sheet and the sheet
-  can cover the bottom navigation.
+- Main was also rendered at 375×720 to check small-screen proportions.
+- The rendered check confirmed the sheet begins near the bottom at its 80% snap
+  position, the composer sits above it with Pearl-like clearance, and the sheet
+  can cover the floating bottom navigation.
+- The sheet implementation now has native snap calculations for 0/43/80 and
+  uses the measured rendered height rather than a fixed pixel offset.
+- Background, chat, and sheet surfaces now use `expo-linear-gradient` with
+  theme-derived colors.
 - No new JavaScript console errors were observed in that rendered check.
-- Populated-message, approval-card, dark-theme, and direct drag/keyboard
-  interaction coverage remain follow-up verification work.
+- Dark-theme and direct drag/keyboard interaction coverage remain follow-up
+  verification work because the available preview capture is static.
