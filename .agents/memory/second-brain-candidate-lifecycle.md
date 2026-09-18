@@ -8,3 +8,9 @@ Candidates are a separate review queue, not a lower-status form of active memory
 **Why:** Personal-memory suggestions can be uncertain, while active memory is allowed to influence later secretary context. A partial promotion or post-approval demotion would make the review decision unreliable.
 
 **How to apply:** Preserve tenant/user scoping and provenance on candidate creation, expose pending candidates for review on web and mobile, and keep promotion plus candidate status update in one database transaction.
+
+The candidate boundary must be applied in both secretary runtime paths, not only the phase-2 runtime.
+
+**Why:** The configured runtime can vary by environment, so protecting only one entry point would let ordinary preference statements bypass review in another environment.
+
+**How to apply:** Keep deterministic memory parsing and candidate creation behavior aligned in `phase2` and the legacy secretary runtime.

@@ -43,6 +43,8 @@ import {
   type ConversationMemorySnapshot,
 } from "./conversation-memory";
 import {
+  createSecondBrainCandidate,
+  parseSecondBrainCandidate,
   parseSecondBrainCommand,
   rememberSecondBrain,
   searchSecondBrain,
@@ -1104,6 +1106,44 @@ export class DeterministicAgentRuntime {
     const turnId = input.requestId ?? randomUUID();
     const conversationMemory = await loadConversationMemory(identity, conversationId);
     const message = input.message.trim();
+    const secondBrainSuggestion = parseSecondBrainCandidate(message);
+    if (secondBrainSuggestion) {
+      const candidate = await createSecondBrainCandidate(identity, {
+        memoryKind: secondBrainSuggestion.memoryKind,
+        key: secondBrainSuggestion.key,
+        value: secondBrainSuggestion.value,
+        confidenceBps: secondBrainSuggestion.confidenceBps,
+        metadata: secondBrainSuggestion.metadata,
+        conversationId,
+        turnId,
+      });
+      const result: TurnResult = {
+        conversationId,
+        turnId,
+        assistantMessage: "لاحظت تفضيلًا شخصيًا، ووضعته في قائمة المراجعة بدل تفعيله تلقائيًا. يمكنك اعتماده من صفحة الذاكرة.",
+        action: {
+          type: "second_brain_memory_candidate_created",
+          memoryKind: secondBrainSuggestion.memoryKind,
+          key: secondBrainSuggestion.key,
+          value: secondBrainSuggestion.value,
+          confidence: secondBrainSuggestion.confidenceBps / 10000,
+          status: candidate.status,
+          candidateId: candidate.id,
+        },
+        provider: "second-brain",
+        model: "deterministic-memory-v1",
+      };
+      if (input.idempotencyKey) {
+        await this.persistence.saveIdempotentResponse(identity, input.idempotencyKey, result);
+      }
+      await saveConversationTurn(identity, conversationMemory, {
+        turnId,
+        userMessage: message,
+        assistantMessage: result.assistantMessage,
+        action: result.action,
+      });
+      return result;
+    }
     const secondBrainCommand = parseSecondBrainCommand(message);
     if (secondBrainCommand) {
       if (secondBrainCommand.type === "remember") {
