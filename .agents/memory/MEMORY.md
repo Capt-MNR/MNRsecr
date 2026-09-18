@@ -37,3 +37,4 @@
 - [Media input vertical slice](media-input-vertical-slice.md) — process voice and receipts once into reviewable compact data before composing a secretary turn.
 - [Fixed mockup composer layering](fixed-mockup-composer-layering.md) — mount fixed mobile composers outside translucent card stacking contexts so sheets cannot cover them.
 - [Native sheet motion on Web](pearl-native-sheet-motion.md) — use measured numeric translation for Expo Web sheet snaps; native-driver initialization can be ignored in the preview renderer.
+- [Pearl visual QA](pearl-visual-qa.md) — compare the populated Pearl render side-by-side at both mobile sizes; component-name mapping is not evidence of visual fidelity.

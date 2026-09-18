@@ -491,7 +491,7 @@ export function MessageBubble({
         )}
       </View>
       {pearlStyle && (
-        <Text style={[styles.messageTime, styles.pearlMessageTime, { color: colors.mutedForeground }]}>
+        <Text style={[styles.messageTime, styles.pearlMessageTime, isUser && styles.pearlUserMessageTime, { color: colors.mutedForeground }]}>
           {messageTime(message.createdAt)}
         </Text>
       )}

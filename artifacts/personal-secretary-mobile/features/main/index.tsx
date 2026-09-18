@@ -143,6 +143,15 @@ export function localized(language: AppLanguage, arabic: string, english: string
   return language === 'en' ? english : arabic;
 }
 
+function colorWithAlpha(color: string, alpha: number) {
+  const normalized = color.replace('#', '');
+  if (normalized.length !== 6) return color;
+  const red = Number.parseInt(normalized.slice(0, 2), 16);
+  const green = Number.parseInt(normalized.slice(2, 4), 16);
+  const blue = Number.parseInt(normalized.slice(4, 6), 16);
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
 function recordSectionLabel(language: AppLanguage, key: string, fallback: string) {
   const englishLabels: Record<string, string> = {
     expenses: 'Expenses',
@@ -789,23 +798,27 @@ function CentralSecretaryChat({
             backgroundColor: compact ? colors.card : 'transparent',
             borderColor: compact ? colors.border : colors.border,
             shadowColor: colors.primary,
-            shadowOpacity: compact || expanded ? 0 : 0.2,
-            shadowRadius: compact ? 0 : 24,
-            shadowOffset: { width: 0, height: 10 },
+            shadowOpacity: compact ? 0 : 0.12,
+            shadowRadius: compact ? 0 : 26,
+            shadowOffset: { width: 0, height: 12 },
             elevation: compact ? 0 : 5,
           },
       ]}
     >
-      {!compact && !expanded && (
+      {!compact && expanded && (
         <LinearGradient
           pointerEvents="none"
-          colors={[colors.card, colors.background, colors.muted]}
+          colors={[
+            colorWithAlpha(colors.card, 0.78),
+            colorWithAlpha(colors.background, 0.48),
+            colorWithAlpha(colors.muted, 0.62),
+          ]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.centralChatSurface}
         />
       )}
-      {!compact && !expanded && (
+      {!compact && expanded && (
         <View pointerEvents="none" style={styles.centralChatAmbient}>
           <View style={[styles.centralChatAmbientOrb, { backgroundColor: colors.primary }]} />
           <View style={[styles.centralChatAmbientOrbSmall, { backgroundColor: colors.accent }]} />
@@ -821,17 +834,10 @@ function CentralSecretaryChat({
             style={({ pressed }) => [
               styles.centralChatIcon,
               styles.centralChatHeroIcon,
-              { backgroundColor: colors.primary, opacity: pressed ? 0.72 : 1 },
+               { backgroundColor: colors.muted, borderColor: colors.border, opacity: pressed ? 0.72 : 1 },
             ]}
           >
-            <View style={styles.centralChatPresenceMark}>
-              <View style={[styles.centralChatPresenceGlow, { backgroundColor: colors.primaryForeground }]} />
-              <View style={[styles.centralChatPresenceCore, { backgroundColor: colors.primary }]}>
-                <Feather name={isSending ? 'loader' : 'zap'} size={18} color={colors.primaryForeground} />
-              </View>
-              <View style={[styles.centralChatPresenceDot, styles.centralChatPresenceDotTop, { backgroundColor: colors.accent }]} />
-              <View style={[styles.centralChatPresenceDot, styles.centralChatPresenceDotSide, { backgroundColor: colors.primaryForeground }]} />
-            </View>
+            <Feather name={isSending ? 'loader' : 'star'} size={15} color={colors.primary} />
           </Pressable>
         )}
         <View style={styles.centralChatHeadingCopy}>
@@ -908,7 +914,7 @@ function CentralSecretaryChat({
               style={({ pressed }) => [
                 styles.centralChatPrompt,
                 {
-                  backgroundColor: colors.muted,
+                   backgroundColor: 'transparent',
                   borderColor: colors.border,
                   opacity: pressed ? 0.65 : 1,
                 },
@@ -1032,7 +1038,7 @@ function CentralSecretaryChat({
               disabled={inputState === 'processing'}
               style={({ pressed }) => [
                 styles.centralChatInputAction,
-                { backgroundColor: inputState === 'recording' ? colors.destructive : colors.muted, opacity: pressed || inputState === 'processing' ? 0.6 : 1 },
+                { backgroundColor: inputState === 'recording' ? colors.destructive : 'transparent', opacity: pressed || inputState === 'processing' ? 0.6 : 1 },
               ]}
             >
               {inputState === 'processing'
@@ -1040,28 +1046,17 @@ function CentralSecretaryChat({
                 : <Feather name={inputState === 'recording' ? 'square' : 'mic'} size={15} color={inputState === 'recording' ? colors.destructiveForeground : colors.primary} />}
             </Pressable>
           )}
-          {onCaptureReceipt && (
-            <Pressable
-              testID={compact ? 'record-context-receipt-camera' : 'main-receipt-camera'}
-              accessibilityRole="button"
-              accessibilityLabel={localized(language, 'تصوير فاتورة', 'Take a receipt photo')}
-              onPress={onCaptureReceipt}
-              disabled={inputState !== 'idle'}
-              style={({ pressed }) => [styles.centralChatInputAction, { backgroundColor: colors.muted, opacity: pressed || inputState !== 'idle' ? 0.6 : 1 }]}
-            >
-              <Feather name="camera" size={15} color={colors.primary} />
-            </Pressable>
-          )}
-          {onPickReceipt && (
+          {(onCaptureReceipt || onPickReceipt) && (
             <Pressable
               testID={compact ? 'record-context-receipt-library' : 'main-receipt-library'}
               accessibilityRole="button"
-              accessibilityLabel={localized(language, 'اختيار صورة فاتورة', 'Choose a receipt image')}
+              accessibilityLabel={localized(language, 'إرفاق فاتورة — اضغط مطولًا للتصوير', 'Attach a receipt — long press to take a photo')}
               onPress={onPickReceipt}
+              onLongPress={onCaptureReceipt}
               disabled={inputState !== 'idle'}
-              style={({ pressed }) => [styles.centralChatInputAction, { backgroundColor: colors.muted, opacity: pressed || inputState !== 'idle' ? 0.6 : 1 }]}
+              style={({ pressed }) => [styles.centralChatInputAction, { backgroundColor: 'transparent', opacity: pressed || inputState !== 'idle' ? 0.6 : 1 }]}
             >
-              <Feather name="image" size={15} color={colors.primary} />
+              <Feather name="paperclip" size={15} color={colors.primary} />
             </Pressable>
           )}
         </View>
@@ -1487,7 +1482,11 @@ export function MainOffice({
     <View testID="main-office-home" style={styles.officeHome}>
       <LinearGradient
         pointerEvents="none"
-        colors={[colors.background, colors.card, colors.muted]}
+        colors={[
+          colorWithAlpha(colors.primary, 0.12),
+          colorWithAlpha(colors.background, 0.82),
+          colorWithAlpha(colors.muted, 0.9),
+        ]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.pearlBackground}
@@ -3209,9 +3208,13 @@ export const styles = StyleSheet.create({
     gap: 10,
   },
   brandMark: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
+    borderBottomRightRadius: 14,
+    borderBottomLeftRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -3236,8 +3239,8 @@ export const styles = StyleSheet.create({
     textAlign: 'right',
   },
   iconButton: {
-    width: 36,
-    height: 36,
+    width: 39,
+    height: 39,
     borderRadius: 13,
     borderWidth: 1,
     alignItems: 'center',
@@ -3759,8 +3762,9 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 0,
     paddingTop: 0,
     paddingBottom: 0,
-    borderRadius: 0,
-    borderWidth: 0,
+    borderRadius: 27,
+    borderWidth: 1,
+    overflow: 'hidden',
     justifyContent: 'flex-start',
   },
   recordChatPanel: {
@@ -3778,9 +3782,9 @@ export const styles = StyleSheet.create({
   },
   centralChatHeadingPearl: {
     paddingHorizontal: 14,
-    paddingTop: 8,
-    paddingBottom: 8,
-    borderBottomWidth: 0,
+    paddingTop: 16,
+    paddingBottom: 13,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   centralChatHeaderActions: {
     flexDirection: 'row-reverse',
@@ -3805,6 +3809,7 @@ export const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 11,
+    borderWidth: 1,
   },
   centralChatPresenceMark: {
     width: 32,
@@ -4079,14 +4084,15 @@ export const styles = StyleSheet.create({
   },
   centralChatPromptRail: {
     gap: 5,
-    paddingVertical: 4,
+    paddingTop: 12,
+    paddingBottom: 0,
     alignItems: 'center',
   },
   centralChatPromptRailPearl: {
     paddingHorizontal: 14,
   },
   centralChatPromptScroll: {
-    height: 42,
+    height: 43,
     flexGrow: 0,
     flexShrink: 0,
   },
@@ -4126,10 +4132,10 @@ export const styles = StyleSheet.create({
     fontWeight: '700',
   },
   centralChatPrompt: {
-    minHeight: 34,
-    borderRadius: 17,
-    borderWidth: 0,
-    paddingHorizontal: 13,
+    minHeight: 31,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 11,
     alignItems: 'flex-end',
     justifyContent: 'center',
   },
@@ -4159,7 +4165,7 @@ export const styles = StyleSheet.create({
     borderRadius: 30,
   },
   pearlSheetHandleZone: {
-    height: 31,
+    height: 25,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -4170,7 +4176,6 @@ export const styles = StyleSheet.create({
     opacity: 0.42,
   },
   pearlSheetHeading: {
-    minHeight: 47,
     flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -4367,9 +4372,10 @@ export const styles = StyleSheet.create({
     gap: 5,
   },
   pearlDateStrip: {
-    minHeight: 46,
-    paddingHorizontal: 2,
-    paddingVertical: 7,
+    minHeight: 70,
+    paddingHorizontal: 1,
+    paddingTop: 17,
+    paddingBottom: 14,
     flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',

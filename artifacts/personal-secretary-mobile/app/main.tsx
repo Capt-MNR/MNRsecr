@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
 import { useQueryClient } from '@tanstack/react-query';
@@ -307,9 +308,14 @@ export default function MainRoute() {
             onPress={() => setDrawerOpen(true)}
             style={({ pressed }) => [styles.brandBlock, { opacity: pressed ? 0.7 : 1 }]}
           >
-            <View style={[styles.brandMark, { backgroundColor: colors.primary }]}>
-              <Feather name="zap" size={17} color={colors.primaryForeground} />
-            </View>
+            <LinearGradient
+              colors={[colors.primary, colors.secondary]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.brandMark}
+            >
+              <Feather name="star" size={17} color={colors.primaryForeground} />
+            </LinearGradient>
             <View>
               <Text style={[styles.brandName, { color: colors.foreground }]}>سكرتيرك الذكي</Text>
               <View style={styles.availability}>
@@ -319,8 +325,8 @@ export default function MainRoute() {
             </View>
           </Pressable>
           <View style={styles.headerActions}>
+            <Pressable testID="main-quick-bubble" accessibilityRole="button" accessibilityLabel="فتح السكرتير بسرعة" onPress={() => router.replace('/')} style={({ pressed }) => [styles.iconButton, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}><Feather name="bell" size={17} color={colors.mutedForeground} /></Pressable>
             <Pressable testID="open-main-drawer" accessibilityRole="button" accessibilityLabel="فتح قائمة البرنامج" onPress={() => setDrawerOpen(true)} style={({ pressed }) => [styles.iconButton, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}><Feather name="menu" size={18} color={colors.foreground} /></Pressable>
-            <Pressable testID="main-quick-bubble" accessibilityRole="button" accessibilityLabel="فتح السكرتير بسرعة" onPress={() => router.replace('/')} style={({ pressed }) => [styles.quickAccessBubble, { backgroundColor: colors.primary, opacity: pressed ? 0.7 : 1 }]}><Feather name="message-circle" size={17} color={colors.primaryForeground} /></Pressable>
           </View>
         </View>
       </View>
