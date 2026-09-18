@@ -4039,6 +4039,11 @@ export const styles = StyleSheet.create({
   centralChatInput: {
     flex: 1,
     maxHeight: 50,
+    borderWidth: 0,
+    outlineStyle: 'solid',
+    outlineWidth: 0,
+    outlineColor: 'transparent',
+    backgroundColor: 'transparent',
     paddingTop: 7,
     paddingBottom: 6,
     paddingHorizontal: 4,
