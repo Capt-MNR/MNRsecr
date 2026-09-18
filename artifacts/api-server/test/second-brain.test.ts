@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import {
   conversationMemoryTable,
   db,
+  peopleTable,
   secondBrainMemoriesTable,
 } from "@workspace/db";
 import {
@@ -12,6 +13,7 @@ import {
   searchSecondBrain,
 } from "../src/lib/second-brain.ts";
 import { Phase2AgentRuntime, type ModelGateway } from "../src/lib/phase2.ts";
+import { resolveEntity } from "../src/lib/entity-resolver.ts";
 
 const identity = {
   tenantId: `second-brain-${process.pid}-${Date.now()}`,
@@ -40,6 +42,16 @@ async function cleanup() {
 test("parses explicit remember, preference, and recall commands", () => {
   assert.deepEqual(parseSecondBrainCommand("افتكر إني بحب الردود المختصرة")?.type, "remember");
   assert.deepEqual(parseSecondBrainCommand("أنا بفضل الفواتير بالجنيه")?.type, "remember");
+  assert.deepEqual(parseSecondBrainCommand("افتكر إن اسم ميدو هو محمد أحمد"), {
+    type: "remember",
+    memoryKind: "alias",
+    key: "alias:ميدو",
+    value: "محمد أحمد",
+    metadata: {
+      alias: "ميدو",
+      canonical: "محمد أحمد",
+    },
+  });
   assert.deepEqual(parseSecondBrainCommand("فاكر إيه اللي حفظته؟")?.type, "recall");
   assert.equal(parseSecondBrainCommand("سجل مصروف لمحمد ٥٠٠"), null);
 });
@@ -73,6 +85,44 @@ test("stores explicit memories with replacement and tenant isolation", async () 
   assert.equal(other.length, 1);
   assert.equal(other[0]?.value, "أفضل الردود الطويلة");
   await cleanup();
+});
+
+test("uses an explicit personal alias only for the owner's matching entity", async () => {
+  await cleanup();
+  const [person] = await db.insert(peopleTable).values({
+    tenantId: identity.tenantId,
+    ownerUserId: identity.userId,
+    name: "محمد أحمد",
+    nameKey: "محمد احمد",
+  }).returning();
+  await db.insert(peopleTable).values({
+    tenantId: otherIdentity.tenantId,
+    ownerUserId: otherIdentity.userId,
+    name: "محمد أحمد",
+    nameKey: "محمد احمد",
+  });
+  await rememberSecondBrain(identity, {
+    memoryKind: "alias",
+    key: "alias:ميدو",
+    value: "محمد أحمد",
+    metadata: { alias: "ميدو", canonical: "محمد أحمد" },
+  });
+
+  const own = await resolveEntity(identity, "person", "ميدو");
+  const other = await resolveEntity(otherIdentity, "person", "ميدو");
+  assert.equal(own.selected?.id, person.id);
+  assert.equal(own.matchType, "alias");
+  assert.equal(other.selected, undefined);
+  assert.equal(other.matchType, "none");
+  await cleanup();
+  await db.delete(peopleTable).where(and(
+    eq(peopleTable.tenantId, identity.tenantId),
+    eq(peopleTable.ownerUserId, identity.userId),
+  ));
+  await db.delete(peopleTable).where(and(
+    eq(peopleTable.tenantId, otherIdentity.tenantId),
+    eq(peopleTable.ownerUserId, otherIdentity.userId),
+  ));
 });
 
 test("handles memory commands without calling the model gateway", async () => {

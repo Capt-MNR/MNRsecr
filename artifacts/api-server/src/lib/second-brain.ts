@@ -256,6 +256,35 @@ export async function searchSecondBrain(
     .map((item) => item.memory);
 }
 
+export async function listSecondBrainAliases(
+  identity: Identity,
+  entityType?: "person" | "project" | "financial_party",
+): Promise<Array<{ alias: string; canonical: string }>> {
+  const rows = await db
+    .select()
+    .from(secondBrainMemoriesTable)
+    .where(and(
+      eq(secondBrainMemoriesTable.tenantId, identity.tenantId),
+      eq(secondBrainMemoriesTable.ownerUserId, identity.userId),
+      eq(secondBrainMemoriesTable.kind, "alias"),
+      eq(secondBrainMemoriesTable.status, "active"),
+    ))
+    .orderBy(desc(secondBrainMemoriesTable.updatedAt))
+    .limit(100);
+
+  return rows
+    .filter((row) => {
+      const rowEntityType = row.metadata?.entityType;
+      return !entityType || !rowEntityType || rowEntityType === entityType;
+    })
+    .map((row) => ({
+      alias: typeof row.metadata?.alias === "string"
+        ? row.metadata.alias
+        : row.key.replace(/^alias:/, ""),
+      canonical: row.value,
+    }));
+}
+
 export function formatSecondBrainContext(memories: SecondBrainMemory[]): string | null {
   if (memories.length === 0) return null;
   const payload = memories.map(secondBrainValue);

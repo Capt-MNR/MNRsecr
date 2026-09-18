@@ -11,6 +11,7 @@ import {
 import type { Identity } from "./secretary";
 import { logger } from "./logger";
 import { featureFlags } from "./feature-flags";
+import { listSecondBrainAliases } from "./second-brain";
 
 export type EntityType = "person" | "project" | "financial_party";
 export type ResolverMatchType = "exact" | "alias" | "fuzzy" | "ambiguous" | "none";
@@ -141,18 +142,40 @@ async function queryCandidates(identity: Identity, entityType: EntityType, query
     const rows = await db.select().from(peopleTable).where(and(
       eqOwnership(identity, peopleTable),
     )).orderBy(asc(peopleTable.createdAt)).limit(100);
-    return rows.map((row: Person) => ({ id: row.id, name: row.name, nameKey: row.nameKey }));
+    return addSecondBrainAliases(identity, entityType, rows.map((row: Person) => ({ id: row.id, name: row.name, nameKey: row.nameKey })));
   }
   if (entityType === "financial_party") {
     const rows = await db.select().from(financialPartiesTable).where(and(
       eqOwnership(identity, financialPartiesTable),
     )).orderBy(asc(financialPartiesTable.createdAt)).limit(100);
-    return rows.map((row) => ({ id: row.id, name: row.name, nameKey: row.nameKey }));
+    return addSecondBrainAliases(identity, entityType, rows.map((row) => ({ id: row.id, name: row.name, nameKey: row.nameKey })));
   }
   const rows = await db.select().from(projectsTable).where(and(
     eqOwnership(identity, projectsTable),
   )).orderBy(asc(projectsTable.createdAt)).limit(100);
-  return rows.map((row: Project) => ({ id: row.id, name: row.name, nameKey: row.nameKey }));
+  return addSecondBrainAliases(identity, entityType, rows.map((row: Project) => ({ id: row.id, name: row.name, nameKey: row.nameKey })));
+}
+
+async function addSecondBrainAliases(
+  identity: Identity,
+  entityType: EntityType,
+  candidates: ResolverCandidate[],
+): Promise<ResolverCandidate[]> {
+  if (candidates.length === 0) return candidates;
+  const aliases = await listSecondBrainAliases(identity, entityType);
+  if (aliases.length === 0) return candidates;
+  return candidates.map((candidate) => {
+    const candidateNames = new Set([
+      normalizeEntityText(candidate.name),
+      normalizeEntityText(candidate.nameKey ?? ""),
+    ]);
+    const matchingAliases = aliases
+      .filter((item) => candidateNames.has(normalizeEntityText(item.canonical)))
+      .map((item) => item.alias);
+    return matchingAliases.length > 0
+      ? { ...candidate, aliases: matchingAliases }
+      : candidate;
+  });
 }
 
 function eqOwnership(identity: Identity, table: { tenantId: any; ownerUserId: any }) {
