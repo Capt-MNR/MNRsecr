@@ -1,0 +1,473 @@
+STOP.
+
+The current result is NOT visually faithful enough to the Pearl/Canva reference.
+
+I have now compared the actual rendered Main screen against the Canva design at the same conceptual mobile viewport.
+
+The problem is NOT primarily colors, border radius, or small React Native rendering differences.
+
+The problem is the MAIN COMPOSITION and CONTENT HIERARCHY.
+
+You implemented a "dashboard with a chat section".
+
+The Canva/Pearl design is a "secretary conversation workspace with contextual sections".
+
+These are materially different layouts.
+
+Do NOT make another cosmetic pass.
+
+Do NOT just adjust colors.
+Do NOT just adjust padding.
+Do NOT just adjust border radius.
+Do NOT preserve the current Main card composition if it conflicts with Pearl.
+
+==================================================
+VISUAL SOURCE OF TRUTH
+==================================================
+
+Use the existing Pearl implementation:
+
+artifacts/mockup-sandbox/src/components/mockups/personal-secretary/OpalescentPearlSecretaryMobileKeyboard.tsx
+
+and its directly related styles/components.
+
+Also use:
+
+docs/PEARL_MAIN_FORENSIC_COMPARISON.md
+
+The Pearl/Canva composition is authoritative.
+
+The REAL Main remains authoritative for functionality and data.
+
+==================================================
+THE CORE MISMATCH
+==================================================
+
+CURRENT MAIN:
+
+Header
+↓
+Date
+↓
+Large "Today's conversation" card
+↓
+Large empty-state area
+↓
+Large composer
+↓
+Large Records card
+
+TARGET PEARL:
+
+Header
+↓
+Compact context/date area
+↓
+Compact "Today's conversation" header
+↓
+REAL CONVERSATION CONTENT
+    ↓
+    user message
+    assistant response
+    user message
+    assistant response
+    approval/action card
+↓
+Large conversational viewport / breathing space
+↓
+Thin compact composer
+↓
+Records/Context section
+
+The conversation is the primary workspace.
+
+It is NOT a large empty card inside a dashboard.
+
+==================================================
+1. REMOVE THE FALSE "LARGE CHAT CARD" MENTAL MODEL
+==================================================
+
+The current "حديثنا اليوم" container is visually behaving like a large dashboard card.
+
+That is wrong.
+
+In Pearl:
+
+"حديثنا اليوم" is a contextual header/section inside the conversation workspace.
+
+The conversation itself occupies the main viewport.
+
+Do NOT give the Today section an unnecessarily large fixed card height.
+
+Do NOT create a huge empty card merely because there are no messages in the current runtime state.
+
+The layout must support real conversation content naturally.
+
+==================================================
+2. REAL CHAT MUST BE THE PRIMARY CONTENT
+==================================================
+
+The central area must use the existing REAL Secretary Chat.
+
+Do not create mock messages.
+
+Do not hardcode Pearl's sample conversation.
+
+The Pearl conversation shown in the mockup is a VISUAL/STRUCTURAL reference only.
+
+The real Main must render actual messages returned by:
+
+useSecretaryChatService
+→ existing Secretary Chat API
+→ existing Secretary Runtime
+
+When there are messages, they should occupy the same visual region and follow Pearl's message geometry.
+
+When there are no messages, show the existing empty state, but the EMPTY STATE must not distort the overall Pearl composition.
+
+==================================================
+3. MESSAGE GEOMETRY
+==================================================
+
+Match Pearl's conversation geometry:
+
+- message width constraints
+- horizontal margins
+- bubble radius
+- bubble padding
+- vertical spacing
+- timestamp placement
+- sender/role indicators
+- alignment
+- assistant/user visual distinction
+
+Do not stretch messages across the entire screen.
+
+Do not turn the conversation into dashboard cards.
+
+==================================================
+4. APPROVAL CARD
+==================================================
+
+Pearl shows an approval/action card naturally embedded in the conversation.
+
+The real Main already has approval functionality.
+
+Use the existing real approval component/data.
+
+Do not duplicate approval logic.
+
+Do not create mock approval state.
+
+Match Pearl's visual geometry for the approval card:
+
+- inset
+- width
+- radius
+- border
+- title
+- amount/content hierarchy
+- buttons
+- spacing
+- visual prominence
+
+The buttons MUST remain connected to the existing server-authoritative approval flow.
+
+==================================================
+5. COMPOSER IS TOO LARGE IN CURRENT MAIN
+==================================================
+
+This is one of the most obvious mismatches.
+
+The current Main composer is a large floating card.
+
+Pearl's composer is substantially thinner and more compact.
+
+Reproduce Pearl's composer geometry:
+
+- horizontal inset
+- bottom offset
+- height
+- radius
+- internal padding
+- send button
+- microphone
+- attachment controls
+- placeholder
+- relationship to bottom navigation
+- safe-area inset
+- keyboard behavior
+
+Do not preserve the current oversized composer just because it already exists.
+
+Preserve its FUNCTIONALITY, but change its visual geometry to match Pearl.
+
+==================================================
+6. RECORDS / CONTEXT SECTION
+==================================================
+
+The current Records section is visually too large and behaves like another dashboard card.
+
+In Pearl it is secondary contextual content below the conversation workspace.
+
+Make it visually secondary while preserving the real Records functionality.
+
+Do not remove Records.
+
+Do not remove navigation to:
+
+Records
+→ Entity
+→ Related Entities
+→ Details
+
+Only change its composition and visual weight to match Pearl.
+
+==================================================
+7. HEADER
+==================================================
+
+The current header is visually heavier than Pearl.
+
+Compare the actual Pearl header geometry and reproduce:
+
+- height
+- horizontal padding
+- icon sizes
+- icon placement
+- title typography
+- subtitle
+- status indicator
+- action button geometry
+
+Do not invent new header actions.
+
+Every visible icon must remain meaningful and interactive.
+
+==================================================
+8. DATE / CONTEXT AREA
+==================================================
+
+The current date/context section is taking too much visual weight.
+
+Pearl treats this as compact contextual information.
+
+Match:
+
+- vertical spacing
+- typography
+- badge size
+- alignment
+- section height
+
+Do not turn it into another large card.
+
+==================================================
+9. OVERALL VERTICAL COMPOSITION
+==================================================
+
+This is the most important part.
+
+Measure the Pearl layout as a percentage of the available viewport height.
+
+Then reproduce the same hierarchy in Main.
+
+The available height should be conceptually divided into:
+
+HEADER
++
+CONTEXT
++
+CONVERSATION WORKSPACE
++
+COMPOSER
++
+LOWER CONTEXT/RECORDS
+
+Do NOT allow:
+
+Today's card
++
+empty state
++
+large composer
++
+large Records card
+
+to consume the majority of the viewport.
+
+The conversation workspace must be the dominant area.
+
+==================================================
+10. EMPTY STATE
+==================================================
+
+When there is no conversation:
+
+Do not make the empty state look like a huge standalone dashboard card.
+
+Keep the Pearl conversational composition.
+
+The empty state should visually occupy the conversation viewport without creating a giant bordered container that changes the fundamental composition.
+
+==================================================
+11. RESPONSIVE SCALING
+==================================================
+
+Do not compare the raw pixel width of the Canva screenshot to the Android screenshot.
+
+The Canva screenshot contains a smaller centered phone/rendering area.
+
+Normalize both references to the same application viewport aspect ratio.
+
+Compare RELATIVE geometry:
+
+- percentage of viewport width
+- percentage of viewport height
+- relative component proportions
+- spacing ratios
+
+Do not simply stretch the Canva screenshot.
+
+==================================================
+12. WHAT YOU MAY CHANGE
+==================================================
+
+You MAY change Main:
+
+- layout hierarchy
+- component composition
+- flex structure
+- dimensions
+- spacing
+- card geometry
+- typography
+- surfaces
+- positioning
+- scroll regions
+- composer geometry
+- contextual section geometry
+
+as required to reproduce Pearl.
+
+==================================================
+13. WHAT YOU MUST NOT CHANGE
+==================================================
+
+Do NOT change:
+
+- Secretary Runtime
+- LLM architecture
+- provider routing
+- memory architecture
+- deterministic parser
+- tools
+- approvals backend
+- tenant ownership
+- authentication
+- API contracts
+- Quick architecture
+- notification architecture
+
+Do not add:
+
+- new LLM calls
+- new API calls
+- polling
+- background AI
+- duplicate state stores
+- duplicate chat services
+
+==================================================
+14. IMPORTANT: DO NOT PRESERVE BAD EXISTING GEOMETRY
+==================================================
+
+Existing Main geometry is NOT sacred.
+
+Existing Main functionality IS sacred.
+
+If the current Main uses a large card and Pearl does not, change the card.
+
+If the current composer is large and Pearl is compact, change the composer.
+
+If the current Records section is too dominant, change its visual composition.
+
+Preserve behavior/data/functionality, not the old visual layout.
+
+==================================================
+15. VISUAL QA
+==================================================
+
+After implementation:
+
+Render the REAL Main screen.
+
+Compare it visually against the Pearl/Canva reference.
+
+Do not judge success from code alone.
+
+The following questions must have clear YES answers:
+
+1. Does the Main look like a conversation workspace rather than a traditional dashboard?
+2. Is the conversation the dominant visual area?
+3. Is "حديثنا اليوم" compact rather than a huge card?
+4. Is the composer thin/compact like Pearl?
+5. Is Records secondary rather than another dominant dashboard card?
+6. Are message bubbles proportioned like Pearl?
+7. Does the approval card sit naturally inside the conversation?
+8. Does the header have Pearl's proportions?
+9. Is the overall vertical rhythm recognizably Pearl?
+10. Does the screen look like the same product/design system as the Canva reference?
+
+If several answers are NO, continue implementing.
+
+==================================================
+16. FINAL REPORT
+==================================================
+
+Update:
+
+docs/PEARL_MAIN_FORENSIC_COMPARISON.md
+
+Add:
+
+"SECOND VISUAL IMPLEMENTATION PASS"
+
+Document:
+
+- composition changes
+- chat viewport changes
+- composer changes
+- Today section changes
+- Records section changes
+- header changes
+- message geometry changes
+- approval card changes
+- remaining differences
+
+Do not claim "matched" merely because colors and styling are similar.
+
+Use:
+
+MATCHED
+PARTIALLY MATCHED
+NOT MATCHED
+
+with concrete reasons.
+
+==================================================
+FINAL INSTRUCTION
+==================================================
+
+This is NOT another styling pass.
+
+Rebuild the REAL MAIN composition where necessary.
+
+PEARL = visual source of truth.
+MAIN = functional source of truth.
+
+Preserve Main functionality.
+Replace the incorrect visual composition.
+
+The current result is still materially different from Pearl.
+Do not stop until the major composition mismatch has been addressed.
