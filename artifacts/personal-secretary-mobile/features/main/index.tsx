@@ -730,6 +730,7 @@ type SecretaryChatProps = {
   expanded?: boolean;
   onToggleExpanded?: () => void;
   onOpenPearlSheet?: (tab: 'records' | 'context') => void;
+  sheetLift?: number;
 };
 
 function CentralSecretaryChat({
@@ -754,6 +755,7 @@ function CentralSecretaryChat({
   expanded = false,
   onToggleExpanded,
   onOpenPearlSheet,
+  sheetLift = 0,
   inputState = 'idle',
   onToggleVoice,
   onCaptureReceipt,
@@ -1019,7 +1021,7 @@ function CentralSecretaryChat({
       <View style={[
         styles.centralChatComposer,
         expanded && styles.centralChatComposerExpanded,
-        expanded && { bottom: 78 + insets.bottom },
+        expanded && { bottom: 78 + insets.bottom + sheetLift },
         {
           backgroundColor: expanded ? colors.card : 'transparent',
           borderColor: expanded ? colors.border : 'transparent',
@@ -1234,6 +1236,10 @@ export function MainOffice({
   const pearlSheetDragStartPosition = useRef(80);
   const pearlSheetWasDragged = useRef(false);
   const pearlSheetOpen = pearlSheetPosition < 80;
+  const pearlComposerLift = (
+    Math.max(0, pearlSheetHeight.current * 0.8 - pearlSheetOffset)
+    + 40
+  );
   const [recentSearchOpen, setRecentSearchOpen] = useState(false);
   const recentSearchRef = useRef<TextInput>(null);
   const recordsQuery = useListRecords({
@@ -1380,7 +1386,7 @@ export function MainOffice({
       meta: localized(language, 'تذكير محدث', 'Reminder updated'),
     })),
   ].slice(0, 5) : [];
-  const pearlSheetRecords = latestEdits.slice(0, 3);
+  const pearlSheetRecords = latestEdits;
   const normalizedSearch = conversationSearch.trim().toLocaleLowerCase();
   const filteredLatestEdits = normalizedSearch
     ? latestEdits.filter((edit) => [
@@ -1579,6 +1585,7 @@ export function MainOffice({
         onChangeInputReview={onChangeInputReview}
         onClearInputReview={onClearInputReview}
         onOpenPearlSheet={openPearlSheet}
+        sheetLift={pearlComposerLift}
       />
 
       <View
@@ -1622,81 +1629,90 @@ export function MainOffice({
         >
           <View style={[styles.pearlSheetHandle, { backgroundColor: colors.mutedForeground }]} />
         </Pressable>
-        <View style={styles.pearlSheetHeading}>
-          <View style={styles.pearlSheetHeadingCopy}>
-            <Text style={[styles.pearlSheetTitle, { color: colors.foreground }]}>
-              {localized(language, 'السجلات والسياق', 'Records & context')}
-            </Text>
-            <Text style={[styles.pearlSheetHint, { color: colors.mutedForeground }]}>
-              {localized(language, 'اربط ما قيل بما حُفظ', 'Connect what was said to what was saved')}
+        <ScrollView
+          testID="pearl-sheet-scroll"
+          style={styles.pearlSheetScroll}
+          contentContainerStyle={styles.pearlSheetScrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled
+        >
+          <View style={styles.pearlSheetHeading}>
+            <View style={styles.pearlSheetHeadingCopy}>
+              <Text style={[styles.pearlSheetTitle, { color: colors.foreground }]}>
+                {localized(language, 'السجلات والسياق', 'Records & context')}
+              </Text>
+              <Text style={[styles.pearlSheetHint, { color: colors.mutedForeground }]}>
+                {localized(language, 'اربط ما قيل بما حُفظ', 'Connect what was said to what was saved')}
+              </Text>
+            </View>
+            <Text style={[styles.pearlSheetCount, { color: colors.mutedForeground, backgroundColor: colors.muted }]}>
+              {contextualRecordCount} {localized(language, 'عناصر', 'items')}
             </Text>
           </View>
-          <Text style={[styles.pearlSheetCount, { color: colors.mutedForeground, backgroundColor: colors.muted }]}>
-            {contextualRecordCount} {localized(language, 'عناصر', 'items')}
-          </Text>
-        </View>
-        <View style={styles.pearlSheetTabs}>
-          {(['records', 'context'] as const).map((tab) => (
-            <Pressable
-              key={tab}
-              accessibilityRole="button"
-              accessibilityState={{ selected: pearlSheetTab === tab }}
-              onPress={() => setPearlSheetTab(tab)}
-              style={[
-                styles.pearlSheetTab,
-                pearlSheetTab === tab && { backgroundColor: colors.muted },
-              ]}
-            >
-              <Text style={[styles.pearlSheetTabText, { color: pearlSheetTab === tab ? colors.foreground : colors.mutedForeground }]}>
-                {tab === 'records' ? localized(language, 'السجلات', 'Records') : localized(language, 'الصورة الأكبر', 'Bigger picture')}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-        {pearlSheetTab === 'records' ? (
-          <View style={styles.pearlSheetRecordList}>
-            {pearlSheetRecords.length > 0 ? pearlSheetRecords.map((item) => (
+          <View style={styles.pearlSheetTabs}>
+            {(['records', 'context'] as const).map((tab) => (
               <Pressable
-                key={item.id}
+                key={tab}
                 accessibilityRole="button"
-                onPress={() => {
-                  animatePearlSheetTo(80);
-                  onOpenRecord(item.record);
-                }}
-                style={({ pressed }) => [
-                  styles.pearlSheetRecord,
-                  { backgroundColor: colors.muted, borderColor: colors.border, opacity: pressed ? 0.68 : 1 },
+                accessibilityState={{ selected: pearlSheetTab === tab }}
+                onPress={() => setPearlSheetTab(tab)}
+                style={[
+                  styles.pearlSheetTab,
+                  pearlSheetTab === tab && { backgroundColor: colors.muted },
                 ]}
               >
-                <View style={[styles.pearlSheetRecordIcon, { backgroundColor: colors.card }]}>
-                  <Feather name={item.icon} size={14} color={colors.primary} />
-                </View>
-                <View style={styles.pearlSheetRecordCopy}>
-                  <Text style={[styles.pearlSheetRecordTitle, { color: colors.foreground }]} numberOfLines={1}>{item.record.title}</Text>
-                  <Text style={[styles.pearlSheetRecordMeta, { color: colors.mutedForeground }]} numberOfLines={1}>{item.meta} · {item.record.subtitle}</Text>
-                </View>
-                <Text style={[styles.pearlSheetRecordTrailing, { color: colors.mutedForeground }]} numberOfLines={1}>{item.record.trailing ?? ''}</Text>
-                <Feather name="chevron-left" size={14} color={colors.mutedForeground} />
+                <Text style={[styles.pearlSheetTabText, { color: pearlSheetTab === tab ? colors.foreground : colors.mutedForeground }]}>
+                  {tab === 'records' ? localized(language, 'السجلات', 'Records') : localized(language, 'الصورة الأكبر', 'Bigger picture')}
+                </Text>
               </Pressable>
-            )) : (
-              <Text style={[styles.pearlSheetEmpty, { color: colors.mutedForeground }]}>
-                {localized(language, 'ستظهر السجلات المرتبطة هنا بعد أول تحديث.', 'Linked records will appear here after the first update.')}
-              </Text>
-            )}
+            ))}
           </View>
-        ) : (
-          <View style={[styles.pearlSheetContext, { backgroundColor: colors.muted, borderColor: colors.border }]}>
-            <View style={[styles.pearlSheetContextIcon, { backgroundColor: colors.card }]}>
-              <Feather name="shield" size={15} color={colors.primary} />
+          {pearlSheetTab === 'records' ? (
+            <View style={styles.pearlSheetRecordList}>
+              {pearlSheetRecords.length > 0 ? pearlSheetRecords.map((item) => (
+                <Pressable
+                  key={item.id}
+                  accessibilityRole="button"
+                  onPress={() => {
+                    animatePearlSheetTo(80);
+                    onOpenRecord(item.record);
+                  }}
+                  style={({ pressed }) => [
+                    styles.pearlSheetRecord,
+                    { backgroundColor: colors.muted, borderColor: colors.border, opacity: pressed ? 0.68 : 1 },
+                  ]}
+                >
+                  <View style={[styles.pearlSheetRecordIcon, { backgroundColor: colors.card }]}>
+                    <Feather name={item.icon} size={14} color={colors.primary} />
+                  </View>
+                  <View style={styles.pearlSheetRecordCopy}>
+                    <Text style={[styles.pearlSheetRecordTitle, { color: colors.foreground }]} numberOfLines={1}>{item.record.title}</Text>
+                    <Text style={[styles.pearlSheetRecordMeta, { color: colors.mutedForeground }]} numberOfLines={1}>{item.meta} · {item.record.subtitle}</Text>
+                  </View>
+                  <Text style={[styles.pearlSheetRecordTrailing, { color: colors.mutedForeground }]} numberOfLines={1}>{item.record.trailing ?? ''}</Text>
+                  <Feather name="chevron-left" size={14} color={colors.mutedForeground} />
+                </Pressable>
+              )) : (
+                <Text style={[styles.pearlSheetEmpty, { color: colors.mutedForeground }]}>
+                  {localized(language, 'ستظهر السجلات المرتبطة هنا بعد أول تحديث.', 'Linked records will appear here after the first update.')}
+                </Text>
+              )}
             </View>
-            <Text style={[styles.pearlSheetContextTitle, { color: colors.foreground }]}>
-              {localized(language, 'خريطة اليوم كما فهمها السكرتير', 'Today’s context map')}
-            </Text>
-            <Text style={[styles.pearlSheetContextText, { color: colors.mutedForeground }]}>
-              {localized(language, `${contextualRecordCount} عناصر مرتبطة بالمحادثة الحالية.`, `${contextualRecordCount} items are linked to the current conversation.`)}
-            </Text>
-          </View>
-        )}
+          ) : (
+            <View style={[styles.pearlSheetContext, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+              <View style={[styles.pearlSheetContextIcon, { backgroundColor: colors.card }]}>
+                <Feather name="shield" size={15} color={colors.primary} />
+              </View>
+              <Text style={[styles.pearlSheetContextTitle, { color: colors.foreground }]}>
+                {localized(language, 'خريطة اليوم كما فهمها السكرتير', 'Today’s context map')}
+              </Text>
+              <Text style={[styles.pearlSheetContextText, { color: colors.mutedForeground }]}>
+                {localized(language, `${contextualRecordCount} عناصر مرتبطة بالمحادثة الحالية.`, `${contextualRecordCount} items are linked to the current conversation.`)}
+              </Text>
+            </View>
+          )}
+        </ScrollView>
       </View>
 
       {false && !todayQuery.isLoading && !todayQuery.isError && contextData && (
@@ -4163,6 +4179,13 @@ export const styles = StyleSheet.create({
   pearlSheetSurface: {
     ...StyleSheet.absoluteFill,
     borderRadius: 30,
+  },
+  pearlSheetScroll: {
+    flex: 1,
+    minHeight: 0,
+  },
+  pearlSheetScrollContent: {
+    paddingBottom: 24,
   },
   pearlSheetHandleZone: {
     height: 25,
