@@ -486,6 +486,37 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /memories/{memoryId}/restore:
+    post:
+      operationId: restoreSecondBrainMemory
+      tags: [secretary]
+      summary: Restore one archived personal Second Brain memory
+      parameters:
+        - name: memoryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Restored personal memory
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SecondBrainMemoryResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Archived memory not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /turns:
     post:
       operationId: createTurn

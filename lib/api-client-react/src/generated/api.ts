@@ -2429,6 +2429,80 @@ export const useArchiveSecondBrainMemory = <TError = ErrorType<ErrorResponse>,
       return useMutation(getArchiveSecondBrainMemoryMutationOptions(options));
     }
 
+export const getRestoreSecondBrainMemoryUrl = (memoryId: string,) => {
+
+
+
+
+  return `/api/memories/${memoryId}/restore`
+}
+
+/**
+ * @summary Restore one archived personal Second Brain memory
+ */
+export const restoreSecondBrainMemory = async (memoryId: string, options?: Parameters<typeof customFetch>[1]): Promise<SecondBrainMemoryResponse> => {
+
+  return customFetch<SecondBrainMemoryResponse>(getRestoreSecondBrainMemoryUrl(memoryId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRestoreSecondBrainMemoryMutationKey = () => ['restoreSecondBrainMemory'] as const;
+
+export const getRestoreSecondBrainMemoryMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreSecondBrainMemory>>, TError,RestoreSecondBrainMemoryMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof restoreSecondBrainMemory>>, TError,RestoreSecondBrainMemoryMutationVariables, TContext> => {
+
+const mutationKey = getRestoreSecondBrainMemoryMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof restoreSecondBrainMemory>>, RestoreSecondBrainMemoryMutationVariables> = (props) => {
+          const {memoryId} = props ?? {};
+
+          return  restoreSecondBrainMemory(memoryId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RestoreSecondBrainMemoryMutationResult = NonNullable<Awaited<ReturnType<typeof restoreSecondBrainMemory>>>
+
+    export type RestoreSecondBrainMemoryMutationError = ErrorType<ErrorResponse>
+    export type RestoreSecondBrainMemoryMutationVariables = {memoryId: string}
+
+    /**
+ * @summary Restore one archived personal Second Brain memory
+ */
+export const useRestoreSecondBrainMemory = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreSecondBrainMemory>>, TError,RestoreSecondBrainMemoryMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof restoreSecondBrainMemory>>,
+        TError,
+        RestoreSecondBrainMemoryMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRestoreSecondBrainMemoryMutationOptions(options));
+    }
+
 export const getCreateTurnUrl = () => {
 
 

@@ -681,6 +681,29 @@ export const ArchiveSecondBrainMemoryResponse = zod.object({
 
 
 /**
+ * @summary Restore one archived personal Second Brain memory
+ */
+export const RestoreSecondBrainMemoryParams = zod.object({
+  "memoryId": zod.coerce.string().uuid()
+})
+
+export const RestoreSecondBrainMemoryResponse = zod.object({
+  "memory": zod.object({
+  "id": zod.string().uuid(),
+  "kind": zod.enum(['fact', 'preference', 'alias']),
+  "key": zod.string(),
+  "value": zod.string(),
+  "confidence": zod.number(),
+  "status": zod.enum(['active', 'archived']),
+  "sourceConversationId": zod.string().nullable(),
+  "sourceTurnId": zod.string().nullable(),
+  "updatedAt": zod.coerce.date(),
+  "lastConfirmedAt": zod.coerce.date().nullable()
+})
+})
+
+
+/**
  * @summary Send a natural-language message to the secretary
  */
 

@@ -10,6 +10,7 @@ import {
   archiveSecondBrainMemory,
   listSecondBrainMemories,
   publicSecondBrainMemory,
+  restoreSecondBrainMemory,
 } from "../lib/second-brain";
 
 const router: IRouter = Router();
@@ -53,6 +54,29 @@ router.delete("/memories/:memoryId", async (req, res): Promise<void> => {
   } catch (error) {
     req.log.error({ error, requestId: requestId(req), memoryId: parsed.data.memoryId }, "Second Brain memory archive failed");
     sendRouteError(req, res, 500, "تعذر أرشفة الذاكرة الشخصية.", "SECOND_BRAIN_ARCHIVE_FAILED");
+  }
+});
+
+router.post("/memories/:memoryId/restore", async (req, res): Promise<void> => {
+  const identity = requireIdentity(req, res);
+  if (!identity) return;
+  const parsed = ArchiveSecondBrainMemoryParams.safeParse(req.params);
+  if (!parsed.success) {
+    sendRouteError(req, res, 400, "معرّف الذاكرة غير صالح.", "INVALID_MEMORY_ID");
+    return;
+  }
+  try {
+    const memory = await restoreSecondBrainMemory(identity, parsed.data.memoryId);
+    if (!memory) {
+      sendRouteError(req, res, 404, "الذاكرة المؤرشفة غير موجودة.", "SECOND_BRAIN_ARCHIVED_MEMORY_NOT_FOUND");
+      return;
+    }
+    res.json(ArchiveSecondBrainMemoryResponse.parse({
+      memory: publicSecondBrainMemory(memory),
+    }));
+  } catch (error) {
+    req.log.error({ error, requestId: requestId(req), memoryId: parsed.data.memoryId }, "Second Brain memory restore failed");
+    sendRouteError(req, res, 500, "تعذر استرجاع الذاكرة الشخصية.", "SECOND_BRAIN_RESTORE_FAILED");
   }
 });
 

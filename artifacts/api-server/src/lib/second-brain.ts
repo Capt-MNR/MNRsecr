@@ -312,6 +312,26 @@ export async function archiveSecondBrainMemory(
   return memory ?? null;
 }
 
+export async function restoreSecondBrainMemory(
+  identity: Identity,
+  memoryId: string,
+): Promise<SecondBrainMemory | null> {
+  const [memory] = await db
+    .update(secondBrainMemoriesTable)
+    .set({
+      status: "active",
+      updatedAt: new Date(),
+    })
+    .where(and(
+      eq(secondBrainMemoriesTable.id, memoryId),
+      eq(secondBrainMemoriesTable.tenantId, identity.tenantId),
+      eq(secondBrainMemoriesTable.ownerUserId, identity.userId),
+      eq(secondBrainMemoriesTable.status, "archived"),
+    ))
+    .returning();
+  return memory ?? null;
+}
+
 export function publicSecondBrainMemory(memory: SecondBrainMemory) {
   return {
     id: memory.id,
