@@ -8,6 +8,7 @@ export const modules: ModuleMap = {
   "./components/mockups/personal-secretary/InboxSecretaryCalmPriority.tsx": () => import("../components/mockups/personal-secretary/InboxSecretaryCalmPriority.tsx"),
   "./components/mockups/personal-secretary/InboxSecretaryMobile.tsx": () => import("../components/mockups/personal-secretary/InboxSecretaryMobile.tsx"),
   "./components/mockups/personal-secretary/OpalescentPearlSecretaryMobile.tsx": () => import("../components/mockups/personal-secretary/OpalescentPearlSecretaryMobile.tsx"),
+  "./components/mockups/personal-secretary/OpalescentPearlSecretaryMobileKeyboard.tsx": () => import("../components/mockups/personal-secretary/OpalescentPearlSecretaryMobileKeyboard.tsx"),
   "./components/mockups/personal-secretary/SecretaryCommandCenter.tsx": () => import("../components/mockups/personal-secretary/SecretaryCommandCenter.tsx"),
   "./components/mockups/personal-secretary/SecretaryDaybookMobile.tsx": () => import("../components/mockups/personal-secretary/SecretaryDaybookMobile.tsx"),
   "./components/mockups/personal-secretary/SecretaryPulseBoard.tsx": () => import("../components/mockups/personal-secretary/SecretaryPulseBoard.tsx"),
