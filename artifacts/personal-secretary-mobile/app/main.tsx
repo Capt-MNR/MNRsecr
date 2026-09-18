@@ -76,22 +76,22 @@ export default function MainRoute() {
       ...baseColors,
       text: '#15213d',
       tint: '#5257e8',
-      background: '#f5f8ff',
+       background: '#f2eff1',
       foreground: '#15213d',
-      card: '#ffffff',
+       card: '#fffafd',
       cardForeground: '#15213d',
-      primary: '#5257e8',
-      primaryForeground: '#ffffff',
-      secondary: '#e9edff',
-      secondaryForeground: '#15213d',
-      muted: '#edf1ff',
-      mutedForeground: '#687594',
-      accent: '#22b887',
-      accentForeground: '#ffffff',
-      destructive: '#d85878',
-      destructiveForeground: '#ffffff',
-      border: '#dfe5f3',
-      input: '#e8edfa',
+       primary: '#ae7188',
+       primaryForeground: '#fff9fa',
+       secondary: '#e9e3eb',
+       secondaryForeground: '#303446',
+       muted: '#f1e8ef',
+       mutedForeground: '#7a7b8e',
+       accent: '#769c8e',
+       accentForeground: '#fff9fa',
+       destructive: '#bd6a7d',
+       destructiveForeground: '#fff9fa',
+       border: '#e1dce5',
+       input: '#f8f1f6',
     };
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -293,7 +293,11 @@ export default function MainRoute() {
   const topInset = insets.top + (Platform.OS === 'web' ? 24 : 0);
 
   return (
-    <KeyboardAvoidingView style={[styles.screen, { backgroundColor: colors.background }]} behavior="padding">
+    <KeyboardAvoidingView
+      style={[styles.screen, { backgroundColor: colors.background }]}
+      behavior="padding"
+      keyboardVerticalOffset={topInset}
+    >
       <View style={[styles.header, { paddingTop: topInset + 5, borderBottomColor: colors.border, backgroundColor: colors.background }]}>
         <View style={styles.headerTop}>
           <Pressable

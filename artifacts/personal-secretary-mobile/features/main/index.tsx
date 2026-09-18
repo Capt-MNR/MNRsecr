@@ -753,6 +753,7 @@ function CentralSecretaryChat({
   const { language } = useLanguage();
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [inputHeight, setInputHeight] = useState(30);
+  const transcriptRef = useRef<ScrollView>(null);
   useEffect(() => {
     if (!draft) setInputHeight(30);
   }, [draft]);
@@ -766,6 +767,12 @@ function CentralSecretaryChat({
   const inputContentHeight = (event: { nativeEvent: { contentSize: { height: number } } }) => {
     setInputHeight(Math.min(inputMaxHeight, Math.max(30, event.nativeEvent.contentSize.height)));
   };
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      transcriptRef.current?.scrollToEnd({ animated: false });
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [messages.length, isSending, expanded]);
   return (
     <View
       testID={compact ? 'record-context-chat' : 'main-central-chat'}
@@ -774,7 +781,7 @@ function CentralSecretaryChat({
         !compact && expanded && styles.centralChatExpanded,
           {
             backgroundColor: colors.card,
-            borderColor: compact ? colors.border : expanded ? 'transparent' : colors.primary,
+            borderColor: compact ? colors.border : colors.border,
             shadowColor: colors.primary,
             shadowOpacity: compact || expanded ? 0 : 0.2,
             shadowRadius: compact ? 0 : 24,
@@ -789,7 +796,7 @@ function CentralSecretaryChat({
           <View style={[styles.centralChatAmbientOrbSmall, { backgroundColor: colors.accent }]} />
         </View>
       )}
-      <View style={styles.centralChatHeading}>
+      <View style={[styles.centralChatHeading, { borderBottomColor: colors.border }]}>
         {!compact && (
           <Pressable
             testID="main-chat-focus"
@@ -878,6 +885,7 @@ function CentralSecretaryChat({
 
       <ScrollView
         testID={compact ? 'record-context-transcript' : 'main-chat-transcript'}
+        ref={transcriptRef}
         style={[
           styles.centralChatTranscript,
           compact && styles.recordChatTranscript,
@@ -906,7 +914,7 @@ function CentralSecretaryChat({
             </Text>
           </View>
         )}
-        {transcriptMessages.slice().reverse().map((message) => (
+        {transcriptMessages.map((message) => (
           <MessageBubble
             key={message.id}
             message={message}
@@ -3452,22 +3460,23 @@ export const styles = StyleSheet.create({
   centralChatPanel: {
     minHeight: 270,
     marginTop: 10,
-    borderRadius: 22,
-    borderWidth: 0,
-    padding: 10,
+    borderRadius: 27,
+    borderWidth: 1,
+    padding: 14,
     overflow: 'hidden',
     position: 'relative',
   },
   centralChatExpanded: {
     flex: 1,
     minHeight: 0,
-    marginTop: -3,
-    marginBottom: -4,
-    marginHorizontal: -7,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 8,
-    borderRadius: 0,
+    marginTop: 8,
+    marginBottom: 6,
+    marginHorizontal: 0,
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 10,
+    borderRadius: 27,
+    borderWidth: 1,
     justifyContent: 'flex-start',
   },
   recordChatPanel: {
@@ -3480,6 +3489,8 @@ export const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 9,
+    paddingBottom: 11,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   centralChatHeaderActions: {
     flexDirection: 'row-reverse',
@@ -3621,6 +3632,7 @@ export const styles = StyleSheet.create({
     maxHeight: 100000,
     minHeight: 0,
     marginTop: 12,
+    paddingBottom: 8,
   },
   recordChatTranscript: {
     maxHeight: 220,
@@ -3705,11 +3717,12 @@ export const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   centralChatComposerExpanded: {
-    minHeight: 62,
-    marginTop: 12,
-    borderRadius: 0,
-    paddingLeft: 0,
-    paddingRight: 0,
+    minHeight: 58,
+    marginTop: 10,
+    borderRadius: 17,
+    borderWidth: 1,
+    paddingLeft: 7,
+    paddingRight: 8,
   },
   centralChatInputExpanded: {
     paddingTop: 12,
