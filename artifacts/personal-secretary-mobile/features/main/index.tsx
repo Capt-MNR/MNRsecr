@@ -796,7 +796,7 @@ function CentralSecretaryChat({
           },
       ]}
     >
-      {!compact && (
+      {!compact && !expanded && (
         <LinearGradient
           pointerEvents="none"
           colors={[colors.card, colors.background, colors.muted]}
@@ -805,7 +805,7 @@ function CentralSecretaryChat({
           style={styles.centralChatSurface}
         />
       )}
-      {!compact && (
+      {!compact && !expanded && (
         <View pointerEvents="none" style={styles.centralChatAmbient}>
           <View style={[styles.centralChatAmbientOrb, { backgroundColor: colors.primary }]} />
           <View style={[styles.centralChatAmbientOrbSmall, { backgroundColor: colors.accent }]} />
@@ -3271,7 +3271,8 @@ export const styles = StyleSheet.create({
   },
   drawerLayer: {
     ...StyleSheet.absoluteFill,
-    zIndex: 1,
+    zIndex: 1000,
+    elevation: 1000,
     flexDirection: 'row-reverse',
   },
   drawerBackdrop: {
@@ -3287,7 +3288,7 @@ export const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 18,
     shadowOffset: { width: -4, height: 0 },
-    elevation: 8,
+    elevation: 1001,
   },
   drawerScrollContent: {
     flexGrow: 1,
@@ -3757,8 +3758,8 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 0,
     paddingTop: 0,
     paddingBottom: 0,
-    borderRadius: 27,
-    borderWidth: 1,
+    borderRadius: 0,
+    borderWidth: 0,
     justifyContent: 'flex-start',
   },
   recordChatPanel: {
@@ -3776,8 +3777,9 @@ export const styles = StyleSheet.create({
   },
   centralChatHeadingPearl: {
     paddingHorizontal: 14,
-    paddingTop: 16,
-    paddingBottom: 13,
+    paddingTop: 8,
+    paddingBottom: 8,
+    borderBottomWidth: 0,
   },
   centralChatHeaderActions: {
     flexDirection: 'row-reverse',
@@ -3941,8 +3943,8 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   centralChatTranscriptEmptyContentPearl: {
-    justifyContent: 'flex-start',
-    paddingTop: 24,
+    justifyContent: 'center',
+    paddingTop: 0,
   },
   centralChatEmpty: {
     alignItems: 'center',

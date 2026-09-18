@@ -326,7 +326,6 @@ export default function MainRoute() {
       </View>
       {!hydrated ? <View style={styles.loadingState}><ActivityIndicator color={colors.primary} /></View> : (
         <MainWorkspace>
-          <MainDrawer colors={colors} language={language} themePreference={themePreference} open={drawerOpen} activeSection={mainSection} onClose={() => setDrawerOpen(false)} onSelect={openMainSection} onOpenQuick={() => router.replace('/')} onThemeChange={setThemePreference} onLanguageChange={setLanguage} assistantPreferences={assistantPreferences} onAssistantPreferencesChange={(patch) => setAssistantPreferences((current) => ({ ...current, ...patch }))} />
           {selectedRecord ? <RecordDetailView record={selectedRecord} colors={colors} onBack={() => setSelectedRecord(null)} onAskSecretary={askSecretaryAboutRecord} onOpenConversation={openConversation} onOpenRelatedRecord={openRecord} chatMessages={messages} chatDraft={draft} onChangeChatDraft={setDraft} onSendChat={() => void sendMessage()} chatBusy={secretaryChat.isSending || conversationQuery.isFetching} onApprove={(approval, args) => void updateApproval(approval, 'completed', args)} onReject={(approval) => void updateApproval(approval, 'rejected')} busyOperationId={busyOperationId} chatContext={chatContext} /> : (
             <>
                 {mainSection === 'office' && <MainOffice colors={colors} language={language} assistantPreferences={assistantPreferences} onOpenRecord={openRecord} onRetryInput={(attachment) => { if (attachment) void inputCapture.retryAttachment(attachment); }} retryingInput={inputCapture.state === 'processing'} onOpenRecords={() => openMainSection('records')} onOpenFinancial={() => openMainSection('financial')} onOpenConversation={openConversationById} onFocusChat={focusMainChat} onAskSecretary={(value) => { setDraft(value); setInputReview(null); setTimeout(() => inputRef.current?.focus(), 0); }} messages={messages} draft={draft} onChangeDraft={setDraft} onSend={() => void sendMessage()} inputRef={inputRef} isSending={secretaryChat.isSending || conversationQuery.isFetching || inputCapture.state === 'processing'} onApprove={(approval, args) => void updateApproval(approval, 'completed', args)} onReject={(approval) => void updateApproval(approval, 'rejected')} busyOperationId={busyOperationId} recordOrigins={recordOrigins} chatContext={chatContext} recentConversations={recentConversations} conversationSearch={conversationSearch} onChangeConversationSearch={setConversationSearch} conversationsLoading={secretaryChat.conversationsQuery.isFetching} pendingApprovals={messages.flatMap((message) => message.approval?.status === 'pending' ? [message.approval] : [])} inputState={inputCapture.state} onToggleVoice={() => void inputCapture.toggleVoice()} onCaptureReceipt={() => void inputCapture.pickReceipt('camera')} onPickReceipt={() => void inputCapture.pickReceipt('library')} inputReview={inputReview} onChangeInputReview={updateInputReview} onClearInputReview={() => setInputReview(null)} />}
@@ -349,6 +348,22 @@ export default function MainRoute() {
           activeSection={selectedRecord ? 'records' : mainSection}
           onSelect={openMainSection}
           onOpenDrawer={() => setDrawerOpen(true)}
+        />
+      )}
+      {hydrated && (
+        <MainDrawer
+          colors={colors}
+          language={language}
+          themePreference={themePreference}
+          open={drawerOpen}
+          activeSection={mainSection}
+          onClose={() => setDrawerOpen(false)}
+          onSelect={openMainSection}
+          onOpenQuick={() => router.replace('/')}
+          onThemeChange={setThemePreference}
+          onLanguageChange={setLanguage}
+          assistantPreferences={assistantPreferences}
+          onAssistantPreferencesChange={(patch) => setAssistantPreferences((current) => ({ ...current, ...patch }))}
         />
       )}
       {localError && <View style={styles.errorRow}>
