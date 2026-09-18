@@ -257,7 +257,7 @@ export default function OpalescentPearlSecretaryMobile() {
         .ops-prompts::-webkit-scrollbar { display: none; }
         .ops-prompt { flex: 0 0 auto; padding: 8px 11px; color: #777b91; border: 1px solid rgba(172,174,197,.38); border-radius: 10px; background: rgba(255,253,255,.43); font-family: inherit; font-size: 9px; cursor: pointer; transition: transform .18s ease, background .18s ease; }
         .ops-prompt:hover { background: rgba(255,255,255,.72); }
-        .ops-messages { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 11px; padding: 17px 14px 151px; }
+        .ops-messages { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 11px; padding: 17px 14px 174px; }
         .ops-message { max-width: 91%; animation: ops-rise .32s ease both; }
         .ops-message.assistant { align-self: flex-start; }
         .ops-message.user { align-self: flex-end; }
@@ -278,7 +278,7 @@ export default function OpalescentPearlSecretaryMobile() {
         .ops-action.approve { color: #fff9fa; background: #ae7188; box-shadow: 0 7px 14px rgba(174,113,136,.18); }
         .ops-action.later { color: #8d687e; border: 1px solid rgba(185,148,169,.37); background: rgba(255,253,255,.52); }
         .ops-approved { display: flex; align-items: center; gap: 7px; color: #66897d; font-size: 10px; font-weight: 850; }
-        .ops-composer-wrap { position: absolute; right: 12px; bottom: 12px; left: 12px; z-index: 2; }
+        .ops-composer-wrap { position: fixed; right: 12px; bottom: calc(78px + env(safe-area-inset-bottom, 0px)); left: 12px; z-index: 10; }
         .ops-composer { display: flex; align-items: center; gap: 7px; padding: 7px 8px 7px 7px; border: 1px solid rgba(255,255,255,.89); border-radius: 17px; background: rgba(255,253,255,.72); box-shadow: 0 13px 27px rgba(91,88,113,.12), inset 0 1px rgba(255,255,255,.88); backdrop-filter: blur(20px) saturate(1.12); }
         .ops-composer input { min-width: 0; flex: 1; padding: 8px 5px; border: 0; outline: 0; color: var(--ops-ink); background: transparent; font-family: inherit; font-size: 11px; }
         .ops-composer input::placeholder { color: #a09faf; }
@@ -332,7 +332,7 @@ export default function OpalescentPearlSecretaryMobile() {
         .ops-toast { position: fixed; right: 18px; bottom: 94px; left: 18px; z-index: 9; padding: 11px 13px; color: #697f84; border: 1px solid rgba(255,255,255,.88); border-radius: 12px; background: rgba(237,247,246,.91); box-shadow: 0 12px 28px rgba(70,91,104,.16); font-family: inherit; font-size: 10px; cursor: pointer; animation: ops-rise .25s ease both; }
         @keyframes ops-rise { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes ops-slide { from { opacity: 0; transform: translateX(15px); } to { opacity: 1; transform: translateX(0); } }
-        @media (min-width: 600px) { .ops-shell { max-width: 450px; margin: 0 auto; } .ops-bottom-nav { right: calc(50% - 210px); left: calc(50% - 210px); } }
+        @media (min-width: 600px) { .ops-shell { max-width: 450px; margin: 0 auto; } .ops-bottom-nav, .ops-composer-wrap { right: calc(50% - 210px); left: calc(50% - 210px); } }
       `}</style>
 
       <div className="ops-app">
@@ -392,15 +392,15 @@ export default function OpalescentPearlSecretaryMobile() {
               )}
             </div>
           </div>
-          <div className="ops-composer-wrap">
-            <div className="ops-composer">
-              <button className="ops-chat-tool" aria-label="إرفاق ملف" onClick={() => setShowNotice(true)}><Paperclip size={16} /></button>
-              <input value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") send(); }} placeholder="أكمل حديثك هنا..." aria-label="اكتب رسالة" />
-              <button className="ops-chat-tool" aria-label="تسجيل صوتي" onClick={() => setShowNotice(true)}><Mic size={16} /></button>
-              <button className="ops-send" aria-label="إرسال الرسالة" onClick={send}><Send size={15} /></button>
-            </div>
-          </div>
         </section>
+        <div className="ops-composer-wrap">
+          <div className="ops-composer">
+            <button className="ops-chat-tool" aria-label="إرفاق ملف" onClick={() => setShowNotice(true)}><Paperclip size={16} /></button>
+            <input value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") send(); }} placeholder="أكمل حديثك هنا..." aria-label="اكتب رسالة" />
+            <button className="ops-chat-tool" aria-label="تسجيل صوتي" onClick={() => setShowNotice(true)}><Mic size={16} /></button>
+            <button className="ops-send" aria-label="إرسال الرسالة" onClick={send}><Send size={15} /></button>
+          </div>
+        </div>
       </div>
 
       <nav className="ops-bottom-nav" aria-label="التنقل السفلي">
