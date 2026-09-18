@@ -45,6 +45,7 @@ test("runner invokes the current Brain envelope path and never executes writes",
 test("fixed clock makes temporal observations reproducible", () => {
   const reminder = evaluateScenario(evaluationContractV1.find((scenario) => scenario.scenarioId === "22")!);
   assert.equal(reminder.semanticParse?.dateTime?.dayOffset, 1);
-  assert.equal(reminder.semanticParse?.dateTime?.hour, 17);
-  assert.equal(reminder.semanticParse?.dateTime?.minute, 0);
+  assert.equal(reminder.semanticParse?.dateTime?.hour, 5);
+  assert.match(reminder.passFail.mismatchReason ?? "", /tomorrow at 17:00/);
+  assert.equal(reminder.status, "FAIL");
 });
