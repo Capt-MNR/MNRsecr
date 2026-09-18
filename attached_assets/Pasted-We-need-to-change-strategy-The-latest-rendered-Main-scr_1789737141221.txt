@@ -1,0 +1,477 @@
+We need to change strategy.
+
+The latest rendered Main screen is STILL materially different from the Pearl/Canva reference.
+
+Do NOT perform another incremental styling pass.
+
+Do NOT continue modifying the existing Main dashboard composition one padding/radius/color at a time.
+
+The current result proves that the existing Main component hierarchy is the wrong visual foundation.
+
+==================================================
+NEW STRATEGY: PORT PEARL'S VISUAL STRUCTURE
+==================================================
+
+Use:
+
+artifacts/mockup-sandbox/src/components/mockups/personal-secretary/OpalescentPearlSecretaryMobileKeyboard.tsx
+
+as the PRIMARY VISUAL COMPONENT BLUEPRINT.
+
+Do not merely copy its colors or individual CSS values.
+
+Reproduce its relevant COMPONENT HIERARCHY / LAYOUT STRUCTURE in the REAL Main.
+
+Conceptually:
+
+PEARL COMPONENT STRUCTURE
+        ↓
+same visual hierarchy / containers / layout relationships
+        ↓
+REAL MAIN DATA + REAL MAIN FUNCTIONALITY
+
+The existing Main functionality must be plugged into this structure.
+
+This is fundamentally different from:
+
+CURRENT MAIN STRUCTURE
+        ↓
+make it look more like Pearl
+
+==================================================
+1. FIRST INSPECT PEARL'S COMPONENT TREE
+==================================================
+
+Before editing Main, inspect the complete Pearl component and every directly related component/style it imports.
+
+Identify:
+
+- root screen container
+- header container
+- header controls
+- context/date region
+- conversation region
+- message list
+- message bubbles
+- action chips
+- approval/action cards
+- composer
+- bottom sheet/context region
+- Records/context section
+- bottom navigation
+- overlay/menu layers
+
+Document the hierarchy briefly.
+
+The important thing is to understand HOW Pearl is constructed, not just its CSS values.
+
+==================================================
+2. IDENTIFY THE CURRENT MAIN TREE
+==================================================
+
+Then inspect the actual Main implementation.
+
+Identify which current containers are responsible for:
+
+- large Today card
+- empty-state area
+- oversized composer
+- Records section
+- header
+- bottom navigation
+
+We already know the current structure is producing the wrong composition.
+
+Therefore you are allowed to restructure these UI containers.
+
+Do NOT preserve the old visual hierarchy merely because the functionality currently works.
+
+==================================================
+3. REBUILD THE MAIN VISUAL SHELL
+==================================================
+
+The REAL Main should now follow the Pearl structural model.
+
+The intended visual flow is:
+
+HEADER
+↓
+COMPACT CONTEXT
+↓
+COMPACT "حديثنا اليوم"
+↓
+REAL CONVERSATION WORKSPACE
+↓
+REAL MESSAGE STREAM
+↓
+REAL ACTION / APPROVAL CARDS WHEN PRESENT
+↓
+COMPACT COMPOSER
+↓
+SECONDARY RECORDS / CONTEXT
+↓
+BOTTOM NAVIGATION
+
+The conversation workspace must NOT be implemented as a giant dashboard card.
+
+==================================================
+4. VERY IMPORTANT: REMOVE THE OLD EMPTY-CARD MODEL
+==================================================
+
+The current implementation still behaves as though:
+
+"حديثنا اليوم" = a large card.
+
+This is incorrect.
+
+"حديثنا اليوم" should be a compact contextual header associated with the conversation.
+
+The conversation viewport is the actual workspace.
+
+Do not use a large fixed/min-height card to create the visual appearance of the conversation.
+
+Do not use empty vertical space to simulate the Pearl layout.
+
+The viewport should naturally contain the message list.
+
+==================================================
+5. REAL MESSAGE STREAM
+==================================================
+
+Use the existing real Secretary Chat data/service.
+
+Do NOT copy Pearl's demo conversation.
+
+Do NOT hardcode demo messages.
+
+Do NOT create mock state.
+
+The Pearl message examples are ONLY structural/visual references.
+
+The real Main must continue using:
+
+useSecretaryChatService
+→ existing Secretary Chat API
+→ existing Secretary Runtime
+
+No additional LLM calls.
+No additional API requests.
+
+==================================================
+6. EMPTY STATE
+==================================================
+
+When there are no messages:
+
+Render the existing Main empty state inside the conversation viewport.
+
+But the empty state must NOT create the layout itself.
+
+In other words:
+
+WRONG:
+
+EmptyState
+→ large card
+→ card determines viewport
+
+CORRECT:
+
+ConversationViewport
+→ EmptyState centered inside it
+
+The conversation viewport owns the geometry.
+
+==================================================
+7. COMPOSER
+==================================================
+
+The current composer is still too large compared with Pearl.
+
+Do not merely reduce its padding slightly.
+
+Rebuild its visual shell according to Pearl's composer structure.
+
+Match:
+
+- height
+- horizontal inset
+- bottom offset
+- internal alignment
+- send button geometry
+- microphone button
+- camera button
+- image/attachment button
+- text field
+- radius
+- border
+- shadow
+- safe-area behavior
+- keyboard behavior
+
+Preserve all existing functionality.
+
+==================================================
+8. REMOVE THE BLACK INPUT OUTLINE
+==================================================
+
+The latest Android/web preview shows a clearly visible BLACK rectangular outline around the text input.
+
+This is not part of Pearl.
+
+Inspect the actual input/focus styling.
+
+Remove any unintended:
+
+- browser focus outline
+- default input border
+- debug border
+- accessibility/debug styling
+- platform-specific black border
+
+The focused input must visually match the Pearl composer.
+
+Do NOT disable keyboard/focus functionality to achieve this.
+
+==================================================
+9. HEADER MUST FOLLOW PEARL STRUCTURE
+==================================================
+
+Do not keep the current header simply because it is functional.
+
+Reproduce the Pearl header's structural arrangement.
+
+Match:
+
+- control order
+- control positions
+- spacing
+- title position
+- subtitle
+- assistant/status indicator
+- icon/button dimensions
+- vertical alignment
+
+Every button must remain connected to REAL Main functionality.
+
+Do not invent functionality.
+
+==================================================
+10. RECORDS MUST BE SECONDARY
+==================================================
+
+Records remain real and fully functional.
+
+But visually they are secondary context.
+
+Use Pearl's structural relationship between the conversation workspace and the lower Records/context area.
+
+Do not let Records become another large dashboard card competing with the conversation.
+
+==================================================
+11. DO NOT COPY MOCKUP LOGIC
+==================================================
+
+You may port:
+
+- component hierarchy
+- layout structure
+- visual containers
+- styling system
+- geometry
+- interaction presentation
+
+You MUST NOT port:
+
+- mock data
+- demo messages
+- fake handlers
+- mock navigation
+- mock API
+- demo business state
+
+Replace those with the real Main implementations.
+
+==================================================
+12. PRESERVE MAIN FUNCTIONALITY
+==================================================
+
+The following must remain real:
+
+- Secretary Chat
+- Records
+- Record Detail
+- Related Entities
+- Tasks
+- appointments
+- expenses
+- approvals
+- permissions
+- authentication
+- existing API
+- existing Secretary Runtime
+- existing memory architecture
+
+Only the frontend composition is being restructured.
+
+==================================================
+13. PRESERVE QUICK
+==================================================
+
+Do not move any Main functionality into Quick.
+
+Do not modify Quick architecture.
+
+Quick remains lightweight and continues using the shared Secretary Chat API.
+
+==================================================
+14. TOKEN / API REQUIREMENT
+==================================================
+
+This visual restructuring MUST NOT introduce:
+
+- new LLM calls
+- new API requests
+- new tool calls
+- new conversation queries
+- polling
+- background AI
+- duplicate chat service
+- duplicate state store
+
+The UI must remain token-neutral.
+
+==================================================
+15. USE PEARL AS A STRUCTURAL BLUEPRINT, NOT A SCREENSHOT
+==================================================
+
+The important question is NOT:
+
+"How can I make the current Main screenshot look similar?"
+
+The important question is:
+
+"What layout/component structure does Pearl use that produces this visual result?"
+
+Reproduce that structure in Main.
+
+==================================================
+16. VISUAL COMPARISON
+==================================================
+
+After restructuring, render the REAL Main at the same application viewport proportions as the Pearl reference.
+
+Compare:
+
+A. Header geometry
+B. Context/date geometry
+C. Today section height
+D. Conversation viewport
+E. Message positioning
+F. Composer height and position
+G. Records position
+H. Bottom navigation
+I. Overall vertical rhythm
+J. Relative visual density
+
+The result should no longer look like:
+
+"an existing dashboard with Pearl styling."
+
+It should look like:
+
+"the Pearl visual structure containing the real Main application."
+
+==================================================
+17. IMPORTANT: DO NOT USE ARTIFICIAL EMPTY SPACE
+==================================================
+
+Do NOT add large fixed heights merely to visually push components into position.
+
+Do NOT use:
+
+- arbitrary spacer Views
+- giant minHeight values
+- absolute positioning hacks
+- invisible placeholders
+
+to imitate Pearl.
+
+Use the correct layout hierarchy and flex/scroll behavior.
+
+==================================================
+18. MENU LAYERING
+==================================================
+
+Keep the previously identified hamburger-menu fix.
+
+The existing hamburger menu must render above:
+
+- conversation
+- Today/context
+- Records
+- composer
+- bottom navigation
+
+Inspect:
+
+- zIndex
+- elevation
+- overflow
+- parent stacking contexts
+- portal/modal behavior
+
+Do not simply increase random zIndex values.
+
+==================================================
+19. ACCEPTANCE TEST
+==================================================
+
+The implementation is NOT complete if the rendered Main still visually resembles the current screenshot.
+
+Specifically, these must be true:
+
+[ ] Header proportions match Pearl
+[ ] Today is a compact section, not a large card
+[ ] Conversation is the primary workspace
+[ ] Empty state does not define the layout
+[ ] Composer is compact like Pearl
+[ ] No black input outline
+[ ] Records is secondary
+[ ] Bottom navigation follows Pearl
+[ ] Overall vertical composition matches Pearl
+[ ] Existing Main functionality still works
+[ ] Hamburger menu renders above all content
+[ ] Quick remains unchanged architecturally
+[ ] No additional LLM/API calls introduced
+
+==================================================
+20. DO NOT STOP AFTER TYPECHECK
+==================================================
+
+Typecheck is necessary but NOT sufficient.
+
+The primary acceptance criterion is the rendered UI.
+
+Actually inspect the resulting screen.
+
+If it still looks materially different from Pearl, continue restructuring.
+
+==================================================
+FINAL INSTRUCTION
+==================================================
+
+STOP trying to transform the current Main dashboard into Pearl through incremental styling.
+
+Instead:
+
+PORT PEARL'S VISUAL COMPONENT/LAYOUT STRUCTURE
+into
+THE REAL MAIN APPLICATION,
+
+while preserving all real Main data, functionality, services, APIs, approvals, Records, and architecture.
+
+Pearl = visual/component-structure source of truth.
+Main = functional/data source of truth.
+
+This is a structural frontend refactor, not another cosmetic pass.
