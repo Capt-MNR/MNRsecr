@@ -1111,6 +1111,7 @@ export class DeterministicAgentRuntime {
           memoryKind: secondBrainCommand.memoryKind,
           key: secondBrainCommand.key,
           value: secondBrainCommand.value,
+          metadata: secondBrainCommand.metadata,
           conversationId,
           turnId,
         });

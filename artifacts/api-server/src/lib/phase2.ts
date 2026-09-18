@@ -4517,6 +4517,7 @@ export class Phase2AgentRuntime {
           memoryKind: secondBrainCommand.memoryKind,
           key: secondBrainCommand.key,
           value: secondBrainCommand.value,
+          metadata: secondBrainCommand.metadata,
           conversationId,
           turnId: requestId,
         });

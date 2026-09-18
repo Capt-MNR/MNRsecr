@@ -14,6 +14,7 @@ export type SecondBrainCommand =
       memoryKind: SecondBrainKind;
       key: string;
       value: string;
+      metadata?: Record<string, unknown>;
     }
   | {
       type: "recall";
@@ -47,10 +48,12 @@ function compact(value: string): string {
     : `${trimmed.slice(0, MAX_MEMORY_VALUE_CHARS - 1)}…`;
 }
 
-function keyFor(kind: SecondBrainKind, value: string): string {
-  const normalizedValue = normalize(value).slice(0, 140);
+function keyFor(kind: SecondBrainKind, value: string, alias?: string): string {
+  const normalizedValue = normalize(alias ?? value).slice(0, 140);
   return kind === "preference"
     ? `preference:${normalizedValue}`
+    : kind === "alias"
+      ? `alias:${normalizedValue}`
     : `note:${normalizedValue}`;
 }
 
@@ -69,6 +72,34 @@ export function parseSecondBrainCommand(message: string): SecondBrainCommand | n
       key: keyFor("preference", value),
       value,
     };
+  }
+
+  const alias = text.match(
+    /^(?:افتكر|إفتكر|خلي\s+بالك|احفظ|سجل\s+في\s+ذاكرتك|remember(?:\s+that)?|keep\s+in\s+mind)\s*(?:إن|ان|أن|:)?\s*اسم\s+(?:(الشخص|المشروع|الطرف)\s+)?(.+?)\s+(?:هو|هي|يعني)\s+(.+)$/iu,
+  );
+  if (alias?.[2]?.trim() && alias[3]?.trim()) {
+    const aliasName = alias[2].trim().replace(/^["'«“]|["'»”]$/g, "");
+    const canonicalName = alias[3].trim().replace(/^["'«“]|["'»”]$/g, "");
+    const entityType = alias[1]?.toLocaleLowerCase("ar") === "المشروع"
+      ? "project"
+      : alias[1]?.toLocaleLowerCase("ar") === "الطرف"
+        ? "financial_party"
+        : alias[1]
+          ? "person"
+          : undefined;
+    if (aliasName && canonicalName) {
+      return {
+        type: "remember",
+        memoryKind: "alias",
+        key: keyFor("alias", canonicalName, aliasName),
+        value: compact(canonicalName),
+        metadata: {
+          alias: compact(aliasName),
+          canonical: compact(canonicalName),
+          ...(entityType ? { entityType } : {}),
+        },
+      };
+    }
   }
 
   const remember = text.match(
@@ -117,6 +148,7 @@ export async function rememberSecondBrain(
     memoryKind: SecondBrainKind;
     key: string;
     value: string;
+    metadata?: Record<string, unknown>;
     conversationId?: string | null;
     turnId?: string | null;
   },
@@ -136,7 +168,10 @@ export async function rememberSecondBrain(
       status: "active",
       sourceConversationId: input.conversationId ?? null,
       sourceTurnId: input.turnId ?? null,
-      metadata: { source: "explicit_user_instruction" },
+      metadata: {
+        source: "explicit_user_instruction",
+        ...(input.metadata ?? {}),
+      },
       lastConfirmedAt: new Date(),
     })
     .onConflictDoUpdate({
@@ -153,7 +188,10 @@ export async function rememberSecondBrain(
         status: "active",
         sourceConversationId: input.conversationId ?? null,
         sourceTurnId: input.turnId ?? null,
-        metadata: { source: "explicit_user_instruction" },
+        metadata: {
+          source: "explicit_user_instruction",
+          ...(input.metadata ?? {}),
+        },
         lastConfirmedAt: new Date(),
         updatedAt: new Date(),
       },
