@@ -361,78 +361,62 @@ export async function reviewSecondBrainCandidate(
     note?: string | null;
   },
 ): Promise<{ candidate: SecondBrainCandidate; memory: SecondBrainMemory | null } | null> {
-  const [candidate] = await db
-    .select()
-    .from(secondBrainCandidatesTable)
-    .where(and(
-      eq(secondBrainCandidatesTable.id, candidateId),
-      eq(secondBrainCandidatesTable.tenantId, identity.tenantId),
-      eq(secondBrainCandidatesTable.ownerUserId, identity.userId),
-    ))
-    .limit(1);
-  if (!candidate) return null;
-  if (candidate.status === "approved" && input.status === "approved") {
-    const [memory] = candidate.promotedMemoryId
-      ? await db
-        .select()
-        .from(secondBrainMemoriesTable)
-        .where(and(
-          eq(secondBrainMemoriesTable.id, candidate.promotedMemoryId),
-          eq(secondBrainMemoriesTable.tenantId, identity.tenantId),
-          eq(secondBrainMemoriesTable.ownerUserId, identity.userId),
-        ))
-        .limit(1)
-      : [];
-    return { candidate, memory: memory ?? null };
-  }
-
-  const now = new Date();
-  if (input.status !== "approved") {
-    const [updated] = await db
-      .update(secondBrainCandidatesTable)
-      .set({
-        status: input.status,
-        reviewerNote: input.note ?? null,
-        reviewedAt: now,
-        updatedAt: now,
-      })
+  return db.transaction(async (tx) => {
+    const [candidate] = await tx
+      .select()
+      .from(secondBrainCandidatesTable)
       .where(and(
         eq(secondBrainCandidatesTable.id, candidateId),
         eq(secondBrainCandidatesTable.tenantId, identity.tenantId),
         eq(secondBrainCandidatesTable.ownerUserId, identity.userId),
       ))
-      .returning();
-    return updated ? { candidate: updated, memory: null } : null;
-  }
+      .limit(1);
+    if (!candidate) return null;
 
-  const [memory] = await db
-    .insert(secondBrainMemoriesTable)
-    .values({
-      tenantId: identity.tenantId,
-      ownerUserId: identity.userId,
-      kind: candidate.kind,
-      key: candidate.key,
-      value: candidate.value,
-      normalizedValue: candidate.normalizedValue,
-      confidenceBps: candidate.confidenceBps,
-      status: "active",
-      sourceConversationId: candidate.sourceConversationId,
-      sourceTurnId: candidate.sourceTurnId,
-      metadata: {
-        ...candidate.metadata,
-        source: "reviewed_memory_candidate",
-        candidateId: candidate.id,
-      },
-      lastConfirmedAt: now,
-    })
-    .onConflictDoUpdate({
-      target: [
-        secondBrainMemoriesTable.tenantId,
-        secondBrainMemoriesTable.ownerUserId,
-        secondBrainMemoriesTable.kind,
-        secondBrainMemoriesTable.key,
-      ],
-      set: {
+    if (candidate.status === "approved") {
+      const [memory] = candidate.promotedMemoryId
+        ? await tx
+          .select()
+          .from(secondBrainMemoriesTable)
+          .where(and(
+            eq(secondBrainMemoriesTable.id, candidate.promotedMemoryId),
+            eq(secondBrainMemoriesTable.tenantId, identity.tenantId),
+            eq(secondBrainMemoriesTable.ownerUserId, identity.userId),
+          ))
+          .limit(1)
+        : [];
+      return { candidate, memory: memory ?? null };
+    }
+    if (candidate.status === input.status && input.status !== "approved") {
+      return { candidate, memory: null };
+    }
+
+    const now = new Date();
+    if (input.status !== "approved") {
+      const [updated] = await tx
+        .update(secondBrainCandidatesTable)
+        .set({
+          status: input.status,
+          reviewerNote: input.note ?? null,
+          reviewedAt: now,
+          updatedAt: now,
+        })
+        .where(and(
+          eq(secondBrainCandidatesTable.id, candidateId),
+          eq(secondBrainCandidatesTable.tenantId, identity.tenantId),
+          eq(secondBrainCandidatesTable.ownerUserId, identity.userId),
+        ))
+        .returning();
+      return updated ? { candidate: updated, memory: null } : null;
+    }
+
+    const [memory] = await tx
+      .insert(secondBrainMemoriesTable)
+      .values({
+        tenantId: identity.tenantId,
+        ownerUserId: identity.userId,
+        kind: candidate.kind,
+        key: candidate.key,
         value: candidate.value,
         normalizedValue: candidate.normalizedValue,
         confidenceBps: candidate.confidenceBps,
@@ -445,28 +429,50 @@ export async function reviewSecondBrainCandidate(
           candidateId: candidate.id,
         },
         lastConfirmedAt: now,
-        updatedAt: now,
-      },
-    })
-    .returning();
-  if (!memory) throw new Error("Second Brain candidate promotion failed.");
+      })
+      .onConflictDoUpdate({
+        target: [
+          secondBrainMemoriesTable.tenantId,
+          secondBrainMemoriesTable.ownerUserId,
+          secondBrainMemoriesTable.kind,
+          secondBrainMemoriesTable.key,
+        ],
+        set: {
+          value: candidate.value,
+          normalizedValue: candidate.normalizedValue,
+          confidenceBps: candidate.confidenceBps,
+          status: "active",
+          sourceConversationId: candidate.sourceConversationId,
+          sourceTurnId: candidate.sourceTurnId,
+          metadata: {
+            ...candidate.metadata,
+            source: "reviewed_memory_candidate",
+            candidateId: candidate.id,
+          },
+          lastConfirmedAt: now,
+          updatedAt: now,
+        },
+      })
+      .returning();
+    if (!memory) throw new Error("Second Brain candidate promotion failed.");
 
-  const [updated] = await db
-    .update(secondBrainCandidatesTable)
-    .set({
-      status: "approved",
-      reviewerNote: input.note ?? null,
-      promotedMemoryId: memory.id,
-      reviewedAt: now,
-      updatedAt: now,
-    })
-    .where(and(
-      eq(secondBrainCandidatesTable.id, candidateId),
-      eq(secondBrainCandidatesTable.tenantId, identity.tenantId),
-      eq(secondBrainCandidatesTable.ownerUserId, identity.userId),
-    ))
-    .returning();
-  return updated ? { candidate: updated, memory } : null;
+    const [updated] = await tx
+      .update(secondBrainCandidatesTable)
+      .set({
+        status: "approved",
+        reviewerNote: input.note ?? null,
+        promotedMemoryId: memory.id,
+        reviewedAt: now,
+        updatedAt: now,
+      })
+      .where(and(
+        eq(secondBrainCandidatesTable.id, candidateId),
+        eq(secondBrainCandidatesTable.tenantId, identity.tenantId),
+        eq(secondBrainCandidatesTable.ownerUserId, identity.userId),
+      ))
+      .returning();
+    return updated ? { candidate: updated, memory } : null;
+  });
 }
 
 export async function searchSecondBrain(
@@ -575,6 +581,14 @@ export function applySecondBrainPolicy(
 ): SecondBrainRetrievalResult {
   const structuredDomain = trace.queryDomain === "structured_record_read"
     || trace.queryDomain === "structured_record_mutation";
+  const selectedById = new Map(trace.selected.map((item) => [item.memoryId, item]));
+  const expectedKind = trace.queryDomain === "preference"
+    ? "preference"
+    : trace.queryDomain === "personal_fact"
+      ? "fact"
+      : trace.queryDomain === "entity_resolution"
+        ? "alias"
+        : null;
   const allowed = memories.filter((memory) => {
     if (structuredDomain) {
       trace.excluded.push({
@@ -583,7 +597,7 @@ export function applySecondBrainPolicy(
       });
       return false;
     }
-    if (memory.kind === "alias" && trace.queryDomain !== "memory_recall") {
+    if (expectedKind && memory.kind !== expectedKind) {
       trace.excluded.push({
         memoryId: memory.id,
         reason: "type_not_allowed",
@@ -594,6 +608,32 @@ export function applySecondBrainPolicy(
       trace.excluded.push({
         memoryId: memory.id,
         reason: "low_confidence",
+      });
+      return false;
+    }
+    if (memory.kind === "alias" && memory.confidenceBps < 9500) {
+      trace.excluded.push({
+        memoryId: memory.id,
+        reason: "low_confidence",
+      });
+      return false;
+    }
+    if (
+      memory.kind === "alias"
+      && trace.queryDomain === "entity_resolution"
+      && typeof memory.metadata?.entityId !== "string"
+    ) {
+      trace.excluded.push({
+        memoryId: memory.id,
+        reason: "missing_entity_association",
+      });
+      return false;
+    }
+    const relevance = selectedById.get(memory.id)?.relevanceScore ?? 0;
+    if (trace.queryDomain !== "memory_recall" && relevance <= 0) {
+      trace.excluded.push({
+        memoryId: memory.id,
+        reason: "unrelated",
       });
       return false;
     }
