@@ -37,6 +37,7 @@ import {
   secretaryContextFromRecord,
   starterMessage,
   styles,
+  SecondBrainMemorySheet,
   type Approval,
   type ApprovalStatus,
   type AssistantPreferences,
@@ -107,6 +108,7 @@ export default function MainRoute() {
   const [mainSection, setMainSection] = useState<MainSection>('office');
   const [selectedRecord, setSelectedRecord] = useState<MobileRecordRow | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [memorySheetOpen, setMemorySheetOpen] = useState(false);
   const [chatContext, setChatContext] = useState<MobileRecordRow | null>(null);
   const [messages, setMessages] = useState<LocalMessage[]>([starterMessage]);
   const [conversationId, setConversationId] = useState<string | undefined>();
@@ -366,12 +368,22 @@ export default function MainRoute() {
           onClose={() => setDrawerOpen(false)}
           onSelect={openMainSection}
           onOpenQuick={() => router.replace('/')}
+          onOpenMemories={() => {
+            setDrawerOpen(false);
+            setMemorySheetOpen(true);
+          }}
           onThemeChange={setThemePreference}
           onLanguageChange={setLanguage}
           assistantPreferences={assistantPreferences}
           onAssistantPreferencesChange={(patch) => setAssistantPreferences((current) => ({ ...current, ...patch }))}
         />
       )}
+      <SecondBrainMemorySheet
+        colors={colors}
+        language={language}
+        visible={memorySheetOpen}
+        onClose={() => setMemorySheetOpen(false)}
+      />
       {localError && <View style={styles.errorRow}>
         <Text style={{ color: colors.destructive, padding: 12, flex: 1 }}>{localError}</Text>
         {inputCapture.canRetry && <Pressable onPress={() => void inputCapture.retry()} style={styles.retryButton}>

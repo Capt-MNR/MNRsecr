@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   Archive,
   ArrowUp,
+  Brain,
   CircleAlert,
   LoaderCircle,
   Menu,
@@ -396,6 +397,10 @@ function Home() {
               <span className="flex size-4 items-center justify-center rounded border border-current text-[9px]">▦</span>
               السجلات المحفوظة
             </a>
+            <Link href="/memories" className="mt-2 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+              <Brain className="size-4" />
+              الذاكرة الشخصية
+            </Link>
           </div>
 
           <ConversationHistory
@@ -445,6 +450,14 @@ function Home() {
               >
                 <Archive className="size-4" />
                 <span className="hidden sm:inline">السجلات</span>
+              </Link>
+              <Link
+                href="/memories"
+                className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-border/70 bg-card px-3 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                data-testid="link-memories-home"
+              >
+                <Brain className="size-4" />
+                <span className="hidden sm:inline">الذاكرة</span>
               </Link>
               <div className="hidden items-center gap-2 rounded-full border border-border/70 bg-card/70 px-3 py-1.5 text-xs text-muted-foreground sm:flex">
                 <span className={`size-1.5 rounded-full ${healthQuery.isError ? 'bg-destructive' : 'bg-chart-3'}`} />

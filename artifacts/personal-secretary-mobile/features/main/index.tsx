@@ -27,6 +27,7 @@ import { receiptNeedsReview, type SecretaryInputResult, type SecretaryInputState
 import { MessageBubble } from '../message-bubble';
 import { ReceiptReviewCard } from '../receipt-review';
 export { default as MainWorkspace } from './MainWorkspace';
+export { SecondBrainMemorySheet } from './SecondBrainMemorySheet';
 export { MessageBubble };
 
 export type ApprovalStatus = 'pending' | 'executing' | 'completed' | 'rejected' | 'expired' | 'failed';
@@ -2946,6 +2947,7 @@ export function MainDrawer({
   onClose,
   onSelect,
   onOpenQuick,
+  onOpenMemories,
   onThemeChange,
   onLanguageChange,
   assistantPreferences,
@@ -2959,6 +2961,7 @@ export function MainDrawer({
   onClose: () => void;
   onSelect: (section: MainSection) => void;
   onOpenQuick: () => void;
+  onOpenMemories: () => void;
   onThemeChange: (theme: ThemePreference) => void;
   onLanguageChange: (language: AppLanguage) => void;
   assistantPreferences: AssistantPreferences;
@@ -3052,6 +3055,24 @@ export function MainDrawer({
               {localized(language, 'الإعدادات', 'Settings')}
             </Text>
           </View>
+          <Pressable
+            testID="drawer-open-memories"
+            accessibilityRole="button"
+            accessibilityLabel={localized(language, 'فتح الذاكرة الشخصية', 'Open personal memory')}
+            onPress={onOpenMemories}
+            style={({ pressed }) => [styles.drawerMemoryLink, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}
+          >
+            <Feather name="database" size={15} color={colors.primary} />
+            <View style={styles.drawerMemoryCopy}>
+              <Text style={[styles.drawerMemoryTitle, { color: colors.foreground }]}>
+                {localized(language, 'الذاكرة الشخصية', 'Personal memory')}
+              </Text>
+              <Text style={[styles.drawerMemoryText, { color: colors.mutedForeground }]}>
+                {localized(language, 'راجع ما حفظته واحذفه عند الحاجة', 'Review or remove what you saved')}
+              </Text>
+            </View>
+            <Feather name="chevron-left" size={15} color={colors.mutedForeground} />
+          </Pressable>
           <Text style={[styles.drawerSettingLabel, { color: colors.mutedForeground }]}>
             {localized(language, 'الخلفية', 'Appearance')}
           </Text>
@@ -3432,6 +3453,28 @@ export const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  drawerMemoryLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    marginBottom: 17,
+  },
+  drawerMemoryCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  drawerMemoryTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  drawerMemoryText: {
+    fontSize: 10,
+    lineHeight: 15,
   },
   drawerSettingsTitle: {
     fontSize: 13,

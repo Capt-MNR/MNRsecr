@@ -416,6 +416,55 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /memories:
+    get:
+      operationId: listSecondBrainMemories
+      tags: [secretary]
+      summary: List active personal Second Brain memories
+      responses:
+        "200":
+          description: Active personal memories
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SecondBrainMemoryListResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /memories/{memoryId}:
+    delete:
+      operationId: archiveSecondBrainMemory
+      tags: [secretary]
+      summary: Archive one personal Second Brain memory
+      parameters:
+        - name: memoryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Archived personal memory
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SecondBrainMemoryResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Memory not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /turns:
     post:
       operationId: createTurn
@@ -1426,6 +1475,49 @@ components:
         context:
           $ref: "#/components/schemas/TodayContext"
       required: [context]
+    SecondBrainMemory:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum: [fact, preference, alias]
+        key:
+          type: string
+        value:
+          type: string
+        confidence:
+          type: number
+        status:
+          type: string
+          enum: [active, archived]
+        sourceConversationId:
+          type: ["string", "null"]
+        sourceTurnId:
+          type: ["string", "null"]
+        updatedAt:
+          type: string
+          format: date-time
+        lastConfirmedAt:
+          type: ["string", "null"]
+          format: date-time
+      required: [id, kind, key, value, confidence, status, sourceConversationId, sourceTurnId, updatedAt, lastConfirmedAt]
+    SecondBrainMemoryListResponse:
+      type: object
+      properties:
+        memories:
+          type: array
+          items:
+            $ref: "#/components/schemas/SecondBrainMemory"
+      required: [memories]
+    SecondBrainMemoryResponse:
+      type: object
+      properties:
+        memory:
+          $ref: "#/components/schemas/SecondBrainMemory"
+      required: [memory]
     ConversationTurn:
       type: object
       additionalProperties: true

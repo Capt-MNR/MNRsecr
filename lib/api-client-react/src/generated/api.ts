@@ -54,6 +54,8 @@ import type {
   RegisterMobilePushTokenInput,
   RelationshipListResponse,
   RelationshipMutationInput,
+  SecondBrainMemoryListResponse,
+  SecondBrainMemoryResponse,
   TodayContextResponse,
   TurnInput,
   TurnResponse,
@@ -2267,6 +2269,157 @@ export function useGetTodayContext<TData = Awaited<ReturnType<typeof getTodayCon
 
 
 
+
+export const getListSecondBrainMemoriesUrl = () => {
+
+
+
+
+  return `/api/memories`
+}
+
+/**
+ * @summary List active personal Second Brain memories
+ */
+export const listSecondBrainMemories = async ( options?: Parameters<typeof customFetch>[1]): Promise<SecondBrainMemoryListResponse> => {
+
+  return customFetch<SecondBrainMemoryListResponse>(getListSecondBrainMemoriesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListSecondBrainMemoriesQueryKey = () => {
+    return [
+    `/api/memories`
+    ] as const;
+    }
+
+
+export const getListSecondBrainMemoriesQueryOptions = <TData = Awaited<ReturnType<typeof listSecondBrainMemories>>, TError = ErrorType<ErrorResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSecondBrainMemories>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListSecondBrainMemoriesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSecondBrainMemories>>> = ({ signal }) => listSecondBrainMemories({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSecondBrainMemories>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListSecondBrainMemoriesQueryResult = NonNullable<Awaited<ReturnType<typeof listSecondBrainMemories>>>
+export type ListSecondBrainMemoriesQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary List active personal Second Brain memories
+ */
+
+export function useListSecondBrainMemories<TData = Awaited<ReturnType<typeof listSecondBrainMemories>>, TError = ErrorType<ErrorResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSecondBrainMemories>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListSecondBrainMemoriesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getArchiveSecondBrainMemoryUrl = (memoryId: string,) => {
+
+
+
+
+  return `/api/memories/${memoryId}`
+}
+
+/**
+ * @summary Archive one personal Second Brain memory
+ */
+export const archiveSecondBrainMemory = async (memoryId: string, options?: Parameters<typeof customFetch>[1]): Promise<SecondBrainMemoryResponse> => {
+
+  return customFetch<SecondBrainMemoryResponse>(getArchiveSecondBrainMemoryUrl(memoryId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getArchiveSecondBrainMemoryMutationKey = () => ['archiveSecondBrainMemory'] as const;
+
+export const getArchiveSecondBrainMemoryMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof archiveSecondBrainMemory>>, TError,ArchiveSecondBrainMemoryMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof archiveSecondBrainMemory>>, TError,ArchiveSecondBrainMemoryMutationVariables, TContext> => {
+
+const mutationKey = getArchiveSecondBrainMemoryMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof archiveSecondBrainMemory>>, ArchiveSecondBrainMemoryMutationVariables> = (props) => {
+          const {memoryId} = props ?? {};
+
+          return  archiveSecondBrainMemory(memoryId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ArchiveSecondBrainMemoryMutationResult = NonNullable<Awaited<ReturnType<typeof archiveSecondBrainMemory>>>
+
+    export type ArchiveSecondBrainMemoryMutationError = ErrorType<ErrorResponse>
+    export type ArchiveSecondBrainMemoryMutationVariables = {memoryId: string}
+
+    /**
+ * @summary Archive one personal Second Brain memory
+ */
+export const useArchiveSecondBrainMemory = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof archiveSecondBrainMemory>>, TError,ArchiveSecondBrainMemoryMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof archiveSecondBrainMemory>>,
+        TError,
+        ArchiveSecondBrainMemoryMutationVariables,
+        TContext
+      > => {
+      return useMutation(getArchiveSecondBrainMemoryMutationOptions(options));
+    }
 
 export const getCreateTurnUrl = () => {
 

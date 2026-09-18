@@ -256,6 +256,56 @@ export async function searchSecondBrain(
     .map((item) => item.memory);
 }
 
+export async function listSecondBrainMemories(
+  identity: Identity,
+): Promise<SecondBrainMemory[]> {
+  return db
+    .select()
+    .from(secondBrainMemoriesTable)
+    .where(and(
+      eq(secondBrainMemoriesTable.tenantId, identity.tenantId),
+      eq(secondBrainMemoriesTable.ownerUserId, identity.userId),
+      eq(secondBrainMemoriesTable.status, "active"),
+    ))
+    .orderBy(desc(secondBrainMemoriesTable.updatedAt))
+    .limit(100);
+}
+
+export async function archiveSecondBrainMemory(
+  identity: Identity,
+  memoryId: string,
+): Promise<SecondBrainMemory | null> {
+  const [memory] = await db
+    .update(secondBrainMemoriesTable)
+    .set({
+      status: "archived",
+      updatedAt: new Date(),
+    })
+    .where(and(
+      eq(secondBrainMemoriesTable.id, memoryId),
+      eq(secondBrainMemoriesTable.tenantId, identity.tenantId),
+      eq(secondBrainMemoriesTable.ownerUserId, identity.userId),
+      eq(secondBrainMemoriesTable.status, "active"),
+    ))
+    .returning();
+  return memory ?? null;
+}
+
+export function publicSecondBrainMemory(memory: SecondBrainMemory) {
+  return {
+    id: memory.id,
+    kind: memory.kind,
+    key: memory.key,
+    value: memory.value,
+    confidence: memory.confidenceBps / 10000,
+    status: memory.status,
+    sourceConversationId: memory.sourceConversationId,
+    sourceTurnId: memory.sourceTurnId,
+    updatedAt: memory.updatedAt.toISOString(),
+    lastConfirmedAt: memory.lastConfirmedAt?.toISOString() ?? null,
+  };
+}
+
 export async function listSecondBrainAliases(
   identity: Identity,
   entityType?: "person" | "project" | "financial_party",

@@ -366,6 +366,47 @@ export interface TodayContextResponse {
   context: TodayContext;
 }
 
+export type SecondBrainMemoryKind = typeof SecondBrainMemoryKind[keyof typeof SecondBrainMemoryKind];
+
+
+export const SecondBrainMemoryKind = {
+  fact: 'fact',
+  preference: 'preference',
+  alias: 'alias',
+} as const;
+
+export type SecondBrainMemoryStatus = typeof SecondBrainMemoryStatus[keyof typeof SecondBrainMemoryStatus];
+
+
+export const SecondBrainMemoryStatus = {
+  active: 'active',
+  archived: 'archived',
+} as const;
+
+export interface SecondBrainMemory {
+  id: string;
+  kind: SecondBrainMemoryKind;
+  key: string;
+  value: string;
+  confidence: number;
+  status: SecondBrainMemoryStatus;
+  /** @nullable */
+  sourceConversationId: string | null;
+  /** @nullable */
+  sourceTurnId: string | null;
+  updatedAt: string;
+  /** @nullable */
+  lastConfirmedAt: string | null;
+}
+
+export interface SecondBrainMemoryListResponse {
+  memories: SecondBrainMemory[];
+}
+
+export interface SecondBrainMemoryResponse {
+  memory: SecondBrainMemory;
+}
+
 export type ConversationTurnAction = { [key: string]: unknown };
 
 export interface ConversationTurn {

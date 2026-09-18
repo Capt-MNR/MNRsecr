@@ -629,6 +629,48 @@ export const GetTodayContextResponse = zod.object({
 
 
 /**
+ * @summary List active personal Second Brain memories
+ */
+export const ListSecondBrainMemoriesResponse = zod.object({
+  "memories": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "kind": zod.enum(['fact', 'preference', 'alias']),
+  "key": zod.string(),
+  "value": zod.string(),
+  "confidence": zod.number(),
+  "status": zod.enum(['active', 'archived']),
+  "sourceConversationId": zod.string().nullable(),
+  "sourceTurnId": zod.string().nullable(),
+  "updatedAt": zod.coerce.date(),
+  "lastConfirmedAt": zod.coerce.date().nullable()
+}))
+})
+
+
+/**
+ * @summary Archive one personal Second Brain memory
+ */
+export const ArchiveSecondBrainMemoryParams = zod.object({
+  "memoryId": zod.coerce.string().uuid()
+})
+
+export const ArchiveSecondBrainMemoryResponse = zod.object({
+  "memory": zod.object({
+  "id": zod.string().uuid(),
+  "kind": zod.enum(['fact', 'preference', 'alias']),
+  "key": zod.string(),
+  "value": zod.string(),
+  "confidence": zod.number(),
+  "status": zod.enum(['active', 'archived']),
+  "sourceConversationId": zod.string().nullable(),
+  "sourceTurnId": zod.string().nullable(),
+  "updatedAt": zod.coerce.date(),
+  "lastConfirmedAt": zod.coerce.date().nullable()
+})
+})
+
+
+/**
  * @summary Send a natural-language message to the secretary
  */
 
