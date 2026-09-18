@@ -7,4 +7,4 @@ Fixed mobile composers should be mounted at the screen-level layout, not inside 
 
 **Why:** A fixed child can still render behind a sibling sheet when its ancestor has effects such as backdrop blur or other stacking-context behavior. Changing only the child z-index does not reliably solve that overlap.
 
-**How to apply:** When a mockup has a draggable sheet plus a persistent composer, keep the composer as a sibling of the chat card, use a z-index above the sheet, and verify at a phone viewport with the sheet partially open.
+**How to apply:** When a mockup has a draggable sheet plus a persistent composer, keep the composer as a sibling of the chat card, use a z-index above the sheet, and verify at a phone viewport with the sheet partially open. If the screen shell must let the sheet cover bottom navigation, make that shell the stacking parent rather than relying on a descendant z-index.

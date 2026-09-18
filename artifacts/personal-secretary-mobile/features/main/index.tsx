@@ -776,6 +776,7 @@ function CentralSecretaryChat({
     return () => clearTimeout(timer);
   }, [messages.length, isSending, expanded]);
   return (
+    <>
     <View
       testID={compact ? 'record-context-chat' : 'main-central-chat'}
       style={[
@@ -825,21 +826,13 @@ function CentralSecretaryChat({
           <Text style={[styles.centralChatTitle, { color: colors.foreground }]}>
             {context
               ? `${localized(language, 'السكرتير', 'Secretary')} · ${context.title}`
-              : localized(language, 'سكرتيرك الذكي', 'Your intelligent secretary')}
+              : localized(language, 'حديثنا اليوم', 'Today’s conversation')}
           </Text>
           <Text style={[styles.centralChatHint, { color: colors.mutedForeground }]}>
             {context
               ? localized(language, 'اسأل عن هذا السياق أو علاقاته', 'Ask about this context or its relationships')
-              : localized(language, 'أفهم طلبك وأقترح الخطوة التالية', 'I understand your request and suggest the next step')}
+              : localized(language, 'مكان واحد للفكرة والخطوة التالية', 'One place for the idea and the next step')}
           </Text>
-          {!compact && (
-            <View style={styles.centralChatSignal}>
-              <View style={[styles.centralChatSignalDot, { backgroundColor: isSending ? colors.accent : colors.primary }]} />
-              <Text style={[styles.centralChatSignalText, { color: colors.primary }]} numberOfLines={1}>
-                {smartSignal ?? localized(language, 'جاهز لفهم طلبك', 'Ready to understand your request')}
-              </Text>
-            </View>
-          )}
         </View>
         {!compact && (
           <View style={styles.centralChatHeaderActions}>
@@ -856,7 +849,7 @@ function CentralSecretaryChat({
             >
               <Feather name={onOpenPearlSheet ? 'archive' : 'menu'} size={17} color={colors.foreground} />
             </Pressable>
-            {onToggleExpanded && (
+            {onToggleExpanded && !onOpenPearlSheet && (
               <Pressable
                 testID="main-chat-expand-toggle"
                 accessibilityRole="button"
@@ -968,6 +961,7 @@ function CentralSecretaryChat({
           </View>
         )}
       </ScrollView>
+      </View>
 
       {inputReview?.kind === 'receipt' && onChangeInputReview && onClearInputReview && (
         <ReceiptReviewCard
@@ -1088,7 +1082,7 @@ function CentralSecretaryChat({
           <Feather name="arrow-up" size={17} color={colors.primaryForeground} />
         </Pressable>
       </View>
-      {!compact && onQuickPrompt && expanded && (
+      {!compact && onQuickPrompt && expanded && !onOpenPearlSheet && (
         <View style={styles.centralChatQuickDock}>
           <Pressable
             testID="main-chat-quick-actions"
@@ -1108,7 +1102,7 @@ function CentralSecretaryChat({
           </Pressable>
         </View>
       )}
-      {!compact && onQuickPrompt && suggestionsOpen && (
+      {!compact && onQuickPrompt && suggestionsOpen && !onOpenPearlSheet && (
         <View
           style={[
             styles.centralChatSuggestionMenu,
@@ -1133,10 +1127,12 @@ function CentralSecretaryChat({
           ))}
         </View>
       )}
-      <Text style={[styles.centralChatFooter, { color: colors.mutedForeground }]}>
-        {localized(language, 'نفس المحادثة والعمليات والموافقات · لا يتم الإرسال تلقائيًا', 'Same conversation, actions, and approvals · nothing is sent automatically')}
-      </Text>
-    </View>
+      {!onOpenPearlSheet && (
+        <Text style={[styles.centralChatFooter, { color: colors.mutedForeground }]}>
+          {localized(language, 'نفس المحادثة والعمليات والموافقات · لا يتم الإرسال تلقائيًا', 'Same conversation, actions, and approvals · nothing is sent automatically')}
+        </Text>
+      )}
+    </>
   );
 }
 
@@ -1519,7 +1515,7 @@ export function MainOffice({
             backgroundColor: colors.card,
             borderColor: colors.border,
             shadowColor: colors.foreground,
-            transform: [{ translateY: pearlSheetOpen ? 0 : 238 }],
+             transform: [{ translateY: pearlSheetOpen ? 0 : 395 }],
           },
         ]}
       >
@@ -3171,7 +3167,7 @@ export const styles = StyleSheet.create({
   },
   drawerLayer: {
     ...StyleSheet.absoluteFill,
-    zIndex: 20,
+    zIndex: 1,
     flexDirection: 'row-reverse',
   },
   drawerBackdrop: {
@@ -3638,7 +3634,7 @@ export const styles = StyleSheet.create({
     borderRadius: 27,
     borderWidth: 1,
     padding: 14,
-    overflow: 'hidden',
+    overflow: 'visible',
     position: 'relative',
   },
   centralChatExpanded: {
@@ -3806,8 +3802,8 @@ export const styles = StyleSheet.create({
     height: 0,
     maxHeight: 100000,
     minHeight: 0,
-    marginTop: 12,
-    paddingBottom: 8,
+    marginTop: 9,
+    paddingBottom: 88,
   },
   recordChatTranscript: {
     maxHeight: 220,
@@ -3893,15 +3889,18 @@ export const styles = StyleSheet.create({
   },
   centralChatComposerExpanded: {
     minHeight: 58,
-    marginTop: 10,
-    marginBottom: 38,
+    marginTop: 0,
+    marginBottom: 0,
     borderRadius: 17,
     borderWidth: 1,
     paddingLeft: 7,
     paddingRight: 8,
-    position: 'relative',
-    zIndex: 15,
-    elevation: 15,
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: -16,
+    zIndex: 40,
+    elevation: 40,
   },
   centralChatInputExpanded: {
     paddingTop: 12,
@@ -4002,19 +4001,19 @@ export const styles = StyleSheet.create({
   },
   pearlSheet: {
     position: 'absolute',
-    right: 7,
+    right: 0,
     bottom: 0,
-    left: 7,
-    zIndex: 8,
-    height: 300,
-    borderRadius: 27,
+    left: 0,
+    zIndex: 20,
+    height: 420,
+    borderRadius: 30,
     borderWidth: 1,
     paddingHorizontal: 12,
     paddingBottom: 8,
     shadowOpacity: 0.16,
     shadowRadius: 22,
     shadowOffset: { width: 0, height: -8 },
-    elevation: 8,
+    elevation: 1,
   },
   pearlSheetHandleZone: {
     height: 31,
@@ -4159,10 +4158,13 @@ export const styles = StyleSheet.create({
   },
   officeHome: {
     flex: 1,
-    overflow: 'hidden',
-    paddingHorizontal: 7,
-    paddingTop: 3,
+    overflow: 'visible',
+    paddingHorizontal: 15,
+    paddingTop: 0,
     paddingBottom: 4,
+    position: 'relative',
+    zIndex: 3,
+    elevation: 3,
   },
   officeIntro: {
     flexDirection: 'row-reverse',
