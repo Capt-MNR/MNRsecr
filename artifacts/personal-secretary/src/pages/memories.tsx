@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { ArrowRight, ArchiveRestore, Brain, Clock3, LoaderCircle, RotateCcw, Search, ShieldCheck, SlidersHorizontal, Sparkles, Trash2, X } from 'lucide-react';
+import { ArrowRight, ArchiveRestore, Brain, Check, Clock3, LoaderCircle, RotateCcw, Search, ShieldCheck, SlidersHorizontal, Sparkles, Trash2, X } from 'lucide-react';
 import { Link } from 'wouter';
 import {
   getListSecondBrainMemoriesQueryKey,
   type ListSecondBrainMemoriesParams,
   useArchiveSecondBrainMemory,
   useListSecondBrainMemories,
+  useRestoreSecondBrainMemory,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -37,6 +38,7 @@ export default function Memories() {
   const [kind, setKind] = useState<ListSecondBrainMemoriesParams['kind']>();
   const [status, setStatus] = useState<NonNullable<ListSecondBrainMemoriesParams['status']>>('active');
   const [archivingId, setArchivingId] = useState<string | null>(null);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
   const filters: ListSecondBrainMemoriesParams = {
     ...(search ? { search } : {}),
     ...(kind ? { kind } : {}),
@@ -58,14 +60,29 @@ export default function Memories() {
       onError: () => setArchivingId(null),
     },
   });
+  const restoreMutation = useRestoreSecondBrainMemory({
+    mutation: {
+      onSuccess: async () => {
+        await queryClient.invalidateQueries({ queryKey: getListSecondBrainMemoriesQueryKey() });
+        setRestoringId(null);
+      },
+      onError: () => setRestoringId(null),
+    },
+  });
 
   const memories = memoriesQuery.data?.memories ?? [];
   const hasFilters = Boolean(search || kind || status === 'archived');
 
   function archiveMemory(id: string) {
-    if (archiveMutation.isPending) return;
+    if (archiveMutation.isPending || restoreMutation.isPending) return;
     setArchivingId(id);
     archiveMutation.mutate({ memoryId: id });
+  }
+
+  function restoreMemory(id: string) {
+    if (archiveMutation.isPending || restoreMutation.isPending) return;
+    setRestoringId(id);
+    restoreMutation.mutate({ memoryId: id });
   }
 
   return (
@@ -225,16 +242,27 @@ export default function Memories() {
                       </div>
                       <p className="mt-3 text-[15px] leading-7 text-foreground">{memory.value}</p>
                     </div>
-                    {status === 'active' && (
+                    {status === 'active' ? (
                     <button
                       type="button"
                       onClick={() => archiveMemory(memory.id)}
-                      disabled={archiveMutation.isPending}
+                      disabled={archiveMutation.isPending || restoreMutation.isPending}
                       className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-border/70 px-3 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:border-destructive/30 hover:bg-destructive/5 hover:text-destructive disabled:opacity-50"
                       aria-label={`أرشفة الذاكرة: ${memory.value}`}
                     >
                       {isArchiving ? <LoaderCircle className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
                       <span className="hidden sm:inline">إزالة</span>
+                    </button>
+                    ) : (
+                    <button
+                      type="button"
+                      onClick={() => restoreMemory(memory.id)}
+                      disabled={archiveMutation.isPending || restoreMutation.isPending}
+                      className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-border/70 px-3 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:border-primary/30 hover:bg-primary/5 hover:text-primary disabled:opacity-50"
+                      aria-label={`استرجاع الذاكرة: ${memory.value}`}
+                    >
+                      {restoringId === memory.id ? <LoaderCircle className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+                      <span className="hidden sm:inline">استرجاع</span>
                     </button>
                     )}
                   </div>

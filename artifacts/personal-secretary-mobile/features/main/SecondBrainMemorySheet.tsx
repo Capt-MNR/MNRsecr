@@ -3,6 +3,7 @@ import {
   type ListSecondBrainMemoriesParams,
   useArchiveSecondBrainMemory,
   useListSecondBrainMemories,
+  useRestoreSecondBrainMemory,
   type SecondBrainMemory,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -53,6 +54,7 @@ export function SecondBrainMemorySheet({
 }) {
   const queryClient = useQueryClient();
   const [archivingId, setArchivingId] = useState<string | null>(null);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
   const [searchDraft, setSearchDraft] = useState('');
   const [search, setSearch] = useState('');
   const [kind, setKind] = useState<ListSecondBrainMemoriesParams['kind']>();
@@ -78,11 +80,26 @@ export function SecondBrainMemorySheet({
       onError: () => setArchivingId(null),
     },
   });
+  const restoreMutation = useRestoreSecondBrainMemory({
+    mutation: {
+      onSuccess: async () => {
+        await queryClient.invalidateQueries({ queryKey: getListSecondBrainMemoriesQueryKey() });
+        setRestoringId(null);
+      },
+      onError: () => setRestoringId(null),
+    },
+  });
 
   function archiveMemory(id: string) {
-    if (archiveMutation.isPending) return;
+    if (archiveMutation.isPending || restoreMutation.isPending) return;
     setArchivingId(id);
     archiveMutation.mutate({ memoryId: id });
+  }
+
+  function restoreMemory(id: string) {
+    if (archiveMutation.isPending || restoreMutation.isPending) return;
+    setRestoringId(id);
+    restoreMutation.mutate({ memoryId: id });
   }
 
   const memories = memoriesQuery.data?.memories ?? [];
@@ -244,16 +261,26 @@ export function SecondBrainMemorySheet({
                         <Text style={[styles.kind, { color: colors.primary }]}>{kindLabel(language, memory.kind)}</Text>
                         <Text style={[styles.value, { color: colors.foreground }]}>{memory.value}</Text>
                       </View>
-                      {status === 'active' && <Pressable
+                      {status === 'active' ? <Pressable
                         accessibilityRole="button"
                         accessibilityLabel={localized(language, `إزالة ${memory.value}`, `Remove ${memory.value}`)}
-                        disabled={archiveMutation.isPending}
+                        disabled={archiveMutation.isPending || restoreMutation.isPending}
                         onPress={() => archiveMemory(memory.id)}
                         style={[styles.archive, { borderColor: colors.border, opacity: archiveMutation.isPending ? 0.55 : 1 }]}
                       >
                         {isArchiving
                           ? <ActivityIndicator size="small" color={colors.destructive} />
                           : <Feather name="trash-2" size={15} color={colors.destructive} />}
+                      </Pressable> : <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={localized(language, `استرجاع ${memory.value}`, `Restore ${memory.value}`)}
+                        disabled={archiveMutation.isPending || restoreMutation.isPending}
+                        onPress={() => restoreMemory(memory.id)}
+                        style={[styles.archive, { borderColor: colors.border, opacity: archiveMutation.isPending || restoreMutation.isPending ? 0.55 : 1 }]}
+                      >
+                        {restoringId === memory.id
+                          ? <ActivityIndicator size="small" color={colors.primary} />
+                          : <Feather name="rotate-ccw" size={15} color={colors.primary} />}
                       </Pressable>}
                     </View>
                     <Text style={[styles.meta, { color: colors.mutedForeground }]}>
