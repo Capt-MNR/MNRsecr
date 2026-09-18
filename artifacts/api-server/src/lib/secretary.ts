@@ -43,11 +43,12 @@ import {
   type ConversationMemorySnapshot,
 } from "./conversation-memory";
 import {
+  applySecondBrainPolicy,
   createSecondBrainCandidate,
   parseSecondBrainCandidate,
   parseSecondBrainCommand,
   rememberSecondBrain,
-  searchSecondBrain,
+  retrieveSecondBrain,
   secondBrainRecallMessage,
 } from "./second-brain";
 import { isBroadExpenseReportRequest } from "./expense-report";
@@ -1196,9 +1197,18 @@ export class DeterministicAgentRuntime {
           turnId,
         });
       }
-      const memories = secondBrainCommand.type === "recall"
-        ? await searchSecondBrain(identity, secondBrainCommand.query)
-        : [];
+      const retrieval = secondBrainCommand.type === "recall"
+        ? await retrieveSecondBrain(identity, secondBrainCommand.query, {
+            mode: "explicit_recall",
+            queryDomain: "memory_recall",
+            requestId: turnId,
+            conversationId,
+          })
+        : null;
+      const governedRetrieval = retrieval
+        ? applySecondBrainPolicy(retrieval.memories, retrieval.trace)
+        : null;
+      const memories = governedRetrieval?.memories ?? [];
       const result: TurnResult = {
         conversationId,
         turnId,
@@ -1217,6 +1227,7 @@ export class DeterministicAgentRuntime {
               type: "second_brain_recall",
               query: secondBrainCommand.query,
               memories: memories.map((memory) => memory.id),
+              secondBrainRetrievalTrace: governedRetrieval?.trace,
             },
         provider: "second-brain",
         model: "deterministic-memory-v1",

@@ -157,7 +157,10 @@ async function persistSecondBrainCommand(
         conversationId,
       })
     : null;
-  const memories = retrieval?.memories ?? [];
+  const governedRetrieval = retrieval
+    ? applySecondBrainPolicy(retrieval.memories, retrieval.trace)
+    : null;
+  const memories = governedRetrieval?.memories ?? [];
   const result: Phase2TurnResult = {
     conversationId,
     turnId: requestId,
@@ -175,7 +178,7 @@ async function persistSecondBrainCommand(
       : {
           ...action,
           memories: memories.map((memory) => memory.id),
-          secondBrainRetrievalTrace: retrieval?.trace,
+          secondBrainRetrievalTrace: governedRetrieval?.trace,
         },
     provider: "second-brain",
     model: "deterministic-memory-v1",
