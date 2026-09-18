@@ -73,6 +73,14 @@ export type SecondBrainCommand =
       query: string;
     };
 
+export type SecondBrainCandidateSuggestion = {
+  memoryKind: SecondBrainKind;
+  key: string;
+  value: string;
+  confidenceBps: number;
+  metadata: Record<string, unknown>;
+};
+
 export type SecondBrainCandidateStatus =
   | "pending_review"
   | "approved"
@@ -118,19 +126,6 @@ function keyFor(kind: SecondBrainKind, value: string, alias?: string): string {
 export function parseSecondBrainCommand(message: string): SecondBrainCommand | null {
   const text = message.trim();
   if (!text) return null;
-
-  const preference = text.match(
-    /^(?:انا|أنا)\s+(?:بفضل|أفضل|بحب|أحب|ما\s+بحبش|مش\s+بحب)\s+(.+)$/iu,
-  );
-  if (preference?.[1]?.trim()) {
-    const value = compact(text);
-    return {
-      type: "remember",
-      memoryKind: "preference",
-      key: keyFor("preference", value),
-      value,
-    };
-  }
 
   const alias = text.match(
     /^(?:افتكر|إفتكر|خلي\s+بالك|احفظ|سجل\s+في\s+ذاكرتك|remember(?:\s+that)?|keep\s+in\s+mind)\s*(?:إن|ان|أن|:)?\s*اسم\s+(?:(الشخص|المشروع|الطرف)\s+)?(.+?)\s+(?:هو|هي|يعني)\s+(.+)$/iu,
@@ -181,6 +176,28 @@ export function parseSecondBrainCommand(message: string): SecondBrainCommand | n
   }
 
   return null;
+}
+
+export function parseSecondBrainCandidate(
+  message: string,
+): SecondBrainCandidateSuggestion | null {
+  const text = message.trim();
+  if (!text) return null;
+  const preference = text.match(
+    /^(?:انا|أنا)\s+(?:بفضل|أفضل|بحب|أحب|ما\s+بحبش|مش\s+بحب)\s+(.+)$/iu,
+  );
+  if (!preference?.[1]?.trim()) return null;
+  const value = compact(text);
+  return {
+    memoryKind: "preference",
+    key: keyFor("preference", value),
+    value,
+    confidenceBps: 7000,
+    metadata: {
+      source: "inferred_user_statement",
+      suggestionType: "preference",
+    },
+  };
 }
 
 export function shouldSearchSecondBrain(message: string): boolean {
@@ -317,6 +334,19 @@ export async function createSecondBrainCandidate(
     turnId?: string | null;
   },
 ): Promise<SecondBrainCandidate> {
+  const [existing] = await db
+    .select()
+    .from(secondBrainCandidatesTable)
+    .where(and(
+      eq(secondBrainCandidatesTable.tenantId, identity.tenantId),
+      eq(secondBrainCandidatesTable.ownerUserId, identity.userId),
+      eq(secondBrainCandidatesTable.kind, input.memoryKind),
+      eq(secondBrainCandidatesTable.key, input.key),
+      eq(secondBrainCandidatesTable.status, "pending_review"),
+    ))
+    .limit(1);
+  if (existing) return existing;
+
   const [candidate] = await db
     .insert(secondBrainCandidatesTable)
     .values({
@@ -419,7 +449,7 @@ export async function reviewSecondBrainCandidate(
         key: candidate.key,
         value: candidate.value,
         normalizedValue: candidate.normalizedValue,
-        confidenceBps: candidate.confidenceBps,
+        confidenceBps: 10000,
         status: "active",
         sourceConversationId: candidate.sourceConversationId,
         sourceTurnId: candidate.sourceTurnId,

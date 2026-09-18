@@ -38,13 +38,16 @@ import {
   formatSecondBrainContext,
   applySecondBrainPolicy,
   classifySecondBrainQuery,
+  createSecondBrainCandidate,
   emptyRetrievalTrace,
+  parseSecondBrainCandidate,
   parseSecondBrainCommand,
   rememberSecondBrain,
   retrieveSecondBrain,
   secondBrainRecallMessage,
   shouldSearchSecondBrain,
   type SecondBrainCommand,
+  type SecondBrainCandidateSuggestion,
 } from "./second-brain";
 import {
   agentToolError,
@@ -171,6 +174,59 @@ async function persistSecondBrainCommand(
           memories: memories.map((memory) => memory.id),
           secondBrainRetrievalTrace: retrieval?.trace,
         },
+    provider: "second-brain",
+    model: "deterministic-memory-v1",
+  };
+  if (!dryRun) {
+    await saveConversationTurn(identity, conversationMemory, {
+      turnId: requestId,
+      userMessage: input.message.trim(),
+      assistantMessage: result.assistantMessage,
+      action: result.action,
+    });
+    if (input.idempotencyKey) await saveIdempotent(identity, input.idempotencyKey, result);
+  }
+  return result;
+}
+
+async function persistSecondBrainCandidate(
+  identity: Identity,
+  input: Phase2TurnInput,
+  conversationMemory: ConversationMemorySnapshot,
+  suggestion: SecondBrainCandidateSuggestion,
+  requestId: string,
+  dryRun: boolean,
+): Promise<Phase2TurnResult> {
+  const conversationId = input.conversationId || conversationMemory.conversationId;
+  const candidate = dryRun
+    ? null
+    : await createSecondBrainCandidate(identity, {
+        memoryKind: suggestion.memoryKind,
+        key: suggestion.key,
+        value: suggestion.value,
+        confidenceBps: suggestion.confidenceBps,
+        metadata: suggestion.metadata,
+        conversationId,
+        turnId: requestId,
+      });
+  const result: Phase2TurnResult = {
+    conversationId,
+    turnId: requestId,
+    assistantMessage: "لاحظت تفضيلًا شخصيًا، ووضعته في قائمة المراجعة بدل تفعيله تلقائيًا. يمكنك اعتماده من صفحة الذاكرة.",
+    response: {
+      kind: "answer",
+      message: "تم وضع الاقتراح في قائمة مراجعة الذاكرة الشخصية.",
+    },
+    action: {
+      type: "second_brain_memory_candidate_created",
+      memoryKind: suggestion.memoryKind,
+      key: suggestion.key,
+      value: suggestion.value,
+      confidence: suggestion.confidenceBps / 10000,
+      status: "pending_review",
+      ...(candidate ? { candidateId: candidate.id } : {}),
+      ...(dryRun ? { dryRun: true } : {}),
+    },
     provider: "second-brain",
     model: "deterministic-memory-v1",
   };
@@ -4548,6 +4604,17 @@ export class Phase2AgentRuntime {
         { ...input, conversationId },
         conversationMemory,
         secondBrainCommand,
+        requestId,
+        Boolean(options.dryRun),
+      );
+    }
+    const secondBrainSuggestion = parseSecondBrainCandidate(input.message);
+    if (secondBrainSuggestion) {
+      return persistSecondBrainCandidate(
+        identity,
+        { ...input, conversationId },
+        conversationMemory,
+        secondBrainSuggestion,
         requestId,
         Boolean(options.dryRun),
       );
