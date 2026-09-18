@@ -37,6 +37,7 @@ import { detectLearningSignal } from "./learning-signals";
 import {
   formatSecondBrainContext,
   applySecondBrainPolicy,
+  applySecondBrainContextBudget,
   classifySecondBrainQuery,
   createSecondBrainCandidate,
   emptyRetrievalTrace,
@@ -4681,7 +4682,10 @@ export class Phase2AgentRuntime {
       secondBrainRetrieval.memories,
       secondBrainRetrieval.trace,
     );
-    const secondBrainMemories = governedSecondBrain.memories;
+    const secondBrainMemories = applySecondBrainContextBudget(
+      governedSecondBrain.memories,
+      governedSecondBrain.trace,
+    );
     const secondBrainContext = formatSecondBrainContext(secondBrainMemories);
     const financialFollowupAdjustment = featureFlags.deterministicIntelligence()
       ? parseFinancialFollowupAdjustment(input.message, conversationMemory.state)

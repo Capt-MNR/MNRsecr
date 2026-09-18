@@ -743,6 +743,38 @@ export function applySecondBrainPolicy(
   return { memories: allowed, trace };
 }
 
+export function applySecondBrainContextBudget(
+  memories: SecondBrainMemory[],
+  trace: SecondBrainRetrievalTrace,
+): SecondBrainMemory[] {
+  const header = "[Second Brain — معرفة شخصية صريحة، ليست مصدرًا قانونيًا للبيانات]\n";
+  const selected: SecondBrainMemory[] = [];
+  const payload: ReturnType<typeof secondBrainValue>[] = [];
+
+  for (const memory of memories) {
+    const nextText = `${header}${JSON.stringify([...payload, secondBrainValue(memory)])}`;
+    if (nextText.length > MAX_CONTEXT_CHARS) {
+      trace.excluded.push({
+        memoryId: memory.id,
+        reason: "budget",
+      });
+      continue;
+    }
+    selected.push(memory);
+    payload.push(secondBrainValue(memory));
+  }
+
+  const selectedIds = new Set(selected.map((memory) => memory.id));
+  trace.selected = trace.selected.filter((item) => selectedIds.has(item.memoryId));
+  trace.llmContextIncluded = selected.length > 0;
+  if (selected.length === 0 && memories.length > 0) {
+    trace.llmContextReason = "budget_excluded_all";
+  } else if (selected.length < memories.length) {
+    trace.llmContextReason = "budget_bounded";
+  }
+  return selected;
+}
+
 export async function listSecondBrainMemories(
   identity: Identity,
   options: {
