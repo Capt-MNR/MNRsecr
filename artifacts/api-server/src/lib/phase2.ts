@@ -209,13 +209,19 @@ async function persistSecondBrainCandidate(
         conversationId,
         turnId: requestId,
       });
+  const candidateMessage = suggestion.memoryKind === "alias"
+    ? "لاحظت اسمًا بديلًا، ووضعته في قائمة المراجعة حتى يتم ربطه بكيان واضح قبل استخدامه."
+    : "لاحظت تفضيلًا شخصيًا، ووضعته في قائمة المراجعة بدل تفعيله تلقائيًا. يمكنك اعتماده من صفحة الذاكرة.";
+  const candidateResponse = suggestion.memoryKind === "alias"
+    ? "تم وضع الاسم البديل في قائمة مراجعة الذاكرة لحين ربطه بكيان واضح."
+    : "تم وضع الاقتراح في قائمة مراجعة الذاكرة الشخصية.";
   const result: Phase2TurnResult = {
     conversationId,
     turnId: requestId,
-    assistantMessage: "لاحظت تفضيلًا شخصيًا، ووضعته في قائمة المراجعة بدل تفعيله تلقائيًا. يمكنك اعتماده من صفحة الذاكرة.",
+    assistantMessage: candidateMessage,
     response: {
       kind: "answer",
-      message: "تم وضع الاقتراح في قائمة مراجعة الذاكرة الشخصية.",
+      message: candidateResponse,
     },
     action: {
       type: "second_brain_memory_candidate_created",
@@ -4579,6 +4585,25 @@ export class Phase2AgentRuntime {
     const conversationMemory = await loadConversationMemory(identity, conversationId);
     const secondBrainCommand = parseSecondBrainCommand(input.message);
     if (secondBrainCommand?.type === "remember") {
+      if (secondBrainCommand.memoryKind === "alias") {
+        return persistSecondBrainCandidate(
+          identity,
+          { ...input, conversationId },
+          conversationMemory,
+          {
+            memoryKind: "alias",
+            key: secondBrainCommand.key,
+            value: secondBrainCommand.value,
+            confidenceBps: 7000,
+            metadata: {
+              ...(secondBrainCommand.metadata ?? {}),
+              source: "explicit_alias_without_entity_association",
+            },
+          },
+          requestId,
+          Boolean(options.dryRun),
+        );
+      }
       if (!options.dryRun) {
         await rememberSecondBrain(identity, {
           memoryKind: secondBrainCommand.memoryKind,

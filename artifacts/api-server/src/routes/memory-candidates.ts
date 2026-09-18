@@ -15,6 +15,7 @@ import {
   publicSecondBrainCandidate,
   publicSecondBrainMemory,
   reviewSecondBrainCandidate,
+  SecondBrainCandidateReviewError,
 } from "../lib/second-brain";
 
 const router: IRouter = Router();
@@ -89,6 +90,10 @@ router.post("/memory-candidates/:candidateId/review", async (req, res): Promise<
       memory: result.memory ? publicSecondBrainMemory(result.memory) : null,
     }));
   } catch (error) {
+    if (error instanceof SecondBrainCandidateReviewError) {
+      sendRouteError(req, res, 400, error.message, error.code);
+      return;
+    }
     req.log.error({
       error,
       requestId: requestId(req),

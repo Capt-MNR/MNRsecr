@@ -1147,6 +1147,46 @@ export class DeterministicAgentRuntime {
     const secondBrainCommand = parseSecondBrainCommand(message);
     if (secondBrainCommand) {
       if (secondBrainCommand.type === "remember") {
+        if (secondBrainCommand.memoryKind === "alias") {
+          const candidate = await createSecondBrainCandidate(identity, {
+            memoryKind: "alias",
+            key: secondBrainCommand.key,
+            value: secondBrainCommand.value,
+            confidenceBps: 7000,
+            metadata: {
+              ...(secondBrainCommand.metadata ?? {}),
+              source: "explicit_alias_without_entity_association",
+            },
+            conversationId,
+            turnId,
+          });
+          const result: TurnResult = {
+            conversationId,
+            turnId,
+            assistantMessage: "لاحظت اسمًا بديلًا، ووضعته في قائمة المراجعة حتى يتم ربطه بكيان واضح قبل استخدامه.",
+            action: {
+              type: "second_brain_memory_candidate_created",
+              memoryKind: "alias",
+              key: secondBrainCommand.key,
+              value: secondBrainCommand.value,
+              confidence: 0.7,
+              status: candidate.status,
+              candidateId: candidate.id,
+            },
+            provider: "second-brain",
+            model: "deterministic-memory-v1",
+          };
+          if (input.idempotencyKey) {
+            await this.persistence.saveIdempotentResponse(identity, input.idempotencyKey, result);
+          }
+          await saveConversationTurn(identity, conversationMemory, {
+            turnId,
+            userMessage: message,
+            assistantMessage: result.assistantMessage,
+            action: result.action,
+          });
+          return result;
+        }
         await rememberSecondBrain(identity, {
           memoryKind: secondBrainCommand.memoryKind,
           key: secondBrainCommand.key,

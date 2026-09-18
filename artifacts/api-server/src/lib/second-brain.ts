@@ -87,6 +87,15 @@ export type SecondBrainCandidateStatus =
   | "rejected"
   | "needs_context";
 
+export class SecondBrainCandidateReviewError extends Error {
+  readonly code = "SECOND_BRAIN_ALIAS_ASSOCIATION_REQUIRED";
+
+  constructor() {
+    super("An alias candidate must be associated with a canonical entity before approval.");
+    this.name = "SecondBrainCandidateReviewError";
+  }
+}
+
 const MAX_MEMORY_VALUE_CHARS = 320;
 const MAX_CONTEXT_CHARS = 2800;
 const RECALL_WORDS = /(?:فاكر|تفتكر|اللي\s+فاكره|ماذا\s+تعرف\s+عني|ذاكرتك|المحفوظ|remember|recall|memory)/iu;
@@ -422,6 +431,13 @@ export async function reviewSecondBrainCandidate(
     }
 
     const now = new Date();
+    if (
+      input.status === "approved"
+      && candidate.kind === "alias"
+      && typeof candidate.metadata?.entityId !== "string"
+    ) {
+      throw new SecondBrainCandidateReviewError();
+    }
     if (input.status !== "approved") {
       const [updated] = await tx
         .update(secondBrainCandidatesTable)
@@ -818,7 +834,8 @@ export async function listSecondBrainAliases(
   return rows
     .filter((row) => {
       const rowEntityType = row.metadata?.entityType;
-      return !entityType || !rowEntityType || rowEntityType === entityType;
+      return typeof row.metadata?.entityId === "string"
+        && (!entityType || !rowEntityType || rowEntityType === entityType);
     })
     .map((row) => ({
       alias: typeof row.metadata?.alias === "string"
