@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -53,6 +54,15 @@ import {
   type LocalMessage,
   type MobileRecordRow,
 } from './quick-model';
+
+function colorWithAlpha(color: string, alpha: number) {
+  const normalized = color.replace('#', '');
+  if (normalized.length !== 6) return color;
+  const red = Number.parseInt(normalized.slice(0, 2), 16);
+  const green = Number.parseInt(normalized.slice(2, 4), 16);
+  const blue = Number.parseInt(normalized.slice(4, 6), 16);
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
 
 export default function QuickRoute() {
   const colors = useColors();
@@ -235,14 +245,70 @@ export default function QuickRoute() {
   const topInset = insets.top + (Platform.OS === 'web' ? 67 : 0);
   const bottomInset = insets.bottom + (Platform.OS === 'web' ? 34 : 10);
   const reversedMessages = [...messages].reverse();
+  const isFreshConversation = messages.length === 1 && messages[0]?.id === starterMessage.id;
+  const quickIntro = (
+    <View>
+      <View style={[styles.quickHero, { backgroundColor: colorWithAlpha(colors.card, 0.84), borderColor: colors.border }]}>
+        <View style={styles.quickHeroTop}>
+          <View style={[styles.quickHeroMark, { backgroundColor: colorWithAlpha(colors.primary, 0.14), borderColor: colorWithAlpha(colors.primary, 0.22) }]}>
+            <Feather name="message-circle" size={22} color={colors.primary} />
+          </View>
+          <View style={styles.quickHeroCopy}>
+            <Text style={[styles.quickHeroEyebrow, { color: colors.primary }]}>{localized(language, 'المساعد السريع', 'QUICK SECRETARY')}</Text>
+            <Text style={[styles.quickHeroTitle, { color: colors.foreground }]}>{localized(language, 'السكرتير الشخصي', 'Personal Secretary')}</Text>
+          </View>
+        </View>
+        <Text style={[styles.quickHeroText, { color: colors.mutedForeground }]}>{localized(language, 'اطلبها بطريقتك، وأنا أرتّب الخطوة التالية من غير ما تفتح مساحة العمل كاملة.', 'Ask naturally and I will organize the next step without opening the full workspace.')}</Text>
+        <View style={[styles.quickHeroStatus, { borderTopColor: colors.border }]}>
+          <View style={[styles.quickHeroStatusDot, { backgroundColor: colors.accent }]} />
+          <Text style={[styles.quickHeroStatusText, { color: colors.mutedForeground }]}>{localized(language, 'جاهز لطلب قصير', 'Ready for a short request')}</Text>
+          <Text style={[styles.quickHeroStatusMode, { color: colors.mutedForeground }]}>Quick</Text>
+        </View>
+      </View>
+      <View style={styles.suggestionsBlock}>
+        <Text style={[styles.suggestionsLabel, { color: colors.mutedForeground }]}>{localized(language, 'ابدأ من هنا', 'Start here')}</Text>
+        <View style={styles.suggestions}>
+          {visibleSuggestions.map((suggestion, index) => (
+            <Pressable
+              key={suggestion}
+              testID={`suggestion-${suggestion}`}
+              onPress={() => { setDraft(suggestion); inputRef.current?.focus(); }}
+              style={({ pressed }) => [
+                styles.suggestionChip,
+                { borderColor: colors.border, backgroundColor: colorWithAlpha(colors.card, 0.86), opacity: pressed ? 0.65 : 1 },
+              ]}
+            >
+              <View style={[styles.suggestionIcon, { backgroundColor: colors.muted }]}>
+                <Feather name={index === 0 ? 'sun' : index === 1 ? 'bell' : 'credit-card'} size={14} color={colors.primary} />
+              </View>
+              <Text style={[styles.suggestionText, { color: colors.foreground }]}>{suggestion}</Text>
+              <Feather name="chevron-left" size={15} color={colors.mutedForeground} />
+            </Pressable>
+          ))}
+        </View>
+      </View>
+    </View>
+  );
 
   return (
     <KeyboardAvoidingView style={[styles.screen, { backgroundColor: colors.background }]} behavior="padding">
-      <View style={[styles.header, { paddingTop: topInset + 8, borderBottomColor: colors.border }]}>
+      <LinearGradient
+        pointerEvents="none"
+        colors={[
+          colorWithAlpha(colors.primary, 0.11),
+          colorWithAlpha(colors.background, 0.72),
+          colorWithAlpha(colors.muted, 0.68),
+        ]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.quickBackground}
+      />
+      <View style={[styles.header, { paddingTop: topInset + 8, borderBottomColor: colorWithAlpha(colors.border, 0.72) }]}>
         <View style={styles.headerTop}>
           <View style={styles.brandBlock}>
             <View style={[styles.brandMark, { backgroundColor: colors.primary }]}><Feather name="message-circle" size={18} color={colors.primaryForeground} /></View>
-            <View>
+            <View style={styles.brandCopy}>
+              <Text style={[styles.brandEyebrow, { color: colors.mutedForeground }]}>{localized(language, 'وصول سريع', 'QUICK ACCESS')}</Text>
               <Text style={[styles.brandName, { color: colors.foreground }]}>{localized(language, 'السكرتير السريع', 'Quick Chat')}</Text>
               <View style={styles.availability}><View style={[styles.statusDot, { backgroundColor: colors.accent }]} /><Text style={[styles.availabilityText, { color: colors.mutedForeground }]}>{localized(language, 'فتحت السكرتير بسرعة', 'Fast access to your secretary')}</Text></View>
             </View>
@@ -255,16 +321,19 @@ export default function QuickRoute() {
       {!hydrated ? <View style={styles.loadingState}><ActivityIndicator color={colors.primary} /></View> : (
         <QuickScreen>
           <FlatList
-            inverted
-            data={reversedMessages}
+             inverted={!isFreshConversation}
+             data={isFreshConversation ? messages : reversedMessages}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => <QuickMessageBubble message={item} colors={colors} onApprove={(approval) => void updateApproval(approval, 'completed')} onReject={(approval) => void updateApproval(approval, 'rejected')} onOpenMain={() => openMain()} onOpenRecord={(record) => openMain(record)} onRetryInput={(attachment) => { if (attachment) void inputCapture.retryAttachment(attachment); }} retryingInput={inputCapture.state === 'processing'} busyOperationId={busyOperationId} />}
-            contentContainerStyle={styles.messageList}
+             contentContainerStyle={styles.messageList}
             keyboardDismissMode="interactive"
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
-            ListHeaderComponent={secretaryChat.isSending || conversationQuery.isFetching ? <View style={styles.typingRow}><View style={[styles.typingBubble, { backgroundColor: colors.card, borderColor: colors.border }]}><ActivityIndicator size="small" color={colors.primary} /><Text style={[styles.typingText, { color: colors.mutedForeground }]}>{conversationQuery.isFetching ? 'بفتح المحادثة الأصلية…' : 'بفكر في الرد…'}</Text></View></View> : null}
-            ListFooterComponent={<View><View style={[styles.quickHero, { backgroundColor: colors.card, borderColor: colors.border }]}><View style={[styles.quickHeroMark, { backgroundColor: colors.primary }]}><Feather name="message-circle" size={23} color={colors.primaryForeground} /></View><Text style={[styles.quickHeroTitle, { color: colors.foreground }]}>{localized(language, 'السكرتير الشخصي', 'Personal Secretary')}</Text><Text style={[styles.quickHeroText, { color: colors.mutedForeground }]}>{localized(language, 'مساحة سريعة للتحدث والمراجعة، مرتبطة بنفس محادثات وعمليات البرنامج الكامل.', 'A fast space to talk and review, connected to the same conversations and actions as the full workspace.')}</Text></View>{messages.length === 1 && <View style={styles.suggestionsBlock}><Text style={[styles.suggestionsLabel, { color: colors.mutedForeground }]}>{localized(language, 'ابدأ بطلب سريع', 'Start with a quick request')}</Text><View style={styles.suggestions}>{visibleSuggestions.map((suggestion) => <Pressable key={suggestion} testID={`suggestion-${suggestion}`} onPress={() => { setDraft(suggestion); inputRef.current?.focus(); }} style={({ pressed }) => [styles.suggestionChip, { borderColor: colors.border, backgroundColor: colors.card, opacity: pressed ? 0.65 : 1 }]}><Text style={[styles.suggestionText, { color: colors.foreground }]}>{suggestion}</Text></Pressable>)}</View></View>}</View>}
+             ListHeaderComponent={isFreshConversation
+               ? quickIntro
+               : secretaryChat.isSending || conversationQuery.isFetching
+                 ? <View style={styles.typingRow}><View style={[styles.typingBubble, { backgroundColor: colors.card, borderColor: colors.border }]}><ActivityIndicator size="small" color={colors.primary} /><Text style={[styles.typingText, { color: colors.mutedForeground }]}>{conversationQuery.isFetching ? 'بفتح المحادثة الأصلية…' : 'بفكر في الرد…'}</Text></View></View>
+                 : null}
           />
         </QuickScreen>
       )}
