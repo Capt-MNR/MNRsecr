@@ -1230,7 +1230,6 @@ export function MainOffice({
     },
   });
   const [financialExpanded, setFinancialExpanded] = useState(false);
-  const [chatExpanded, setChatExpanded] = useState(true);
   const [pearlSheetPosition, setPearlSheetPosition] = useState(80);
   const [pearlSheetTab, setPearlSheetTab] = useState<'records' | 'context'>('records');
   const [pearlSheetOffset, setPearlSheetOffset] = useState(0);
@@ -1289,7 +1288,6 @@ export function MainOffice({
   }
 
   function focusAndExpandChat() {
-    setChatExpanded(true);
     onFocusChat();
   }
 
@@ -1494,7 +1492,7 @@ export function MainOffice({
         end={{ x: 1, y: 1 }}
         style={styles.pearlBackground}
       />
-      {!chatExpanded && <View testID="main-summary-cards" style={styles.officeSummaryGrid}>
+      {false && <View testID="main-summary-cards" style={styles.officeSummaryGrid}>
         {summaryCards.map((card) => (
           <Pressable
             key={card.key}
@@ -1564,8 +1562,7 @@ export function MainOffice({
           value: action.draft,
         }))}
         onFocusChat={focusAndExpandChat}
-        expanded={chatExpanded}
-        onToggleExpanded={() => setChatExpanded((expanded) => !expanded)}
+         expanded
         isSending={isSending}
         onApprove={onApprove}
         onReject={onReject}
@@ -1703,7 +1700,7 @@ export function MainOffice({
         )}
       </View>
 
-      {!chatExpanded && !todayQuery.isLoading && !todayQuery.isError && contextData && (
+      {false && !todayQuery.isLoading && !todayQuery.isError && contextData && (
         <>
           <View style={styles.officeDashboardSplit}>
             <View style={[styles.officeDashboardCard, styles.officeTodayCard]}>
@@ -1781,7 +1778,7 @@ export function MainOffice({
         </>
       )}
 
-      {!chatExpanded && <View testID="recent-activity" style={styles.officeSection}>
+      {false && <View testID="recent-activity" style={styles.officeSection}>
         <View style={styles.officeSectionHeading}>
           <View>
             <Text style={[styles.officeSectionTitle, { color: colors.foreground }]}>
@@ -3734,11 +3731,15 @@ export const styles = StyleSheet.create({
     textAlign: 'center',
   },
   centralChatPanel: {
-    minHeight: 270,
-    marginTop: 10,
-    borderRadius: 27,
-    borderWidth: 1,
-    padding: 14,
+    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    height: 0,
+    minHeight: 0,
+    marginTop: 0,
+    borderRadius: 0,
+    borderWidth: 0,
+    padding: 0,
     overflow: 'visible',
     position: 'relative',
   },
