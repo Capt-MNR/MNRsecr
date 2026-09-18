@@ -42,6 +42,12 @@ import {
   saveConversationTurn,
   type ConversationMemorySnapshot,
 } from "./conversation-memory";
+import {
+  parseSecondBrainCommand,
+  rememberSecondBrain,
+  searchSecondBrain,
+  secondBrainRecallMessage,
+} from "./second-brain";
 import { isBroadExpenseReportRequest } from "./expense-report";
 import type { SecretaryChatContext, SecretaryChatPeer, TurnInputChannel } from "@workspace/api-zod";
 
@@ -1098,6 +1104,53 @@ export class DeterministicAgentRuntime {
     const turnId = input.requestId ?? randomUUID();
     const conversationMemory = await loadConversationMemory(identity, conversationId);
     const message = input.message.trim();
+    const secondBrainCommand = parseSecondBrainCommand(message);
+    if (secondBrainCommand) {
+      if (secondBrainCommand.type === "remember") {
+        await rememberSecondBrain(identity, {
+          memoryKind: secondBrainCommand.memoryKind,
+          key: secondBrainCommand.key,
+          value: secondBrainCommand.value,
+          conversationId,
+          turnId,
+        });
+      }
+      const memories = secondBrainCommand.type === "recall"
+        ? await searchSecondBrain(identity, secondBrainCommand.query)
+        : [];
+      const result: TurnResult = {
+        conversationId,
+        turnId,
+        assistantMessage: secondBrainCommand.type === "remember"
+          ? "تمام، حفظتها في الذاكرة الشخصية. هستخدمها كسياق مساعد، لكن مش هاعتبرها بديلًا عن السجلات الرسمية."
+          : secondBrainRecallMessage(memories),
+        action: secondBrainCommand.type === "remember"
+          ? {
+              type: "second_brain_memory_saved",
+              memoryKind: secondBrainCommand.memoryKind,
+              key: secondBrainCommand.key,
+              value: secondBrainCommand.value,
+              source: "explicit_user_instruction",
+            }
+          : {
+              type: "second_brain_recall",
+              query: secondBrainCommand.query,
+              memories: memories.map((memory) => memory.id),
+            },
+        provider: "second-brain",
+        model: "deterministic-memory-v1",
+      };
+      if (input.idempotencyKey) {
+        await this.persistence.saveIdempotentResponse(identity, input.idempotencyKey, result);
+      }
+      await saveConversationTurn(identity, conversationMemory, {
+        turnId,
+        userMessage: message,
+        assistantMessage: result.assistantMessage,
+        action: result.action,
+      });
+      return result;
+    }
     let result: TurnResult;
     if (isBroadExpenseReportRequest(message)) {
       const report = await this.persistence.getExpenseReport(identity);

@@ -35,6 +35,15 @@ import {
 } from "./relationship-context";
 import { detectLearningSignal } from "./learning-signals";
 import {
+  formatSecondBrainContext,
+  parseSecondBrainCommand,
+  rememberSecondBrain,
+  searchSecondBrain,
+  secondBrainRecallMessage,
+  shouldSearchSecondBrain,
+  type SecondBrainCommand,
+} from "./second-brain";
+import {
   agentToolError,
   isTransientProviderFailure,
   providerFailoverError,
@@ -110,6 +119,61 @@ export type Phase2TurnResult = {
   provider: string;
   model: string;
 };
+
+async function persistSecondBrainCommand(
+  identity: Identity,
+  input: Phase2TurnInput,
+  conversationMemory: ConversationMemorySnapshot,
+  command: SecondBrainCommand,
+  requestId: string,
+  dryRun: boolean,
+): Promise<Phase2TurnResult> {
+  const conversationId = input.conversationId || conversationMemory.conversationId;
+  const action = command.type === "remember"
+    ? {
+        type: "second_brain_memory_saved",
+        memoryKind: command.memoryKind,
+        key: command.key,
+        value: command.value,
+        source: "explicit_user_instruction",
+        ...(dryRun ? { dryRun: true } : {}),
+      }
+    : {
+        type: "second_brain_recall",
+        query: command.query,
+      };
+  const memories = command.type === "recall"
+    ? await searchSecondBrain(identity, command.query)
+    : [];
+  const result: Phase2TurnResult = {
+    conversationId,
+    turnId: requestId,
+    assistantMessage: command.type === "remember"
+      ? "تمام، حفظتها في الذاكرة الشخصية. هستخدمها كسياق مساعد، لكن مش هاعتبرها بديلًا عن السجلات الرسمية."
+      : secondBrainRecallMessage(memories),
+    response: {
+      kind: "answer",
+      message: command.type === "remember"
+        ? "تم حفظ المعلومة في Second Brain."
+        : secondBrainRecallMessage(memories),
+    },
+    action: command.type === "remember"
+      ? action
+      : { ...action, memories: memories.map((memory) => memory.id) },
+    provider: "second-brain",
+    model: "deterministic-memory-v1",
+  };
+  if (!dryRun) {
+    await saveConversationTurn(identity, conversationMemory, {
+      turnId: requestId,
+      userMessage: input.message.trim(),
+      assistantMessage: result.assistantMessage,
+      action: result.action,
+    });
+    if (input.idempotencyKey) await saveIdempotent(identity, input.idempotencyKey, result);
+  }
+  return result;
+}
 
 type ToolDefinition = {
   name: string;
@@ -4446,6 +4510,36 @@ export class Phase2AgentRuntime {
 
     const conversationId = input.conversationId || crypto.randomUUID();
     const conversationMemory = await loadConversationMemory(identity, conversationId);
+    const secondBrainCommand = parseSecondBrainCommand(input.message);
+    if (secondBrainCommand?.type === "remember") {
+      if (!options.dryRun) {
+        await rememberSecondBrain(identity, {
+          memoryKind: secondBrainCommand.memoryKind,
+          key: secondBrainCommand.key,
+          value: secondBrainCommand.value,
+          conversationId,
+          turnId: requestId,
+        });
+      }
+      return persistSecondBrainCommand(
+        identity,
+        { ...input, conversationId },
+        conversationMemory,
+        secondBrainCommand,
+        requestId,
+        Boolean(options.dryRun),
+      );
+    }
+    if (secondBrainCommand?.type === "recall") {
+      return persistSecondBrainCommand(
+        identity,
+        { ...input, conversationId },
+        conversationMemory,
+        secondBrainCommand,
+        requestId,
+        Boolean(options.dryRun),
+      );
+    }
     const learningSignal = detectLearningSignal(input.message, conversationMemory.recentTurns);
     const semanticParse = featureFlags.deterministicIntelligence()
       ? parseSemanticRequest(input.message)
@@ -4464,6 +4558,10 @@ export class Phase2AgentRuntime {
           return null;
         })
       : null;
+    const secondBrainMemories = shouldSearchSecondBrain(input.message)
+      ? await searchSecondBrain(identity, input.message)
+      : [];
+    const secondBrainContext = formatSecondBrainContext(secondBrainMemories);
     const financialFollowupAdjustment = featureFlags.deterministicIntelligence()
       ? parseFinancialFollowupAdjustment(input.message, conversationMemory.state)
       : null;
@@ -4495,6 +4593,9 @@ export class Phase2AgentRuntime {
             role: "system" as const,
             text: `[سياق علاقات منظم من البيانات القانونية، محدود بالسؤال]\n${serializeRelationshipContext(relationshipContext.context)}`,
           }]
+        : []),
+      ...(secondBrainContext
+        ? [{ role: "system" as const, text: secondBrainContext }]
         : []),
       { role: "user", text: input.message.trim() },
     ];
