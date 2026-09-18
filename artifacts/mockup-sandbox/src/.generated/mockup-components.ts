@@ -9,5 +9,6 @@ export const modules: ModuleMap = {
   "./components/mockups/personal-secretary/InboxSecretaryMobile.tsx": () => import("../components/mockups/personal-secretary/InboxSecretaryMobile.tsx"),
   "./components/mockups/personal-secretary/SecretaryCommandCenter.tsx": () => import("../components/mockups/personal-secretary/SecretaryCommandCenter.tsx"),
   "./components/mockups/personal-secretary/SecretaryPulseBoard.tsx": () => import("../components/mockups/personal-secretary/SecretaryPulseBoard.tsx"),
+  "./components/mockups/personal-secretary/SecretaryTriageTimelineMobile.tsx": () => import("../components/mockups/personal-secretary/SecretaryTriageTimelineMobile.tsx"),
   "./components/mockups/personal-secretary/SoftGlassDragSheetSecretaryMobile.tsx": () => import("../components/mockups/personal-secretary/SoftGlassDragSheetSecretaryMobile.tsx")
 };
