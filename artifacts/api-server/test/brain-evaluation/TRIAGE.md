@@ -196,6 +196,7 @@ Passed after the final changes:
 - `src/lib/brain-contract.ts`
 - `src/lib/second-brain.ts`
 - `src/lib/secretary.ts`
+- `src/lib/phase2.ts`
 - `test/deterministic-intelligence.test.ts`
 - `test/brain-contract.test.ts`
 - `test/second-brain.test.ts`
@@ -203,6 +204,33 @@ Passed after the final changes:
 - `test/brain-evaluation/evaluator.ts`
 - `test/brain-evaluation/evaluation.test.ts`
 - `test/brain-evaluation/results/brain-v1-post-fix.json`
+- `test/brain-evaluation/reasoning-safety.test.ts`
+- `test/brain-evaluation/REASONING-SAFETY.md`
+
+## Isolated reasoning and failure-safety follow-up
+
+The deterministic 30-scenario runner remains intentionally provider-free, so
+its `BLOCKED_BY_INFRASTRUCTURE` labels are historical facts about that runner,
+not claims that the production failure paths are untested. A separate isolated
+fixture suite now covers the missing safety seams without changing
+Evaluation Contract v1:
+
+- Planning is measured through a scripted provider in the read-only tool scope.
+  The fixture proves ordered-plan response handling and zero writes, but it
+  does not claim real-provider planning quality or token usage.
+- Memory/financial conflict evidence records structured financial precedence
+  and excludes conflicting memory from financial authority.
+- Provider timeout recovery and total provider failure preserve provider trace
+  evidence and return no-write/error-safe outcomes.
+- Expired approvals cannot be claimed; rejected approvals cannot be replayed.
+- A post-mutation verification failure is surfaced as `verification.state =
+  failed`; the fixture proves there is no verified-success claim or duplicate
+  retry.
+
+The detailed axis-by-axis result is in
+`test/brain-evaluation/REASONING-SAFETY.md`. These fixture results must remain
+separate from the 30-scenario PASS/FAIL count and must not be used to inflate
+the contract score.
 
 ## Commit provenance
 

@@ -1500,6 +1500,13 @@ type MutationVerification = {
   reason?: string;
 };
 
+export type MutationVerificationResolver = (
+  identity: Identity,
+  toolName: string,
+  result: ToolResult,
+  executor: DbExecutor,
+) => Promise<MutationVerification>;
+
 async function verifyMutationResult(
   identity: Identity,
   toolName: string,
@@ -1688,6 +1695,7 @@ async function executeTool(
     approvedOperationId?: string;
     transactionExecutor?: DbExecutor;
     activityWriter?: typeof recordToolActivity;
+    verificationResolver?: MutationVerificationResolver;
   },
 ): Promise<ToolResult> {
   if (WRITE_TOOLS.has(name) && options.approvedOperationId && !options.transactionExecutor) {
@@ -2673,7 +2681,9 @@ async function executeTool(
   if (result.ok && WRITE_TOOLS.has(name)) {
     const activityWriter = options.activityWriter ?? recordToolActivity;
     await activityWriter(identity, name, args, result, db);
-    const verification = await verifyMutationResult(identity, name, result, db);
+    const verification = options.verificationResolver
+      ? await options.verificationResolver(identity, name, result, db)
+      : await verifyMutationResult(identity, name, result, db);
     result = { ...result, verification };
   }
 
@@ -2700,6 +2710,7 @@ export async function executeStructuredTool(
     channel?: TurnInputChannel;
     approvedOperationId?: string;
     activityWriter?: typeof recordToolActivity;
+    verificationResolver?: MutationVerificationResolver;
   } = { requestId: crypto.randomUUID() },
 ): Promise<ToolResult> {
   return executeTool(identity, name, args, options);
