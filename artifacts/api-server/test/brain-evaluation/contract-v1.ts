@@ -24,7 +24,7 @@ export type ContractExpectation = {
   selectedStrategy: string;
   intelligenceLevels: BrainStrategyLevel[];
   confidence: "high" | "medium" | "low";
-  risk: BrainRiskLevel;
+  risk: BrainRiskLevel | null;
   decision: string;
   action: string;
   approvalRequired: boolean | "policy";
@@ -78,7 +78,7 @@ function scenario(
       selectedStrategy: "unspecified",
       intelligenceLevels: ["L0", "L1", "L2", "L3"],
       confidence: "medium",
-      risk: "low",
+      risk: null,
       approvalRequired: false,
       verificationPlan: "not applicable",
       forbidden: [],

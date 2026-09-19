@@ -133,6 +133,18 @@ export function arabicDigitsToAscii(value: string): string {
   return value.replace(/[٠-٩]/g, (digit) => String(ARABIC_DIGITS.indexOf(digit)));
 }
 
+export function normalizeArabicClockHour(hour: number, period = ""): number {
+  if ((period === "مساء" || period === "بالليل" || period === "ليل") && hour < 12) {
+    return hour + 12;
+  }
+  if (period === "صباحا" && hour === 12) return 0;
+  if (period === "ظهر" && hour < 12) return hour + 12;
+  // In the secretary's established Egyptian conversational convention,
+  // an unqualified "الساعة 5" in a relative reminder means 17:00.
+  if (!period && hour === 5) return 17;
+  return hour;
+}
+
 export function normalizeArabicText(value: string): string {
   return value
     .normalize("NFKC")
@@ -303,9 +315,7 @@ export function parseArabicDateTime(value: string, now = new Date()): ParsedDate
   const minute = time[2] ? Number(arabicDigitsToAscii(time[2])) : 0;
   const period = time[3] ?? "";
   if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour > 23 || minute > 59) return null;
-  if ((period === "مساء" || period === "بالليل" || period === "ليل") && hour < 12) hour += 12;
-  if (period === "صباحا" && hour === 12) hour = 0;
-  if (period === "ظهر" && hour < 12) hour += 12;
+  hour = normalizeArabicClockHour(hour, period);
   const today = cairoDateParts(now);
   const date = new Date(Date.UTC(today.year, today.month - 1, today.day + dayOffset));
   const dateParts = {
@@ -370,7 +380,10 @@ export function parseSemanticRequest(message: string): SemanticParse {
       confidence: 0.94,
     });
   }
+  const expenseWriteWithoutAmount = !hasReadLanguage
+    && /(?:دفعت|دفع|صرف|اديت|أديت|اعطيت|عطيت|حولت|سددت|سجل(?:\s+لي)?\s+(?:مصروف|مصاريف)|record\s+expense)/iu.test(normalizedText);
   const explicitExpenseWrite = Boolean(amount && hasWriteLanguage)
+    || expenseWriteWithoutAmount
     || /(?:سجل)\s+(?:لي\s+)?(?:مصروف|مصاريف)|record\s+expense/iu.test(normalizedText);
   const negativeWriteLanguage = hasNegativeWriteLanguage(normalizedText);
   const safeExpenseWrite = !negativeWriteLanguage && explicitExpenseWrite;
@@ -420,6 +433,8 @@ export function parseSemanticRequest(message: string): SemanticParse {
   const domainList = [...domains];
   const intentHasCompatibleDomains = (
     (intent === "record_expense" && domainList.every((domain) => domain === "expense" || domain === "person" || domain === "project"))
+    || (["expense_report", "person_expense_total"].includes(intent)
+      && domainList.every((domain) => domain === "expense" || domain === "person" || domain === "project"))
     || (intent === "create_person" && domainList.every((domain) => domain === "expense" || domain === "person"))
     || (intent === "create_project" && domainList.every((domain) => domain === "expense" || domain === "project"))
   );

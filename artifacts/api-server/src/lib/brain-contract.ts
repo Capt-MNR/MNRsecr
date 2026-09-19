@@ -155,12 +155,51 @@ function strategyFor(
       deterministicExecution: false,
     };
   }
+  if (semanticParse?.intent === "record_expense" && !semanticParse.amount && !semanticParse.ambiguous) {
+    return {
+      level: "L1",
+      reason: "missing_expense_amount_requires_focused_clarification",
+      llmAllowed: false,
+      deterministicExecution: false,
+    };
+  }
+  if (
+    semanticParse?.intent === "record_expense"
+    && Boolean(semanticParse.amount)
+    && !semanticParse.ambiguous
+    && semanticParse.entityMentions.length <= 1
+  ) {
+    return {
+      level: "L0",
+      reason: "amount_known_single_scope_deterministic_expense",
+      llmAllowed: false,
+      deterministicExecution: true,
+    };
+  }
+  if (semanticParse?.intent === "unknown" && semanticParse.hasWriteLanguage) {
+    return {
+      level: "L1",
+      reason: "vague_action_requires_non_mutating_clarification",
+      llmAllowed: false,
+      deterministicExecution: false,
+    };
+  }
   if (semanticParse && !semanticParse.ambiguous && semanticParse.confidence >= 0.9) {
     const isRead = ["expense_report", "person_expense_total", "project_people", "schedule_read", "memory_recall"]
       .includes(semanticParse.intent);
+    const isSimpleWrite = [
+      "record_expense",
+      "create_reminder",
+      "create_person",
+      "create_project",
+    ].includes(semanticParse.intent) && semanticParse.entityMentions.length <= 1;
     return {
-      level: isRead ? "L1" : "L2",
-      reason: isRead ? "high_confidence_scoped_read" : "high_confidence_structured_intent",
+      level: isRead ? "L1" : isSimpleWrite ? "L0" : "L2",
+      reason: isRead
+        ? "high_confidence_scoped_read"
+        : isSimpleWrite
+          ? "high_confidence_single_scope_deterministic_action"
+          : "high_confidence_structured_intent",
       llmAllowed: !isRead,
       deterministicExecution: true,
     };
@@ -186,12 +225,23 @@ function riskFor(
   semanticParse: SemanticParse | null | undefined,
   relationshipContext: RelationshipContextResult | null | undefined,
 ): BrainDecisionEnvelope["risk"] {
-  const write = [
-    "record_expense",
-    "create_reminder",
-    "create_person",
-    "create_project",
-  ].includes(intent) || Boolean(semanticParse?.hasWriteLanguage);
+  const incompleteExpense = intent === "record_expense" && !semanticParse?.amount;
+  const unknownAction = intent === "unknown";
+  const semanticRead = [
+    "expense_report",
+    "person_expense_total",
+    "project_people",
+    "schedule_read",
+    "memory_recall",
+  ].includes(semanticParse?.intent ?? "");
+  const write = !incompleteExpense && (
+    !semanticRead && !unknownAction && ([
+      "record_expense",
+      "create_reminder",
+      "create_person",
+      "create_project",
+    ].includes(intent) || Boolean(semanticParse?.hasWriteLanguage))
+  );
   const ambiguity = Boolean(semanticParse?.ambiguous)
     || Boolean(relationshipContext?.context.uncertainties.length);
   const financial = intent.includes("expense") || /financial|debt|obligation|payment/.test(intent);

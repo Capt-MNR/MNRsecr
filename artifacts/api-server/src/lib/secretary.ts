@@ -53,6 +53,7 @@ import {
   secondBrainRecallMessage,
 } from "./second-brain";
 import { isBroadExpenseReportRequest } from "./expense-report";
+import { normalizeArabicClockHour } from "./deterministic-intelligence";
 import type { SecretaryChatContext, SecretaryChatPeer, TurnInputChannel } from "@workspace/api-zod";
 
 export type Identity = {
@@ -920,13 +921,7 @@ function parseClock(message: string): { hour: number; minute: number } | null {
   const minute = match[2] ? arabicDigits(match[2]) : 0;
   const period = match[3]?.toLocaleLowerCase("ar");
   if (minute > 59 || hour > 23) return null;
-  if (period?.startsWith("مساء") || period === "بالليل" || period === "ليل") {
-    if (hour < 12) hour += 12;
-  } else if (period?.startsWith("صباح") && hour === 12) {
-    hour = 0;
-  } else if (period === "ظهر" && hour < 12) {
-    hour += 12;
-  }
+  hour = normalizeArabicClockHour(hour, period?.startsWith("مساء") ? "مساء" : period?.startsWith("صباح") ? "صباحا" : period);
   return hour <= 23 ? { hour, minute } : null;
 }
 

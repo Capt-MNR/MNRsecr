@@ -150,7 +150,7 @@ export function parseSecondBrainCommand(message: string): SecondBrainCommand | n
   const alias = text.match(
     /^(?:افتكر|إفتكر|خلي\s+بالك|احفظ|سجل\s+في\s+ذاكرتك|remember(?:\s+that)?|keep\s+in\s+mind)\s*(?:إن|ان|أن|:)?\s*اسم\s+(?:(الشخص|المشروع|الطرف)\s+)?(.+?)\s+(?:هو|هي|يعني)\s+(.+)$/iu,
   );
-  if (alias?.[2]?.trim() && alias[3]?.trim()) {
+  if (alias?.[1] && alias[2]?.trim() && alias[3]?.trim()) {
     const aliasName = alias[2].trim().replace(/^["'«“]|["'»”]$/g, "");
     const canonicalName = alias[3].trim().replace(/^["'«“]|["'»”]$/g, "");
     const entityType = alias[1]?.toLocaleLowerCase("ar") === "المشروع"
@@ -170,6 +170,26 @@ export function parseSecondBrainCommand(message: string): SecondBrainCommand | n
           alias: compact(aliasName),
           canonical: compact(canonicalName),
           ...(entityType ? { entityType } : {}),
+        },
+      };
+    }
+  }
+
+  const bareAlias = text.match(
+    /^(?:افتكر|إفتكر|خلي\s+بالك|احفظ|سجل\s+في\s+ذاكرتك|remember(?:\s+that)?|keep\s+in\s+mind)\s*(?:إن|ان|أن|:)?\s*(?!اسم\s)(.+?)\s+(?:هو|هي|يعني)\s+(.+)$/iu,
+  );
+  if (bareAlias?.[1]?.trim() && bareAlias[2]?.trim()) {
+    const aliasName = bareAlias[1].trim().replace(/^["'«“]|["'»”]$/g, "");
+    const canonicalName = bareAlias[2].trim().replace(/^["'«“]|["'»”]$/g, "");
+    if (!/^اسم\s+/iu.test(aliasName)) {
+      return {
+        type: "remember",
+        memoryKind: "alias",
+        key: keyFor("alias", canonicalName, aliasName),
+        value: compact(canonicalName),
+        metadata: {
+          alias: compact(aliasName),
+          canonical: compact(canonicalName),
         },
       };
     }

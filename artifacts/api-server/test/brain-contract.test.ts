@@ -61,6 +61,102 @@ test("holds ambiguous financial writes at contextual reasoning", () => {
   assert.equal(envelope.risk.level, "medium");
 });
 
+test("routes a clear single-scope expense to deterministic L0", () => {
+  const semanticParse = parseSemanticRequest("دفعت لمحمد 500 جنيه");
+  const envelope = createBrainDecisionEnvelope({
+    requestId: "request-simple-expense",
+    conversationId: "conversation-simple-expense",
+    message: "دفعت لمحمد 500 جنيه",
+    semanticParse,
+  });
+  assert.equal(envelope.strategy.level, "L0");
+  assert.equal(envelope.strategy.deterministicExecution, true);
+  assert.equal(envelope.risk.requiresApproval, true);
+});
+
+test("routes a clear amount-only transport expense to deterministic L0", () => {
+  const semanticParse = parseSemanticRequest("دفعت 120 جنيه أوبر");
+  const envelope = createBrainDecisionEnvelope({
+    requestId: "request-transport-expense",
+    conversationId: "conversation-transport-expense",
+    message: "دفعت 120 جنيه أوبر",
+    semanticParse,
+  });
+  assert.equal(envelope.strategy.level, "L0");
+  assert.equal(envelope.strategy.deterministicExecution, true);
+  assert.equal(envelope.risk.requiresApproval, true);
+});
+
+test("routes a missing expense amount to non-mutating L1 clarification", () => {
+  const semanticParse = parseSemanticRequest("دفعت لمحمد");
+  const envelope = createBrainDecisionEnvelope({
+    requestId: "request-missing-expense-amount",
+    conversationId: "conversation-missing-expense-amount",
+    message: "دفعت لمحمد",
+    semanticParse,
+  });
+  assert.equal(envelope.intent.name, "record_expense");
+  assert.equal(envelope.strategy.level, "L1");
+  assert.equal(envelope.strategy.deterministicExecution, false);
+  assert.equal(envelope.risk.level, "low");
+  assert.equal(envelope.risk.requiresApproval, false);
+});
+
+test("does not turn a structured financial read into an approval-gated write", () => {
+  const message = "أنا دفعت كام لشركة المحجر؟";
+  const semanticParse = parseSemanticRequest(message);
+  const envelope = createBrainDecisionEnvelope({
+    requestId: "request-financial-read",
+    conversationId: "conversation-financial-read",
+    message,
+    semanticParse,
+    relationshipContext: {
+      context: {
+        version: 1,
+        intent: "person_financial_status",
+        bounds: {
+          maxEntities: 3,
+          maxRelationships: 12,
+          maxRecords: 12,
+          maxTimelineEvents: 8,
+          maxContextChars: 6000,
+        },
+        resolvedEntities: [{
+          id: "party-quarry",
+          name: "شركة المحجر",
+          type: "financial_party",
+          matchType: "exact",
+          confidence: 0.98,
+        }],
+        relevantRelationships: [],
+        relevantRecords: [],
+        financialSummary: {},
+        recentActivity: [],
+        conversationReferences: [],
+        uncertainties: [],
+        truncated: false,
+      },
+      response: { kind: "answer", message: "structured financial result" },
+    },
+  });
+  assert.equal(envelope.risk.level, "low");
+  assert.equal(envelope.risk.requiresApproval, false);
+});
+
+test("keeps vague action language in non-mutating clarification", () => {
+  const semanticParse = parseSemanticRequest("اعمل حاجة مناسبة لمحمد");
+  const envelope = createBrainDecisionEnvelope({
+    requestId: "request-vague-action",
+    conversationId: "conversation-vague-action",
+    message: "اعمل حاجة مناسبة لمحمد",
+    semanticParse,
+  });
+  assert.equal(envelope.intent.name, "unknown");
+  assert.equal(envelope.strategy.level, "L1");
+  assert.equal(envelope.risk.level, "low");
+  assert.equal(envelope.risk.requiresApproval, false);
+});
+
 test("does not allow a relationship clarification to execute", () => {
   const semanticParse = parseSemanticRequest("محمد عليه كام؟");
   const envelope = createBrainDecisionEnvelope({

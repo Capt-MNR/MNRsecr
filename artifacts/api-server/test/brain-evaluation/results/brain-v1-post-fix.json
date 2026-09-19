@@ -1,0 +1,6127 @@
+{
+  "contract": "SECRETARY BRAIN v1 EVALUATION CONTRACT — 30 GROUND-TRUTH SCENARIOS",
+  "generatedAt": "2026-09-19T10:00:00.000Z",
+  "fixedClock": "2026-09-19T10:00:00.000Z",
+  "fixtureScope": {
+    "tenant": "brain-evaluation-tenant",
+    "user": "brain-evaluation-user",
+    "writesAllowed": false
+  },
+  "summary": {
+    "total": 30,
+    "pass": 9,
+    "fail": 12,
+    "blockedByInfrastructure": 8,
+    "notExecutable": 1,
+    "contractPassRateAmongExecutable": 42.86,
+    "logicalLlmCallsMeasured": 0,
+    "providerAttemptsMeasured": 0,
+    "tokenMeasurement": "N/A — no provider calls were made by the isolated deterministic harness"
+  },
+  "scenarios": [
+    {
+      "scenarioId": "01",
+      "title": "Simple expense",
+      "input": "دفعت لمحمد 500 جنيه",
+      "context": "none",
+      "status": "PASS",
+      "executionMode": "envelope",
+      "limitation": null,
+      "expected": {
+        "secondaryIntents": [],
+        "mentionedEntities": [
+          "person:محمد"
+        ],
+        "resolvedEntities": [
+          "person:محمد if unique"
+        ],
+        "ambiguousEntities": [],
+        "timeScope": "not explicitly stated",
+        "knownInformation": [
+          "amount=500 EGP",
+          "expense action"
+        ],
+        "unknownInformation": [
+          "project",
+          "purpose"
+        ],
+        "requiredContext": [
+          "unique person resolution"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "structured_records",
+          "entity_graph"
+        ],
+        "excludedSources": [
+          "second_brain_financial_truth",
+          "unverified_model_claims"
+        ],
+        "selectedStrategy": "deterministic",
+        "intelligenceLevels": [
+          "L0"
+        ],
+        "confidence": "high",
+        "risk": "medium",
+        "approvalRequired": "policy",
+        "verificationPlan": "verify persisted record and activity",
+        "forbidden": [
+          "silent ambiguous person selection",
+          "invented project/purpose",
+          "unverified success"
+        ],
+        "primaryIntent": "record_expense",
+        "decision": "create pending operation, not confirmed expense",
+        "action": "record_expense after approval",
+        "expectedOutcome": "one expense after approval, with no duplicate"
+      },
+      "observed": {
+        "primaryIntent": "record_expense",
+        "secondaryIntents": [],
+        "mentionedEntities": [
+          "person:محمد"
+        ],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [
+          "amount=50000 minor EGP"
+        ],
+        "unknownInformation": [],
+        "requiredContext": [],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "user_input"
+        ],
+        "excludedSources": [
+          "unverified_model_claims"
+        ],
+        "selectedStrategy": "amount_known_single_scope_deterministic_expense",
+        "intelligenceLevel": "L0",
+        "confidence": 0.7935000000000001,
+        "confidenceBand": "medium",
+        "risk": "medium",
+        "decision": "deterministic_path_selected",
+        "action": "approval_gated_structured_action",
+        "approvalRequired": true,
+        "verificationPlan": [
+          "authoritative_structured_result"
+        ],
+        "failureState": null,
+        "provenance": [
+          "requestId=brain-eval-01",
+          "conversationId=brain-eval-conversation-01",
+          "evaluationScenario=01"
+        ],
+        "actualOutcome": "deterministic parser and Brain envelope evaluated; no provider or mutation executed",
+        "correction": {
+          "previousState": null,
+          "correctionTarget": null,
+          "updatedInterpretation": null,
+          "duplicateRisk": null,
+          "finalPersistedState": null
+        }
+      },
+      "envelope": {
+        "version": 1,
+        "requestId": "brain-eval-01",
+        "conversationId": "brain-eval-conversation-01",
+        "state": "understanding",
+        "intent": {
+          "name": "record_expense",
+          "confidence": 0.93,
+          "source": "deterministic"
+        },
+        "strategy": {
+          "level": "L0",
+          "reason": "amount_known_single_scope_deterministic_expense",
+          "llmAllowed": false,
+          "deterministicExecution": true
+        },
+        "context": {
+          "sources": [
+            "user_input"
+          ],
+          "selected": [],
+          "excluded": [
+            "unverified_model_claims"
+          ],
+          "ambiguity": [],
+          "temporal": {
+            "mentioned": false,
+            "resolved": false,
+            "dayOffset": null,
+            "hasExactTime": false
+          }
+        },
+        "confidence": {
+          "overall": 0.7935000000000001,
+          "intent": 0.93,
+          "entity": 0.7,
+          "temporal": 1,
+          "execution": 0.5
+        },
+        "risk": {
+          "level": "medium",
+          "factors": [
+            "state_mutation",
+            "financial_data"
+          ],
+          "requiresApproval": true
+        },
+        "verification": {
+          "state": "pending",
+          "required": true,
+          "checks": [
+            "authoritative_structured_result"
+          ]
+        },
+        "trace": {
+          "retrievalUsed": false,
+          "relationshipContextUsed": false,
+          "toolCalls": 0,
+          "llmCalls": 0,
+          "evaluationScenario": null
+        }
+      },
+      "semanticParse": {
+        "originalText": "دفعت لمحمد 500 جنيه",
+        "normalizedText": "دفعت لمحمد 500 جنيه",
+        "tokens": [
+          "دفعت",
+          "لمحمد",
+          "500",
+          "جنيه"
+        ],
+        "domains": [
+          "expense"
+        ],
+        "intent": "record_expense",
+        "confidence": 0.93,
+        "amount": {
+          "amountMinor": 50000,
+          "currency": "EGP",
+          "raw": "500",
+          "confidence": 0.99
+        },
+        "entityMentions": [
+          {
+            "entityType": "person",
+            "query": "محمد",
+            "confidence": 0.9
+          }
+        ],
+        "hasWriteLanguage": true,
+        "hasReadLanguage": false,
+        "ambiguous": false
+      },
+      "instrumentation": {
+        "logicalLlmCalls": 0,
+        "providerAttempts": 0,
+        "inputTokens": null,
+        "outputTokens": null,
+        "totalTokens": null,
+        "selectedStrategy": "L0",
+        "intelligenceLevel": "L0",
+        "measurement": "deterministic_path_no_provider_call"
+      },
+      "passFail": {
+        "pass": true,
+        "mismatchReason": null,
+        "comparedFields": [
+          "primaryIntent",
+          "intelligenceLevel",
+          "risk"
+        ],
+        "responsibleSubsystem": null
+      },
+      "failureClassification": null
+    },
+    {
+      "scenarioId": "02",
+      "title": "Missing amount",
+      "input": "دفعت لمحمد",
+      "context": "none",
+      "status": "PASS",
+      "executionMode": "envelope",
+      "limitation": null,
+      "expected": {
+        "secondaryIntents": [],
+        "mentionedEntities": [
+          "person:محمد"
+        ],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [
+          "amount"
+        ],
+        "requiredContext": [
+          "amount"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [],
+        "excludedSources": [],
+        "selectedStrategy": "lightweight interpretation",
+        "intelligenceLevels": [
+          "L1"
+        ],
+        "confidence": "medium",
+        "risk": null,
+        "approvalRequired": false,
+        "verificationPlan": "not applicable",
+        "forbidden": [
+          "guess amount",
+          "zero-value expense",
+          "unrelated questions"
+        ],
+        "primaryIntent": "record_expense",
+        "decision": "ask focused clarification",
+        "action": "clarify amount",
+        "expectedOutcome": "no mutation and no invented pending expense"
+      },
+      "observed": {
+        "primaryIntent": "record_expense",
+        "secondaryIntents": [],
+        "mentionedEntities": [
+          "person:محمد"
+        ],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "user_input"
+        ],
+        "excludedSources": [
+          "unverified_model_claims"
+        ],
+        "selectedStrategy": "missing_expense_amount_requires_focused_clarification",
+        "intelligenceLevel": "L1",
+        "confidence": 0.7260000000000001,
+        "confidenceBand": "medium",
+        "risk": "low",
+        "decision": "understanding",
+        "action": "record_expense",
+        "approvalRequired": false,
+        "verificationPlan": [],
+        "failureState": null,
+        "provenance": [
+          "requestId=brain-eval-02",
+          "conversationId=brain-eval-conversation-02",
+          "evaluationScenario=02"
+        ],
+        "actualOutcome": "deterministic parser and Brain envelope evaluated; no provider or mutation executed",
+        "correction": {
+          "previousState": null,
+          "correctionTarget": null,
+          "updatedInterpretation": null,
+          "duplicateRisk": null,
+          "finalPersistedState": null
+        }
+      },
+      "envelope": {
+        "version": 1,
+        "requestId": "brain-eval-02",
+        "conversationId": "brain-eval-conversation-02",
+        "state": "understanding",
+        "intent": {
+          "name": "record_expense",
+          "confidence": 0.78,
+          "source": "deterministic"
+        },
+        "strategy": {
+          "level": "L1",
+          "reason": "missing_expense_amount_requires_focused_clarification",
+          "llmAllowed": false,
+          "deterministicExecution": false
+        },
+        "context": {
+          "sources": [
+            "user_input"
+          ],
+          "selected": [],
+          "excluded": [
+            "unverified_model_claims"
+          ],
+          "ambiguity": [],
+          "temporal": {
+            "mentioned": false,
+            "resolved": false,
+            "dayOffset": null,
+            "hasExactTime": false
+          }
+        },
+        "confidence": {
+          "overall": 0.7260000000000001,
+          "intent": 0.78,
+          "entity": 0.7,
+          "temporal": 1,
+          "execution": 0.5
+        },
+        "risk": {
+          "level": "low",
+          "factors": [
+            "financial_data"
+          ],
+          "requiresApproval": false
+        },
+        "verification": {
+          "state": "not_required",
+          "required": false,
+          "checks": []
+        },
+        "trace": {
+          "retrievalUsed": false,
+          "relationshipContextUsed": false,
+          "toolCalls": 0,
+          "llmCalls": 0,
+          "evaluationScenario": null
+        }
+      },
+      "semanticParse": {
+        "originalText": "دفعت لمحمد",
+        "normalizedText": "دفعت لمحمد",
+        "tokens": [
+          "دفعت",
+          "لمحمد"
+        ],
+        "domains": [
+          "expense"
+        ],
+        "intent": "record_expense",
+        "confidence": 0.78,
+        "entityMentions": [
+          {
+            "entityType": "person",
+            "query": "محمد",
+            "confidence": 0.9
+          }
+        ],
+        "hasWriteLanguage": true,
+        "hasReadLanguage": false,
+        "ambiguous": false
+      },
+      "instrumentation": {
+        "logicalLlmCalls": 0,
+        "providerAttempts": 0,
+        "inputTokens": null,
+        "outputTokens": null,
+        "totalTokens": null,
+        "selectedStrategy": "L1",
+        "intelligenceLevel": "L1",
+        "measurement": "deterministic_path_no_provider_call"
+      },
+      "passFail": {
+        "pass": true,
+        "mismatchReason": null,
+        "comparedFields": [
+          "primaryIntent",
+          "intelligenceLevel",
+          "approvalRequired"
+        ],
+        "responsibleSubsystem": null
+      },
+      "failureClassification": null
+    },
+    {
+      "scenarioId": "03",
+      "title": "Ambiguous person",
+      "input": "دفعت لمحمد 500 جنيه",
+      "context": "multiple people named محمد with no unique resolver result",
+      "status": "FAIL",
+      "executionMode": "envelope",
+      "limitation": null,
+      "expected": {
+        "secondaryIntents": [],
+        "mentionedEntities": [
+          "person:محمد"
+        ],
+        "resolvedEntities": [],
+        "ambiguousEntities": [
+          "person:محمد"
+        ],
+        "timeScope": null,
+        "knownInformation": [
+          "amount=500 EGP"
+        ],
+        "unknownInformation": [],
+        "requiredContext": [
+          "which محمد"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [],
+        "excludedSources": [],
+        "selectedStrategy": "lightweight interpretation",
+        "intelligenceLevels": [
+          "L1"
+        ],
+        "confidence": "medium",
+        "risk": null,
+        "approvalRequired": false,
+        "verificationPlan": "not applicable",
+        "forbidden": [
+          "first match",
+          "fuzzy authority",
+          "arbitrary expense target"
+        ],
+        "primaryIntent": "record_expense",
+        "decision": "ask which person",
+        "action": "clarify entity",
+        "expectedOutcome": "no mutation and no silent selection"
+      },
+      "observed": {
+        "primaryIntent": "person_financial_status",
+        "secondaryIntents": [],
+        "mentionedEntities": [
+          "person:محمد"
+        ],
+        "resolvedEntities": [
+          "bounded_relationship_context",
+          "conversation_referents"
+        ],
+        "ambiguousEntities": [
+          "person_ambiguous"
+        ],
+        "timeScope": null,
+        "knownInformation": [
+          "amount=50000 minor EGP"
+        ],
+        "unknownInformation": [
+          "person_ambiguous"
+        ],
+        "requiredContext": [
+          "bounded_relationship_context",
+          "conversation_referents"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "user_input",
+          "conversation",
+          "relationship_graph",
+          "structured_records"
+        ],
+        "excludedSources": [
+          "unverified_model_claims"
+        ],
+        "selectedStrategy": "authoritative_context_requires_clarification",
+        "intelligenceLevel": "L0",
+        "confidence": 0.6225,
+        "confidenceBand": "medium",
+        "risk": "high",
+        "decision": "clarification_required",
+        "action": "approval_gated_structured_action",
+        "approvalRequired": true,
+        "verificationPlan": [
+          "authoritative_structured_result"
+        ],
+        "failureState": null,
+        "provenance": [
+          "requestId=brain-eval-03",
+          "conversationId=brain-eval-conversation-03",
+          "evaluationScenario=03"
+        ],
+        "actualOutcome": "deterministic parser and Brain envelope evaluated; no provider or mutation executed",
+        "correction": {
+          "previousState": null,
+          "correctionTarget": null,
+          "updatedInterpretation": null,
+          "duplicateRisk": null,
+          "finalPersistedState": null
+        }
+      },
+      "envelope": {
+        "version": 1,
+        "requestId": "brain-eval-03",
+        "conversationId": "brain-eval-conversation-03",
+        "state": "clarification",
+        "intent": {
+          "name": "person_financial_status",
+          "confidence": 0.8,
+          "source": "relationship_context"
+        },
+        "strategy": {
+          "level": "L0",
+          "reason": "authoritative_context_requires_clarification",
+          "llmAllowed": false,
+          "deterministicExecution": false
+        },
+        "context": {
+          "sources": [
+            "user_input",
+            "conversation",
+            "relationship_graph",
+            "structured_records"
+          ],
+          "selected": [
+            "bounded_relationship_context",
+            "conversation_referents"
+          ],
+          "excluded": [
+            "unverified_model_claims"
+          ],
+          "ambiguity": [
+            "person_ambiguous"
+          ],
+          "temporal": {
+            "mentioned": false,
+            "resolved": false,
+            "dayOffset": null,
+            "hasExactTime": false
+          }
+        },
+        "confidence": {
+          "overall": 0.6225,
+          "intent": 0.8,
+          "entity": 0.25,
+          "temporal": 1,
+          "execution": 0.5
+        },
+        "risk": {
+          "level": "high",
+          "factors": [
+            "state_mutation",
+            "financial_data",
+            "unresolved_context"
+          ],
+          "requiresApproval": true
+        },
+        "verification": {
+          "state": "pending",
+          "required": true,
+          "checks": [
+            "authoritative_structured_result"
+          ]
+        },
+        "trace": {
+          "retrievalUsed": false,
+          "relationshipContextUsed": true,
+          "toolCalls": 0,
+          "llmCalls": 0,
+          "evaluationScenario": null
+        }
+      },
+      "semanticParse": {
+        "originalText": "دفعت لمحمد 500 جنيه",
+        "normalizedText": "دفعت لمحمد 500 جنيه",
+        "tokens": [
+          "دفعت",
+          "لمحمد",
+          "500",
+          "جنيه"
+        ],
+        "domains": [
+          "expense"
+        ],
+        "intent": "record_expense",
+        "confidence": 0.93,
+        "amount": {
+          "amountMinor": 50000,
+          "currency": "EGP",
+          "raw": "500",
+          "confidence": 0.99
+        },
+        "entityMentions": [
+          {
+            "entityType": "person",
+            "query": "محمد",
+            "confidence": 0.9
+          }
+        ],
+        "hasWriteLanguage": true,
+        "hasReadLanguage": false,
+        "ambiguous": false
+      },
+      "instrumentation": {
+        "logicalLlmCalls": 0,
+        "providerAttempts": 0,
+        "inputTokens": null,
+        "outputTokens": null,
+        "totalTokens": null,
+        "selectedStrategy": "L0",
+        "intelligenceLevel": "L0",
+        "measurement": "deterministic_path_no_provider_call"
+      },
+      "passFail": {
+        "pass": false,
+        "mismatchReason": "primaryIntent observed=person_financial_status expected=record_expense; intelligenceLevel observed=L0 expected=L1; approvalRequired observed=true expected=false",
+        "comparedFields": [
+          "primaryIntent",
+          "intelligenceLevel",
+          "approvalRequired"
+        ],
+        "responsibleSubsystem": "brain-contract.ts / deterministic-intelligence.ts"
+      },
+      "failureClassification": "intelligence-level mismatch"
+    },
+    {
+      "scenarioId": "04",
+      "title": "Clear transport expense",
+      "input": "دفعت 120 جنيه أوبر",
+      "context": "none",
+      "status": "PASS",
+      "executionMode": "envelope",
+      "limitation": null,
+      "expected": {
+        "secondaryIntents": [],
+        "mentionedEntities": [],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [
+          "amount=120 EGP",
+          "purpose may be transport"
+        ],
+        "unknownInformation": [],
+        "requiredContext": [],
+        "optionalContext": [],
+        "authoritativeSources": [],
+        "excludedSources": [],
+        "selectedStrategy": "deterministic",
+        "intelligenceLevels": [
+          "L0"
+        ],
+        "confidence": "medium",
+        "risk": null,
+        "approvalRequired": "policy",
+        "verificationPlan": "verify persisted final state",
+        "forbidden": [
+          "unnecessary LLM",
+          "invented financial metadata"
+        ],
+        "primaryIntent": "record_expense",
+        "decision": "create pending operation",
+        "action": "record_expense after approval",
+        "expectedOutcome": "verified transport expense without unnecessary LLM"
+      },
+      "observed": {
+        "primaryIntent": "record_expense",
+        "secondaryIntents": [],
+        "mentionedEntities": [],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [
+          "amount=12000 minor EGP"
+        ],
+        "unknownInformation": [],
+        "requiredContext": [],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "user_input"
+        ],
+        "excludedSources": [
+          "unverified_model_claims"
+        ],
+        "selectedStrategy": "amount_known_single_scope_deterministic_expense",
+        "intelligenceLevel": "L0",
+        "confidence": 0.769,
+        "confidenceBand": "medium",
+        "risk": "medium",
+        "decision": "deterministic_path_selected",
+        "action": "approval_gated_structured_action",
+        "approvalRequired": true,
+        "verificationPlan": [
+          "authoritative_structured_result"
+        ],
+        "failureState": null,
+        "provenance": [
+          "requestId=brain-eval-04",
+          "conversationId=brain-eval-conversation-04",
+          "evaluationScenario=04"
+        ],
+        "actualOutcome": "deterministic parser and Brain envelope evaluated; no provider or mutation executed",
+        "correction": {
+          "previousState": null,
+          "correctionTarget": null,
+          "updatedInterpretation": null,
+          "duplicateRisk": null,
+          "finalPersistedState": null
+        }
+      },
+      "envelope": {
+        "version": 1,
+        "requestId": "brain-eval-04",
+        "conversationId": "brain-eval-conversation-04",
+        "state": "understanding",
+        "intent": {
+          "name": "record_expense",
+          "confidence": 0.82,
+          "source": "deterministic"
+        },
+        "strategy": {
+          "level": "L0",
+          "reason": "amount_known_single_scope_deterministic_expense",
+          "llmAllowed": false,
+          "deterministicExecution": true
+        },
+        "context": {
+          "sources": [
+            "user_input"
+          ],
+          "selected": [],
+          "excluded": [
+            "unverified_model_claims"
+          ],
+          "ambiguity": [],
+          "temporal": {
+            "mentioned": false,
+            "resolved": false,
+            "dayOffset": null,
+            "hasExactTime": false
+          }
+        },
+        "confidence": {
+          "overall": 0.769,
+          "intent": 0.82,
+          "entity": 0.8,
+          "temporal": 1,
+          "execution": 0.5
+        },
+        "risk": {
+          "level": "medium",
+          "factors": [
+            "state_mutation",
+            "financial_data"
+          ],
+          "requiresApproval": true
+        },
+        "verification": {
+          "state": "pending",
+          "required": true,
+          "checks": [
+            "authoritative_structured_result"
+          ]
+        },
+        "trace": {
+          "retrievalUsed": false,
+          "relationshipContextUsed": false,
+          "toolCalls": 0,
+          "llmCalls": 0,
+          "evaluationScenario": null
+        }
+      },
+      "semanticParse": {
+        "originalText": "دفعت 120 جنيه أوبر",
+        "normalizedText": "دفعت 120 جنيه اوبر",
+        "tokens": [
+          "دفعت",
+          "120",
+          "جنيه",
+          "اوبر"
+        ],
+        "domains": [
+          "expense"
+        ],
+        "intent": "record_expense",
+        "confidence": 0.82,
+        "amount": {
+          "amountMinor": 12000,
+          "currency": "EGP",
+          "raw": "120",
+          "confidence": 0.99
+        },
+        "entityMentions": [],
+        "hasWriteLanguage": true,
+        "hasReadLanguage": false,
+        "ambiguous": false
+      },
+      "instrumentation": {
+        "logicalLlmCalls": 0,
+        "providerAttempts": 0,
+        "inputTokens": null,
+        "outputTokens": null,
+        "totalTokens": null,
+        "selectedStrategy": "L0",
+        "intelligenceLevel": "L0",
+        "measurement": "deterministic_path_no_provider_call"
+      },
+      "passFail": {
+        "pass": true,
+        "mismatchReason": null,
+        "comparedFields": [
+          "primaryIntent",
+          "intelligenceLevel"
+        ],
+        "responsibleSubsystem": null
+      },
+      "failureClassification": null
+    },
+    {
+      "scenarioId": "05",
+      "title": "Financial question",
+      "input": "أنا دفعت كام لشركة المحجر؟",
+      "context": "structured party/project fixture required",
+      "status": "FAIL",
+      "executionMode": "envelope",
+      "limitation": null,
+      "expected": {
+        "secondaryIntents": [],
+        "mentionedEntities": [
+          "financial_party:شركة المحجر"
+        ],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [
+          "authoritative structured financial records"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "structured_records",
+          "entity_graph"
+        ],
+        "excludedSources": [
+          "second_brain_financial_truth",
+          "unverified_model_claims"
+        ],
+        "selectedStrategy": "structured lookup",
+        "intelligenceLevels": [
+          "L0",
+          "L1"
+        ],
+        "confidence": "medium",
+        "risk": null,
+        "approvalRequired": false,
+        "verificationPlan": "not applicable",
+        "forbidden": [
+          "conversation-memory total",
+          "unverified memory",
+          "LLM-selected SQL limits"
+        ],
+        "primaryIntent": "financial_retrieval",
+        "decision": "retrieve and answer from records",
+        "action": "financial read",
+        "expectedOutcome": "structured-record answer"
+      },
+      "observed": {
+        "primaryIntent": "person_financial_status",
+        "secondaryIntents": [],
+        "mentionedEntities": [],
+        "resolvedEntities": [
+          "bounded_relationship_context",
+          "conversation_referents"
+        ],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [
+          "bounded_relationship_context",
+          "conversation_referents"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "user_input",
+          "conversation",
+          "relationship_graph",
+          "structured_records"
+        ],
+        "excludedSources": [
+          "unverified_model_claims"
+        ],
+        "selectedStrategy": "high_confidence_scoped_read",
+        "intelligenceLevel": "L1",
+        "confidence": 0.868,
+        "confidenceBand": "high",
+        "risk": "low",
+        "decision": "deterministic_path_selected",
+        "action": "person_financial_status",
+        "approvalRequired": false,
+        "verificationPlan": [],
+        "failureState": null,
+        "provenance": [
+          "requestId=brain-eval-05",
+          "conversationId=brain-eval-conversation-05",
+          "evaluationScenario=05"
+        ],
+        "actualOutcome": "deterministic parser and Brain envelope evaluated; no provider or mutation executed",
+        "correction": {
+          "previousState": null,
+          "correctionTarget": null,
+          "updatedInterpretation": null,
+          "duplicateRisk": null,
+          "finalPersistedState": null
+        }
+      },
+      "envelope": {
+        "version": 1,
+        "requestId": "brain-eval-05",
+        "conversationId": "brain-eval-conversation-05",
+        "state": "understanding",
+        "intent": {
+          "name": "person_financial_status",
+          "confidence": 0.94,
+          "source": "relationship_context"
+        },
+        "strategy": {
+          "level": "L1",
+          "reason": "high_confidence_scoped_read",
+          "llmAllowed": false,
+          "deterministicExecution": true
+        },
+        "context": {
+          "sources": [
+            "user_input",
+            "conversation",
+            "relationship_graph",
+            "structured_records"
+          ],
+          "selected": [
+            "bounded_relationship_context",
+            "conversation_referents"
+          ],
+          "excluded": [
+            "unverified_model_claims"
+          ],
+          "ambiguity": [],
+          "temporal": {
+            "mentioned": false,
+            "resolved": false,
+            "dayOffset": null,
+            "hasExactTime": false
+          }
+        },
+        "confidence": {
+          "overall": 0.868,
+          "intent": 0.94,
+          "entity": 0.98,
+          "temporal": 1,
+          "execution": 0.5
+        },
+        "risk": {
+          "level": "low",
+          "factors": [
+            "financial_data"
+          ],
+          "requiresApproval": false
+        },
+        "verification": {
+          "state": "not_required",
+          "required": false,
+          "checks": []
+        },
+        "trace": {
+          "retrievalUsed": false,
+          "relationshipContextUsed": true,
+          "toolCalls": 0,
+          "llmCalls": 0,
+          "evaluationScenario": null
+        }
+      },
+      "semanticParse": {
+        "originalText": "أنا دفعت كام لشركة المحجر؟",
+        "normalizedText": "انا دفعت كم لشركه المحجر",
+        "tokens": [
+          "انا",
+          "دفعت",
+          "كم",
+          "لشركه",
+          "المحجر"
+        ],
+        "domains": [
+          "expense"
+        ],
+        "intent": "expense_report",
+        "confidence": 0.91,
+        "entityMentions": [],
+        "hasWriteLanguage": true,
+        "hasReadLanguage": true,
+        "ambiguous": false
+      },
+      "instrumentation": {
+        "logicalLlmCalls": 0,
+        "providerAttempts": 0,
+        "inputTokens": null,
+        "outputTokens": null,
+        "totalTokens": null,
+        "selectedStrategy": "L1",
+        "intelligenceLevel": "L1",
+        "measurement": "deterministic_path_no_provider_call"
+      },
+      "passFail": {
+        "pass": false,
+        "mismatchReason": "primaryIntent observed=person_financial_status expected=financial_retrieval",
+        "comparedFields": [
+          "primaryIntent",
+          "intelligenceLevel",
+          "approvalRequired"
+        ],
+        "responsibleSubsystem": "brain-contract.ts / deterministic-intelligence.ts"
+      },
+      "failureClassification": "intent/decision mismatch"
+    },
+    {
+      "scenarioId": "06",
+      "title": "Last event involving a person",
+      "input": "آخر حاجة حصلت مع محمد كانت إيه؟",
+      "context": "bounded activity/conversation fixture required",
+      "status": "FAIL",
+      "executionMode": "envelope",
+      "limitation": null,
+      "expected": {
+        "secondaryIntents": [],
+        "mentionedEntities": [
+          "person:محمد"
+        ],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [
+          "bounded conversation",
+          "activity",
+          "graph/financial context"
+        ],
+        "optionalContext": [
+          "recent conversation"
+        ],
+        "authoritativeSources": [
+          "conversation",
+          "activity",
+          "relationship_graph",
+          "structured_records"
+        ],
+        "excludedSources": [
+          "unbounded_history",
+          "unverified_model_claims"
+        ],
+        "selectedStrategy": "normal reasoning",
+        "intelligenceLevels": [
+          "L2"
+        ],
+        "confidence": "medium",
+        "risk": null,
+        "approvalRequired": false,
+        "verificationPlan": "preserve source provenance",
+        "forbidden": [
+          "lexical match only",
+          "unrelated history dump",
+          "fabricated event"
+        ],
+        "primaryIntent": "contextual_retrieval",
+        "decision": "synthesize latest relevant event",
+        "action": "bounded contextual answer",
+        "expectedOutcome": "latest relevant event with provenance"
+      },
+      "observed": {
+        "primaryIntent": "recent_activity",
+        "secondaryIntents": [],
+        "mentionedEntities": [],
+        "resolvedEntities": [
+          "bounded_relationship_context",
+          "conversation_referents"
+        ],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [
+          "bounded_relationship_context",
+          "conversation_referents"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "user_input",
+          "conversation",
+          "relationship_graph",
+          "structured_records"
+        ],
+        "excludedSources": [
+          "unverified_model_claims"
+        ],
+        "selectedStrategy": "structured_tools_with_contextual_reasoning",
+        "intelligenceLevel": "L2",
+        "confidence": 0.868,
+        "confidenceBand": "high",
+        "risk": "low",
+        "decision": "deterministic_path_selected",
+        "action": "recent_activity",
+        "approvalRequired": false,
+        "verificationPlan": [],
+        "failureState": null,
+        "provenance": [
+          "requestId=brain-eval-06",
+          "conversationId=brain-eval-conversation-06",
+          "evaluationScenario=06"
+        ],
+        "actualOutcome": "deterministic parser and Brain envelope evaluated; no provider or mutation executed",
+        "correction": {
+          "previousState": null,
+          "correctionTarget": null,
+          "updatedInterpretation": null,
+          "duplicateRisk": null,
+          "finalPersistedState": null
+        }
+      },
+      "envelope": {
+        "version": 1,
+        "requestId": "brain-eval-06",
+        "conversationId": "brain-eval-conversation-06",
+        "state": "understanding",
+        "intent": {
+          "name": "recent_activity",
+          "confidence": 0.94,
+          "source": "relationship_context"
+        },
+        "strategy": {
+          "level": "L2",
+          "reason": "structured_tools_with_contextual_reasoning",
+          "llmAllowed": true,
+          "deterministicExecution": true
+        },
+        "context": {
+          "sources": [
+            "user_input",
+            "conversation",
+            "relationship_graph",
+            "structured_records"
+          ],
+          "selected": [
+            "bounded_relationship_context",
+            "conversation_referents"
+          ],
+          "excluded": [
+            "unverified_model_claims"
+          ],
+          "ambiguity": [],
+          "temporal": {
+            "mentioned": false,
+            "resolved": false,
+            "dayOffset": null,
+            "hasExactTime": false
+          }
+        },
+        "confidence": {
+          "overall": 0.868,
+          "intent": 0.94,
+          "entity": 0.98,
+          "temporal": 1,
+          "execution": 0.5
+        },
+        "risk": {
+          "level": "low",
+          "factors": [],
+          "requiresApproval": false
+        },
+        "verification": {
+          "state": "not_required",
+          "required": false,
+          "checks": []
+        },
+        "trace": {
+          "retrievalUsed": false,
+          "relationshipContextUsed": true,
+          "toolCalls": 0,
+          "llmCalls": 0,
+          "evaluationScenario": null
+        }
+      },
+      "semanticParse": {
+        "originalText": "آخر حاجة حصلت مع محمد كانت إيه؟",
+        "normalizedText": "اخر حاجه حصلت مع محمد كانت ايه",
+        "tokens": [
+          "اخر",
+          "حاجه",
+          "حصلت",
+          "مع",
+          "محمد",
+          "كانت",
+          "ايه"
+        ],
+        "domains": [
+          "memory"
+        ],
+        "intent": "memory_recall",
+        "confidence": 0.72,
+        "entityMentions": [],
+        "hasWriteLanguage": false,
+        "hasReadLanguage": true,
+        "ambiguous": false
+      },
+      "instrumentation": {
+        "logicalLlmCalls": 0,
+        "providerAttempts": 0,
+        "inputTokens": null,
+        "outputTokens": null,
+        "totalTokens": null,
+        "selectedStrategy": "L2",
+        "intelligenceLevel": "L2",
+        "measurement": "deterministic_path_no_provider_call"
+      },
+      "passFail": {
+        "pass": false,
+        "mismatchReason": "primaryIntent observed=recent_activity expected=contextual_retrieval",
+        "comparedFields": [
+          "primaryIntent",
+          "intelligenceLevel",
+          "approvalRequired"
+        ],
+        "responsibleSubsystem": "brain-contract.ts / deterministic-intelligence.ts"
+      },
+      "failureClassification": "intent/decision mismatch"
+    },
+    {
+      "scenarioId": "07",
+      "title": "Explicit memory",
+      "input": "افتكر إن اسم ميدو هو محمد أحمد",
+      "context": "none",
+      "status": "PASS",
+      "executionMode": "envelope",
+      "limitation": null,
+      "expected": {
+        "secondaryIntents": [],
+        "mentionedEntities": [
+          "alias:ميدو",
+          "person:محمد أحمد"
+        ],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [
+          "Second Brain policy",
+          "provenance"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "second_brain"
+        ],
+        "excludedSources": [
+          "structured_financial_mutation"
+        ],
+        "selectedStrategy": "deterministic",
+        "intelligenceLevels": [
+          "L0"
+        ],
+        "confidence": "medium",
+        "risk": null,
+        "approvalRequired": false,
+        "verificationPlan": "preserve provenance and safe entity association",
+        "forbidden": [
+          "ordinary text as memory command",
+          "financial record",
+          "unnecessary LLM"
+        ],
+        "primaryIntent": "explicit_memory_save",
+        "decision": "save confirmed memory under policy",
+        "action": "explicit memory save",
+        "expectedOutcome": "confirmed memory without operational record"
+      },
+      "observed": {
+        "primaryIntent": "explicit_memory_save",
+        "secondaryIntents": [],
+        "mentionedEntities": [],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "user_input"
+        ],
+        "excludedSources": [
+          "unverified_model_claims"
+        ],
+        "selectedStrategy": "explicit deterministic memory operation",
+        "intelligenceLevel": "L0",
+        "confidence": 0.99,
+        "confidenceBand": "high",
+        "risk": "low",
+        "decision": "save confirmed memory under policy",
+        "action": "explicit memory save",
+        "approvalRequired": false,
+        "verificationPlan": [
+          "preserve provenance",
+          "safe entity association if resolvable"
+        ],
+        "failureState": null,
+        "provenance": [
+          "runtimePath=second_brain_command",
+          "memoryKind=fact"
+        ],
+        "actualOutcome": "Second Brain explicit-memory dispatch recognized; no mutation executed",
+        "correction": {
+          "previousState": null,
+          "correctionTarget": null,
+          "updatedInterpretation": null,
+          "duplicateRisk": null,
+          "finalPersistedState": null
+        }
+      },
+      "envelope": {
+        "version": 1,
+        "requestId": "brain-eval-07",
+        "conversationId": "brain-eval-conversation-07",
+        "state": "understanding",
+        "intent": {
+          "name": "unknown",
+          "confidence": 0.35,
+          "source": "unknown"
+        },
+        "strategy": {
+          "level": "L2",
+          "reason": "structured_tools_with_contextual_reasoning",
+          "llmAllowed": true,
+          "deterministicExecution": true
+        },
+        "context": {
+          "sources": [
+            "user_input"
+          ],
+          "selected": [],
+          "excluded": [
+            "unverified_model_claims"
+          ],
+          "ambiguity": [],
+          "temporal": {
+            "mentioned": false,
+            "resolved": false,
+            "dayOffset": null,
+            "hasExactTime": false
+          }
+        },
+        "confidence": {
+          "overall": 0.5575000000000001,
+          "intent": 0.35,
+          "entity": 0.8,
+          "temporal": 1,
+          "execution": 0.5
+        },
+        "risk": {
+          "level": "low",
+          "factors": [],
+          "requiresApproval": false
+        },
+        "verification": {
+          "state": "not_required",
+          "required": false,
+          "checks": []
+        },
+        "trace": {
+          "retrievalUsed": false,
+          "relationshipContextUsed": false,
+          "toolCalls": 0,
+          "llmCalls": 0,
+          "evaluationScenario": null
+        }
+      },
+      "semanticParse": {
+        "originalText": "افتكر إن اسم ميدو هو محمد أحمد",
+        "normalizedText": "افتكر ان اسم ميدو هو محمد احمد",
+        "tokens": [
+          "افتكر",
+          "ان",
+          "اسم",
+          "ميدو",
+          "هو",
+          "محمد",
+          "احمد"
+        ],
+        "domains": [
+          "unknown"
+        ],
+        "intent": "unknown",
+        "confidence": 0.35,
+        "entityMentions": [],
+        "hasWriteLanguage": false,
+        "hasReadLanguage": false,
+        "ambiguous": false
+      },
+      "instrumentation": {
+        "logicalLlmCalls": 0,
+        "providerAttempts": 0,
+        "inputTokens": null,
+        "outputTokens": null,
+        "totalTokens": null,
+        "selectedStrategy": "L2",
+        "intelligenceLevel": "L2",
+        "measurement": "deterministic_path_no_provider_call"
+      },
+      "passFail": {
+        "pass": true,
+        "mismatchReason": null,
+        "comparedFields": [
+          "primaryIntent",
+          "intelligenceLevel",
+          "approvalRequired"
+        ],
+        "responsibleSubsystem": null
+      },
+      "failureClassification": null
+    },
+    {
+      "scenarioId": "08",
+      "title": "Inferred preference",
+      "input": "أنا بفضل إن مواعيدي كلها تكون بعد الساعة 6",
+      "context": "none",
+      "status": "PASS",
+      "executionMode": "envelope",
+      "limitation": null,
+      "expected": {
+        "secondaryIntents": [],
+        "mentionedEntities": [],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": "after 18:00",
+        "knownInformation": [
+          "ordinary preference statement"
+        ],
+        "unknownInformation": [],
+        "requiredContext": [
+          "candidate review policy"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "second_brain_candidate_queue"
+        ],
+        "excludedSources": [
+          "confirmed_memory",
+          "operational_schedule"
+        ],
+        "selectedStrategy": "lightweight interpretation",
+        "intelligenceLevels": [
+          "L1"
+        ],
+        "confidence": "medium",
+        "risk": null,
+        "approvalRequired": false,
+        "verificationPlan": "not applicable",
+        "forbidden": [
+          "automatic promotion",
+          "silent reminder changes",
+          "operational truth"
+        ],
+        "primaryIntent": "inferred_preference",
+        "decision": "create pending candidate for review",
+        "action": "candidate memory suggestion",
+        "expectedOutcome": "candidate not active operational memory"
+      },
+      "observed": {
+        "primaryIntent": "inferred_preference",
+        "secondaryIntents": [],
+        "mentionedEntities": [],
+        "resolvedEntities": [],
+        "ambiguousEntities": [
+          "multiple_domains"
+        ],
+        "timeScope": null,
+        "knownInformation": [
+          "amount=600 minor EGP"
+        ],
+        "unknownInformation": [
+          "multiple_domains"
+        ],
+        "requiredContext": [],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "user_input"
+        ],
+        "excludedSources": [
+          "unverified_model_claims"
+        ],
+        "selectedStrategy": "lightweight preference candidate interpretation",
+        "intelligenceLevel": "L1",
+        "confidence": 0.7,
+        "confidenceBand": "medium",
+        "risk": "low",
+        "decision": "create pending candidate for review",
+        "action": "candidate memory suggestion",
+        "approvalRequired": false,
+        "verificationPlan": [
+          "candidate requires review"
+        ],
+        "failureState": null,
+        "provenance": [
+          "runtimePath=second_brain_candidate",
+          "memoryKind=preference"
+        ],
+        "actualOutcome": "Second Brain candidate dispatch recognized; no mutation executed",
+        "correction": {
+          "previousState": null,
+          "correctionTarget": null,
+          "updatedInterpretation": null,
+          "duplicateRisk": null,
+          "finalPersistedState": null
+        }
+      },
+      "envelope": {
+        "version": 1,
+        "requestId": "brain-eval-08",
+        "conversationId": "brain-eval-conversation-08",
+        "state": "understanding",
+        "intent": {
+          "name": "expense_report",
+          "confidence": 0.91,
+          "source": "deterministic"
+        },
+        "strategy": {
+          "level": "L3",
+          "reason": "contextual_ambiguity_requires_reasoning",
+          "llmAllowed": true,
+          "deterministicExecution": false
+        },
+        "context": {
+          "sources": [
+            "user_input"
+          ],
+          "selected": [],
+          "excluded": [
+            "unverified_model_claims"
+          ],
+          "ambiguity": [
+            "multiple_domains"
+          ],
+          "temporal": {
+            "mentioned": false,
+            "resolved": false,
+            "dayOffset": null,
+            "hasExactTime": false
+          }
+        },
+        "confidence": {
+          "overall": 0.8095000000000001,
+          "intent": 0.91,
+          "entity": 0.8,
+          "temporal": 1,
+          "execution": 0.5
+        },
+        "risk": {
+          "level": "high",
+          "factors": [
+            "financial_data",
+            "unresolved_context"
+          ],
+          "requiresApproval": false
+        },
+        "verification": {
+          "state": "not_required",
+          "required": false,
+          "checks": []
+        },
+        "trace": {
+          "retrievalUsed": false,
+          "relationshipContextUsed": false,
+          "toolCalls": 0,
+          "llmCalls": 0,
+          "evaluationScenario": null
+        }
+      },
+      "semanticParse": {
+        "originalText": "أنا بفضل إن مواعيدي كلها تكون بعد الساعة 6",
+        "normalizedText": "انا بفضل ان مواعيدي كلها تكون بعد الساعه 6",
+        "tokens": [
+          "انا",
+          "بفضل",
+          "ان",
+          "مواعيدي",
+          "كلها",
+          "تكون",
+          "بعد",
+          "الساعه",
+          "6"
+        ],
+        "domains": [
+          "expense",
+          "schedule"
+        ],
+        "intent": "expense_report",
+        "confidence": 0.91,
+        "amount": {
+          "amountMinor": 600,
+          "currency": "EGP",
+          "raw": "6",
+          "confidence": 0.99
+        },
+        "entityMentions": [],
+        "hasWriteLanguage": false,
+        "hasReadLanguage": true,
+        "ambiguous": true
+      },
+      "instrumentation": {
+        "logicalLlmCalls": 0,
+        "providerAttempts": 0,
+        "inputTokens": null,
+        "outputTokens": null,
+        "totalTokens": null,
+        "selectedStrategy": "L3",
+        "intelligenceLevel": "L3",
+        "measurement": "deterministic_path_no_provider_call"
+      },
+      "passFail": {
+        "pass": true,
+        "mismatchReason": null,
+        "comparedFields": [
+          "primaryIntent",
+          "intelligenceLevel",
+          "approvalRequired"
+        ],
+        "responsibleSubsystem": null
+      },
+      "failureClassification": null
+    },
+    {
+      "scenarioId": "09",
+      "title": "Explicit memory recall",
+      "input": "فاكر إيه اللي حفظته عني؟",
+      "context": "none",
+      "status": "PASS",
+      "executionMode": "envelope",
+      "limitation": null,
+      "expected": {
+        "secondaryIntents": [],
+        "mentionedEntities": [],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [
+          "Second Brain policy and retrieval trace"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "second_brain"
+        ],
+        "excludedSources": [
+          "archived_memories",
+          "rejected_candidates",
+          "unreviewed_candidates"
+        ],
+        "selectedStrategy": "deterministic retrieval",
+        "intelligenceLevels": [
+          "L1"
+        ],
+        "confidence": "medium",
+        "risk": null,
+        "approvalRequired": false,
+        "verificationPlan": "trace selected and excluded memories",
+        "forbidden": [
+          "candidate dump",
+          "archived memories",
+          "unnecessary LLM"
+        ],
+        "primaryIntent": "explicit_memory_retrieval",
+        "decision": "return active eligible memories",
+        "action": "memory recall",
+        "expectedOutcome": "active memory answer with retrieval trace"
+      },
+      "observed": {
+        "primaryIntent": "explicit_memory_retrieval",
+        "secondaryIntents": [],
+        "mentionedEntities": [],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "user_input"
+        ],
+        "excludedSources": [
+          "unverified_model_claims"
+        ],
+        "selectedStrategy": "deterministic governed memory retrieval",
+        "intelligenceLevel": "L1",
+        "confidence": 0.99,
+        "confidenceBand": "high",
+        "risk": "low",
+        "decision": "return active eligible memories",
+        "action": "memory recall",
+        "approvalRequired": false,
+        "verificationPlan": [
+          "trace selected and excluded memories"
+        ],
+        "failureState": null,
+        "provenance": [
+          "runtimePath=second_brain_command",
+          "memoryKind=recall"
+        ],
+        "actualOutcome": "Second Brain recall dispatch recognized; no mutation executed",
+        "correction": {
+          "previousState": null,
+          "correctionTarget": null,
+          "updatedInterpretation": null,
+          "duplicateRisk": null,
+          "finalPersistedState": null
+        }
+      },
+      "envelope": {
+        "version": 1,
+        "requestId": "brain-eval-09",
+        "conversationId": "brain-eval-conversation-09",
+        "state": "understanding",
+        "intent": {
+          "name": "memory_recall",
+          "confidence": 0.72,
+          "source": "deterministic"
+        },
+        "strategy": {
+          "level": "L2",
+          "reason": "structured_tools_with_contextual_reasoning",
+          "llmAllowed": true,
+          "deterministicExecution": true
+        },
+        "context": {
+          "sources": [
+            "user_input"
+          ],
+          "selected": [],
+          "excluded": [
+            "unverified_model_claims"
+          ],
+          "ambiguity": [],
+          "temporal": {
+            "mentioned": false,
+            "resolved": false,
+            "dayOffset": null,
+            "hasExactTime": false
+          }
+        },
+        "confidence": {
+          "overall": 0.7240000000000001,
+          "intent": 0.72,
+          "entity": 0.8,
+          "temporal": 1,
+          "execution": 0.5
+        },
+        "risk": {
+          "level": "low",
+          "factors": [],
+          "requiresApproval": false
+        },
+        "verification": {
+          "state": "not_required",
+          "required": false,
+          "checks": []
+        },
+        "trace": {
+          "retrievalUsed": false,
+          "relationshipContextUsed": false,
+          "toolCalls": 0,
+          "llmCalls": 0,
+          "evaluationScenario": null
+        }
+      },
+      "semanticParse": {
+        "originalText": "فاكر إيه اللي حفظته عني؟",
+        "normalizedText": "فاكر ايه اللي حفظته عني",
+        "tokens": [
+          "فاكر",
+          "ايه",
+          "اللي",
+          "حفظته",
+          "عني"
+        ],
+        "domains": [
+          "memory"
+        ],
+        "intent": "memory_recall",
+        "confidence": 0.72,
+        "entityMentions": [],
+        "hasWriteLanguage": false,
+        "hasReadLanguage": true,
+        "ambiguous": false
+      },
+      "instrumentation": {
+        "logicalLlmCalls": 0,
+        "providerAttempts": 0,
+        "inputTokens": null,
+        "outputTokens": null,
+        "totalTokens": null,
+        "selectedStrategy": "L2",
+        "intelligenceLevel": "L2",
+        "measurement": "deterministic_path_no_provider_call"
+      },
+      "passFail": {
+        "pass": true,
+        "mismatchReason": null,
+        "comparedFields": [
+          "primaryIntent",
+          "intelligenceLevel",
+          "approvalRequired"
+        ],
+        "responsibleSubsystem": null
+      },
+      "failureClassification": null
+    },
+    {
+      "scenarioId": "10",
+      "title": "Unassociated alias",
+      "input": "افتكر إن أبو علي هو محمد",
+      "context": "none",
+      "status": "PASS",
+      "executionMode": "envelope",
+      "limitation": null,
+      "expected": {
+        "secondaryIntents": [],
+        "mentionedEntities": [
+          "alias:أبو علي",
+          "person:محمد"
+        ],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [
+          "canonical entity association"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "second_brain_candidate_queue",
+          "entity_graph"
+        ],
+        "excludedSources": [
+          "entity_resolver_executable_aliases"
+        ],
+        "selectedStrategy": "lightweight interpretation",
+        "intelligenceLevels": [
+          "L1"
+        ],
+        "confidence": "medium",
+        "risk": null,
+        "approvalRequired": false,
+        "verificationPlan": "not applicable",
+        "forbidden": [
+          "confirmed alias",
+          "arbitrary محمد"
+        ],
+        "primaryIntent": "alias_candidate",
+        "decision": "create alias candidate requiring association",
+        "action": "candidate alias",
+        "expectedOutcome": "alias cannot resolve a person yet"
+      },
+      "observed": {
+        "primaryIntent": "alias_candidate",
+        "secondaryIntents": [],
+        "mentionedEntities": [],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "user_input"
+        ],
+        "excludedSources": [
+          "unverified_model_claims"
+        ],
+        "selectedStrategy": "lightweight alias candidate interpretation",
+        "intelligenceLevel": "L1",
+        "confidence": 0.99,
+        "confidenceBand": "high",
+        "risk": "low",
+        "decision": "create alias candidate requiring association",
+        "action": "candidate alias",
+        "approvalRequired": false,
+        "verificationPlan": [
+          "preserve provenance",
+          "require canonical association before authority"
+        ],
+        "failureState": null,
+        "provenance": [
+          "runtimePath=second_brain_command",
+          "memoryKind=alias"
+        ],
+        "actualOutcome": "Second Brain alias-candidate dispatch recognized; no mutation executed",
+        "correction": {
+          "previousState": null,
+          "correctionTarget": null,
+          "updatedInterpretation": null,
+          "duplicateRisk": null,
+          "finalPersistedState": null
+        }
+      },
+      "envelope": {
+        "version": 1,
+        "requestId": "brain-eval-10",
+        "conversationId": "brain-eval-conversation-10",
+        "state": "understanding",
+        "intent": {
+          "name": "unknown",
+          "confidence": 0.35,
+          "source": "unknown"
+        },
+        "strategy": {
+          "level": "L2",
+          "reason": "structured_tools_with_contextual_reasoning",
+          "llmAllowed": true,
+          "deterministicExecution": true
+        },
+        "context": {
+          "sources": [
+            "user_input"
+          ],
+          "selected": [],
+          "excluded": [
+            "unverified_model_claims"
+          ],
+          "ambiguity": [],
+          "temporal": {
+            "mentioned": false,
+            "resolved": false,
+            "dayOffset": null,
+            "hasExactTime": false
+          }
+        },
+        "confidence": {
+          "overall": 0.5575000000000001,
+          "intent": 0.35,
+          "entity": 0.8,
+          "temporal": 1,
+          "execution": 0.5
+        },
+        "risk": {
+          "level": "low",
+          "factors": [],
+          "requiresApproval": false
+        },
+        "verification": {
+          "state": "not_required",
+          "required": false,
+          "checks": []
+        },
+        "trace": {
+          "retrievalUsed": false,
+          "relationshipContextUsed": false,
+          "toolCalls": 0,
+          "llmCalls": 0,
+          "evaluationScenario": null
+        }
+      },
+      "semanticParse": {
+        "originalText": "افتكر إن أبو علي هو محمد",
+        "normalizedText": "افتكر ان ابو علي هو محمد",
+        "tokens": [
+          "افتكر",
+          "ان",
+          "ابو",
+          "علي",
+          "هو",
+          "محمد"
+        ],
+        "domains": [
+          "unknown"
+        ],
+        "intent": "unknown",
+        "confidence": 0.35,
+        "entityMentions": [],
+        "hasWriteLanguage": false,
+        "hasReadLanguage": false,
+        "ambiguous": false
+      },
+      "instrumentation": {
+        "logicalLlmCalls": 0,
+        "providerAttempts": 0,
+        "inputTokens": null,
+        "outputTokens": null,
+        "totalTokens": null,
+        "selectedStrategy": "L2",
+        "intelligenceLevel": "L2",
+        "measurement": "deterministic_path_no_provider_call"
+      },
+      "passFail": {
+        "pass": true,
+        "mismatchReason": null,
+        "comparedFields": [
+          "primaryIntent",
+          "intelligenceLevel",
+          "approvalRequired"
+        ],
+        "responsibleSubsystem": null
+      },
+      "failureClassification": null
+    },
+    {
+      "scenarioId": "11",
+      "title": "Explicit project alias without association",
+      "input": "افتكر إن اسم المشروع الكبير هو المحجر",
+      "context": "none",
+      "status": "PASS",
+      "executionMode": "envelope",
+      "limitation": null,
+      "expected": {
+        "secondaryIntents": [],
+        "mentionedEntities": [
+          "alias:المشروع الكبير",
+          "project:المحجر"
+        ],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [
+          "canonical project association"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "second_brain_candidate_queue",
+          "entity_graph"
+        ],
+        "excludedSources": [
+          "fuzzy_project_selection",
+          "financial_records"
+        ],
+        "selectedStrategy": "lightweight interpretation",
+        "intelligenceLevels": [
+          "L1"
+        ],
+        "confidence": "medium",
+        "risk": null,
+        "approvalRequired": false,
+        "verificationPlan": "not applicable",
+        "forbidden": [
+          "fuzzy project selection",
+          "financial alias authority"
+        ],
+        "primaryIntent": "alias_candidate",
+        "decision": "create alias candidate or ask association",
+        "action": "candidate alias",
+        "expectedOutcome": "candidate cannot affect project resolution"
+      },
+      "observed": {
+        "primaryIntent": "alias_candidate",
+        "secondaryIntents": [],
+        "mentionedEntities": [
+          "project:الكبير هو المحجر"
+        ],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "user_input"
+        ],
+        "excludedSources": [
+          "unverified_model_claims"
+        ],
+        "selectedStrategy": "lightweight alias candidate interpretation",
+        "intelligenceLevel": "L1",
+        "confidence": 0.99,
+        "confidenceBand": "high",
+        "risk": "low",
+        "decision": "create alias candidate requiring association",
+        "action": "candidate alias",
+        "approvalRequired": false,
+        "verificationPlan": [
+          "preserve provenance",
+          "require canonical association before authority"
+        ],
+        "failureState": null,
+        "provenance": [
+          "runtimePath=second_brain_command",
+          "memoryKind=alias"
+        ],
+        "actualOutcome": "Second Brain alias-candidate dispatch recognized; no mutation executed",
+        "correction": {
+          "previousState": null,
+          "correctionTarget": null,
+          "updatedInterpretation": null,
+          "duplicateRisk": null,
+          "finalPersistedState": null
+        }
+      },
+      "envelope": {
+        "version": 1,
+        "requestId": "brain-eval-11",
+        "conversationId": "brain-eval-conversation-11",
+        "state": "understanding",
+        "intent": {
+          "name": "unknown",
+          "confidence": 0.35,
+          "source": "unknown"
+        },
+        "strategy": {
+          "level": "L2",
+          "reason": "structured_tools_with_contextual_reasoning",
+          "llmAllowed": true,
+          "deterministicExecution": true
+        },
+        "context": {
+          "sources": [
+            "user_input"
+          ],
+          "selected": [],
+          "excluded": [
+            "unverified_model_claims"
+          ],
+          "ambiguity": [],
+          "temporal": {
+            "mentioned": false,
+            "resolved": false,
+            "dayOffset": null,
+            "hasExactTime": false
+          }
+        },
+        "confidence": {
+          "overall": 0.5325000000000001,
+          "intent": 0.35,
+          "entity": 0.7,
+          "temporal": 1,
+          "execution": 0.5
+        },
+        "risk": {
+          "level": "low",
+          "factors": [],
+          "requiresApproval": false
+        },
+        "verification": {
+          "state": "not_required",
+          "required": false,
+          "checks": []
+        },
+        "trace": {
+          "retrievalUsed": false,
+          "relationshipContextUsed": false,
+          "toolCalls": 0,
+          "llmCalls": 0,
+          "evaluationScenario": null
+        }
+      },
+      "semanticParse": {
+        "originalText": "افتكر إن اسم المشروع الكبير هو المحجر",
+        "normalizedText": "افتكر ان اسم المشروع الكبير هو المحجر",
+        "tokens": [
+          "افتكر",
+          "ان",
+          "اسم",
+          "المشروع",
+          "الكبير",
+          "هو",
+          "المحجر"
+        ],
+        "domains": [
+          "project"
+        ],
+        "intent": "unknown",
+        "confidence": 0.35,
+        "entityMentions": [
+          {
+            "entityType": "project",
+            "query": "الكبير هو المحجر",
+            "confidence": 0.92
+          }
+        ],
+        "hasWriteLanguage": false,
+        "hasReadLanguage": false,
+        "ambiguous": false
+      },
+      "instrumentation": {
+        "logicalLlmCalls": 0,
+        "providerAttempts": 0,
+        "inputTokens": null,
+        "outputTokens": null,
+        "totalTokens": null,
+        "selectedStrategy": "L2",
+        "intelligenceLevel": "L2",
+        "measurement": "deterministic_path_no_provider_call"
+      },
+      "passFail": {
+        "pass": true,
+        "mismatchReason": null,
+        "comparedFields": [
+          "primaryIntent",
+          "intelligenceLevel",
+          "approvalRequired"
+        ],
+        "responsibleSubsystem": null
+      },
+      "failureClassification": null
+    },
+    {
+      "scenarioId": "12",
+      "title": "Associated alias",
+      "input": "المشروع الكبير",
+      "context": "associated alias fixture required",
+      "status": "FAIL",
+      "executionMode": "envelope",
+      "limitation": null,
+      "expected": {
+        "secondaryIntents": [],
+        "mentionedEntities": [
+          "alias:المشروع الكبير"
+        ],
+        "resolvedEntities": [
+          "canonical project previously associated"
+        ],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [
+          "same-tenant explicit alias association"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "second_brain",
+          "entity_graph",
+          "structured_records"
+        ],
+        "excludedSources": [
+          "cross_tenant_entities",
+          "unrelated_same_name_entity"
+        ],
+        "selectedStrategy": "deterministic",
+        "intelligenceLevels": [
+          "L0"
+        ],
+        "confidence": "medium",
+        "risk": null,
+        "approvalRequired": false,
+        "verificationPlan": "not applicable",
+        "forbidden": [
+          "cross-tenant resolution",
+          "unrelated same-name entity"
+        ],
+        "primaryIntent": "project_reference",
+        "decision": "resolve canonical project ID",
+        "action": "normal project operation",
+        "expectedOutcome": "scoped canonical resolution without ambiguity"
+      },
+      "observed": {
+        "primaryIntent": "entity_context",
+        "secondaryIntents": [],
+        "mentionedEntities": [
+          "project:الكبير"
+        ],
+        "resolvedEntities": [
+          "bounded_relationship_context",
+          "conversation_referents"
+        ],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [
+          "bounded_relationship_context",
+          "conversation_referents"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "user_input",
+          "conversation",
+          "relationship_graph",
+          "structured_records"
+        ],
+        "excludedSources": [
+          "unverified_model_claims"
+        ],
+        "selectedStrategy": "structured_tools_with_contextual_reasoning",
+        "intelligenceLevel": "L2",
+        "confidence": 0.868,
+        "confidenceBand": "high",
+        "risk": "low",
+        "decision": "deterministic_path_selected",
+        "action": "entity_context",
+        "approvalRequired": false,
+        "verificationPlan": [],
+        "failureState": null,
+        "provenance": [
+          "requestId=brain-eval-12",
+          "conversationId=brain-eval-conversation-12",
+          "evaluationScenario=12"
+        ],
+        "actualOutcome": "deterministic parser and Brain envelope evaluated; no provider or mutation executed",
+        "correction": {
+          "previousState": null,
+          "correctionTarget": null,
+          "updatedInterpretation": null,
+          "duplicateRisk": null,
+          "finalPersistedState": null
+        }
+      },
+      "envelope": {
+        "version": 1,
+        "requestId": "brain-eval-12",
+        "conversationId": "brain-eval-conversation-12",
+        "state": "understanding",
+        "intent": {
+          "name": "entity_context",
+          "confidence": 0.94,
+          "source": "relationship_context"
+        },
+        "strategy": {
+          "level": "L2",
+          "reason": "structured_tools_with_contextual_reasoning",
+          "llmAllowed": true,
+          "deterministicExecution": true
+        },
+        "context": {
+          "sources": [
+            "user_input",
+            "conversation",
+            "relationship_graph",
+            "structured_records"
+          ],
+          "selected": [
+            "bounded_relationship_context",
+            "conversation_referents"
+          ],
+          "excluded": [
+            "unverified_model_claims"
+          ],
+          "ambiguity": [],
+          "temporal": {
+            "mentioned": false,
+            "resolved": false,
+            "dayOffset": null,
+            "hasExactTime": false
+          }
+        },
+        "confidence": {
+          "overall": 0.868,
+          "intent": 0.94,
+          "entity": 0.98,
+          "temporal": 1,
+          "execution": 0.5
+        },
+        "risk": {
+          "level": "low",
+          "factors": [],
+          "requiresApproval": false
+        },
+        "verification": {
+          "state": "not_required",
+          "required": false,
+          "checks": []
+        },
+        "trace": {
+          "retrievalUsed": false,
+          "relationshipContextUsed": true,
+          "toolCalls": 0,
+          "llmCalls": 0,
+          "evaluationScenario": null
+        }
+      },
+      "semanticParse": {
+        "originalText": "المشروع الكبير",
+        "normalizedText": "المشروع الكبير",
+        "tokens": [
+          "المشروع",
+          "الكبير"
+        ],
+        "domains": [
+          "project"
+        ],
+        "intent": "unknown",
+        "confidence": 0.35,
+        "entityMentions": [
+          {
+            "entityType": "project",
+            "query": "الكبير",
+            "confidence": 0.92
+          }
+        ],
+        "hasWriteLanguage": false,
+        "hasReadLanguage": false,
+        "ambiguous": false
+      },
+      "instrumentation": {
+        "logicalLlmCalls": 0,
+        "providerAttempts": 0,
+        "inputTokens": null,
+        "outputTokens": null,
+        "totalTokens": null,
+        "selectedStrategy": "L2",
+        "intelligenceLevel": "L2",
+        "measurement": "deterministic_path_no_provider_call"
+      },
+      "passFail": {
+        "pass": false,
+        "mismatchReason": "primaryIntent observed=entity_context expected=project_reference; intelligenceLevel observed=L2 expected=L0",
+        "comparedFields": [
+          "primaryIntent",
+          "intelligenceLevel",
+          "approvalRequired"
+        ],
+        "responsibleSubsystem": "brain-contract.ts / deterministic-intelligence.ts"
+      },
+      "failureClassification": "intelligence-level mismatch"
+    },
+    {
+      "scenarioId": "13",
+      "title": "Project expense total",
+      "input": "أنا صرفت كام على مشروع المحجر؟",
+      "context": "project financial fixture required",
+      "status": "FAIL",
+      "executionMode": "envelope",
+      "limitation": null,
+      "expected": {
+        "secondaryIntents": [],
+        "mentionedEntities": [
+          "project:المحجر"
+        ],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [
+          "bounded structured financial records"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "structured_records",
+          "relationship_graph"
+        ],
+        "excludedSources": [
+          "second_brain_financial_truth",
+          "arbitrary_truncation",
+          "invented_expenses"
+        ],
+        "selectedStrategy": "structured lookup",
+        "intelligenceLevels": [
+          "L0",
+          "L1"
+        ],
+        "confidence": "medium",
+        "risk": null,
+        "approvalRequired": false,
+        "verificationPlan": "not applicable",
+        "forbidden": [
+          "memory balance",
+          "arbitrary record limit",
+          "invented expense"
+        ],
+        "primaryIntent": "project_expense_total",
+        "decision": "calculate total deterministically",
+        "action": "financial read",
+        "expectedOutcome": "bounded authoritative project total"
+      },
+      "observed": {
+        "primaryIntent": "project_expenses",
+        "secondaryIntents": [],
+        "mentionedEntities": [],
+        "resolvedEntities": [
+          "bounded_relationship_context",
+          "conversation_referents"
+        ],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [
+          "bounded_relationship_context",
+          "conversation_referents"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "user_input",
+          "conversation",
+          "relationship_graph",
+          "structured_records"
+        ],
+        "excludedSources": [
+          "unverified_model_claims"
+        ],
+        "selectedStrategy": "high_confidence_scoped_read",
+        "intelligenceLevel": "L1",
+        "confidence": 0.868,
+        "confidenceBand": "high",
+        "risk": "low",
+        "decision": "deterministic_path_selected",
+        "action": "project_expenses",
+        "approvalRequired": false,
+        "verificationPlan": [],
+        "failureState": null,
+        "provenance": [
+          "requestId=brain-eval-13",
+          "conversationId=brain-eval-conversation-13",
+          "evaluationScenario=13"
+        ],
+        "actualOutcome": "deterministic parser and Brain envelope evaluated; no provider or mutation executed",
+        "correction": {
+          "previousState": null,
+          "correctionTarget": null,
+          "updatedInterpretation": null,
+          "duplicateRisk": null,
+          "finalPersistedState": null
+        }
+      },
+      "envelope": {
+        "version": 1,
+        "requestId": "brain-eval-13",
+        "conversationId": "brain-eval-conversation-13",
+        "state": "understanding",
+        "intent": {
+          "name": "project_expenses",
+          "confidence": 0.94,
+          "source": "relationship_context"
+        },
+        "strategy": {
+          "level": "L1",
+          "reason": "high_confidence_scoped_read",
+          "llmAllowed": false,
+          "deterministicExecution": true
+        },
+        "context": {
+          "sources": [
+            "user_input",
+            "conversation",
+            "relationship_graph",
+            "structured_records"
+          ],
+          "selected": [
+            "bounded_relationship_context",
+            "conversation_referents"
+          ],
+          "excluded": [
+            "unverified_model_claims"
+          ],
+          "ambiguity": [],
+          "temporal": {
+            "mentioned": false,
+            "resolved": false,
+            "dayOffset": null,
+            "hasExactTime": false
+          }
+        },
+        "confidence": {
+          "overall": 0.868,
+          "intent": 0.94,
+          "entity": 0.98,
+          "temporal": 1,
+          "execution": 0.5
+        },
+        "risk": {
+          "level": "low",
+          "factors": [
+            "financial_data"
+          ],
+          "requiresApproval": false
+        },
+        "verification": {
+          "state": "not_required",
+          "required": false,
+          "checks": []
+        },
+        "trace": {
+          "retrievalUsed": false,
+          "relationshipContextUsed": true,
+          "toolCalls": 0,
+          "llmCalls": 0,
+          "evaluationScenario": null
+        }
+      },
+      "semanticParse": {
+        "originalText": "أنا صرفت كام على مشروع المحجر؟",
+        "normalizedText": "انا صرفت كم علي مشروع المحجر",
+        "tokens": [
+          "انا",
+          "صرفت",
+          "كم",
+          "علي",
+          "مشروع",
+          "المحجر"
+        ],
+        "domains": [
+          "expense",
+          "project"
+        ],
+        "intent": "expense_report",
+        "confidence": 0.91,
+        "entityMentions": [],
+        "hasWriteLanguage": true,
+        "hasReadLanguage": true,
+        "ambiguous": false
+      },
+      "instrumentation": {
+        "logicalLlmCalls": 0,
+        "providerAttempts": 0,
+        "inputTokens": null,
+        "outputTokens": null,
+        "totalTokens": null,
+        "selectedStrategy": "L1",
+        "intelligenceLevel": "L1",
+        "measurement": "deterministic_path_no_provider_call"
+      },
+      "passFail": {
+        "pass": false,
+        "mismatchReason": "primaryIntent observed=project_expenses expected=project_expense_total",
+        "comparedFields": [
+          "primaryIntent",
+          "intelligenceLevel",
+          "approvalRequired"
+        ],
+        "responsibleSubsystem": "brain-contract.ts / deterministic-intelligence.ts"
+      },
+      "failureClassification": "intent/decision mismatch"
+    },
+    {
+      "scenarioId": "14",
+      "title": "Memory conflicts with financial record",
+      "input": "فاكر إن مصروف المحجر كان 5000 جنيه",
+      "context": "conflicting structured/memory fixture required",
+      "status": "FAIL",
+      "executionMode": "envelope",
+      "limitation": null,
+      "expected": {
+        "secondaryIntents": [],
+        "mentionedEntities": [
+          "project:المحجر"
+        ],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [
+          "memory says 5000 EGP",
+          "structured record differs"
+        ],
+        "unknownInformation": [],
+        "requiredContext": [
+          "authoritative structured record",
+          "memory provenance"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "structured_records"
+        ],
+        "excludedSources": [
+          "memory_as_financial_truth"
+        ],
+        "selectedStrategy": "normal reasoning",
+        "intelligenceLevels": [
+          "L2"
+        ],
+        "confidence": "medium",
+        "risk": null,
+        "approvalRequired": false,
+        "verificationPlan": "preserve both source traces without rewriting memory",
+        "forbidden": [
+          "rewrite record",
+          "memory authority"
+        ],
+        "primaryIntent": "memory_financial_conflict",
+        "decision": "explain conflict with structured precedence",
+        "action": "conflict explanation",
+        "expectedOutcome": "record wins and memory is not silently changed"
+      },
+      "observed": {
+        "primaryIntent": "project_expenses",
+        "secondaryIntents": [],
+        "mentionedEntities": [],
+        "resolvedEntities": [
+          "bounded_relationship_context",
+          "conversation_referents"
+        ],
+        "ambiguousEntities": [
+          "multiple_domains",
+          "memory_conflicts_with_structured_record"
+        ],
+        "timeScope": null,
+        "knownInformation": [
+          "amount=500000 minor EGP"
+        ],
+        "unknownInformation": [
+          "multiple_domains",
+          "memory_conflicts_with_structured_record"
+        ],
+        "requiredContext": [
+          "bounded_relationship_context",
+          "conversation_referents"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "user_input",
+          "conversation",
+          "relationship_graph",
+          "structured_records"
+        ],
+        "excludedSources": [
+          "unverified_model_claims"
+        ],
+        "selectedStrategy": "contextual_ambiguity_requires_reasoning",
+        "intelligenceLevel": "L3",
+        "confidence": 0.868,
+        "confidenceBand": "high",
+        "risk": "high",
+        "decision": "reasoning_path_selected",
+        "action": "project_expenses",
+        "approvalRequired": false,
+        "verificationPlan": [],
+        "failureState": null,
+        "provenance": [
+          "requestId=brain-eval-14",
+          "conversationId=brain-eval-conversation-14",
+          "evaluationScenario=14"
+        ],
+        "actualOutcome": "deterministic parser and Brain envelope evaluated; no provider or mutation executed",
+        "correction": {
+          "previousState": null,
+          "correctionTarget": null,
+          "updatedInterpretation": null,
+          "duplicateRisk": null,
+          "finalPersistedState": null
+        }
+      },
+      "envelope": {
+        "version": 1,
+        "requestId": "brain-eval-14",
+        "conversationId": "brain-eval-conversation-14",
+        "state": "understanding",
+        "intent": {
+          "name": "project_expenses",
+          "confidence": 0.94,
+          "source": "relationship_context"
+        },
+        "strategy": {
+          "level": "L3",
+          "reason": "contextual_ambiguity_requires_reasoning",
+          "llmAllowed": true,
+          "deterministicExecution": false
+        },
+        "context": {
+          "sources": [
+            "user_input",
+            "conversation",
+            "relationship_graph",
+            "structured_records"
+          ],
+          "selected": [
+            "bounded_relationship_context",
+            "conversation_referents"
+          ],
+          "excluded": [
+            "unverified_model_claims"
+          ],
+          "ambiguity": [
+            "multiple_domains",
+            "memory_conflicts_with_structured_record"
+          ],
+          "temporal": {
+            "mentioned": false,
+            "resolved": false,
+            "dayOffset": null,
+            "hasExactTime": false
+          }
+        },
+        "confidence": {
+          "overall": 0.868,
+          "intent": 0.94,
+          "entity": 0.98,
+          "temporal": 1,
+          "execution": 0.5
+        },
+        "risk": {
+          "level": "high",
+          "factors": [
+            "financial_data",
+            "unresolved_context"
+          ],
+          "requiresApproval": false
+        },
+        "verification": {
+          "state": "not_required",
+          "required": false,
+          "checks": []
+        },
+        "trace": {
+          "retrievalUsed": false,
+          "relationshipContextUsed": true,
+          "toolCalls": 0,
+          "llmCalls": 0,
+          "evaluationScenario": null
+        }
+      },
+      "semanticParse": {
+        "originalText": "فاكر إن مصروف المحجر كان 5000 جنيه",
+        "normalizedText": "فاكر ان مصروف المحجر كان 5000 جنيه",
+        "tokens": [
+          "فاكر",
+          "ان",
+          "مصروف",
+          "المحجر",
+          "كان",
+          "5000",
+          "جنيه"
+        ],
+        "domains": [
+          "expense",
+          "memory"
+        ],
+        "intent": "memory_recall",
+        "confidence": 0.72,
+        "amount": {
+          "amountMinor": 500000,
+          "currency": "EGP",
+          "raw": "5000",
+          "confidence": 0.99
+        },
+        "entityMentions": [],
+        "hasWriteLanguage": false,
+        "hasReadLanguage": false,
+        "ambiguous": true
+      },
+      "instrumentation": {
+        "logicalLlmCalls": 0,
+        "providerAttempts": 0,
+        "inputTokens": null,
+        "outputTokens": null,
+        "totalTokens": null,
+        "selectedStrategy": "L3",
+        "intelligenceLevel": "L3",
+        "measurement": "deterministic_path_no_provider_call"
+      },
+      "passFail": {
+        "pass": false,
+        "mismatchReason": "primaryIntent observed=project_expenses expected=memory_financial_conflict; intelligenceLevel observed=L3 expected=L2",
+        "comparedFields": [
+          "primaryIntent",
+          "intelligenceLevel",
+          "approvalRequired"
+        ],
+        "responsibleSubsystem": "brain-contract.ts / deterministic-intelligence.ts"
+      },
+      "failureClassification": "intelligence-level mismatch"
+    },
+    {
+      "scenarioId": "15",
+      "title": "Payment with missing agreed amount",
+      "input": "ادفع لمحمد اللي اتفقنا عليه",
+      "context": "obligation relationship fixture with unknown amount",
+      "status": "FAIL",
+      "executionMode": "envelope",
+      "limitation": null,
+      "expected": {
+        "secondaryIntents": [
+          "payment",
+          "obligation_retrieval"
+        ],
+        "mentionedEntities": [
+          "person:محمد"
+        ],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [
+          "exact amount"
+        ],
+        "requiredContext": [
+          "relevant obligation",
+          "safe amount confirmation"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "financial_graph",
+          "conversation_context"
+        ],
+        "excludedSources": [
+          "old_unrelated_amount",
+          "memory_as_payment_truth"
+        ],
+        "selectedStrategy": "normal reasoning",
+        "intelligenceLevels": [
+          "L2"
+        ],
+        "confidence": "low",
+        "risk": "high",
+        "approvalRequired": true,
+        "verificationPlan": "not applicable",
+        "forbidden": [
+          "guess amount",
+          "old amount",
+          "automatic payment"
+        ],
+        "primaryIntent": "financial_action",
+        "decision": "ask focused confirmation, no payment",
+        "action": "clarify payment amount",
+        "expectedOutcome": "no execution until amount is resolved and approved"
+      },
+      "observed": {
+        "primaryIntent": "person_financial_status",
+        "secondaryIntents": [],
+        "mentionedEntities": [
+          "person:محمد اللي اتفقنا عليه"
+        ],
+        "resolvedEntities": [
+          "bounded_relationship_context",
+          "conversation_referents"
+        ],
+        "ambiguousEntities": [
+          "agreed_amount_unknown"
+        ],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [
+          "agreed_amount_unknown"
+        ],
+        "requiredContext": [
+          "bounded_relationship_context",
+          "conversation_referents"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "user_input",
+          "conversation",
+          "relationship_graph",
+          "structured_records"
+        ],
+        "excludedSources": [
+          "unverified_model_claims"
+        ],
+        "selectedStrategy": "authoritative_context_requires_clarification",
+        "intelligenceLevel": "L0",
+        "confidence": 0.868,
+        "confidenceBand": "high",
+        "risk": "high",
+        "decision": "clarification_required",
+        "action": "approval_gated_structured_action",
+        "approvalRequired": true,
+        "verificationPlan": [
+          "authoritative_structured_result"
+        ],
+        "failureState": null,
+        "provenance": [
+          "requestId=brain-eval-15",
+          "conversationId=brain-eval-conversation-15",
+          "evaluationScenario=15"
+        ],
+        "actualOutcome": "deterministic parser and Brain envelope evaluated; no provider or mutation executed",
+        "correction": {
+          "previousState": null,
+          "correctionTarget": null,
+          "updatedInterpretation": null,
+          "duplicateRisk": null,
+          "finalPersistedState": null
+        }
+      },
+      "envelope": {
+        "version": 1,
+        "requestId": "brain-eval-15",
+        "conversationId": "brain-eval-conversation-15",
+        "state": "clarification",
+        "intent": {
+          "name": "person_financial_status",
+          "confidence": 0.94,
+          "source": "relationship_context"
+        },
+        "strategy": {
+          "level": "L0",
+          "reason": "authoritative_context_requires_clarification",
+          "llmAllowed": false,
+          "deterministicExecution": false
+        },
+        "context": {
+          "sources": [
+            "user_input",
+            "conversation",
+            "relationship_graph",
+            "structured_records"
+          ],
+          "selected": [
+            "bounded_relationship_context",
+            "conversation_referents"
+          ],
+          "excluded": [
+            "unverified_model_claims"
+          ],
+          "ambiguity": [
+            "agreed_amount_unknown"
+          ],
+          "temporal": {
+            "mentioned": false,
+            "resolved": false,
+            "dayOffset": null,
+            "hasExactTime": false
+          }
+        },
+        "confidence": {
+          "overall": 0.868,
+          "intent": 0.94,
+          "entity": 0.98,
+          "temporal": 1,
+          "execution": 0.5
+        },
+        "risk": {
+          "level": "high",
+          "factors": [
+            "state_mutation",
+            "financial_data",
+            "unresolved_context"
+          ],
+          "requiresApproval": true
+        },
+        "verification": {
+          "state": "pending",
+          "required": true,
+          "checks": [
+            "authoritative_structured_result"
+          ]
+        },
+        "trace": {
+          "retrievalUsed": false,
+          "relationshipContextUsed": true,
+          "toolCalls": 0,
+          "llmCalls": 0,
+          "evaluationScenario": null
+        }
+      },
+      "semanticParse": {
+        "originalText": "ادفع لمحمد اللي اتفقنا عليه",
+        "normalizedText": "ادفع لمحمد اللي اتفقنا عليه",
+        "tokens": [
+          "ادفع",
+          "لمحمد",
+          "اللي",
+          "اتفقنا",
+          "عليه"
+        ],
+        "domains": [
+          "expense"
+        ],
+        "intent": "record_expense",
+        "confidence": 0.78,
+        "entityMentions": [
+          {
+            "entityType": "person",
+            "query": "محمد اللي اتفقنا عليه",
+            "confidence": 0.9
+          }
+        ],
+        "hasWriteLanguage": true,
+        "hasReadLanguage": false,
+        "ambiguous": false
+      },
+      "instrumentation": {
+        "logicalLlmCalls": 0,
+        "providerAttempts": 0,
+        "inputTokens": null,
+        "outputTokens": null,
+        "totalTokens": null,
+        "selectedStrategy": "L0",
+        "intelligenceLevel": "L0",
+        "measurement": "deterministic_path_no_provider_call"
+      },
+      "passFail": {
+        "pass": false,
+        "mismatchReason": "primaryIntent observed=person_financial_status expected=financial_action; intelligenceLevel observed=L0 expected=L2",
+        "comparedFields": [
+          "primaryIntent",
+          "intelligenceLevel",
+          "risk",
+          "approvalRequired"
+        ],
+        "responsibleSubsystem": "brain-contract.ts / deterministic-intelligence.ts"
+      },
+      "failureClassification": "intelligence-level mismatch"
+    },
+    {
+      "scenarioId": "16",
+      "title": "Correction of amount",
+      "input": "لا، كانت 750",
+      "context": "previous conversation/operation fixture required",
+      "status": "BLOCKED_BY_INFRASTRUCTURE",
+      "executionMode": "blocked",
+      "limitation": "isolated conversation and operation fixture is not available to the harness",
+      "expected": {
+        "secondaryIntents": [],
+        "mentionedEntities": [
+          "person:محمد"
+        ],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [
+          "previous expense amount=500",
+          "correction amount=750"
+        ],
+        "unknownInformation": [],
+        "requiredContext": [
+          "previous operation and expense ID"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "conversation_provenance",
+          "structured_records"
+        ],
+        "excludedSources": [
+          "new_duplicate_expense"
+        ],
+        "selectedStrategy": "correction reconciliation",
+        "intelligenceLevels": [
+          "L1",
+          "L2"
+        ],
+        "confidence": "medium",
+        "risk": null,
+        "approvalRequired": "policy",
+        "verificationPlan": "verify final amount and provenance",
+        "forbidden": [
+          "second 750 expense",
+          "both confirmed amounts"
+        ],
+        "primaryIntent": "correction",
+        "decision": "target existing expense and update amount",
+        "action": "update existing expense",
+        "expectedOutcome": "one corrected expense, not two"
+      },
+      "observed": {
+        "primaryIntent": "unknown",
+        "secondaryIntents": [],
+        "mentionedEntities": [],
+        "resolvedEntities": [
+          "conversation_referents"
+        ],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [
+          "amount=75000 minor EGP"
+        ],
+        "unknownInformation": [],
+        "requiredContext": [
+          "conversation_referents"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "user_input",
+          "conversation"
+        ],
+        "excludedSources": [
+          "unverified_model_claims"
+        ],
+        "selectedStrategy": "structured_tools_with_contextual_reasoning",
+        "intelligenceLevel": "L2",
+        "confidence": 0.5575000000000001,
+        "confidenceBand": "medium",
+        "risk": "low",
+        "decision": "deterministic_path_selected",
+        "action": "unknown",
+        "approvalRequired": false,
+        "verificationPlan": [],
+        "failureState": null,
+        "provenance": [
+          "requestId=brain-eval-16",
+          "conversationId=brain-eval-conversation-16",
+          "evaluationScenario=16"
+        ],
+        "actualOutcome": "deterministic parser and Brain envelope evaluated; no provider or mutation executed",
+        "correction": {
+          "previousState": null,
+          "correctionTarget": "not resolved by standalone harness",
+          "updatedInterpretation": "unknown",
+          "duplicateRisk": "not measured without previous operation fixture",
+          "finalPersistedState": "not executed"
+        }
+      },
+      "envelope": {
+        "version": 1,
+        "requestId": "brain-eval-16",
+        "conversationId": "brain-eval-conversation-16",
+        "state": "understanding",
+        "intent": {
+          "name": "unknown",
+          "confidence": 0.35,
+          "source": "unknown"
+        },
+        "strategy": {
+          "level": "L2",
+          "reason": "structured_tools_with_contextual_reasoning",
+          "llmAllowed": true,
+          "deterministicExecution": true
+        },
+        "context": {
+          "sources": [
+            "user_input",
+            "conversation"
+          ],
+          "selected": [
+            "conversation_referents"
+          ],
+          "excluded": [
+            "unverified_model_claims"
+          ],
+          "ambiguity": [],
+          "temporal": {
+            "mentioned": false,
+            "resolved": false,
+            "dayOffset": null,
+            "hasExactTime": false
+          }
+        },
+        "confidence": {
+          "overall": 0.5575000000000001,
+          "intent": 0.35,
+          "entity": 0.8,
+          "temporal": 1,
+          "execution": 0.5
+        },
+        "risk": {
+          "level": "low",
+          "factors": [],
+          "requiresApproval": false
+        },
+        "verification": {
+          "state": "not_required",
+          "required": false,
+          "checks": []
+        },
+        "trace": {
+          "retrievalUsed": false,
+          "relationshipContextUsed": false,
+          "toolCalls": 0,
+          "llmCalls": 0,
+          "evaluationScenario": null
+        }
+      },
+      "semanticParse": {
+        "originalText": "لا، كانت 750",
+        "normalizedText": "لا كانت 750",
+        "tokens": [
+          "لا",
+          "كانت",
+          "750"
+        ],
+        "domains": [
+          "expense"
+        ],
+        "intent": "unknown",
+        "confidence": 0.35,
+        "amount": {
+          "amountMinor": 75000,
+          "currency": "EGP",
+          "raw": "750",
+          "confidence": 0.99
+        },
+        "entityMentions": [],
+        "hasWriteLanguage": false,
+        "hasReadLanguage": false,
+        "ambiguous": false
+      },
+      "instrumentation": {
+        "logicalLlmCalls": 0,
+        "providerAttempts": 0,
+        "inputTokens": null,
+        "outputTokens": null,
+        "totalTokens": null,
+        "selectedStrategy": "L2",
+        "intelligenceLevel": "L2",
+        "measurement": "not_executable"
+      },
+      "passFail": {
+        "pass": null,
+        "mismatchReason": null,
+        "comparedFields": [],
+        "responsibleSubsystem": null
+      },
+      "failureClassification": null
+    },
+    {
+      "scenarioId": "17",
+      "title": "Correction of person",
+      "input": "لا، كنت دافعها لأحمد",
+      "context": "previous conversation/operation fixture required",
+      "status": "BLOCKED_BY_INFRASTRUCTURE",
+      "executionMode": "blocked",
+      "limitation": "isolated conversation and operation fixture is not available to the harness",
+      "expected": {
+        "secondaryIntents": [],
+        "mentionedEntities": [
+          "person:أحمد"
+        ],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [
+          "safe unique أحمد resolution"
+        ],
+        "requiredContext": [
+          "previous expense ID",
+          "unique أحمد resolution"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "conversation_provenance",
+          "structured_records",
+          "entity_resolver"
+        ],
+        "excludedSources": [
+          "new_duplicate_expense"
+        ],
+        "selectedStrategy": "correction reconciliation",
+        "intelligenceLevels": [
+          "L1",
+          "L2"
+        ],
+        "confidence": "medium",
+        "risk": null,
+        "approvalRequired": "policy",
+        "verificationPlan": "verify final person and provenance",
+        "forbidden": [
+          "add أحمد as another expense",
+          "silent ambiguous أحمد"
+        ],
+        "primaryIntent": "correction",
+        "decision": "replace person on previous expense",
+        "action": "update existing expense person",
+        "expectedOutcome": "one corrected expense"
+      },
+      "observed": {
+        "primaryIntent": "unknown",
+        "secondaryIntents": [],
+        "mentionedEntities": [
+          "person:أحمد"
+        ],
+        "resolvedEntities": [
+          "conversation_referents"
+        ],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [
+          "conversation_referents"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "user_input",
+          "conversation"
+        ],
+        "excludedSources": [
+          "unverified_model_claims"
+        ],
+        "selectedStrategy": "structured_tools_with_contextual_reasoning",
+        "intelligenceLevel": "L2",
+        "confidence": 0.5325000000000001,
+        "confidenceBand": "medium",
+        "risk": "low",
+        "decision": "deterministic_path_selected",
+        "action": "unknown",
+        "approvalRequired": false,
+        "verificationPlan": [],
+        "failureState": null,
+        "provenance": [
+          "requestId=brain-eval-17",
+          "conversationId=brain-eval-conversation-17",
+          "evaluationScenario=17"
+        ],
+        "actualOutcome": "deterministic parser and Brain envelope evaluated; no provider or mutation executed",
+        "correction": {
+          "previousState": null,
+          "correctionTarget": "not resolved by standalone harness",
+          "updatedInterpretation": "unknown",
+          "duplicateRisk": "not measured without previous operation fixture",
+          "finalPersistedState": "not executed"
+        }
+      },
+      "envelope": {
+        "version": 1,
+        "requestId": "brain-eval-17",
+        "conversationId": "brain-eval-conversation-17",
+        "state": "understanding",
+        "intent": {
+          "name": "unknown",
+          "confidence": 0.35,
+          "source": "unknown"
+        },
+        "strategy": {
+          "level": "L2",
+          "reason": "structured_tools_with_contextual_reasoning",
+          "llmAllowed": true,
+          "deterministicExecution": true
+        },
+        "context": {
+          "sources": [
+            "user_input",
+            "conversation"
+          ],
+          "selected": [
+            "conversation_referents"
+          ],
+          "excluded": [
+            "unverified_model_claims"
+          ],
+          "ambiguity": [],
+          "temporal": {
+            "mentioned": false,
+            "resolved": false,
+            "dayOffset": null,
+            "hasExactTime": false
+          }
+        },
+        "confidence": {
+          "overall": 0.5325000000000001,
+          "intent": 0.35,
+          "entity": 0.7,
+          "temporal": 1,
+          "execution": 0.5
+        },
+        "risk": {
+          "level": "low",
+          "factors": [],
+          "requiresApproval": false
+        },
+        "verification": {
+          "state": "not_required",
+          "required": false,
+          "checks": []
+        },
+        "trace": {
+          "retrievalUsed": false,
+          "relationshipContextUsed": false,
+          "toolCalls": 0,
+          "llmCalls": 0,
+          "evaluationScenario": null
+        }
+      },
+      "semanticParse": {
+        "originalText": "لا، كنت دافعها لأحمد",
+        "normalizedText": "لا كنت دافعها لاحمد",
+        "tokens": [
+          "لا",
+          "كنت",
+          "دافعها",
+          "لاحمد"
+        ],
+        "domains": [
+          "unknown"
+        ],
+        "intent": "unknown",
+        "confidence": 0.35,
+        "entityMentions": [
+          {
+            "entityType": "person",
+            "query": "أحمد",
+            "confidence": 0.9
+          }
+        ],
+        "hasWriteLanguage": false,
+        "hasReadLanguage": false,
+        "ambiguous": false
+      },
+      "instrumentation": {
+        "logicalLlmCalls": 0,
+        "providerAttempts": 0,
+        "inputTokens": null,
+        "outputTokens": null,
+        "totalTokens": null,
+        "selectedStrategy": "L2",
+        "intelligenceLevel": "L2",
+        "measurement": "not_executable"
+      },
+      "passFail": {
+        "pass": null,
+        "mismatchReason": null,
+        "comparedFields": [],
+        "responsibleSubsystem": null
+      },
+      "failureClassification": null
+    },
+    {
+      "scenarioId": "18",
+      "title": "Correction of date",
+      "input": "لا، دي كانت الأسبوع اللي فات",
+      "context": "previous conversation/operation fixture required",
+      "status": "BLOCKED_BY_INFRASTRUCTURE",
+      "executionMode": "blocked",
+      "limitation": "isolated conversation/operation fixture is not available to the harness",
+      "expected": {
+        "secondaryIntents": [],
+        "mentionedEntities": [],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": "last week as a structured temporal scope",
+        "knownInformation": [],
+        "unknownInformation": [
+          "exact day/time if not justified"
+        ],
+        "requiredContext": [
+          "previous expense ID",
+          "temporal reference"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "conversation_provenance",
+          "structured_records",
+          "temporal_parser"
+        ],
+        "excludedSources": [
+          "random_day_selection",
+          "new_duplicate_expense"
+        ],
+        "selectedStrategy": "correction reconciliation",
+        "intelligenceLevels": [
+          "L1",
+          "L2"
+        ],
+        "confidence": "medium",
+        "risk": null,
+        "approvalRequired": "policy",
+        "verificationPlan": "verify final date and provenance",
+        "forbidden": [
+          "random day",
+          "second expense"
+        ],
+        "primaryIntent": "correction",
+        "decision": "update existing expense temporal scope safely",
+        "action": "update existing expense date",
+        "expectedOutcome": "one expense with justified temporal update"
+      },
+      "observed": {
+        "primaryIntent": "unknown",
+        "secondaryIntents": [],
+        "mentionedEntities": [],
+        "resolvedEntities": [
+          "conversation_referents"
+        ],
+        "ambiguousEntities": [],
+        "timeScope": "mentioned; dayOffset=unknown",
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [
+          "conversation_referents"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "user_input",
+          "conversation"
+        ],
+        "excludedSources": [
+          "unverified_model_claims"
+        ],
+        "selectedStrategy": "structured_tools_with_contextual_reasoning",
+        "intelligenceLevel": "L2",
+        "confidence": 0.46,
+        "confidenceBand": "low",
+        "risk": "low",
+        "decision": "deterministic_path_selected",
+        "action": "unknown",
+        "approvalRequired": false,
+        "verificationPlan": [],
+        "failureState": null,
+        "provenance": [
+          "requestId=brain-eval-18",
+          "conversationId=brain-eval-conversation-18",
+          "evaluationScenario=18"
+        ],
+        "actualOutcome": "deterministic parser and Brain envelope evaluated; no provider or mutation executed",
+        "correction": {
+          "previousState": null,
+          "correctionTarget": "not resolved by standalone harness",
+          "updatedInterpretation": "unknown",
+          "duplicateRisk": "not measured without previous operation fixture",
+          "finalPersistedState": "not executed"
+        }
+      },
+      "envelope": {
+        "version": 1,
+        "requestId": "brain-eval-18",
+        "conversationId": "brain-eval-conversation-18",
+        "state": "understanding",
+        "intent": {
+          "name": "unknown",
+          "confidence": 0.35,
+          "source": "unknown"
+        },
+        "strategy": {
+          "level": "L2",
+          "reason": "structured_tools_with_contextual_reasoning",
+          "llmAllowed": true,
+          "deterministicExecution": true
+        },
+        "context": {
+          "sources": [
+            "user_input",
+            "conversation"
+          ],
+          "selected": [
+            "conversation_referents"
+          ],
+          "excluded": [
+            "unverified_model_claims"
+          ],
+          "ambiguity": [],
+          "temporal": {
+            "mentioned": true,
+            "resolved": false,
+            "dayOffset": null,
+            "hasExactTime": false
+          }
+        },
+        "confidence": {
+          "overall": 0.46,
+          "intent": 0.35,
+          "entity": 0.8,
+          "temporal": 0.35,
+          "execution": 0.5
+        },
+        "risk": {
+          "level": "low",
+          "factors": [],
+          "requiresApproval": false
+        },
+        "verification": {
+          "state": "not_required",
+          "required": false,
+          "checks": []
+        },
+        "trace": {
+          "retrievalUsed": false,
+          "relationshipContextUsed": false,
+          "toolCalls": 0,
+          "llmCalls": 0,
+          "evaluationScenario": null
+        }
+      },
+      "semanticParse": {
+        "originalText": "لا، دي كانت الأسبوع اللي فات",
+        "normalizedText": "لا دي كانت الاسبوع اللي فات",
+        "tokens": [
+          "لا",
+          "دي",
+          "كانت",
+          "الاسبوع",
+          "اللي",
+          "فات"
+        ],
+        "domains": [
+          "unknown"
+        ],
+        "intent": "unknown",
+        "confidence": 0.35,
+        "entityMentions": [],
+        "hasWriteLanguage": false,
+        "hasReadLanguage": false,
+        "ambiguous": false
+      },
+      "instrumentation": {
+        "logicalLlmCalls": 0,
+        "providerAttempts": 0,
+        "inputTokens": null,
+        "outputTokens": null,
+        "totalTokens": null,
+        "selectedStrategy": "L2",
+        "intelligenceLevel": "L2",
+        "measurement": "not_executable"
+      },
+      "passFail": {
+        "pass": null,
+        "mismatchReason": null,
+        "comparedFields": [],
+        "responsibleSubsystem": null
+      },
+      "failureClassification": null
+    },
+    {
+      "scenarioId": "19",
+      "title": "Plan obligations next week",
+      "input": "شوفلي الالتزامات اللي عليا الأسبوع الجاي وقولي أرتبها إزاي",
+      "context": "none",
+      "status": "FAIL",
+      "executionMode": "envelope",
+      "limitation": null,
+      "expected": {
+        "secondaryIntents": [
+          "obligation_retrieval",
+          "temporal_synthesis"
+        ],
+        "mentionedEntities": [],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": "next week",
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [
+          "obligations",
+          "projects",
+          "people",
+          "dates"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "structured_records",
+          "relationship_graph",
+          "conversation_context"
+        ],
+        "excludedSources": [
+          "automatic_execution"
+        ],
+        "selectedStrategy": "deep secretary reasoning",
+        "intelligenceLevels": [
+          "L3"
+        ],
+        "confidence": "medium",
+        "risk": null,
+        "approvalRequired": false,
+        "verificationPlan": "not applicable",
+        "forbidden": [
+          "automatic payment",
+          "automatic rescheduling",
+          "executed recommendation"
+        ],
+        "primaryIntent": "planning",
+        "decision": "produce plan/recommendations",
+        "action": "read-only plan",
+        "expectedOutcome": "recommendations without mutation"
+      },
+      "observed": {
+        "primaryIntent": "unknown",
+        "secondaryIntents": [],
+        "mentionedEntities": [],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": "mentioned; dayOffset=unknown",
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "user_input"
+        ],
+        "excludedSources": [
+          "unverified_model_claims"
+        ],
+        "selectedStrategy": "structured_tools_with_contextual_reasoning",
+        "intelligenceLevel": "L2",
+        "confidence": 0.46,
+        "confidenceBand": "low",
+        "risk": "low",
+        "decision": "deterministic_path_selected",
+        "action": "unknown",
+        "approvalRequired": false,
+        "verificationPlan": [],
+        "failureState": null,
+        "provenance": [
+          "requestId=brain-eval-19",
+          "conversationId=brain-eval-conversation-19",
+          "evaluationScenario=19"
+        ],
+        "actualOutcome": "deterministic parser and Brain envelope evaluated; no provider or mutation executed",
+        "correction": {
+          "previousState": null,
+          "correctionTarget": null,
+          "updatedInterpretation": null,
+          "duplicateRisk": null,
+          "finalPersistedState": null
+        }
+      },
+      "envelope": {
+        "version": 1,
+        "requestId": "brain-eval-19",
+        "conversationId": "brain-eval-conversation-19",
+        "state": "understanding",
+        "intent": {
+          "name": "unknown",
+          "confidence": 0.35,
+          "source": "unknown"
+        },
+        "strategy": {
+          "level": "L2",
+          "reason": "structured_tools_with_contextual_reasoning",
+          "llmAllowed": true,
+          "deterministicExecution": true
+        },
+        "context": {
+          "sources": [
+            "user_input"
+          ],
+          "selected": [],
+          "excluded": [
+            "unverified_model_claims"
+          ],
+          "ambiguity": [],
+          "temporal": {
+            "mentioned": true,
+            "resolved": false,
+            "dayOffset": null,
+            "hasExactTime": false
+          }
+        },
+        "confidence": {
+          "overall": 0.46,
+          "intent": 0.35,
+          "entity": 0.8,
+          "temporal": 0.35,
+          "execution": 0.5
+        },
+        "risk": {
+          "level": "low",
+          "factors": [],
+          "requiresApproval": false
+        },
+        "verification": {
+          "state": "not_required",
+          "required": false,
+          "checks": []
+        },
+        "trace": {
+          "retrievalUsed": false,
+          "relationshipContextUsed": false,
+          "toolCalls": 0,
+          "llmCalls": 0,
+          "evaluationScenario": null
+        }
+      },
+      "semanticParse": {
+        "originalText": "شوفلي الالتزامات اللي عليا الأسبوع الجاي وقولي أرتبها إزاي",
+        "normalizedText": "شوفلي الالتزامات اللي عليا الاسبوع الجاي وقولي ارتبها ازاي",
+        "tokens": [
+          "شوفلي",
+          "الالتزامات",
+          "اللي",
+          "عليا",
+          "الاسبوع",
+          "الجاي",
+          "وقولي",
+          "ارتبها",
+          "ازاي"
+        ],
+        "domains": [
+          "unknown"
+        ],
+        "intent": "unknown",
+        "confidence": 0.35,
+        "entityMentions": [],
+        "hasWriteLanguage": false,
+        "hasReadLanguage": true,
+        "ambiguous": false
+      },
+      "instrumentation": {
+        "logicalLlmCalls": 0,
+        "providerAttempts": 0,
+        "inputTokens": null,
+        "outputTokens": null,
+        "totalTokens": null,
+        "selectedStrategy": "L2",
+        "intelligenceLevel": "L2",
+        "measurement": "deterministic_path_no_provider_call"
+      },
+      "passFail": {
+        "pass": false,
+        "mismatchReason": "primaryIntent observed=unknown expected=planning; intelligenceLevel observed=L2 expected=L3",
+        "comparedFields": [
+          "primaryIntent",
+          "intelligenceLevel",
+          "approvalRequired"
+        ],
+        "responsibleSubsystem": "brain-contract.ts / deterministic-intelligence.ts"
+      },
+      "failureClassification": "intelligence-level mismatch"
+    },
+    {
+      "scenarioId": "20",
+      "title": "Travel and obligations",
+      "input": "أنا مسافر الأسبوع الجاي، شوف لو فيه التزامات ممكن تتعارض مع السفر",
+      "context": "none",
+      "status": "FAIL",
+      "executionMode": "envelope",
+      "limitation": null,
+      "expected": {
+        "secondaryIntents": [
+          "travel_context",
+          "obligation_retrieval"
+        ],
+        "mentionedEntities": [],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": "next week; travel dates may need clarification",
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [
+          "travel dates",
+          "obligations",
+          "tasks",
+          "reminders"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "structured_records",
+          "conversation_context",
+          "relationship_graph"
+        ],
+        "excludedSources": [
+          "automatic_rescheduling",
+          "automatic_external_contact"
+        ],
+        "selectedStrategy": "deep secretary reasoning",
+        "intelligenceLevels": [
+          "L3"
+        ],
+        "confidence": "medium",
+        "risk": null,
+        "approvalRequired": false,
+        "verificationPlan": "not applicable",
+        "forbidden": [
+          "assumed dates",
+          "automatic reschedule",
+          "automatic contact"
+        ],
+        "primaryIntent": "planning",
+        "decision": "identify conflicts or ask dates",
+        "action": "read-only conflict synthesis",
+        "expectedOutcome": "no automatic rescheduling or payment"
+      },
+      "observed": {
+        "primaryIntent": "unknown",
+        "secondaryIntents": [],
+        "mentionedEntities": [
+          "person:و فيه التزامات ممكن تتعارض مع السفر"
+        ],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": "mentioned; dayOffset=unknown",
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "user_input"
+        ],
+        "excludedSources": [
+          "unverified_model_claims"
+        ],
+        "selectedStrategy": "structured_tools_with_contextual_reasoning",
+        "intelligenceLevel": "L2",
+        "confidence": 0.435,
+        "confidenceBand": "low",
+        "risk": "low",
+        "decision": "deterministic_path_selected",
+        "action": "unknown",
+        "approvalRequired": false,
+        "verificationPlan": [],
+        "failureState": null,
+        "provenance": [
+          "requestId=brain-eval-20",
+          "conversationId=brain-eval-conversation-20",
+          "evaluationScenario=20"
+        ],
+        "actualOutcome": "deterministic parser and Brain envelope evaluated; no provider or mutation executed",
+        "correction": {
+          "previousState": null,
+          "correctionTarget": null,
+          "updatedInterpretation": null,
+          "duplicateRisk": null,
+          "finalPersistedState": null
+        }
+      },
+      "envelope": {
+        "version": 1,
+        "requestId": "brain-eval-20",
+        "conversationId": "brain-eval-conversation-20",
+        "state": "understanding",
+        "intent": {
+          "name": "unknown",
+          "confidence": 0.35,
+          "source": "unknown"
+        },
+        "strategy": {
+          "level": "L2",
+          "reason": "structured_tools_with_contextual_reasoning",
+          "llmAllowed": true,
+          "deterministicExecution": true
+        },
+        "context": {
+          "sources": [
+            "user_input"
+          ],
+          "selected": [],
+          "excluded": [
+            "unverified_model_claims"
+          ],
+          "ambiguity": [],
+          "temporal": {
+            "mentioned": true,
+            "resolved": false,
+            "dayOffset": null,
+            "hasExactTime": false
+          }
+        },
+        "confidence": {
+          "overall": 0.435,
+          "intent": 0.35,
+          "entity": 0.7,
+          "temporal": 0.35,
+          "execution": 0.5
+        },
+        "risk": {
+          "level": "low",
+          "factors": [],
+          "requiresApproval": false
+        },
+        "verification": {
+          "state": "not_required",
+          "required": false,
+          "checks": []
+        },
+        "trace": {
+          "retrievalUsed": false,
+          "relationshipContextUsed": false,
+          "toolCalls": 0,
+          "llmCalls": 0,
+          "evaluationScenario": null
+        }
+      },
+      "semanticParse": {
+        "originalText": "أنا مسافر الأسبوع الجاي، شوف لو فيه التزامات ممكن تتعارض مع السفر",
+        "normalizedText": "انا مسافر الاسبوع الجاي شوف لو فيه التزامات ممكن تتعارض مع السفر",
+        "tokens": [
+          "انا",
+          "مسافر",
+          "الاسبوع",
+          "الجاي",
+          "شوف",
+          "لو",
+          "فيه",
+          "التزامات",
+          "ممكن",
+          "تتعارض",
+          "مع",
+          "السفر"
+        ],
+        "domains": [
+          "unknown"
+        ],
+        "intent": "unknown",
+        "confidence": 0.35,
+        "entityMentions": [
+          {
+            "entityType": "person",
+            "query": "و فيه التزامات ممكن تتعارض مع السفر",
+            "confidence": 0.9
+          }
+        ],
+        "hasWriteLanguage": false,
+        "hasReadLanguage": true,
+        "ambiguous": false
+      },
+      "instrumentation": {
+        "logicalLlmCalls": 0,
+        "providerAttempts": 0,
+        "inputTokens": null,
+        "outputTokens": null,
+        "totalTokens": null,
+        "selectedStrategy": "L2",
+        "intelligenceLevel": "L2",
+        "measurement": "deterministic_path_no_provider_call"
+      },
+      "passFail": {
+        "pass": false,
+        "mismatchReason": "primaryIntent observed=unknown expected=planning; intelligenceLevel observed=L2 expected=L3",
+        "comparedFields": [
+          "primaryIntent",
+          "intelligenceLevel",
+          "approvalRequired"
+        ],
+        "responsibleSubsystem": "brain-contract.ts / deterministic-intelligence.ts"
+      },
+      "failureClassification": "intelligence-level mismatch"
+    },
+    {
+      "scenarioId": "21",
+      "title": "Vague action",
+      "input": "اعمل حاجة مناسبة لمحمد",
+      "context": "none",
+      "status": "FAIL",
+      "executionMode": "envelope",
+      "limitation": null,
+      "expected": {
+        "secondaryIntents": [],
+        "mentionedEntities": [
+          "person:محمد"
+        ],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [
+          "desired action"
+        ],
+        "requiredContext": [
+          "user goal"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [],
+        "excludedSources": [],
+        "selectedStrategy": "lightweight interpretation",
+        "intelligenceLevels": [
+          "L1"
+        ],
+        "confidence": "medium",
+        "risk": null,
+        "approvalRequired": false,
+        "verificationPlan": "not applicable",
+        "forbidden": [
+          "guess action",
+          "reminder/payment without intent"
+        ],
+        "primaryIntent": "unclear_action",
+        "decision": "ask what user wants",
+        "action": "focused clarification",
+        "expectedOutcome": "no mutation"
+      },
+      "observed": {
+        "primaryIntent": "unknown",
+        "secondaryIntents": [],
+        "mentionedEntities": [
+          "person:محمد"
+        ],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "user_input"
+        ],
+        "excludedSources": [
+          "unverified_model_claims"
+        ],
+        "selectedStrategy": "vague_action_requires_non_mutating_clarification",
+        "intelligenceLevel": "L1",
+        "confidence": 0.5325000000000001,
+        "confidenceBand": "medium",
+        "risk": "low",
+        "decision": "understanding",
+        "action": "unknown",
+        "approvalRequired": false,
+        "verificationPlan": [],
+        "failureState": null,
+        "provenance": [
+          "requestId=brain-eval-21",
+          "conversationId=brain-eval-conversation-21",
+          "evaluationScenario=21"
+        ],
+        "actualOutcome": "deterministic parser and Brain envelope evaluated; no provider or mutation executed",
+        "correction": {
+          "previousState": null,
+          "correctionTarget": null,
+          "updatedInterpretation": null,
+          "duplicateRisk": null,
+          "finalPersistedState": null
+        }
+      },
+      "envelope": {
+        "version": 1,
+        "requestId": "brain-eval-21",
+        "conversationId": "brain-eval-conversation-21",
+        "state": "understanding",
+        "intent": {
+          "name": "unknown",
+          "confidence": 0.35,
+          "source": "unknown"
+        },
+        "strategy": {
+          "level": "L1",
+          "reason": "vague_action_requires_non_mutating_clarification",
+          "llmAllowed": false,
+          "deterministicExecution": false
+        },
+        "context": {
+          "sources": [
+            "user_input"
+          ],
+          "selected": [],
+          "excluded": [
+            "unverified_model_claims"
+          ],
+          "ambiguity": [],
+          "temporal": {
+            "mentioned": false,
+            "resolved": false,
+            "dayOffset": null,
+            "hasExactTime": false
+          }
+        },
+        "confidence": {
+          "overall": 0.5325000000000001,
+          "intent": 0.35,
+          "entity": 0.7,
+          "temporal": 1,
+          "execution": 0.5
+        },
+        "risk": {
+          "level": "low",
+          "factors": [],
+          "requiresApproval": false
+        },
+        "verification": {
+          "state": "not_required",
+          "required": false,
+          "checks": []
+        },
+        "trace": {
+          "retrievalUsed": false,
+          "relationshipContextUsed": false,
+          "toolCalls": 0,
+          "llmCalls": 0,
+          "evaluationScenario": null
+        }
+      },
+      "semanticParse": {
+        "originalText": "اعمل حاجة مناسبة لمحمد",
+        "normalizedText": "اعمل حاجه مناسبه لمحمد",
+        "tokens": [
+          "اعمل",
+          "حاجه",
+          "مناسبه",
+          "لمحمد"
+        ],
+        "domains": [
+          "unknown"
+        ],
+        "intent": "unknown",
+        "confidence": 0.35,
+        "entityMentions": [
+          {
+            "entityType": "person",
+            "query": "محمد",
+            "confidence": 0.9
+          }
+        ],
+        "hasWriteLanguage": true,
+        "hasReadLanguage": false,
+        "ambiguous": false
+      },
+      "instrumentation": {
+        "logicalLlmCalls": 0,
+        "providerAttempts": 0,
+        "inputTokens": null,
+        "outputTokens": null,
+        "totalTokens": null,
+        "selectedStrategy": "L1",
+        "intelligenceLevel": "L1",
+        "measurement": "deterministic_path_no_provider_call"
+      },
+      "passFail": {
+        "pass": false,
+        "mismatchReason": "primaryIntent observed=unknown expected=unclear_action",
+        "comparedFields": [
+          "primaryIntent",
+          "intelligenceLevel",
+          "approvalRequired"
+        ],
+        "responsibleSubsystem": "brain-contract.ts / deterministic-intelligence.ts"
+      },
+      "failureClassification": "intent/decision mismatch"
+    },
+    {
+      "scenarioId": "22",
+      "title": "Reminder tomorrow",
+      "input": "فكرني بكرة الساعة 5 أكلم أحمد",
+      "context": "none",
+      "status": "PASS",
+      "executionMode": "envelope",
+      "limitation": null,
+      "expected": {
+        "secondaryIntents": [],
+        "mentionedEntities": [
+          "person:أحمد"
+        ],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": "tomorrow at 17:00",
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [
+          "unique أحمد resolution"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "temporal_parser",
+          "structured_records"
+        ],
+        "excludedSources": [
+          "invented date/time"
+        ],
+        "selectedStrategy": "deterministic",
+        "intelligenceLevels": [
+          "L0",
+          "L1"
+        ],
+        "confidence": "medium",
+        "risk": null,
+        "approvalRequired": "policy",
+        "verificationPlan": "verify saved reminder",
+        "forbidden": [
+          "misread tomorrow",
+          "invent date/time",
+          "duplicate reminder"
+        ],
+        "primaryIntent": "create_reminder",
+        "decision": "create reminder through approval policy",
+        "action": "create_reminder",
+        "expectedOutcome": "one verified reminder at tomorrow 17:00"
+      },
+      "observed": {
+        "primaryIntent": "create_reminder",
+        "secondaryIntents": [],
+        "mentionedEntities": [],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": "mentioned; dayOffset=1",
+        "knownInformation": [
+          "dateTime=2026-09-20T14:00:00.000Z"
+        ],
+        "unknownInformation": [],
+        "requiredContext": [],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "user_input"
+        ],
+        "excludedSources": [
+          "unverified_model_claims"
+        ],
+        "selectedStrategy": "high_confidence_single_scope_deterministic_action",
+        "intelligenceLevel": "L0",
+        "confidence": 0.796,
+        "confidenceBand": "medium",
+        "risk": "medium",
+        "decision": "deterministic_path_selected",
+        "action": "approval_gated_structured_action",
+        "approvalRequired": true,
+        "verificationPlan": [
+          "authoritative_structured_result"
+        ],
+        "failureState": null,
+        "provenance": [
+          "requestId=brain-eval-22",
+          "conversationId=brain-eval-conversation-22",
+          "evaluationScenario=22"
+        ],
+        "actualOutcome": "deterministic parser and Brain envelope evaluated; no provider or mutation executed",
+        "correction": {
+          "previousState": null,
+          "correctionTarget": null,
+          "updatedInterpretation": null,
+          "duplicateRisk": null,
+          "finalPersistedState": null
+        }
+      },
+      "envelope": {
+        "version": 1,
+        "requestId": "brain-eval-22",
+        "conversationId": "brain-eval-conversation-22",
+        "state": "understanding",
+        "intent": {
+          "name": "create_reminder",
+          "confidence": 0.9,
+          "source": "deterministic"
+        },
+        "strategy": {
+          "level": "L0",
+          "reason": "high_confidence_single_scope_deterministic_action",
+          "llmAllowed": true,
+          "deterministicExecution": true
+        },
+        "context": {
+          "sources": [
+            "user_input"
+          ],
+          "selected": [],
+          "excluded": [
+            "unverified_model_claims"
+          ],
+          "ambiguity": [],
+          "temporal": {
+            "mentioned": true,
+            "resolved": true,
+            "dayOffset": 1,
+            "hasExactTime": true
+          }
+        },
+        "confidence": {
+          "overall": 0.796,
+          "intent": 0.9,
+          "entity": 0.8,
+          "temporal": 0.94,
+          "execution": 0.5
+        },
+        "risk": {
+          "level": "medium",
+          "factors": [
+            "state_mutation"
+          ],
+          "requiresApproval": true
+        },
+        "verification": {
+          "state": "pending",
+          "required": true,
+          "checks": [
+            "authoritative_structured_result"
+          ]
+        },
+        "trace": {
+          "retrievalUsed": false,
+          "relationshipContextUsed": false,
+          "toolCalls": 0,
+          "llmCalls": 0,
+          "evaluationScenario": null
+        }
+      },
+      "semanticParse": {
+        "originalText": "فكرني بكرة الساعة 5 أكلم أحمد",
+        "normalizedText": "فكرني بكره الساعه 5 اكلم احمد",
+        "tokens": [
+          "فكرني",
+          "بكره",
+          "الساعه",
+          "5",
+          "اكلم",
+          "احمد"
+        ],
+        "domains": [
+          "reminder"
+        ],
+        "intent": "create_reminder",
+        "confidence": 0.9,
+        "dateTime": {
+          "iso": "2026-09-20T14:00:00.000Z",
+          "dayOffset": 1,
+          "hour": 17,
+          "minute": 0,
+          "confidence": 0.94
+        },
+        "entityMentions": [],
+        "hasWriteLanguage": true,
+        "hasReadLanguage": false,
+        "ambiguous": false
+      },
+      "instrumentation": {
+        "logicalLlmCalls": 0,
+        "providerAttempts": 0,
+        "inputTokens": null,
+        "outputTokens": null,
+        "totalTokens": null,
+        "selectedStrategy": "L0",
+        "intelligenceLevel": "L0",
+        "measurement": "deterministic_path_no_provider_call"
+      },
+      "passFail": {
+        "pass": true,
+        "mismatchReason": null,
+        "comparedFields": [
+          "primaryIntent",
+          "intelligenceLevel",
+          "timeScope"
+        ],
+        "responsibleSubsystem": null
+      },
+      "failureClassification": null
+    },
+    {
+      "scenarioId": "23",
+      "title": "Provider failure during general question",
+      "input": "ما آخر حاجة حصلت مع محمد؟",
+      "context": "controlled provider failure injection required",
+      "status": "BLOCKED_BY_INFRASTRUCTURE",
+      "executionMode": "blocked",
+      "limitation": "the current gateway/provider path has no isolated provider-injection seam for this runner",
+      "expected": {
+        "secondaryIntents": [],
+        "mentionedEntities": [],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [
+          "LLM reasoning or provider failover"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "conversation",
+          "activity",
+          "relationship_graph"
+        ],
+        "excludedSources": [
+          "fabricated_answer"
+        ],
+        "selectedStrategy": "normal reasoning",
+        "intelligenceLevels": [
+          "L2"
+        ],
+        "confidence": "medium",
+        "risk": null,
+        "approvalRequired": false,
+        "verificationPlan": "not applicable",
+        "forbidden": [
+          "hallucinated response",
+          "blind retries"
+        ],
+        "primaryIntent": "contextual_retrieval",
+        "decision": "fail over or explicitly fail",
+        "action": "answer or classified provider failure",
+        "expectedOutcome": "no fabricated answer"
+      },
+      "observed": {
+        "primaryIntent": "memory_recall",
+        "secondaryIntents": [],
+        "mentionedEntities": [],
+        "resolvedEntities": [
+          "conversation_referents"
+        ],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [
+          "conversation_referents"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "user_input",
+          "conversation"
+        ],
+        "excludedSources": [
+          "unverified_model_claims"
+        ],
+        "selectedStrategy": "structured_tools_with_contextual_reasoning",
+        "intelligenceLevel": "L2",
+        "confidence": 0.7240000000000001,
+        "confidenceBand": "medium",
+        "risk": "low",
+        "decision": "deterministic_path_selected",
+        "action": "memory_recall",
+        "approvalRequired": false,
+        "verificationPlan": [],
+        "failureState": null,
+        "provenance": [
+          "requestId=brain-eval-23",
+          "conversationId=brain-eval-conversation-23",
+          "evaluationScenario=23"
+        ],
+        "actualOutcome": "deterministic parser and Brain envelope evaluated; no provider or mutation executed",
+        "correction": {
+          "previousState": null,
+          "correctionTarget": null,
+          "updatedInterpretation": null,
+          "duplicateRisk": null,
+          "finalPersistedState": null
+        }
+      },
+      "envelope": {
+        "version": 1,
+        "requestId": "brain-eval-23",
+        "conversationId": "brain-eval-conversation-23",
+        "state": "understanding",
+        "intent": {
+          "name": "memory_recall",
+          "confidence": 0.72,
+          "source": "deterministic"
+        },
+        "strategy": {
+          "level": "L2",
+          "reason": "structured_tools_with_contextual_reasoning",
+          "llmAllowed": true,
+          "deterministicExecution": true
+        },
+        "context": {
+          "sources": [
+            "user_input",
+            "conversation"
+          ],
+          "selected": [
+            "conversation_referents"
+          ],
+          "excluded": [
+            "unverified_model_claims"
+          ],
+          "ambiguity": [],
+          "temporal": {
+            "mentioned": false,
+            "resolved": false,
+            "dayOffset": null,
+            "hasExactTime": false
+          }
+        },
+        "confidence": {
+          "overall": 0.7240000000000001,
+          "intent": 0.72,
+          "entity": 0.8,
+          "temporal": 1,
+          "execution": 0.5
+        },
+        "risk": {
+          "level": "low",
+          "factors": [],
+          "requiresApproval": false
+        },
+        "verification": {
+          "state": "not_required",
+          "required": false,
+          "checks": []
+        },
+        "trace": {
+          "retrievalUsed": false,
+          "relationshipContextUsed": false,
+          "toolCalls": 0,
+          "llmCalls": 0,
+          "evaluationScenario": null
+        }
+      },
+      "semanticParse": {
+        "originalText": "ما آخر حاجة حصلت مع محمد؟",
+        "normalizedText": "ما اخر حاجه حصلت مع محمد",
+        "tokens": [
+          "ما",
+          "اخر",
+          "حاجه",
+          "حصلت",
+          "مع",
+          "محمد"
+        ],
+        "domains": [
+          "memory"
+        ],
+        "intent": "memory_recall",
+        "confidence": 0.72,
+        "entityMentions": [],
+        "hasWriteLanguage": false,
+        "hasReadLanguage": true,
+        "ambiguous": false
+      },
+      "instrumentation": {
+        "logicalLlmCalls": 0,
+        "providerAttempts": 0,
+        "inputTokens": null,
+        "outputTokens": null,
+        "totalTokens": null,
+        "selectedStrategy": "L2",
+        "intelligenceLevel": "L2",
+        "measurement": "not_executable"
+      },
+      "passFail": {
+        "pass": null,
+        "mismatchReason": null,
+        "comparedFields": [],
+        "responsibleSubsystem": null
+      },
+      "failureClassification": null
+    },
+    {
+      "scenarioId": "24",
+      "title": "Provider failure during expense creation",
+      "input": "دفعت لمحمد 500 جنيه",
+      "context": "controlled provider/runtime failure during write-capable flow",
+      "status": "BLOCKED_BY_INFRASTRUCTURE",
+      "executionMode": "blocked",
+      "limitation": "no isolated provider/runtime failure injection seam",
+      "expected": {
+        "secondaryIntents": [],
+        "mentionedEntities": [
+          "person:محمد"
+        ],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [
+          "amount=500 EGP"
+        ],
+        "unknownInformation": [],
+        "requiredContext": [
+          "authoritative operation/record/activity state"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "structured_records",
+          "secretary_operations",
+          "activity_events"
+        ],
+        "excludedSources": [
+          "model_output_as_success"
+        ],
+        "selectedStrategy": "safety reconciliation",
+        "intelligenceLevels": [
+          "L1",
+          "L2"
+        ],
+        "confidence": "low",
+        "risk": "high",
+        "approvalRequired": false,
+        "verificationPlan": "authoritative DB/operation/activity check",
+        "forbidden": [
+          "model-only success",
+          "blind duplicate retry"
+        ],
+        "primaryIntent": "record_expense",
+        "decision": "reconcile mutation before response",
+        "action": "classified failure or idempotent reconciliation",
+        "expectedOutcome": "no blind retry or duplicate"
+      },
+      "observed": {
+        "primaryIntent": "record_expense",
+        "secondaryIntents": [],
+        "mentionedEntities": [
+          "person:محمد"
+        ],
+        "resolvedEntities": [
+          "conversation_referents"
+        ],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [
+          "amount=50000 minor EGP"
+        ],
+        "unknownInformation": [],
+        "requiredContext": [
+          "conversation_referents"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "user_input",
+          "conversation"
+        ],
+        "excludedSources": [
+          "unverified_model_claims"
+        ],
+        "selectedStrategy": "amount_known_single_scope_deterministic_expense",
+        "intelligenceLevel": "L0",
+        "confidence": 0.7935000000000001,
+        "confidenceBand": "medium",
+        "risk": "medium",
+        "decision": "deterministic_path_selected",
+        "action": "approval_gated_structured_action",
+        "approvalRequired": true,
+        "verificationPlan": [
+          "authoritative_structured_result"
+        ],
+        "failureState": null,
+        "provenance": [
+          "requestId=brain-eval-24",
+          "conversationId=brain-eval-conversation-24",
+          "evaluationScenario=24"
+        ],
+        "actualOutcome": "deterministic parser and Brain envelope evaluated; no provider or mutation executed",
+        "correction": {
+          "previousState": null,
+          "correctionTarget": null,
+          "updatedInterpretation": null,
+          "duplicateRisk": null,
+          "finalPersistedState": null
+        }
+      },
+      "envelope": {
+        "version": 1,
+        "requestId": "brain-eval-24",
+        "conversationId": "brain-eval-conversation-24",
+        "state": "understanding",
+        "intent": {
+          "name": "record_expense",
+          "confidence": 0.93,
+          "source": "deterministic"
+        },
+        "strategy": {
+          "level": "L0",
+          "reason": "amount_known_single_scope_deterministic_expense",
+          "llmAllowed": false,
+          "deterministicExecution": true
+        },
+        "context": {
+          "sources": [
+            "user_input",
+            "conversation"
+          ],
+          "selected": [
+            "conversation_referents"
+          ],
+          "excluded": [
+            "unverified_model_claims"
+          ],
+          "ambiguity": [],
+          "temporal": {
+            "mentioned": false,
+            "resolved": false,
+            "dayOffset": null,
+            "hasExactTime": false
+          }
+        },
+        "confidence": {
+          "overall": 0.7935000000000001,
+          "intent": 0.93,
+          "entity": 0.7,
+          "temporal": 1,
+          "execution": 0.5
+        },
+        "risk": {
+          "level": "medium",
+          "factors": [
+            "state_mutation",
+            "financial_data"
+          ],
+          "requiresApproval": true
+        },
+        "verification": {
+          "state": "pending",
+          "required": true,
+          "checks": [
+            "authoritative_structured_result"
+          ]
+        },
+        "trace": {
+          "retrievalUsed": false,
+          "relationshipContextUsed": false,
+          "toolCalls": 0,
+          "llmCalls": 0,
+          "evaluationScenario": null
+        }
+      },
+      "semanticParse": {
+        "originalText": "دفعت لمحمد 500 جنيه",
+        "normalizedText": "دفعت لمحمد 500 جنيه",
+        "tokens": [
+          "دفعت",
+          "لمحمد",
+          "500",
+          "جنيه"
+        ],
+        "domains": [
+          "expense"
+        ],
+        "intent": "record_expense",
+        "confidence": 0.93,
+        "amount": {
+          "amountMinor": 50000,
+          "currency": "EGP",
+          "raw": "500",
+          "confidence": 0.99
+        },
+        "entityMentions": [
+          {
+            "entityType": "person",
+            "query": "محمد",
+            "confidence": 0.9
+          }
+        ],
+        "hasWriteLanguage": true,
+        "hasReadLanguage": false,
+        "ambiguous": false
+      },
+      "instrumentation": {
+        "logicalLlmCalls": 0,
+        "providerAttempts": 0,
+        "inputTokens": null,
+        "outputTokens": null,
+        "totalTokens": null,
+        "selectedStrategy": "L0",
+        "intelligenceLevel": "L0",
+        "measurement": "not_executable"
+      },
+      "passFail": {
+        "pass": null,
+        "mismatchReason": null,
+        "comparedFields": [],
+        "responsibleSubsystem": null
+      },
+      "failureClassification": null
+    },
+    {
+      "scenarioId": "25",
+      "title": "Approval expired",
+      "input": "وافق عليها",
+      "context": "expired operation fixture required",
+      "status": "BLOCKED_BY_INFRASTRUCTURE",
+      "executionMode": "blocked",
+      "limitation": "isolated operation fixture/clock control is not available to this harness",
+      "expected": {
+        "secondaryIntents": [],
+        "mentionedEntities": [],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [
+          "pending operation with expired approval"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "secretary_operations"
+        ],
+        "excludedSources": [
+          "expired approval as valid"
+        ],
+        "selectedStrategy": "deterministic",
+        "intelligenceLevels": [
+          "L0"
+        ],
+        "confidence": "medium",
+        "risk": null,
+        "approvalRequired": true,
+        "verificationPlan": "preserve operation history",
+        "forbidden": [
+          "execute expired approval",
+          "treat expired as valid"
+        ],
+        "primaryIntent": "approval",
+        "decision": "reject execution and require renewed approval",
+        "action": "approval expiry response",
+        "expectedOutcome": "expired operation is not executed"
+      },
+      "observed": {
+        "primaryIntent": "unknown",
+        "secondaryIntents": [],
+        "mentionedEntities": [],
+        "resolvedEntities": [
+          "conversation_referents"
+        ],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [
+          "conversation_referents"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "user_input",
+          "conversation"
+        ],
+        "excludedSources": [
+          "unverified_model_claims"
+        ],
+        "selectedStrategy": "structured_tools_with_contextual_reasoning",
+        "intelligenceLevel": "L2",
+        "confidence": 0.5575000000000001,
+        "confidenceBand": "medium",
+        "risk": "low",
+        "decision": "deterministic_path_selected",
+        "action": "unknown",
+        "approvalRequired": false,
+        "verificationPlan": [],
+        "failureState": null,
+        "provenance": [
+          "requestId=brain-eval-25",
+          "conversationId=brain-eval-conversation-25",
+          "evaluationScenario=25"
+        ],
+        "actualOutcome": "deterministic parser and Brain envelope evaluated; no provider or mutation executed",
+        "correction": {
+          "previousState": null,
+          "correctionTarget": null,
+          "updatedInterpretation": null,
+          "duplicateRisk": null,
+          "finalPersistedState": null
+        }
+      },
+      "envelope": {
+        "version": 1,
+        "requestId": "brain-eval-25",
+        "conversationId": "brain-eval-conversation-25",
+        "state": "understanding",
+        "intent": {
+          "name": "unknown",
+          "confidence": 0.35,
+          "source": "unknown"
+        },
+        "strategy": {
+          "level": "L2",
+          "reason": "structured_tools_with_contextual_reasoning",
+          "llmAllowed": true,
+          "deterministicExecution": true
+        },
+        "context": {
+          "sources": [
+            "user_input",
+            "conversation"
+          ],
+          "selected": [
+            "conversation_referents"
+          ],
+          "excluded": [
+            "unverified_model_claims"
+          ],
+          "ambiguity": [],
+          "temporal": {
+            "mentioned": false,
+            "resolved": false,
+            "dayOffset": null,
+            "hasExactTime": false
+          }
+        },
+        "confidence": {
+          "overall": 0.5575000000000001,
+          "intent": 0.35,
+          "entity": 0.8,
+          "temporal": 1,
+          "execution": 0.5
+        },
+        "risk": {
+          "level": "low",
+          "factors": [],
+          "requiresApproval": false
+        },
+        "verification": {
+          "state": "not_required",
+          "required": false,
+          "checks": []
+        },
+        "trace": {
+          "retrievalUsed": false,
+          "relationshipContextUsed": false,
+          "toolCalls": 0,
+          "llmCalls": 0,
+          "evaluationScenario": null
+        }
+      },
+      "semanticParse": {
+        "originalText": "وافق عليها",
+        "normalizedText": "وافق عليها",
+        "tokens": [
+          "وافق",
+          "عليها"
+        ],
+        "domains": [
+          "unknown"
+        ],
+        "intent": "unknown",
+        "confidence": 0.35,
+        "entityMentions": [],
+        "hasWriteLanguage": false,
+        "hasReadLanguage": false,
+        "ambiguous": false
+      },
+      "instrumentation": {
+        "logicalLlmCalls": 0,
+        "providerAttempts": 0,
+        "inputTokens": null,
+        "outputTokens": null,
+        "totalTokens": null,
+        "selectedStrategy": "L2",
+        "intelligenceLevel": "L2",
+        "measurement": "not_executable"
+      },
+      "passFail": {
+        "pass": null,
+        "mismatchReason": null,
+        "comparedFields": [],
+        "responsibleSubsystem": null
+      },
+      "failureClassification": null
+    },
+    {
+      "scenarioId": "26",
+      "title": "Verification failure after execution attempt",
+      "input": "نفذ العملية لكن التحقق فشل",
+      "context": "controlled post-mutation verification failure required",
+      "status": "BLOCKED_BY_INFRASTRUCTURE",
+      "executionMode": "blocked",
+      "limitation": "no isolated verification-failure injection seam",
+      "expected": {
+        "secondaryIntents": [],
+        "mentionedEntities": [],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [
+          "operation attempt",
+          "authoritative read failure"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "structured_records",
+          "secretary_operations",
+          "activity_events"
+        ],
+        "excludedSources": [
+          "unverified success",
+          "blind retry"
+        ],
+        "selectedStrategy": "verification reconciliation",
+        "intelligenceLevels": [
+          "L1",
+          "L2"
+        ],
+        "confidence": "low",
+        "risk": "high",
+        "approvalRequired": false,
+        "verificationPlan": "repeat bounded authoritative read without mutation",
+        "forbidden": [
+          "say completed",
+          "create another record"
+        ],
+        "primaryIntent": "verification_reconciliation",
+        "decision": "leave uncertain/pending and reconcile safely",
+        "action": "safe read/reconciliation",
+        "expectedOutcome": "no success claim and no duplicate"
+      },
+      "observed": {
+        "primaryIntent": "unknown",
+        "secondaryIntents": [],
+        "mentionedEntities": [
+          "person:كن التحقق فشل"
+        ],
+        "resolvedEntities": [
+          "conversation_referents"
+        ],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [
+          "conversation_referents"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "user_input",
+          "conversation"
+        ],
+        "excludedSources": [
+          "unverified_model_claims"
+        ],
+        "selectedStrategy": "structured_tools_with_contextual_reasoning",
+        "intelligenceLevel": "L2",
+        "confidence": 0.5325000000000001,
+        "confidenceBand": "medium",
+        "risk": "low",
+        "decision": "deterministic_path_selected",
+        "action": "unknown",
+        "approvalRequired": false,
+        "verificationPlan": [],
+        "failureState": null,
+        "provenance": [
+          "requestId=brain-eval-26",
+          "conversationId=brain-eval-conversation-26",
+          "evaluationScenario=26_verification_failure_after_execution_attempt"
+        ],
+        "actualOutcome": "deterministic parser and Brain envelope evaluated; no provider or mutation executed",
+        "correction": {
+          "previousState": null,
+          "correctionTarget": null,
+          "updatedInterpretation": null,
+          "duplicateRisk": null,
+          "finalPersistedState": null
+        }
+      },
+      "envelope": {
+        "version": 1,
+        "requestId": "brain-eval-26",
+        "conversationId": "brain-eval-conversation-26",
+        "state": "understanding",
+        "intent": {
+          "name": "unknown",
+          "confidence": 0.35,
+          "source": "unknown"
+        },
+        "strategy": {
+          "level": "L2",
+          "reason": "structured_tools_with_contextual_reasoning",
+          "llmAllowed": true,
+          "deterministicExecution": true
+        },
+        "context": {
+          "sources": [
+            "user_input",
+            "conversation"
+          ],
+          "selected": [
+            "conversation_referents"
+          ],
+          "excluded": [
+            "unverified_model_claims"
+          ],
+          "ambiguity": [],
+          "temporal": {
+            "mentioned": false,
+            "resolved": false,
+            "dayOffset": null,
+            "hasExactTime": false
+          }
+        },
+        "confidence": {
+          "overall": 0.5325000000000001,
+          "intent": 0.35,
+          "entity": 0.7,
+          "temporal": 1,
+          "execution": 0.5
+        },
+        "risk": {
+          "level": "low",
+          "factors": [],
+          "requiresApproval": false
+        },
+        "verification": {
+          "state": "not_required",
+          "required": false,
+          "checks": []
+        },
+        "trace": {
+          "retrievalUsed": false,
+          "relationshipContextUsed": false,
+          "toolCalls": 0,
+          "llmCalls": 0,
+          "evaluationScenario": "26_verification_failure_after_execution_attempt"
+        }
+      },
+      "semanticParse": {
+        "originalText": "نفذ العملية لكن التحقق فشل",
+        "normalizedText": "نفذ العمليه لكن التحقق فشل",
+        "tokens": [
+          "نفذ",
+          "العمليه",
+          "لكن",
+          "التحقق",
+          "فشل"
+        ],
+        "domains": [
+          "unknown"
+        ],
+        "intent": "unknown",
+        "confidence": 0.35,
+        "entityMentions": [
+          {
+            "entityType": "person",
+            "query": "كن التحقق فشل",
+            "confidence": 0.9
+          }
+        ],
+        "hasWriteLanguage": false,
+        "hasReadLanguage": false,
+        "ambiguous": false
+      },
+      "instrumentation": {
+        "logicalLlmCalls": 0,
+        "providerAttempts": 0,
+        "inputTokens": null,
+        "outputTokens": null,
+        "totalTokens": null,
+        "selectedStrategy": "L2",
+        "intelligenceLevel": "L2",
+        "measurement": "not_executable"
+      },
+      "passFail": {
+        "pass": null,
+        "mismatchReason": null,
+        "comparedFields": [],
+        "responsibleSubsystem": null
+      },
+      "failureClassification": null
+    },
+    {
+      "scenarioId": "27",
+      "title": "User changes mind",
+      "input": "خلاص مش عايزها",
+      "context": "pending operation fixture required",
+      "status": "BLOCKED_BY_INFRASTRUCTURE",
+      "executionMode": "blocked",
+      "limitation": "isolated operation fixture is not available to this runner",
+      "expected": {
+        "secondaryIntents": [],
+        "mentionedEntities": [],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [
+          "latest pending operation in same conversation"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "secretary_operations",
+          "conversation_provenance"
+        ],
+        "excludedSources": [
+          "expired_operation",
+          "executing_operation",
+          "completed_operation"
+        ],
+        "selectedStrategy": "deterministic",
+        "intelligenceLevels": [
+          "L0"
+        ],
+        "confidence": "medium",
+        "risk": null,
+        "approvalRequired": false,
+        "verificationPlan": "preserve audit/history",
+        "forbidden": [
+          "unrelated cancellation",
+          "reverse completed operation",
+          "execute after cancellation"
+        ],
+        "primaryIntent": "cancel_pending_operation",
+        "decision": "cancel/reject only relevant pending operation",
+        "action": "reject pending operation",
+        "expectedOutcome": "no new mutation and original operation does not execute"
+      },
+      "observed": {
+        "primaryIntent": "unknown",
+        "secondaryIntents": [],
+        "mentionedEntities": [],
+        "resolvedEntities": [
+          "conversation_referents"
+        ],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [
+          "conversation_referents"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "user_input",
+          "conversation"
+        ],
+        "excludedSources": [
+          "unverified_model_claims"
+        ],
+        "selectedStrategy": "structured_tools_with_contextual_reasoning",
+        "intelligenceLevel": "L2",
+        "confidence": 0.5575000000000001,
+        "confidenceBand": "medium",
+        "risk": "low",
+        "decision": "deterministic_path_selected",
+        "action": "unknown",
+        "approvalRequired": false,
+        "verificationPlan": [],
+        "failureState": null,
+        "provenance": [
+          "requestId=brain-eval-27",
+          "conversationId=brain-eval-conversation-27",
+          "evaluationScenario=27_user_changes_mind"
+        ],
+        "actualOutcome": "deterministic parser and Brain envelope evaluated; no provider or mutation executed",
+        "correction": {
+          "previousState": null,
+          "correctionTarget": null,
+          "updatedInterpretation": null,
+          "duplicateRisk": null,
+          "finalPersistedState": null
+        }
+      },
+      "envelope": {
+        "version": 1,
+        "requestId": "brain-eval-27",
+        "conversationId": "brain-eval-conversation-27",
+        "state": "rejected",
+        "intent": {
+          "name": "unknown",
+          "confidence": 0.35,
+          "source": "unknown"
+        },
+        "strategy": {
+          "level": "L2",
+          "reason": "structured_tools_with_contextual_reasoning",
+          "llmAllowed": true,
+          "deterministicExecution": true
+        },
+        "context": {
+          "sources": [
+            "user_input",
+            "conversation"
+          ],
+          "selected": [
+            "conversation_referents"
+          ],
+          "excluded": [
+            "unverified_model_claims"
+          ],
+          "ambiguity": [],
+          "temporal": {
+            "mentioned": false,
+            "resolved": false,
+            "dayOffset": null,
+            "hasExactTime": false
+          }
+        },
+        "confidence": {
+          "overall": 0.5575000000000001,
+          "intent": 0.35,
+          "entity": 0.8,
+          "temporal": 1,
+          "execution": 0.5
+        },
+        "risk": {
+          "level": "low",
+          "factors": [],
+          "requiresApproval": false
+        },
+        "verification": {
+          "state": "not_required",
+          "required": false,
+          "checks": []
+        },
+        "trace": {
+          "retrievalUsed": false,
+          "relationshipContextUsed": false,
+          "toolCalls": 0,
+          "llmCalls": 0,
+          "evaluationScenario": "27_user_changes_mind"
+        }
+      },
+      "semanticParse": {
+        "originalText": "خلاص مش عايزها",
+        "normalizedText": "خلاص مش عايزها",
+        "tokens": [
+          "خلاص",
+          "مش",
+          "عايزها"
+        ],
+        "domains": [
+          "unknown"
+        ],
+        "intent": "unknown",
+        "confidence": 0.35,
+        "entityMentions": [],
+        "hasWriteLanguage": false,
+        "hasReadLanguage": false,
+        "ambiguous": false
+      },
+      "instrumentation": {
+        "logicalLlmCalls": 0,
+        "providerAttempts": 0,
+        "inputTokens": null,
+        "outputTokens": null,
+        "totalTokens": null,
+        "selectedStrategy": "L2",
+        "intelligenceLevel": "L2",
+        "measurement": "not_executable"
+      },
+      "passFail": {
+        "pass": null,
+        "mismatchReason": null,
+        "comparedFields": [],
+        "responsibleSubsystem": null
+      },
+      "failureClassification": null
+    },
+    {
+      "scenarioId": "28",
+      "title": "Debt / relationship question",
+      "input": "محمد لسه ليه عندي كام؟",
+      "context": "financial graph fixture required",
+      "status": "FAIL",
+      "executionMode": "envelope",
+      "limitation": null,
+      "expected": {
+        "secondaryIntents": [],
+        "mentionedEntities": [
+          "person:محمد"
+        ],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [
+          "obligations",
+          "payments",
+          "settlements"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "financial_graph",
+          "structured_records",
+          "relationship_graph"
+        ],
+        "excludedSources": [
+          "conversation_memory_balance"
+        ],
+        "selectedStrategy": "relationship synthesis",
+        "intelligenceLevels": [
+          "L1",
+          "L2"
+        ],
+        "confidence": "medium",
+        "risk": null,
+        "approvalRequired": false,
+        "verificationPlan": "not applicable",
+        "forbidden": [
+          "memory-only balance",
+          "payments/obligations confusion",
+          "ignore settlements"
+        ],
+        "primaryIntent": "financial_relationship_retrieval",
+        "decision": "calculate current outstanding state",
+        "action": "financial relationship read",
+        "expectedOutcome": "authoritative balance including settlements"
+      },
+      "observed": {
+        "primaryIntent": "person_financial_status",
+        "secondaryIntents": [],
+        "mentionedEntities": [],
+        "resolvedEntities": [
+          "bounded_relationship_context",
+          "conversation_referents"
+        ],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [
+          "bounded_relationship_context",
+          "conversation_referents"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "user_input",
+          "conversation",
+          "relationship_graph",
+          "structured_records"
+        ],
+        "excludedSources": [
+          "unverified_model_claims"
+        ],
+        "selectedStrategy": "structured_tools_with_contextual_reasoning",
+        "intelligenceLevel": "L2",
+        "confidence": 0.868,
+        "confidenceBand": "high",
+        "risk": "low",
+        "decision": "deterministic_path_selected",
+        "action": "person_financial_status",
+        "approvalRequired": false,
+        "verificationPlan": [],
+        "failureState": null,
+        "provenance": [
+          "requestId=brain-eval-28",
+          "conversationId=brain-eval-conversation-28",
+          "evaluationScenario=28"
+        ],
+        "actualOutcome": "deterministic parser and Brain envelope evaluated; no provider or mutation executed",
+        "correction": {
+          "previousState": null,
+          "correctionTarget": null,
+          "updatedInterpretation": null,
+          "duplicateRisk": null,
+          "finalPersistedState": null
+        }
+      },
+      "envelope": {
+        "version": 1,
+        "requestId": "brain-eval-28",
+        "conversationId": "brain-eval-conversation-28",
+        "state": "understanding",
+        "intent": {
+          "name": "person_financial_status",
+          "confidence": 0.94,
+          "source": "relationship_context"
+        },
+        "strategy": {
+          "level": "L2",
+          "reason": "structured_tools_with_contextual_reasoning",
+          "llmAllowed": true,
+          "deterministicExecution": true
+        },
+        "context": {
+          "sources": [
+            "user_input",
+            "conversation",
+            "relationship_graph",
+            "structured_records"
+          ],
+          "selected": [
+            "bounded_relationship_context",
+            "conversation_referents"
+          ],
+          "excluded": [
+            "unverified_model_claims"
+          ],
+          "ambiguity": [],
+          "temporal": {
+            "mentioned": false,
+            "resolved": false,
+            "dayOffset": null,
+            "hasExactTime": false
+          }
+        },
+        "confidence": {
+          "overall": 0.868,
+          "intent": 0.94,
+          "entity": 0.98,
+          "temporal": 1,
+          "execution": 0.5
+        },
+        "risk": {
+          "level": "low",
+          "factors": [
+            "financial_data"
+          ],
+          "requiresApproval": false
+        },
+        "verification": {
+          "state": "not_required",
+          "required": false,
+          "checks": []
+        },
+        "trace": {
+          "retrievalUsed": false,
+          "relationshipContextUsed": true,
+          "toolCalls": 0,
+          "llmCalls": 0,
+          "evaluationScenario": null
+        }
+      },
+      "semanticParse": {
+        "originalText": "محمد لسه ليه عندي كام؟",
+        "normalizedText": "محمد لسه ليه عندي كم",
+        "tokens": [
+          "محمد",
+          "لسه",
+          "ليه",
+          "عندي",
+          "كم"
+        ],
+        "domains": [
+          "unknown"
+        ],
+        "intent": "unknown",
+        "confidence": 0.35,
+        "entityMentions": [],
+        "hasWriteLanguage": false,
+        "hasReadLanguage": true,
+        "ambiguous": false
+      },
+      "instrumentation": {
+        "logicalLlmCalls": 0,
+        "providerAttempts": 0,
+        "inputTokens": null,
+        "outputTokens": null,
+        "totalTokens": null,
+        "selectedStrategy": "L2",
+        "intelligenceLevel": "L2",
+        "measurement": "deterministic_path_no_provider_call"
+      },
+      "passFail": {
+        "pass": false,
+        "mismatchReason": "primaryIntent observed=person_financial_status expected=financial_relationship_retrieval",
+        "comparedFields": [
+          "primaryIntent",
+          "intelligenceLevel",
+          "approvalRequired"
+        ],
+        "responsibleSubsystem": "brain-contract.ts / deterministic-intelligence.ts"
+      },
+      "failureClassification": "intent/decision mismatch"
+    },
+    {
+      "scenarioId": "29",
+      "title": "Project alias without canonical association",
+      "input": "كام صرفت على المشروع الكبير؟",
+      "context": "unassociated alias candidate fixture required",
+      "status": "FAIL",
+      "executionMode": "envelope",
+      "limitation": null,
+      "expected": {
+        "secondaryIntents": [],
+        "mentionedEntities": [
+          "alias:المشروع الكبير"
+        ],
+        "resolvedEntities": [],
+        "ambiguousEntities": [
+          "project:canonical association missing"
+        ],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [
+          "canonical project identity"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "entity_graph",
+          "structured_records"
+        ],
+        "excludedSources": [
+          "unassociated_alias",
+          "fuzzy_project_selection"
+        ],
+        "selectedStrategy": "contextual clarification",
+        "intelligenceLevels": [
+          "L1",
+          "L2"
+        ],
+        "confidence": "medium",
+        "risk": null,
+        "approvalRequired": false,
+        "verificationPlan": "not applicable",
+        "forbidden": [
+          "fuzzy select",
+          "alias as financial authority"
+        ],
+        "primaryIntent": "project_expense_total",
+        "decision": "ask for canonical project",
+        "action": "clarify project identity",
+        "expectedOutcome": "no financial query against arbitrary project"
+      },
+      "observed": {
+        "primaryIntent": "project_expenses",
+        "secondaryIntents": [],
+        "mentionedEntities": [],
+        "resolvedEntities": [
+          "bounded_relationship_context",
+          "conversation_referents"
+        ],
+        "ambiguousEntities": [
+          "project_alias_unassociated"
+        ],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [
+          "project_alias_unassociated"
+        ],
+        "requiredContext": [
+          "bounded_relationship_context",
+          "conversation_referents"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "user_input",
+          "conversation",
+          "relationship_graph",
+          "structured_records"
+        ],
+        "excludedSources": [
+          "unverified_model_claims"
+        ],
+        "selectedStrategy": "authoritative_context_requires_clarification",
+        "intelligenceLevel": "L0",
+        "confidence": 0.6225,
+        "confidenceBand": "medium",
+        "risk": "high",
+        "decision": "clarification_required",
+        "action": "project_expenses",
+        "approvalRequired": false,
+        "verificationPlan": [],
+        "failureState": null,
+        "provenance": [
+          "requestId=brain-eval-29",
+          "conversationId=brain-eval-conversation-29",
+          "evaluationScenario=29"
+        ],
+        "actualOutcome": "deterministic parser and Brain envelope evaluated; no provider or mutation executed",
+        "correction": {
+          "previousState": null,
+          "correctionTarget": null,
+          "updatedInterpretation": null,
+          "duplicateRisk": null,
+          "finalPersistedState": null
+        }
+      },
+      "envelope": {
+        "version": 1,
+        "requestId": "brain-eval-29",
+        "conversationId": "brain-eval-conversation-29",
+        "state": "clarification",
+        "intent": {
+          "name": "project_expenses",
+          "confidence": 0.8,
+          "source": "relationship_context"
+        },
+        "strategy": {
+          "level": "L0",
+          "reason": "authoritative_context_requires_clarification",
+          "llmAllowed": false,
+          "deterministicExecution": false
+        },
+        "context": {
+          "sources": [
+            "user_input",
+            "conversation",
+            "relationship_graph",
+            "structured_records"
+          ],
+          "selected": [
+            "bounded_relationship_context",
+            "conversation_referents"
+          ],
+          "excluded": [
+            "unverified_model_claims"
+          ],
+          "ambiguity": [
+            "project_alias_unassociated"
+          ],
+          "temporal": {
+            "mentioned": false,
+            "resolved": false,
+            "dayOffset": null,
+            "hasExactTime": false
+          }
+        },
+        "confidence": {
+          "overall": 0.6225,
+          "intent": 0.8,
+          "entity": 0.25,
+          "temporal": 1,
+          "execution": 0.5
+        },
+        "risk": {
+          "level": "high",
+          "factors": [
+            "financial_data",
+            "unresolved_context"
+          ],
+          "requiresApproval": false
+        },
+        "verification": {
+          "state": "not_required",
+          "required": false,
+          "checks": []
+        },
+        "trace": {
+          "retrievalUsed": false,
+          "relationshipContextUsed": true,
+          "toolCalls": 0,
+          "llmCalls": 0,
+          "evaluationScenario": null
+        }
+      },
+      "semanticParse": {
+        "originalText": "كام صرفت على المشروع الكبير؟",
+        "normalizedText": "كم صرفت علي المشروع الكبير",
+        "tokens": [
+          "كم",
+          "صرفت",
+          "علي",
+          "المشروع",
+          "الكبير"
+        ],
+        "domains": [
+          "expense",
+          "project"
+        ],
+        "intent": "expense_report",
+        "confidence": 0.91,
+        "entityMentions": [],
+        "hasWriteLanguage": true,
+        "hasReadLanguage": true,
+        "ambiguous": false
+      },
+      "instrumentation": {
+        "logicalLlmCalls": 0,
+        "providerAttempts": 0,
+        "inputTokens": null,
+        "outputTokens": null,
+        "totalTokens": null,
+        "selectedStrategy": "L0",
+        "intelligenceLevel": "L0",
+        "measurement": "deterministic_path_no_provider_call"
+      },
+      "passFail": {
+        "pass": false,
+        "mismatchReason": "primaryIntent observed=project_expenses expected=project_expense_total; intelligenceLevel observed=L0 expected=L1|L2",
+        "comparedFields": [
+          "primaryIntent",
+          "intelligenceLevel",
+          "approvalRequired"
+        ],
+        "responsibleSubsystem": "brain-contract.ts / deterministic-intelligence.ts"
+      },
+      "failureClassification": "intelligence-level mismatch"
+    },
+    {
+      "scenarioId": "30",
+      "title": "Proactive obligation synthesis",
+      "input": " upcoming obligation event ",
+      "context": "event-driven scheduler/notification subsystem required",
+      "status": "NOT_EXECUTABLE",
+      "executionMode": "not_executable",
+      "limitation": "proactive scheduling and notification are explicitly out of scope",
+      "expected": {
+        "secondaryIntents": [
+          "notification_decision",
+          "dedupe"
+        ],
+        "mentionedEntities": [],
+        "resolvedEntities": [],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [
+          "authoritative obligations",
+          "reminders",
+          "projects",
+          "people"
+        ],
+        "optionalContext": [
+          "Second Brain context"
+        ],
+        "authoritativeSources": [
+          "structured_records",
+          "relationship_graph",
+          "notification_state"
+        ],
+        "excludedSources": [
+          "settled_items",
+          "expired_items",
+          "duplicate_notifications",
+          "automatic_payment",
+          "automatic_contact"
+        ],
+        "selectedStrategy": "proactive synthesis",
+        "intelligenceLevels": [
+          "L3"
+        ],
+        "confidence": "medium",
+        "risk": "high",
+        "approvalRequired": false,
+        "verificationPlan": "verify current state and dedupe/suppression state first",
+        "forbidden": [
+          "pattern-only proactive loop",
+          "settled notification",
+          "duplicate notification",
+          "automatic payment/contact"
+        ],
+        "primaryIntent": "proactive_obligation_synthesis",
+        "decision": "determine whether notification is warranted",
+        "action": "notification decision only; approval boundary for proposed action",
+        "expectedOutcome": "no automatic external action and no fabricated facts"
+      },
+      "observed": {
+        "primaryIntent": "unknown",
+        "secondaryIntents": [],
+        "mentionedEntities": [],
+        "resolvedEntities": [
+          "conversation_referents"
+        ],
+        "ambiguousEntities": [],
+        "timeScope": null,
+        "knownInformation": [],
+        "unknownInformation": [],
+        "requiredContext": [
+          "conversation_referents"
+        ],
+        "optionalContext": [],
+        "authoritativeSources": [
+          "user_input",
+          "conversation"
+        ],
+        "excludedSources": [
+          "unverified_model_claims"
+        ],
+        "selectedStrategy": "structured_tools_with_contextual_reasoning",
+        "intelligenceLevel": "L2",
+        "confidence": 0.5575000000000001,
+        "confidenceBand": "medium",
+        "risk": "low",
+        "decision": "deterministic_path_selected",
+        "action": "unknown",
+        "approvalRequired": false,
+        "verificationPlan": [],
+        "failureState": null,
+        "provenance": [
+          "requestId=brain-eval-30",
+          "conversationId=brain-eval-conversation-30",
+          "evaluationScenario=30"
+        ],
+        "actualOutcome": "deterministic parser and Brain envelope evaluated; no provider or mutation executed",
+        "correction": {
+          "previousState": null,
+          "correctionTarget": null,
+          "updatedInterpretation": null,
+          "duplicateRisk": null,
+          "finalPersistedState": null
+        }
+      },
+      "envelope": {
+        "version": 1,
+        "requestId": "brain-eval-30",
+        "conversationId": "brain-eval-conversation-30",
+        "state": "understanding",
+        "intent": {
+          "name": "unknown",
+          "confidence": 0.35,
+          "source": "unknown"
+        },
+        "strategy": {
+          "level": "L2",
+          "reason": "structured_tools_with_contextual_reasoning",
+          "llmAllowed": true,
+          "deterministicExecution": true
+        },
+        "context": {
+          "sources": [
+            "user_input",
+            "conversation"
+          ],
+          "selected": [
+            "conversation_referents"
+          ],
+          "excluded": [
+            "unverified_model_claims"
+          ],
+          "ambiguity": [],
+          "temporal": {
+            "mentioned": false,
+            "resolved": false,
+            "dayOffset": null,
+            "hasExactTime": false
+          }
+        },
+        "confidence": {
+          "overall": 0.5575000000000001,
+          "intent": 0.35,
+          "entity": 0.8,
+          "temporal": 1,
+          "execution": 0.5
+        },
+        "risk": {
+          "level": "low",
+          "factors": [],
+          "requiresApproval": false
+        },
+        "verification": {
+          "state": "not_required",
+          "required": false,
+          "checks": []
+        },
+        "trace": {
+          "retrievalUsed": false,
+          "relationshipContextUsed": false,
+          "toolCalls": 0,
+          "llmCalls": 0,
+          "evaluationScenario": null
+        }
+      },
+      "semanticParse": {
+        "originalText": "upcoming obligation event",
+        "normalizedText": "upcoming obligation event",
+        "tokens": [
+          "upcoming",
+          "obligation",
+          "event"
+        ],
+        "domains": [
+          "unknown"
+        ],
+        "intent": "unknown",
+        "confidence": 0.35,
+        "entityMentions": [],
+        "hasWriteLanguage": false,
+        "hasReadLanguage": false,
+        "ambiguous": false
+      },
+      "instrumentation": {
+        "logicalLlmCalls": 0,
+        "providerAttempts": 0,
+        "inputTokens": null,
+        "outputTokens": null,
+        "totalTokens": null,
+        "selectedStrategy": "L2",
+        "intelligenceLevel": "L2",
+        "measurement": "not_executable"
+      },
+      "passFail": {
+        "pass": null,
+        "mismatchReason": null,
+        "comparedFields": [],
+        "responsibleSubsystem": null
+      },
+      "failureClassification": null
+    }
+  ]
+}

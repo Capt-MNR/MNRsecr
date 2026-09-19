@@ -47,6 +47,29 @@ test("semantic layer recognizes expense, totals, schedules, and reminders", () =
   assert.equal(reminder.intent, "create_reminder");
   assert.equal(reminder.dateTime?.hour, 17);
   assert.equal(decideDeterministically(reminder).kind, "deterministic");
+
+  const missingAmount = parseSemanticRequest("دفعت لمحمد");
+  assert.equal(missingAmount.intent, "record_expense");
+  assert.equal(decideDeterministically(missingAmount).kind, "clarification");
+
+  const projectExpenseRead = parseSemanticRequest("كام صرفت على مشروع المحجر؟");
+  assert.equal(projectExpenseRead.intent, "expense_report");
+  assert.equal(projectExpenseRead.ambiguous, false);
+});
+
+test("bare Arabic reminder hour 5 follows the established 17:00 convention", () => {
+  const cases = [
+    "بكرة الساعة 5",
+    "بكرة الساعة 5 مساءً",
+    "بكرة الساعة 17",
+    "غداً الساعة 5",
+  ];
+  const expectedHours = [17, 17, 17, 17];
+  for (const [index, text] of cases.entries()) {
+    const parsed = parseArabicDateTime(text, new Date("2026-09-19T10:00:00.000Z"));
+    assert.ok(parsed, text);
+    assert.equal(parsed.hour, expectedHours[index], text);
+  }
 });
 
 test("dialect corpus keeps Egyptian, Gulf, and Levantine requests on the same intents", () => {
@@ -196,6 +219,13 @@ test("Phase2 resolves high-signal reminder and clarification before any provider
   assert.equal(reminder.response?.kind, "answer");
   assert.equal((reminder.action?.deterministicIntelligence as { llmCallsAvoided?: number } | undefined)?.llmCallsAvoided, 0);
   assert.equal(Object.prototype.hasOwnProperty.call(reminder.action ?? {}, "patternInsights"), false);
+
+  const bareHourReminder = await runtime.run(identity, {
+    message: "فكرني بكرة الساعة 5 أكلم محمد",
+    conversationId: `deterministic-bare-hour-reminder-${Date.now()}`,
+  }, { dryRun: true });
+  assert.equal(bareHourReminder.action?.type, "deterministic_write");
+  assert.equal(bareHourReminder.response?.kind, "answer");
 
   const missing = await runtime.run(identity, {
     message: "سجل مصروف لمحمد",

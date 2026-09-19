@@ -64,14 +64,21 @@ test("parses explicit remember, inferred preference candidates, and recall comma
   });
   assert.deepEqual(parseSecondBrainCommand("افتكر إن اسم ميدو هو محمد أحمد"), {
     type: "remember",
+    memoryKind: "fact",
+    key: "note:اسم ميدو هو محمد احمد",
+    value: "اسم ميدو هو محمد أحمد",
+  });
+  assert.deepEqual(parseSecondBrainCommand("افتكر إن أبو علي هو محمد"), {
+    type: "remember",
     memoryKind: "alias",
-    key: "alias:ميدو",
-    value: "محمد أحمد",
+    key: "alias:ابو علي",
+    value: "محمد",
     metadata: {
-      alias: "ميدو",
-      canonical: "محمد أحمد",
+      alias: "أبو علي",
+      canonical: "محمد",
     },
   });
+  assert.equal(parseSecondBrainCommand("افتكر إن اسم المشروع الكبير هو المحجر")?.memoryKind, "alias");
   assert.deepEqual(parseSecondBrainCommand("فاكر إيه اللي حفظته؟")?.type, "recall");
   assert.equal(parseSecondBrainCommand("سجل مصروف لمحمد ٥٠٠"), null);
 });

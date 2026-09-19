@@ -39,13 +39,16 @@ test("runner invokes the current Brain envelope path and never executes writes",
   assert.equal(records.length, 30);
   assert.ok(records.every((record) => record.envelope));
   assert.ok(records.every((record) => record.instrumentation.logicalLlmCalls === 0));
-  assert.ok(records.every((record) => record.observed.actualOutcome.includes("no provider or mutation executed")));
+  assert.ok(records.every((record) =>
+    record.observed.actualOutcome.includes("no provider or mutation executed")
+    || record.observed.actualOutcome.includes("no mutation executed"),
+  ));
 });
 
 test("fixed clock makes temporal observations reproducible", () => {
   const reminder = evaluateScenario(evaluationContractV1.find((scenario) => scenario.scenarioId === "22")!);
   assert.equal(reminder.semanticParse?.dateTime?.dayOffset, 1);
-  assert.equal(reminder.semanticParse?.dateTime?.hour, 5);
-  assert.match(reminder.passFail.mismatchReason ?? "", /tomorrow at 17:00/);
-  assert.equal(reminder.status, "FAIL");
+  assert.equal(reminder.semanticParse?.dateTime?.hour, 17);
+  assert.doesNotMatch(reminder.passFail.mismatchReason ?? "", /tomorrow at 17:00/);
+  assert.equal(reminder.status, "PASS");
 });
