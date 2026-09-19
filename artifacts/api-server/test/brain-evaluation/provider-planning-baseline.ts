@@ -24,7 +24,6 @@ import {
   GroqModelGateway,
   MistralModelGateway,
   normalizeProviderUsage,
-  parseSemanticRequest,
   Phase2AgentRuntime,
   configuredProviderOrder,
   type ConversationMessage,
@@ -37,6 +36,7 @@ import {
   type ProviderName,
   type ToolScope,
 } from "../../src/lib/phase2";
+import { parseSemanticRequest } from "../../src/lib/deterministic-intelligence";
 import { classifySecretaryError, type SecretaryError } from "../../src/lib/error-contract";
 
 type ScenarioId = "01" | "02" | "03" | "04" | "05" | "06" | "07" | "08";
@@ -755,7 +755,7 @@ function evaluateAnswer(
   criteria: Record<string, boolean>;
   notes: string[];
 } {
-  if (route.status === "NOT_MEASURED" || !answer) {
+  if (route.status !== "MEASURED" || !answer) {
     return { status: "NOT_MEASURED", criteria: {}, notes: ["provider or orchestration failure; answer quality was not scored"] };
   }
   const text = answer.toLocaleLowerCase("ar");
@@ -1261,7 +1261,11 @@ async function main(): Promise<void> {
       report: "Provider-backed planning baseline with direct-LLM control group",
       status: "NOT_MEASURED",
       reason: "No configured provider key was available to the existing gateway order.",
-      scenarios: scenarios.map((scenario) => ({ scenarioId: scenario.id, status: "NOT_MEASURED" })),
+      scenarios: scenarios.map((scenario) => ({
+        scenarioId: scenario.id,
+        status: "NOT_MEASURED_PROVIDER_LIMIT",
+        rawSemanticOutput: parseSemanticRequest(scenario.message),
+      })),
     };
     await writeFile(outputPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
     console.log(JSON.stringify(report, null, 2));
@@ -1272,24 +1276,35 @@ async function main(): Promise<void> {
   try {
     const results: Array<{
       scenario: Scenario;
+      rawSemanticOutput: ReturnType<typeof parseSemanticRequest>;
       brain: RouteResult;
       control: RouteResult;
       evaluation: {
-        brain: ReturnType<typeof evaluateAnswer>;
-        control: ReturnType<typeof evaluateAnswer>;
+        brain: EvaluationResult;
+        control: EvaluationResult;
       };
+      comparison: PairedComparison;
     }> = [];
     for (const scenario of scenarios) {
       const brain = await runBrainScenario(scenario, fixture, providers);
       const control = await runControlScenario(scenario, fixture, providers);
+      const brainEvaluation = evaluateAnswer(scenario, brain.finalAnswer, brain, fixture);
+      const controlEvaluation = evaluateAnswer(scenario, control.finalAnswer, control, fixture);
       results.push({
         scenario,
+        rawSemanticOutput: parseSemanticRequest(scenario.message),
         brain,
         control,
         evaluation: {
-          brain: evaluateAnswer(scenario, brain.finalAnswer, brain, fixture),
-          control: evaluateAnswer(scenario, control.finalAnswer, control, fixture),
+          brain: brainEvaluation,
+          control: controlEvaluation,
         },
+        comparison: buildPairedComparison(
+          brain,
+          control,
+          brainEvaluation,
+          controlEvaluation,
+        ),
       });
     }
     const paired = results.map((item) => ({ brain: item.brain, control: item.control }));
@@ -1308,6 +1323,11 @@ async function main(): Promise<void> {
         planningQualityAndSafetySeparate: true,
         providerFailureIsNotAPlanningFail: true,
         noBrainChangesDuringMeasurement: true,
+        retryPolicy: {
+          runnerInvocationsPerRoute: 1,
+          noRunnerRetryLoop: true,
+          failoverBoundedByConfiguredProviderOrder: true,
+        },
       },
       fixture: {
         tenantScoped: true,
@@ -1338,6 +1358,11 @@ async function main(): Promise<void> {
       summary: {
         brainMeasured: results.filter((item) => item.brain.status === "MEASURED").length,
         controlMeasured: results.filter((item) => item.control.status === "MEASURED").length,
+        brainProviderLimit: results.filter((item) => item.brain.status === "NOT_MEASURED_PROVIDER_LIMIT").length,
+        controlProviderLimit: results.filter((item) => item.control.status === "NOT_MEASURED_PROVIDER_LIMIT").length,
+        comparableScenarios: results.filter((item) => item.comparison.status === "COMPARABLE").length,
+        incompleteProviderLimitScenarios: results.filter((item) =>
+          item.comparison.status === "INCOMPLETE_PROVIDER_LIMIT").length,
         brainSafetyPass: results.filter((item) => item.brain.safety.noWrites).length,
         controlSafetyPass: results.filter((item) => item.control.safety.noWrites).length,
         note: "This report is a capability/evidence matrix. It is not a single PASS score and is not merged into #69.",
@@ -1350,8 +1375,9 @@ async function main(): Promise<void> {
       providerOrder: providers,
       statuses: results.map((item) => ({
         scenarioId: item.scenario.id,
-        brain: item.evaluation.brain.status,
-        control: item.evaluation.control.status,
+        brain: item.brain.status,
+        control: item.control.status,
+        comparison: item.comparison.status,
         brainSafety: item.brain.safety.noWrites,
         controlSafety: item.control.safety.noWrites,
       })),

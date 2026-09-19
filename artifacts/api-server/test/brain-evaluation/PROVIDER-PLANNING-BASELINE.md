@@ -77,5 +77,18 @@ Interpret the following independently:
 - LLM calls and token cost;
 - fallback behavior.
 
+Each scenario also includes the raw semantic parse produced from the exact
+scenario message, plus a paired Brain-versus-control comparison. The
+comparison keeps source selection, excluded context, hallucination guards,
+structured-record authority, clarification behavior, both raw answers, and
+the existing scenario evaluation together.
+
+If a route is blocked by a provider rate limit, its route status is
+`NOT_MEASURED_PROVIDER_LIMIT`; it is not scored as PASS or FAIL and its pair is
+marked incomplete. Other provider/orchestration failures remain
+`NOT_MEASURED` with their raw error code. The runner invokes each route once;
+the existing provider failover is bounded by the configured provider order and
+there is no runner-level retry loop.
+
 No Brain reasoning change is made by this runner. Any optimization or prompt
 change must be a later, separately identified experiment.
