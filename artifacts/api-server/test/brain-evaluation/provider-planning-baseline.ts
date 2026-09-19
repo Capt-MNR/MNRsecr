@@ -24,6 +24,7 @@ import {
   GroqModelGateway,
   MistralModelGateway,
   normalizeProviderUsage,
+  parseSemanticRequest,
   Phase2AgentRuntime,
   configuredProviderOrder,
   type ConversationMessage,
@@ -111,7 +112,7 @@ type UsageLog = {
 
 type RouteResult = {
   route: "brain" | "control";
-  status: "MEASURED" | "NOT_MEASURED";
+  status: "MEASURED" | "NOT_MEASURED_PROVIDER_LIMIT" | "NOT_MEASURED";
   responseKind: string | null;
   finalAnswer: string | null;
   provider: string | null;
@@ -162,6 +163,46 @@ type DirectContext = {
   selectedSources: string[];
   excludedSources: string[];
   records: Record<string, unknown>;
+};
+
+type EvaluationResult = ReturnType<typeof evaluateAnswer>;
+
+type PairedComparison = {
+  status: "COMPARABLE" | "INCOMPLETE_PROVIDER_LIMIT" | "INCOMPLETE";
+  brain: {
+    status: RouteResult["status"];
+    answer: string | null;
+    responseKind: string | null;
+    selectedSources: string[];
+    excludedSources: string[];
+    evaluation: EvaluationResult;
+  };
+  control: {
+    status: RouteResult["status"];
+    answer: string | null;
+    responseKind: string | null;
+    selectedSources: string[];
+    excludedSources: string[];
+    evaluation: EvaluationResult;
+  };
+  dimensions: {
+    sourceSelection: {
+      brain: string[];
+      control: string[];
+    };
+    hallucinationGuards: {
+      brain: Record<string, boolean | null>;
+      control: Record<string, boolean | null>;
+    };
+    structuredRecordAuthority: {
+      brain: boolean | null;
+      control: boolean | null;
+    };
+    clarification: {
+      brain: boolean;
+      control: boolean;
+    };
+  };
 };
 
 const scenarios: Scenario[] = [
@@ -800,6 +841,93 @@ function evaluateAnswer(
   return { status, criteria, notes };
 }
 
+function isProviderLimitFailure(
+  error: unknown,
+  classified: SecretaryError | null,
+  attempts: Array<Record<string, unknown>>,
+): boolean {
+  const evidence = [
+    classified?.category,
+    classified?.code,
+    error instanceof Error ? error.message : String(error ?? ""),
+    JSON.stringify(attempts),
+  ].join(" ");
+  return /PROVIDER_RATE_LIMIT|RATE_LIMIT|429|token.?per.?minute|\bTPM\b/i.test(evidence);
+}
+
+function comparisonBoolean(
+  evaluation: EvaluationResult,
+  key: string,
+): boolean | null {
+  if (evaluation.status === "NOT_MEASURED") return null;
+  return typeof evaluation.criteria[key] === "boolean"
+    ? evaluation.criteria[key]
+    : null;
+}
+
+function buildPairedComparison(
+  brain: RouteResult,
+  control: RouteResult,
+  brainEvaluation: EvaluationResult,
+  controlEvaluation: EvaluationResult,
+): PairedComparison {
+  const status = brain.status === "NOT_MEASURED_PROVIDER_LIMIT"
+    || control.status === "NOT_MEASURED_PROVIDER_LIMIT"
+    ? "INCOMPLETE_PROVIDER_LIMIT"
+    : brain.status !== "MEASURED" || control.status !== "MEASURED"
+      ? "INCOMPLETE"
+      : "COMPARABLE";
+  return {
+    status,
+    brain: {
+      status: brain.status,
+      answer: brain.finalAnswer,
+      responseKind: brain.responseKind,
+      selectedSources: brain.contextEvidence.selected,
+      excludedSources: brain.contextEvidence.excluded,
+      evaluation: brainEvaluation,
+    },
+    control: {
+      status: control.status,
+      answer: control.finalAnswer,
+      responseKind: control.responseKind,
+      selectedSources: control.contextEvidence.selected,
+      excludedSources: control.contextEvidence.excluded,
+      evaluation: controlEvaluation,
+    },
+    dimensions: {
+      sourceSelection: {
+        brain: brain.contextEvidence.selected,
+        control: control.contextEvidence.selected,
+      },
+      hallucinationGuards: {
+        brain: {
+          noAutomaticAction: comparisonBoolean(brainEvaluation, "no_automatic_action"),
+          noInventedTravelDates: comparisonBoolean(brainEvaluation, "no_invented_travel_dates"),
+          doesNotTreatMemoryAsFact: comparisonBoolean(brainEvaluation, "does_not_treat_memory_as_fact"),
+          noGuess: comparisonBoolean(brainEvaluation, "no_guess"),
+          noSecondRecord: comparisonBoolean(brainEvaluation, "no_second_record"),
+        },
+        control: {
+          noAutomaticAction: comparisonBoolean(controlEvaluation, "no_automatic_action"),
+          noInventedTravelDates: comparisonBoolean(controlEvaluation, "no_invented_travel_dates"),
+          doesNotTreatMemoryAsFact: comparisonBoolean(controlEvaluation, "does_not_treat_memory_as_fact"),
+          noGuess: comparisonBoolean(controlEvaluation, "no_guess"),
+          noSecondRecord: comparisonBoolean(controlEvaluation, "no_second_record"),
+        },
+      },
+      structuredRecordAuthority: {
+        brain: comparisonBoolean(brainEvaluation, "official_record_wins"),
+        control: comparisonBoolean(controlEvaluation, "official_record_wins"),
+      },
+      clarification: {
+        brain: brain.responseKind === "clarification",
+        control: control.responseKind === "clarification",
+      },
+    },
+  };
+}
+
 function providerData(
   gateway: FailoverModelGateway,
   metrics: GatewayRequestMetrics | null,
@@ -903,9 +1031,12 @@ async function runBrainScenario(
   const attempts = metricsAttempts(null, captured.usageLog);
   const usage = totalUsage(attempts);
   const classified = rawError ? classifySecretaryError(rawError) as SecretaryError : null;
+  const providerLimit = !rawResult && isProviderLimitFailure(rawError, classified, attempts);
   const result: RouteResult = {
     route: "brain",
-    status: rawResult ? "MEASURED" : "NOT_MEASURED",
+    status: rawResult
+      ? "MEASURED"
+      : providerLimit ? "NOT_MEASURED_PROVIDER_LIMIT" : "NOT_MEASURED",
     responseKind: rawResult?.response?.kind ?? null,
     finalAnswer: rawResult?.assistantMessage ?? null,
     provider: rawResult?.provider ?? (typeof providerTrace?.selectedProvider === "string" ? providerTrace.selectedProvider : null),
@@ -1038,9 +1169,12 @@ async function runControlScenario(
   const attempts = metricsAttempts(metrics, null);
   const usage = totalUsage(attempts);
   const classified = error ? classifySecretaryError(error) as SecretaryError : null;
+  const providerLimit = !response && isProviderLimitFailure(error, classified, attempts);
   const result: RouteResult = {
     route: "control",
-    status: response ? "MEASURED" : "NOT_MEASURED",
+    status: response
+      ? "MEASURED"
+      : providerLimit ? "NOT_MEASURED_PROVIDER_LIMIT" : "NOT_MEASURED",
     responseKind,
     finalAnswer,
     provider: response ? selected.provider : null,
