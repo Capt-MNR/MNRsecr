@@ -4938,8 +4938,12 @@ export class Phase2AgentRuntime {
     const secondBrainMemories = applySecondBrainContextBudget(
       governedSecondBrain.memories,
       governedSecondBrain.trace,
+      governedSecondBrain.trace.queryDomain,
     );
-    const secondBrainContext = formatSecondBrainContext(secondBrainMemories);
+    const secondBrainContext = formatSecondBrainContext(
+      secondBrainMemories,
+      governedSecondBrain.trace.queryDomain,
+    );
     const initialBrainEnvelope = createBrainDecisionEnvelope({
       requestId,
       conversationId,
@@ -5178,6 +5182,45 @@ export class Phase2AgentRuntime {
         diagnosticCalls,
       );
       const diagnosticTrace = buildDiagnosticTrace(metrics, diagnosticCalls);
+      const deterministicTrace = {
+        parseSemanticRequest: semanticParse
+          ? {
+              intent: semanticParse.intent,
+              confidence: semanticParse.confidence,
+              domains: semanticParse.domains,
+              entityMentions: semanticParse.entityMentions,
+              dateTime: semanticParse.dateTime ?? null,
+              hasWriteLanguage: semanticParse.hasWriteLanguage,
+              hasReadLanguage: semanticParse.hasReadLanguage,
+              ambiguous: semanticParse.ambiguous,
+            }
+          : null,
+        parseRelationshipRequest: relationshipContext
+          ? {
+              intent: relationshipContext.context.intent,
+              resolvedEntities: relationshipContext.context.resolvedEntities.map((entity) => ({
+                type: entity.type,
+                name: entity.name,
+                matchType: entity.matchType,
+                confidence: entity.confidence,
+              })),
+              uncertainties: relationshipContext.context.uncertainties,
+              responseKind: relationshipContext.response?.kind ?? null,
+            }
+          : null,
+        isUnanchoredConversationFollowup: isUnanchoredConversationFollowup(
+          input.message,
+          conversationMemory.state,
+        ),
+        classifySecondBrainQuery: governedSecondBrain.trace.queryDomain,
+        applySecondBrainPolicy: {
+          selectedCount: governedSecondBrain.trace.selected.length,
+          excluded: governedSecondBrain.trace.excluded.map((item) => item.reason),
+          structuredPrecedence: governedSecondBrain.trace.structuredPrecedence,
+          llmContextIncluded: governedSecondBrain.trace.llmContextIncluded,
+          llmContextReason: governedSecondBrain.trace.llmContextReason,
+        },
+      };
       logger.info({
         requestId,
         conversationId,
@@ -5195,6 +5238,7 @@ export class Phase2AgentRuntime {
         cacheMiss: usageSummary.cacheMiss,
         latencyMs: usageSummary.latencyMs,
         context: usageSummary.context,
+        deterministicTrace,
         diagnosticTrace,
       }, "agent llm usage summary");
       this.gateway.finishRequest?.(requestId);

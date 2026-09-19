@@ -15,6 +15,7 @@ export type SecondBrainQueryDomain =
   | "entity_resolution"
   | "structured_record_read"
   | "structured_record_mutation"
+  | "structured_record_comparison"
   | "general_conversation"
   | "memory_recall";
 
@@ -111,6 +112,9 @@ const MAX_MEMORY_VALUE_CHARS = 320;
 const MAX_CONTEXT_CHARS = 2800;
 const RECALL_WORDS = /(?:فاكر|تفتكر|اللي\s+فاكره|ماذا\s+تعرف\s+عني|ذاكرتك|المحفوظ|remember|recall|memory)/iu;
 const MEMORY_CONTEXT_WORDS = /(?:زي\s+ما\s+اتفقنا|المعتاد|تفضيل|أفضل|بفضل|بحب|فاكر|ذاكرة|remember|preference)/iu;
+const FINANCIAL_COMPARISON_WORDS = /(?:قارن|مقارنة|مقابل|الفرق|تعارض|متعارض|compare|comparison|versus|vs)/iu;
+const FINANCIAL_RECORD_WORDS = /(?:مصروف|مصاريف|مدفوع|مدفوعات|دفع|فلوس|مبلغ|جنيه|دولار|ريال|دين|سلف|التزام|مستحق|دخل|تبرع|حسابات|سجل|record)/iu;
+const EXPLICIT_MEMORY_WORDS = /(?:الذاكره|ذاكرة|ملاحظه\s+(?:قديمه|شخصيه)|معلومة\s+شخصية|معلومه\s+شخصيه|فاكر|تفتكر|memory|remember)/iu;
 
 function normalize(value: string): string {
   return value
@@ -246,6 +250,13 @@ export function shouldSearchSecondBrain(message: string): boolean {
 
 export function classifySecondBrainQuery(message: string): SecondBrainQueryDomain {
   const text = normalize(message);
+  if (
+    EXPLICIT_MEMORY_WORDS.test(text)
+    && FINANCIAL_COMPARISON_WORDS.test(text)
+    && FINANCIAL_RECORD_WORDS.test(text)
+  ) {
+    return "structured_record_comparison";
+  }
   if (RECALL_WORDS.test(message)) return "memory_recall";
   if (/(?:بحب|بفضل|أفضل|تفضيل|ردود|مختصر|مختصرة|لهجه|لغة|شكل)/iu.test(text)) {
     return "preference";
@@ -684,6 +695,7 @@ export function applySecondBrainPolicy(
 ): SecondBrainRetrievalResult {
   const structuredDomain = trace.queryDomain === "structured_record_read"
     || trace.queryDomain === "structured_record_mutation";
+  const structuredComparison = trace.queryDomain === "structured_record_comparison";
   const selectedById = new Map(trace.selected.map((item) => [item.memoryId, item]));
   const expectedKind = trace.queryDomain === "preference"
     ? "preference"
@@ -691,6 +703,8 @@ export function applySecondBrainPolicy(
       ? "fact"
       : trace.queryDomain === "entity_resolution"
         ? "alias"
+        : trace.queryDomain === "structured_record_comparison"
+          ? "fact"
         : null;
   const allowed = memories.filter((memory) => {
     if (structuredDomain) {
@@ -746,28 +760,37 @@ export function applySecondBrainPolicy(
   const selectedIds = new Set(allowed.map((memory) => memory.id));
   trace.selected = trace.selected.filter((item) => selectedIds.has(item.memoryId));
   trace.structuredPrecedence = {
-    applied: structuredDomain,
-    domain: structuredDomain
+    applied: structuredDomain || structuredComparison,
+    domain: structuredDomain || structuredComparison
       ? trace.queryDomain === "structured_record_mutation"
         ? "operational_record"
         : "financial_record"
       : null,
-    conflicts: structuredDomain ? memories.map((memory) => memory.id) : [],
+    conflicts: structuredDomain || structuredComparison ? memories.map((memory) => memory.id) : [],
   };
   trace.llmContextIncluded = allowed.length > 0;
   trace.llmContextReason = structuredDomain
     ? "structured_record_precedence"
+    : structuredComparison && allowed.length > 0
+      ? "structured_record_comparison"
     : allowed.length > 0
       ? "policy_gates_passed"
       : "policy_excluded_all";
   return { memories: allowed, trace };
 }
 
+function secondBrainHeader(queryDomain?: SecondBrainQueryDomain): string {
+  return queryDomain === "structured_record_comparison"
+    ? "[Second Brain — مطالبة شخصية فقط؛ قارنها بالسجل المالي الرسمي ولا تعتبرها حقيقة مالية]\n"
+    : "[Second Brain — معرفة شخصية صريحة، ليست مصدرًا قانونيًا للبيانات]\n";
+}
+
 export function applySecondBrainContextBudget(
   memories: SecondBrainMemory[],
   trace: SecondBrainRetrievalTrace,
+  queryDomain = trace.queryDomain,
 ): SecondBrainMemory[] {
-  const header = "[Second Brain — معرفة شخصية صريحة، ليست مصدرًا قانونيًا للبيانات]\n";
+  const header = secondBrainHeader(queryDomain);
   const selected: SecondBrainMemory[] = [];
   const payload: ReturnType<typeof secondBrainValue>[] = [];
 
@@ -935,10 +958,13 @@ export async function listSecondBrainAliases(
     }));
 }
 
-export function formatSecondBrainContext(memories: SecondBrainMemory[]): string | null {
+export function formatSecondBrainContext(
+  memories: SecondBrainMemory[],
+  queryDomain?: SecondBrainQueryDomain,
+): string | null {
   if (memories.length === 0) return null;
   const payload = memories.map(secondBrainValue);
-  const text = `[Second Brain — معرفة شخصية صريحة، ليست مصدرًا قانونيًا للبيانات]\n${JSON.stringify(payload)}`;
+  const text = `${secondBrainHeader(queryDomain)}${JSON.stringify(payload)}`;
   return text.length <= MAX_CONTEXT_CHARS
     ? text
     : `${text.slice(0, MAX_CONTEXT_CHARS - 1)}…`;

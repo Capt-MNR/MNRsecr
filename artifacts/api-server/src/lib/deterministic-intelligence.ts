@@ -107,6 +107,9 @@ const MONEY_WORDS = /جنيه|جنية|دولار|ريال|ريالات|مصرو
 const REMINDER_WORDS = /فكرني|ذكرني|تذكير|تذكرني|remind|reminder/i;
 const READ_WORDS = /إيه|ايه|ما|ماذا|كم|كام|قد\s*إيه|قديش|شكد|شگد|اجمالي|إجمالي|مجموع|تقرير|اعرض|أعرض|وريني|هات|عندي|مين|هل|مواعيد|شو|ايش|وش|وين|show|total|list/i;
 const WRITE_WORDS = /سجل|سجّل|دفعت|دفع|صرف|اديت|أديت|اعطيت|عطيت|حولت|تحويل|سددت|سدد|خد|اخد|أخد|استلم|أضف|اضف|ضيف|أنشئ|انشئ|اعمل|عدّل|عدل|غيّر|غير|احذف|امسح|فكرني|ذكرني|create|add|record|update|delete|remind/i;
+const TRAVEL_CONFLICT_WORDS = /مسافر|مسافرة|سفر|السفر|رحلة|رحله|travel|trip/i;
+const OBLIGATION_WORDS = /التزام|التزامات|مستحق|واجب|مهمة|مهام|موعد|مواعيد|reminder|task/i;
+const CONFLICT_WORDS = /تعارض|يتعارض|تتعارض|يتداخل|تتداخل|متعارض|conflict|overlap/i;
 
 const SYNONYMS: Array<[RegExp, string]> = [
   [/(?:النهارده|نهارده|اليوم|اليوم ده)/gu, "اليوم"],
@@ -361,6 +364,9 @@ export function parseSemanticRequest(message: string): SemanticParse {
   const tokens = normalizedText.split(/\s+/u).filter(Boolean);
   const hasWriteLanguage = WRITE_WORDS.test(normalizedText);
   const hasReadLanguage = READ_WORDS.test(normalizedText);
+  const travelConflictRequest = TRAVEL_CONFLICT_WORDS.test(normalizedText)
+    && OBLIGATION_WORDS.test(normalizedText)
+    && CONFLICT_WORDS.test(normalizedText);
   const amount = REMINDER_WORDS.test(originalText) ? undefined : parseArabicAmount(originalText);
   const entityMentions = extractEntityMentions(originalText);
   const personTotal = normalizedText.match(/^(.+?)\s+(?:اخد)\s+مني\s+(?:كم)/iu)
@@ -391,6 +397,7 @@ export function parseSemanticRequest(message: string): SemanticParse {
   if (MONEY_WORDS.test(normalizedText) || amount || personTotal) domains.add("expense");
   if (REMINDER_WORDS.test(normalizedText)) domains.add("reminder");
   if (/موعد|مواعيد|ميعاد|مهمه|مهام|schedule|task/i.test(normalizedText)) domains.add("schedule");
+  if (travelConflictRequest) domains.add("schedule");
   if (/شخص|جهة|contact|person|مين/i.test(normalizedText)) domains.add("person");
   if (/مشروع|project/i.test(normalizedText)) domains.add("project");
   if (/فاكر|آخر|اخر|سجلنا|المحفوظ|memory|remember/i.test(normalizedText)) domains.add("memory");
@@ -422,6 +429,10 @@ export function parseSemanticRequest(message: string): SemanticParse {
     confidence = amount
       ? entityMentions.length > 0 ? 0.93 : 0.82
       : 0.78;
+  } else if (travelConflictRequest && hasReadLanguage && !hasWriteLanguage) {
+    // Identify a read-only planning context without inventing a travel interval.
+    intent = "schedule_read";
+    confidence = 0.88;
   } else if (domains.has("schedule") && hasReadLanguage && !hasWriteLanguage) {
     intent = "schedule_read";
     confidence = 0.9;

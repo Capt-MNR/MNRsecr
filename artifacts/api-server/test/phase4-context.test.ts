@@ -203,6 +203,20 @@ test("relationship parser recognizes bounded deterministic reads and safe follow
   assert.equal(parseRelationshipRequest("محمد أحمد عليه كام؟", state)?.intent, "person_financial_status");
   assert.equal(parseRelationshipRequest("كام دفعنا في مشروع المحجر؟", state)?.intent, "project_expenses");
   assert.equal(parseRelationshipRequest("إيه المدفوعات الأخيرة؟", state)?.intent, "recent_payments");
+  assert.equal(
+    parseRelationshipRequest(
+      "أنا مسافر الأسبوع الجاي، شوف لو فيه التزامات ممكن تتعارض مع السفر",
+      emptyConversationState(),
+    )?.intent,
+    "planning_conflict",
+  );
+  assert.equal(
+    parseRelationshipRequest(
+      "أنا مسافر من ٢٠ سبتمبر إلى ٢٥ سبتمبر، شوف لو فيه التزامات تتعارض",
+      emptyConversationState(),
+    )?.intent,
+    "planning_conflict",
+  );
   assert.deepEqual(parseFinancialFollowupAdjustment("طب زود عليهم 2000", state), {
     status: "ready",
     expenseId: state.lastExpense!.id,
@@ -232,6 +246,13 @@ test("relationship parser recognizes bounded deterministic reads and safe follow
   ]) {
     assert.equal(isUnanchoredConversationFollowup(message, emptyConversationState()), true, message);
   }
+  assert.equal(
+    isUnanchoredConversationFollowup(
+      "عايز الصورة الكاملة عن مشروع التوسعة مع محمد: الأشخاص المرتبطين والمصروفات والالتزامات المفتوحة",
+      emptyConversationState(),
+    ),
+    false,
+  );
 });
 
 test("financial context uses canonical directions, settlements, currencies, and tenant isolation", async () => {

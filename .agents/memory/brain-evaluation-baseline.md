@@ -7,4 +7,4 @@ Ground-truth Brain evaluations must keep deterministic parser/envelope observati
 
 **Why:** The fixed 30-scenario contract includes safety cases whose expected behavior depends on authoritative state transitions and controlled failures. Running only the envelope boundary cannot establish those outcomes without overstating coverage.
 
-**How to apply:** Preserve the contract unchanged, use fixed clocks and isolated identities, report expected and observed fields side by side, and keep production behavior untouched during baseline runs.
+**How to apply:** Preserve the contract unchanged, use fixed clocks and isolated identities, report expected and observed fields side by side, and keep production behavior untouched during baseline runs. For missing planning intervals, require clarification before provider-backed record reads; provider runs can vary by failover and must retain per-round traces and token completeness.

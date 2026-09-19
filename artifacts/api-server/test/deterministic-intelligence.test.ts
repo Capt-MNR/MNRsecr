@@ -57,6 +57,18 @@ test("semantic layer recognizes expense, totals, schedules, and reminders", () =
   assert.equal(projectExpenseRead.ambiguous, false);
 });
 
+test("travel and obligation conflict is a read-only planning context without invented dates", () => {
+  const parsed = parseSemanticRequest(
+    "أنا مسافر الأسبوع الجاي، شوف لو فيه التزامات ممكن تتعارض مع السفر",
+  );
+  assert.equal(parsed.intent, "schedule_read");
+  assert.equal(parsed.confidence, 0.88);
+  assert.equal(parsed.domains.includes("schedule"), true);
+  assert.equal(parsed.dateTime, undefined);
+  assert.equal(parsed.hasWriteLanguage, false);
+  assert.equal(decideDeterministically(parsed).kind, "deterministic");
+});
+
 test("bare Arabic reminder hour 5 follows the established 17:00 convention", () => {
   const cases = [
     "بكرة الساعة 5",

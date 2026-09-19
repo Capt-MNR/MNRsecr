@@ -35,7 +35,8 @@ export type RelationshipIntent =
   | "donations"
   | "overdue_commitments"
   | "recent_activity"
-  | "entity_context";
+  | "entity_context"
+  | "planning_conflict";
 
 export type ContextMoneyTotal = {
   currency: string;
@@ -107,17 +108,32 @@ function cleanQuery(value: string | undefined): string | undefined {
   return cleaned && cleaned.length >= 2 ? cleaned : undefined;
 }
 
+function cleanProjectQuery(value: string | undefined): string | undefined {
+  return cleanQuery(value?.split(/\s+مع\s+/u)[0]);
+}
+
+function hasExplicitTravelInterval(message: string): boolean {
+  return /(?:من|ابتداءً?\s+من)\s+.+?\s+(?:إلى|الى|ل|حتى)\s+.+/iu.test(message)
+    || /(?:يوم|بتاريخ)\s+\d{1,2}(?:\s|\/|-)/u.test(message);
+}
+
 export function parseRelationshipRequest(
   message: string,
   state?: ConversationState,
 ): ParsedRelationshipRequest | null {
   const normalized = normalizeEntityText(message);
   const projectMatch = message.match(/(?:مشروع|project)\s+(.+?)(?:[؟?!.،؛:]|$)/iu);
+  const travelConflictRequest = /مسافر|مسافرة|سفر|السفر|رحلة|رحله|travel|trip/iu.test(normalized)
+    && /التزام|التزامات|مستحق|واجب|مهمة|مهام|موعد|مواعيد|reminder|task/iu.test(normalized)
+    && /تعارض|يتعارض|تتعارض|يتداخل|تتداخل|متعارض|conflict|overlap/iu.test(normalized);
   const personDebtPrefix = message.match(/^(.+?)\s+(?:عليه|له|ليه)\s+(?:كام|كم|قد\s*ايه)/iu);
   const personDebtSuffix = message.match(/(?:ليا|لي)\s+(?:كام|كم|قد\s*ايه)\s+عند\s+(.+?)(?:[؟?!.،؛:]|$)/iu);
   const activityPerson = message.match(/(?:اخر|آخر)\s+(?:حاجه|حاجة|شيء)\s+(?:حصلت|حصل)\s+مع\s+(.+?)(?:[؟?!.،؛:]|$)/iu);
   const aboutPerson = message.match(/(?:تفاصيل|ملخص|العلاقات|علاقه|علاقة|عن)\s+(?:الشخص\s+)?(.+?)(?:[؟?!.،؛:]|$)/iu);
   const usesConversationReference = /^(?:طب|طيب|و)?\s*(?:عليه|عندها|عنده|معاه|معها|والمدفوعات|والسلف|والديون|والمشروع|المشروع\s+التاني)/iu.test(message.trim());
+  if (travelConflictRequest) {
+    return { intent: "planning_conflict", usesConversationReference: false };
+  }
   if (/(?:المشروع)\s+(?:التاني|الثاني|2|٢)/u.test(normalized)) {
     return {
       intent: "entity_context",
@@ -152,12 +168,25 @@ export function parseRelationshipRequest(
   }
   if (
     projectMatch
+    && /(?:الأشخاص|اشخاص|الناس|مرتبط|علاقات)/u.test(normalized)
+    && /مصروفات|مصاريف/u.test(normalized)
+    && /التزامات|واجب|مهمة|مهام/u.test(normalized)
+  ) {
+    return {
+      intent: "entity_context",
+      targetType: "project",
+      targetQuery: cleanProjectQuery(projectMatch[1]),
+      usesConversationReference,
+    };
+  }
+  if (
+    projectMatch
     && /(?:مصروفات|دفعت|دفعنا|انفقت|أنفقت|صرفنا|اتصرف).*(?:كم|كام|اجمالي|إجمالي)|(?:كم|كام|اجمالي|إجمالي).*(?:مصروفات|دفعت|دفعنا|انفقت|أنفقت|صرفنا|اتصرف)/u.test(normalized)
   ) {
     return {
       intent: "project_expenses",
       targetType: "project",
-      targetQuery: cleanQuery(projectMatch[1]),
+      targetQuery: cleanProjectQuery(projectMatch[1]),
       usesConversationReference,
     };
   }
@@ -227,12 +256,14 @@ export function isUnanchoredConversationFollowup(
   if (relativeDate.test(normalized) && correctionReference.test(normalized)) return true;
 
   const contextualReference = /(?:ده|دي|ها|اللي\s+فات|التاني|الثاني|مشروع\s+\S+)/u;
-  const correctionSignal = /(?:قصدي|المبلغ|المصروف|الدفعة|العملية|سجلها|عدلها|عدله|غيرها|غيره|(?:على|علي)(?:\s|$))/u;
+  const explicitCorrection = /(?:قصدي|سجلها|عدلها|عدله|غيرها|غيره)/u;
+  const relativeProjectCorrection = /(?:^|\s)(?:على|علي)\s+(?:ال)?مشروع\s+(?:التاني|الثاني|2|٢)(?:\s|$)/u;
   const nameCorrection = /^لا\s+مش\s+\S+\s+\S+/u.test(normalized);
   const numericCorrection = /المبلغ.*\d.*مش.*\d/u.test(normalized);
-  return (contextualReference.test(normalized) && correctionSignal.test(normalized))
+  return ((contextualReference.test(normalized) && explicitCorrection.test(normalized))
+    || relativeProjectCorrection.test(normalized)
     || nameCorrection
-    || numericCorrection;
+    || numericCorrection);
 }
 
 function emptyContext(intent: RelationshipIntent): RelationshipContext {
@@ -286,7 +317,14 @@ async function resolveTarget(
   | { status: "none" }
 > {
   if (parsed.targetType && parsed.targetQuery) {
-    const result = await resolveEntity(identity, parsed.targetType, parsed.targetQuery);
+    let result = await resolveEntity(identity, parsed.targetType, parsed.targetQuery);
+    if (
+      result.matchType === "none"
+      && parsed.targetType === "project"
+      && !/^مشروع\s+/u.test(parsed.targetQuery)
+    ) {
+      result = await resolveEntity(identity, "project", `مشروع ${parsed.targetQuery}`);
+    }
     if (result.matchType === "ambiguous") {
       return {
         status: "ambiguous",
@@ -808,6 +846,20 @@ export async function retrieveRelationshipContext(
     if (entity.matchType === "conversation") {
       context.conversationReferences.push({ type: entity.type, id: entity.id, name: entity.name });
     }
+  }
+
+  if (parsed.intent === "planning_conflict") {
+    if (!hasExplicitTravelInterval(message)) {
+      context.uncertainties.push("travel_interval_missing");
+      return {
+        context,
+        response: {
+          kind: "clarification",
+          message: "حدّد تاريخ بداية السفر ونهايته عشان أراجع الالتزامات المتعارضة بدقة.",
+        },
+      };
+    }
+    return { context };
   }
 
   if (parsed.intent === "person_financial_status") {

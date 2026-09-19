@@ -4,6 +4,12 @@ import { parseArabicDateTime, parseSemanticRequest } from "../src/lib/determinis
 import {
   createBrainDecisionEnvelope,
 } from "../src/lib/brain-contract";
+import {
+  applySecondBrainPolicy,
+  classifySecondBrainQuery,
+  emptyRetrievalTrace,
+} from "../src/lib/second-brain";
+import type { SecondBrainMemory } from "@workspace/db";
 
 test("parses yesterday with an exact Cairo time", () => {
   const parsed = parseArabicDateTime(
@@ -44,6 +50,38 @@ test("selects a safe read strategy and excludes unverified claims", () => {
   assert.equal(envelope.intent.name, "expense_report");
   assert.ok(envelope.context.selected.includes("governed_second_brain_context"));
   assert.ok(envelope.context.excluded.includes("unverified_model_claims"));
+});
+
+test("financial memory comparison keeps the fact contextual and structured precedence explicit", () => {
+  const message = "في الذاكرة عندي ملاحظة قديمة بتقول إن مصروف مشروع التوسعة كان ٧٠٠ جنيه، قولي القيمة الموجودة في الحسابات وقارنها بالملاحظة القديمة";
+  assert.equal(classifySecondBrainQuery(message), "structured_record_comparison");
+  const memory = {
+    id: "memory-comparison-1",
+    kind: "fact",
+    confidenceBps: 10000,
+    metadata: { source: "explicit_user_instruction" },
+  } as unknown as SecondBrainMemory;
+  const trace = emptyRetrievalTrace(message, true, "structured_record_comparison");
+  trace.selected = [{
+    memoryId: memory.id,
+    kind: "fact",
+    relevanceScore: 0.9,
+    confidence: 1,
+    association: null,
+    provenance: {
+      sourceType: "explicit_user_instruction",
+      sourceConversationId: null,
+      sourceTurnId: null,
+    },
+    sourceConversationId: null,
+    sourceTurnId: null,
+  }];
+  const governed = applySecondBrainPolicy([memory], trace);
+  assert.deepEqual(governed.memories.map((item) => item.id), [memory.id]);
+  assert.equal(governed.trace.structuredPrecedence.applied, true);
+  assert.equal(governed.trace.structuredPrecedence.domain, "financial_record");
+  assert.equal(governed.trace.llmContextIncluded, true);
+  assert.equal(governed.trace.llmContextReason, "structured_record_comparison");
 });
 
 test("holds ambiguous financial writes at contextual reasoning", () => {

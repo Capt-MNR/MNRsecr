@@ -103,6 +103,7 @@ type UsageLog = {
   fallbackCount?: number;
   retryCount?: number;
   context?: Record<string, unknown>;
+  deterministicTrace?: Record<string, unknown>;
   diagnosticTrace?: {
     calls?: Array<{
       attempts?: LlmUsageAttempt[];
@@ -120,6 +121,7 @@ type RouteResult = {
   brain?: BrainLog | null;
   action?: Record<string, unknown> | null;
   retrievalTrace?: Record<string, unknown> | null;
+  deterministicTrace?: Record<string, unknown> | null;
   contextEvidence: {
     selected: string[];
     excluded: string[];
@@ -1044,6 +1046,7 @@ async function runBrainScenario(
     brain: observedBrain,
     action,
     retrievalTrace: traceRecord,
+    deterministicTrace: captured.usageLog?.deterministicTrace ?? null,
     contextEvidence: {
       selected: [
         ...(observedBrain?.brainSources ?? []),
