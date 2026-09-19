@@ -12,6 +12,7 @@
     "test:intent-eval-dataset": "node --test test/intent-evaluation/dataset.test.mjs",
     "test:brain-eval": "../../scripts/node_modules/.bin/tsx --test test/brain-evaluation/evaluation.test.ts",
     "test:brain-reasoning-safety": "../../scripts/node_modules/.bin/tsx --test test/brain-evaluation/reasoning-safety.test.ts",
+    "run:brain-real-planning": "../../scripts/node_modules/.bin/tsx test/brain-evaluation/real-planning.ts",
     "run:brain-eval": "../../scripts/node_modules/.bin/tsx test/brain-evaluation/run.ts",
     "test:financial": "../../scripts/node_modules/.bin/tsx --test test/activity-atomicity.test.ts test/financial-graph.test.ts test/relationship-graph.test.ts",
     "test:dialect": "../../scripts/node_modules/.bin/tsx --test test/deterministic-intelligence.test.ts test/arabic-dialect-corpus.test.ts test/phase2-optimization-layers.test.ts",

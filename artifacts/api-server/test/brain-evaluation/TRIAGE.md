@@ -206,6 +206,9 @@ Passed after the final changes:
 - `test/brain-evaluation/results/brain-v1-post-fix.json`
 - `test/brain-evaluation/reasoning-safety.test.ts`
 - `test/brain-evaluation/REASONING-SAFETY.md`
+- `test/brain-evaluation/real-planning.ts`
+- `test/brain-evaluation/REAL-PLANNING.md`
+- `test/brain-evaluation/results/brain-real-planning.json`
 
 ## Isolated reasoning and failure-safety follow-up
 
@@ -231,6 +234,11 @@ The detailed axis-by-axis result is in
 `test/brain-evaluation/REASONING-SAFETY.md`. These fixture results must remain
 separate from the 30-scenario PASS/FAIL count and must not be used to inflate
 the contract score.
+
+Real-provider planning is also separate: `REAL-PLANNING.md` records the
+provider-backed evidence for scenarios 19–20, preserves N/A/NOT_MEASURED
+states, and does not treat provider output parsing failures as planning
+failures.
 
 ## Commit provenance
 

@@ -36,8 +36,13 @@ fixture does not authorize a write.
 
 ## What remains open
 
-- Scenarios 19–20 still need real-provider or dedicated-planner evaluation to
-  measure planning depth, conflict detection, and date clarification quality.
+- Scenarios 19–20 now have a separate real-provider runner in
+  `REAL-PLANNING.md`. The first run passed the travel/date-clarification rubric
+  for scenario 20; scenario 19 was `NOT_MEASURED` after a provider output
+  parsing failure, so no planning-quality claim is made for it.
+- The current read-only scope exposes reminders and bounded context but not
+  direct commitment/task query tools; the runner records this coverage limit
+  instead of pretending that all seeded obligation categories were observed.
 - Scenarios 16–18 still need a prior conversation/operation fixture for
   correction reconciliation.
 - Scenario 30 remains not executable because proactive scheduling and
