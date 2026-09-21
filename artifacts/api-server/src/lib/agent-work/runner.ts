@@ -1,6 +1,8 @@
 import { featureFlags } from "../feature-flags";
 import { agentWorkAdapters } from "./factory";
 import { AgentWorkRuntime } from "./runtime";
+import { compareReadOnlyEvidence } from "./contract";
+import { readInternalRecordsSource } from "./sources";
 import type {
   AgentWorkAdapters,
   AgentWorkRecord,
@@ -61,9 +63,15 @@ type ExecutionPlan = {
   error?: string;
   notificationTitle: string;
   notificationBody: string;
+  notify: boolean;
 };
 
-function planExecution(work: AgentWorkRecord, now: Date): ExecutionPlan {
+async function planExecution(
+  adapters: AgentWorkAdapters,
+  identity: AgentWorkRecord["identity"],
+  work: AgentWorkRecord,
+  now: Date,
+): Promise<{ plan: ExecutionPlan; evidence: Record<string, unknown> }> {
   const schedule = asRecord(work.schedule);
   const nextRunAt = nextScheduledAt(now, schedule);
   const recurring = nextRunAt !== null;
@@ -71,54 +79,124 @@ function planExecution(work: AgentWorkRecord, now: Date): ExecutionPlan {
 
   if (work.kind === "reminder") {
     return {
-      status: "verified",
-      workStatus: recurring ? "active" : "completed",
-      nextRunAt,
-      verification: { kind: "reminder_due", source: "agent_work_runner" },
-      notificationTitle: title,
-      notificationBody: work.description?.trim() || "حان وقت هذا التذكير.",
+      plan: {
+        status: "verified",
+        workStatus: recurring ? "active" : "completed",
+        nextRunAt,
+        verification: { kind: "reminder_due", source: "agent_work_runner" },
+        notificationTitle: title,
+        notificationBody: work.description?.trim() || "حان وقت هذا التذكير.",
+        notify: true,
+      },
+      evidence: { workKind: work.kind, status: "verified", source: "agent_work_runner" },
     };
   }
 
   if (work.kind === "recurring_task" && recurring) {
     return {
-      status: "verified",
-      workStatus: "active",
-      nextRunAt,
-      verification: { kind: "recurring_task_due", source: "agent_work_runner" },
-      notificationTitle: title,
-      notificationBody: work.description?.trim() || "حان وقت متابعة هذا العمل.",
+      plan: {
+        status: "verified",
+        workStatus: "active",
+        nextRunAt,
+        verification: { kind: "recurring_task_due", source: "agent_work_runner" },
+        notificationTitle: title,
+        notificationBody: work.description?.trim() || "حان وقت متابعة هذا العمل.",
+        notify: true,
+      },
+      evidence: { workKind: work.kind, status: "verified", source: "agent_work_runner" },
     };
   }
 
   const source = asRecord(work.source);
   if (source.type === "clock" || source.type === "heartbeat") {
     return {
-      status: "verified",
-      workStatus: recurring ? "active" : "completed",
-      nextRunAt,
-      verification: {
-        kind: "safe_clock_check",
-        source: source.type,
-        checkedAt: now.toISOString(),
+      plan: {
+        status: "verified",
+        workStatus: recurring ? "active" : "completed",
+        nextRunAt,
+        verification: {
+          kind: "safe_clock_check",
+          source: source.type,
+          checkedAt: now.toISOString(),
+        },
+        notificationTitle: title,
+        notificationBody: work.description?.trim() || "اكتملت متابعة العمل.",
+        notify: true,
       },
-      notificationTitle: title,
-      notificationBody: work.description?.trim() || "اكتملت متابعة العمل.",
+      evidence: { workKind: work.kind, status: "verified", source: source.type },
+    };
+  }
+
+  if (source.type === "internal_records") {
+    const sourceRead = await readInternalRecordsSource(identity, work);
+    const current = sourceRead.snapshot;
+    const priorEvidence = await adapters.storage.listEvidence(identity, work.id, 10);
+    const previousHash = priorEvidence
+      .map((item) => item.snapshot.sourceHash)
+      .find((value): value is string => typeof value === "string") ?? null;
+    const comparison = compareReadOnlyEvidence({
+      previousHash,
+      currentHash: current.sourceHash,
+      conditionMet: current.conditionMet,
+      comparisonKnown: current.comparisonKnown,
+    });
+    const firstBaseline = previousHash === null && current.comparisonKnown && !current.conditionMet;
+    const status = firstBaseline ? "unchanged" : comparison.state;
+    const notificationBody = status === "verified"
+      ? `تحقق شرط المتابعة في «${title}».`
+      : status === "needs_review"
+        ? `تغيرت بيانات «${title}» لكن النتيجة تحتاج مراجعتك.`
+        : status === "uncertain"
+          ? `تعذر التحقق من «${title}» بشكل موثوق.`
+          : `لم يتغير شرط المتابعة في «${title}».`;
+    return {
+      plan: {
+        status,
+        workStatus: recurring ? "active" : "completed",
+        nextRunAt,
+        verification: {
+          kind: "read_only_monitor",
+          source: "internal_records",
+          ...comparison,
+          ...(firstBaseline ? { reason: "baseline_established" } : {}),
+          conditionMet: current.conditionMet,
+          comparisonKnown: current.comparisonKnown,
+        },
+        notificationTitle: title,
+        notificationBody,
+        notify: status !== "unchanged",
+      },
+      evidence: {
+        sourceType: current.sourceType,
+        entity: current.entity,
+        metric: current.metric,
+        operator: current.operator,
+        threshold: current.threshold,
+        value: current.value,
+        currency: current.currency,
+        sourceHash: current.sourceHash,
+        conditionMet: current.conditionMet,
+        comparisonKnown: current.comparisonKnown,
+      },
     };
   }
 
   return {
-    status: "needs_review",
-    workStatus: "needs_review",
-    nextRunAt: null,
-    verification: {
-      kind: "unsupported_source",
-      sourceType: typeof source.type === "string" ? source.type : "unknown",
-      safe: false,
+    plan: {
+      status: "needs_review",
+      workStatus: "needs_review",
+      nextRunAt: null,
+      verification: {
+        kind: "unsupported_source",
+        sourceType: typeof source.type === "string" ? source.type : "unknown",
+        safe: false,
+      },
+      error: "AGENT_WORK_SOURCE_REQUIRES_REVIEW",
+      notificationTitle: `مراجعة مطلوبة: ${title}`,
+      notificationBody: "توقفت المتابعة لأن هذا النوع من المصدر لم يُسمح به بعد.",
+      notify: true,
     },
-    error: "AGENT_WORK_SOURCE_REQUIRES_REVIEW",
-    notificationTitle: `مراجعة مطلوبة: ${title}`,
-    notificationBody: "توقفت المتابعة لأن هذا النوع من المصدر لم يُسمح به بعد.",
+    evidence: { workKind: work.kind, status: "needs_review", safe: false },
   };
 }
 
@@ -175,17 +253,13 @@ export class AgentWorkRunner {
       }
       result.claimed += 1;
       try {
-        const plan = planExecution(work, now);
+        const execution = await planExecution(this.adapters, identity, work, now);
+        const plan = execution.plan;
         await this.adapters.storage.storeEvidenceSnapshot({
           identity,
           workId: work.id,
           runId: run.id,
-          snapshot: {
-            workKind: work.kind,
-            status: plan.status,
-            verification: plan.verification,
-            checkedAt: now.toISOString(),
-          },
+          snapshot: { ...execution.evidence, checkedAt: now.toISOString() },
           retentionClass: "standard",
         });
         await this.runtime.completeRun({
@@ -197,6 +271,20 @@ export class AgentWorkRunner {
           nextRunAt: plan.nextRunAt,
           workStatus: plan.workStatus,
         });
+        if (!plan.notify) {
+          await this.adapters.storage.addEvent({
+            identity,
+            workId: work.id,
+            runId: run.id,
+            eventType: "run_unchanged",
+            actorType: "agent",
+            summary: plan.notificationBody,
+            metadata: { status: plan.status },
+            dedupeKey: `agent-work-unchanged:${run.id}`,
+          });
+          result.completed += 1;
+          continue;
+        }
         const notificationEvent = await this.adapters.storage.addEvent({
           identity,
           workId: work.id,

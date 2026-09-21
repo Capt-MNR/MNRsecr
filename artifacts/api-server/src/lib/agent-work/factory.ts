@@ -4,6 +4,7 @@ import {
   DevelopmentSchedulerAdapter,
   EnvironmentIdentityAdapter,
   ExpoNotificationAdapter,
+  PostgresBackgroundIdentityAdapter,
   StubIdentityAdapter,
   StubSchedulerAdapter,
   StubStorageAdapter,
@@ -12,7 +13,7 @@ import { PostgresAgentWorkStorageAdapter } from "./postgres-storage";
 
 function driverFromEnvironment(name: string, fallback: AgentWorkDriver): AgentWorkDriver {
   const value = process.env[name]?.trim().toLowerCase();
-  if (value === "development" || value === "replit" || value === "expo" || value === "stub") {
+  if (value === "development" || value === "postgres" || value === "replit" || value === "expo" || value === "stub") {
     return value;
   }
   return fallback;
@@ -41,6 +42,7 @@ export function createAgentWorkAdapters(overrides: Partial<AgentWorkAdapters> = 
     );
     if (identityDriver === "stub") return new StubIdentityAdapter();
     if (identityDriver === "development") return new EnvironmentIdentityAdapter();
+    if (identityDriver === "postgres") return new PostgresBackgroundIdentityAdapter();
     throw new Error(`AGENT_WORK_IDENTITY_DRIVER_UNSUPPORTED:${identityDriver}`);
   })();
   const notification = overrides.notification ?? (() => {

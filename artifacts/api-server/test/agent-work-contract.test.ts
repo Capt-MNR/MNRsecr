@@ -7,6 +7,7 @@ import {
   redactEvidenceSnapshot,
   transitionWork,
 } from "../src/lib/agent-work/contract.ts";
+import { PostgresBackgroundIdentityAdapter } from "../src/lib/agent-work/development-adapters.ts";
 
 test("Agent Work lifecycle rejects terminal work transitions", () => {
   assert.equal(transitionWork("draft", "active"), "active");
@@ -75,4 +76,30 @@ test("uncertain evidence never becomes verified or unchanged", () => {
     conditionMet: true,
     comparisonKnown: true,
   }).state, "unchanged");
+});
+
+test("production background identity accepts only durable scheduler identities", () => {
+  const adapter = new PostgresBackgroundIdentityAdapter();
+  assert.deepEqual(
+    adapter.resolveBackground({
+      tenantId: "tenant-from-agent-work-row",
+      userId: "user-from-agent-work-row",
+      actor: "scheduler",
+    }),
+    {
+      tenantId: "tenant-from-agent-work-row",
+      userId: "user-from-agent-work-row",
+    },
+  );
+  assert.equal(adapter.resolveRequest({ authorization: "Bearer dev-user" }), null);
+  assert.equal(adapter.resolveBackground({
+    tenantId: "tenant",
+    userId: "user",
+    actor: "manual",
+  }), null);
+  assert.equal(adapter.resolveBackground({
+    tenantId: "tenant\nforged",
+    userId: "user",
+    actor: "scheduler",
+  }), null);
 });

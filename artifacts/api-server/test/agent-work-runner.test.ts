@@ -115,3 +115,53 @@ test("runner refuses an unknown source instead of claiming success", async () =>
   assert.equal(state.runStatus, "needs_review");
   assert.equal(state.nextRunAt, null);
 });
+
+test("internal task monitoring establishes a quiet baseline and stays quiet when unchanged", async () => {
+  process.env.NODE_ENV = "production";
+  process.env.AGENT_WORK_ENABLED = "true";
+  process.env.AGENT_WORK_RUNNER_ENABLED = "true";
+  const identity = {
+    tenantId: `monitor-test-${process.pid}-${Date.now()}`,
+    userId: "monitor-user",
+  };
+  const monitoredWork = work({
+    identity,
+    source: { type: "internal_records" },
+    condition: {
+      entity: "tasks",
+      metric: "open_task_count",
+      operator: "gt",
+      threshold: 0,
+    },
+  });
+  const { adapters, state } = adaptersFor(monitoredWork);
+  const originalStorage = adapters.storage as Record<string, unknown>;
+  const evidence: Array<{ snapshot: Record<string, unknown> }> = [];
+  let notificationCount = 0;
+  let eventCount = 0;
+  originalStorage.listEvidence = async () => evidence;
+  originalStorage.storeEvidenceSnapshot = async (input: { snapshot: Record<string, unknown> }) => {
+    evidence.unshift({ snapshot: input.snapshot });
+    return { reference: "evidence-monitor", stored: true, driver: "stub" as const };
+  };
+  originalStorage.addEvent = async (input: { eventType: string }) => {
+    eventCount += 1;
+    state.events.push(input.eventType);
+    return { id: `event-${eventCount}` };
+  };
+  (adapters.notification as unknown as { notify: () => Promise<unknown> }).notify = async () => {
+    notificationCount += 1;
+    return { status: "accepted", driver: "stub" };
+  };
+
+  const runner = new AgentWorkRunner({ adapters, now: () => now });
+  const first = await runner.tick(now);
+  const second = await runner.tick(now);
+
+  assert.equal(first.completed, 1);
+  assert.equal(second.completed, 1);
+  assert.equal(state.runStatus, "unchanged");
+  assert.equal(evidence.length, 2);
+  assert.equal(notificationCount, 0);
+  assert.deepEqual(state.events, ["run_unchanged", "run_unchanged"]);
+});

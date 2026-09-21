@@ -1011,8 +1011,8 @@ export const phase2Tools: ToolDefinition[] = [
     description: { type: "STRING" },
     sourceType: {
       type: "STRING",
-      enum: ["clock", "heartbeat", "user_defined"],
-      description: "Use clock/heartbeat only for safe built-in checks; use user_defined when an external source is not connected yet.",
+      enum: ["clock", "heartbeat", "internal_records", "user_defined"],
+      description: "Use internal_records only with an allowlisted tenant-scoped record condition; use user_defined when an external source is not connected yet.",
     },
     condition: { type: "OBJECT" },
     schedule: { type: "OBJECT" },

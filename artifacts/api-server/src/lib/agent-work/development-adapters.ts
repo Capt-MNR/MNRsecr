@@ -73,6 +73,29 @@ export class EnvironmentIdentityAdapter implements IdentityAdapter {
   }
 }
 
+/**
+ * Background identities are supplied by durable agent_works rows, not by a
+ * scheduler header or environment variable. Request authentication remains a
+ * separate application boundary and is intentionally not guessed here.
+ */
+export class PostgresBackgroundIdentityAdapter implements IdentityAdapter {
+  readonly driver = "postgres" as const;
+
+  resolveRequest(): AgentWorkIdentity | null {
+    return null;
+  }
+
+  resolveBackground(input: BackgroundIdentityRequest): AgentWorkIdentity | null {
+    if (input.actor !== "scheduler" && input.actor !== "recovery") return null;
+    const validPart = (value: string): boolean =>
+      value.length > 0
+      && value.length <= 256
+      && !/[\u0000-\u001F\u007F]/u.test(value);
+    if (!validPart(input.tenantId) || !validPart(input.userId)) return null;
+    return { tenantId: input.tenantId, userId: input.userId };
+  }
+}
+
 export class StubIdentityAdapter implements IdentityAdapter {
   readonly driver = "stub" as const;
 
