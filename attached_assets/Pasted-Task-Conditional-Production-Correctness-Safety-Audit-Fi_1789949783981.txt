@@ -1,0 +1,459 @@
+Task: Conditional Production Correctness & Safety Audit + Fix
+
+We are now auditing the CURRENT repository state after the completed Brain v1 work.
+
+This is a CONDITIONAL EXECUTION task:
+
+1. First inspect and verify every issue below against the CURRENT code.
+2. Do NOT assume the previous Claude audit is correct.
+3. Classify every finding.
+4. ONLY fix findings that are verified as:
+   STILL_EXISTS
+5. Do NOT fix:
+   - ALREADY_FIXED
+   - NOT_REPRODUCIBLE
+   - FALSE_POSITIVE
+   - NEEDS_RUNTIME/ENVIRONMENT_VERIFICATION
+6. Do not make speculative fixes.
+
+==================================================
+GLOBAL RULES
+
+Before modifying anything:
+
+- inspect the current implementation
+- reproduce the issue where possible
+- identify the exact file/function/path
+- classify the finding
+- define the smallest safe fix
+
+Then implement ONLY verified STILL_EXISTS findings.
+
+Do NOT:
+
+- change Brain architecture
+- change Brain policies
+- change Scenario 02/03/04 behavior unless a finding directly requires it
+- optimize tokens
+- change providers/models
+- rewrite prompts broadly
+- refactor phase2.ts
+- introduce new abstractions unless absolutely required for a verified safety bug
+- weaken tests or expectations
+- change tenant isolation rules
+- change financial truth precedence
+- remove approval requirements
+
+Preserve all existing:
+
+- approval authority
+- idempotency semantics
+- tenant/user isolation
+- structured financial authority
+- verification
+- Second Brain safety
+- Brain Decision Envelope
+- deterministic-first execution policy
+
+==================================================
+P0 — FINANCIAL CORRECTNESS
+
+Verify and conditionally fix:
+
+A. Thousands parsing:
+
+These must resolve to 5000 EGP:
+
+- "دفعت 5 الاف جنيه"
+- "دفعت 5 آلاف جنيه"
+- "دفعت 5,000 جنيه"
+- "دفعت ٥ آلاف جنيه"
+- "دفعت ٥٠٠٠ جنيه"
+
+Also verify written Arabic:
+
+- "دفعت خمسة آلاف جنيه"
+
+If the current implementation produces an incorrect amount or bypasses correct interpretation:
+
+FIX IT.
+
+Requirements:
+
+- deterministic parsing must be correct
+- no silent conversion to 5
+- preserve existing supported formats
+- add focused regression tests
+- do not hard-code the exact scenario string
+
+B. Negation:
+
+These MUST NOT create an expense:
+
+- "مدفعتش ٣٠٠"
+- "مش عايز اسجل ٥٠٠"
+- "ما تسجلش ٥٠٠"
+- "لا تسجل ٥٠٠"
+- "مش عايز أسجل ٥٠٠"
+
+If currently unsafe:
+
+FIX IT.
+
+Also prove that legitimate positive expense commands still work.
+
+Regression tests are mandatory.
+
+==================================================
+P0 — MULTI-OPERATION SAFETY
+
+Inspect how one LLM response containing multiple write operations is handled.
+
+If the current system can silently lose a requested write operation, or only the first write reaches approval:
+
+FIX IT.
+
+Required behavior:
+
+- every requested write operation must remain represented
+- every write must independently pass the existing approval authority
+- no operation may silently disappear
+- partial execution must not occur without independent approval
+- operation identity/idempotency must remain safe
+
+Do not redesign the whole operation system.
+
+Add focused regression coverage.
+
+==================================================
+P0 — CANCELLATION SAFETY
+
+Verify:
+
+Explicit cancellation:
+
+- "خلاص الغي العملية"
+- "غيرت رأيي"
+- "مش عايز العملية دي"
+
+must cancel the appropriate pending operation according to existing policy.
+
+But normal statements such as:
+
+- "مش عايز أنسى أدفع الإيجار"
+- "مش عايز أنسى أدفع لمحمد بكرة"
+
+MUST NOT cancel an unrelated pending operation.
+
+If the current regex/path is too broad:
+
+FIX IT minimally.
+
+Preserve the existing Brain cancellation semantics:
+
+- latest pending operation
+- same conversation
+- do not cancel unrelated/expired/executing/completed operations.
+
+Add regression tests.
+
+==================================================
+P0 — EXECUTING OPERATION RECOVERY
+
+Inspect:
+
+pending → approved → executing → completed/failed
+
+If a verified failure mode exists where an operation can remain permanently executing after a server crash or persistence failure:
+
+FIX IT.
+
+Requirements:
+
+- no blind retry
+- no duplicate financial mutation
+- reconciliation must determine whether the mutation committed
+- uncertain state must remain uncertain until verified
+- existing approval/idempotency semantics must remain authoritative
+
+If recovery already exists and is safe:
+do nothing.
+
+Add tests only if needed to prove the fix.
+
+==================================================
+P1 — API ERROR SEMANTICS
+
+Verify:
+
+- malformed client JSON → HTTP 400
+- internal SyntaxError/unexpected runtime exception → HTTP 500
+
+If internal exceptions are incorrectly converted into client JSON errors:
+
+FIX IT minimally.
+
+Add focused tests.
+
+==================================================
+P1 — ENTITY MATCHING
+
+Inspect create_person.
+
+If:
+
+- "محمد" incorrectly conflicts with "محمد علي"
+- wildcard characters "%" or "_" are interpreted as SQL wildcards unintentionally
+
+then FIX the verified defect.
+
+Preserve legitimate duplicate prevention.
+
+Add focused tests.
+
+==================================================
+P1 — GLOBAL REQUEST DEADLINE
+
+Inspect provider/failover timing.
+
+If the documented 45-second budget is currently applied independently to each provider attempt rather than as one total request deadline:
+
+FIX IT.
+
+Required:
+
+- one total deadline per model request
+- fallback attempts consume remaining budget
+- no provider attempt may extend beyond the remaining request budget
+- preserve provider fallback behavior
+- preserve existing cancellation/abort semantics
+
+Do not change provider selection or model choice.
+
+Add deterministic timeout tests where possible.
+
+==================================================
+P1 — MOBILE IDEMPOTENCY
+
+Compare web and mobile mutation requests.
+
+If mobile does not send/use the existing idempotency mechanism while web does:
+
+FIX IT.
+
+Requirements:
+
+- generate/use idempotencyKey consistently
+- preserve server-side deduplication
+- retry after timeout must not create duplicate operations
+- do not invent a second idempotency system
+
+Add focused client/server regression coverage where practical.
+
+==================================================
+P1 — PRODUCTION AUTH / TENANT BOUNDARY
+
+Inspect current auth.
+
+If dev-user/Bearer development identity is still active in a production-capable path:
+
+DO NOT silently invent a full authentication system.
+
+Instead:
+
+- classify it as a production blocker
+- only implement a fix if a production authentication mechanism already exists in the repository but is not wired correctly
+- otherwise leave it untouched and document exactly what is missing
+
+Do NOT implement email/password/Telegram auth in this task.
+
+Also verify that:
+
+- tenantId/userId are server-derived
+- client input cannot override identity
+- tools do not trust arbitrary client-supplied tenant/user IDs
+
+If a verified tenant-boundary vulnerability exists:
+FIX IT immediately.
+
+==================================================
+P1 — GEMINI API KEY HANDLING
+
+If Gemini API key is sent in a URL query parameter:
+
+FIX ONLY if the existing provider integration can safely switch to the documented header mechanism without changing provider behavior.
+
+Use:
+x-goog-api-key
+
+Also ensure sanitizer/logging does not expose the key.
+
+Do not rotate keys.
+
+If already correct:
+do nothing.
+
+==================================================
+P1 — LOGGING / PRIVACY
+
+Inspect current logs and shadow logs.
+
+If sensitive financial/person data is logged unnecessarily:
+
+Apply the smallest safe redaction/minimization fix.
+
+Preserve diagnostic usefulness.
+
+If retention is controlled externally and cannot be verified:
+classify as NEEDS_RUNTIME/ENVIRONMENT_VERIFICATION and do not invent a retention policy.
+
+Never log API keys/secrets.
+
+==================================================
+P1 — MIGRATIONS
+
+Inspect:
+
+- migration journal
+- migration files
+- schema
+- runtime-created resolver_shadow_log
+
+If migration metadata/schema inconsistency is verified:
+
+FIX IT.
+
+Requirements:
+
+- valid migration metadata
+- all existing migrations represented correctly
+- fresh database migration path remains valid
+- no destructive production migration
+- runtime-created tables must not fight schema ownership
+
+If actual DB execution is unavailable:
+do not guess.
+Classify runtime-only portions as NEEDS_RUNTIME/ENVIRONMENT_VERIFICATION.
+
+==================================================
+P2 — MODEL / PROVIDER CONFIG CONSISTENCY
+
+Compare:
+
+- source defaults
+- .env.example
+- .replit
+- runtime provider order
+- fallback model configuration
+
+If inconsistent configuration can silently change production behavior:
+
+FIX only clearly verified configuration inconsistency.
+
+Do not:
+
+- change provider strategy
+- replace models based on preference
+- optimize token usage
+- remove a preview model merely because it is preview
+
+If external model availability must be verified:
+classify it separately rather than guessing.
+
+==================================================
+SAFETY REQUIREMENTS FOR ALL FIXES
+
+Every fix must preserve:
+
+1. No write without approval.
+2. No cross-tenant access.
+3. No financial mutation from memory alone.
+4. No blind retry after uncertain execution.
+5. Idempotent mutation behavior.
+6. Post-mutation verification.
+7. Existing Brain cancellation boundaries.
+8. Existing Second Brain candidate/confirmed separation.
+
+For every financial/parser fix:
+
+- test positive case
+- test negative/ambiguous case
+- verify no unintended mutation.
+
+==================================================
+VERIFICATION AFTER CONDITIONAL FIXES
+
+After implementing verified fixes, run:
+
+1. focused tests for every changed area
+2. Brain tests
+3. deterministic intelligence tests
+4. Second Brain tests
+5. Brain Evaluation Contract v1
+6. relevant Phase 2/financial tests
+7. typecheck
+8. build
+9. git diff --check
+
+Do NOT rerun provider-backed measurement unless a fix directly changes Brain/provider behavior.
+
+Do NOT perform token optimization.
+
+==================================================
+FINAL REPORT
+
+Produce a structured report with:
+
+A. Audit classification for EVERY original finding:
+
+ID
+Finding
+Status
+Severity
+Evidence
+Action
+
+Statuses:
+
+- FIXED
+- ALREADY_FIXED
+- NOT_REPRODUCIBLE
+- FALSE_POSITIVE
+- NEEDS_RUNTIME/ENVIRONMENT_VERIFICATION
+- PRODUCTION_BLOCKER_NOT_SAFE_TO_FIX_IN_THIS_TASK
+
+B. Changes actually made:
+
+- file
+- reason
+- behavior before
+- behavior after
+
+C. Tests:
+
+- focused tests
+- Brain tests
+- Second Brain
+- financial tests
+- typecheck
+- build
+- diff check
+
+D. Remaining blockers:
+Only verified remaining issues.
+
+E. Explicitly state:
+
+- no token optimization performed
+- no provider/model strategy changed
+- no Brain architecture changes
+- no weakening of safety policies
+- no speculative fixes
+
+IMPORTANT:
+This task is conditional execution.
+Audit first.
+Fix only verified STILL_EXISTS findings.
+If a finding is uncertain, do not fix it.
+If production authentication is missing entirely, document it as a blocker rather than inventing an authentication architecture.
+Stop after the final verification report.
