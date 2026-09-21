@@ -713,6 +713,49 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /memory-candidates/{candidateId}/associate:
+    post:
+      operationId: associateSecondBrainCandidate
+      tags: [secretary]
+      summary: Associate an alias candidate with a canonical entity
+      parameters:
+        - name: candidateId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SecondBrainCandidateAssociationInput"
+      responses:
+        "200":
+          description: Candidate association saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SecondBrainCandidateResponse"
+        "400":
+          description: Invalid candidate association
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Candidate not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /turns:
     post:
       operationId: createTurn
@@ -1881,6 +1924,12 @@ components:
           enum: [pending_review, approved, rejected, needs_context]
         entityAssociated:
           type: boolean
+        entityType:
+          type: ["string", "null"]
+          enum: [person, project, financial_party, null]
+        entityId:
+          type: ["string", "null"]
+          format: uuid
         sourceConversationId:
           type: ["string", "null"]
         sourceTurnId:
@@ -1936,6 +1985,16 @@ components:
           type: ["string", "null"]
           maxLength: 1000
       required: [status]
+    SecondBrainCandidateAssociationInput:
+      type: object
+      properties:
+        entityType:
+          type: string
+          enum: [person, project, financial_party]
+        entityId:
+          type: string
+          format: uuid
+      required: [entityType, entityId]
     SecondBrainCandidateResponse:
       type: object
       properties:

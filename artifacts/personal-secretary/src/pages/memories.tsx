@@ -9,6 +9,9 @@ import {
   useArchiveSecondBrainMemory,
   useListSecondBrainMemories,
   useReviewSecondBrainCandidate,
+  useAssociateSecondBrainCandidate,
+  useGetCandidates,
+  getGetCandidatesQueryKey,
   useRestoreSecondBrainMemory,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -43,6 +46,9 @@ export default function Memories() {
   const [archivingId, setArchivingId] = useState<string | null>(null);
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [reviewingCandidateId, setReviewingCandidateId] = useState<string | null>(null);
+  const [associatingCandidateId, setAssociatingCandidateId] = useState<string | null>(null);
+  const [associationType, setAssociationType] = useState<'person' | 'project'>('person');
+  const [associationQuery, setAssociationQuery] = useState('');
   const filters: ListSecondBrainMemoriesParams = {
     ...(search ? { search } : {}),
     ...(kind ? { kind } : {}),
@@ -92,6 +98,19 @@ export default function Memories() {
       onError: () => setReviewingCandidateId(null),
     },
   });
+  const entityCandidatesQuery = useGetCandidates(
+    { type: associationType, q: associationQuery.trim() || ' ' },
+    { query: { queryKey: getGetCandidatesQueryKey({ type: associationType, q: associationQuery.trim() || ' ' }), enabled: Boolean(associatingCandidateId && associationQuery.trim()), staleTime: 10_000 } },
+  );
+  const associateCandidateMutation = useAssociateSecondBrainCandidate({
+    mutation: {
+      onSuccess: async () => {
+        await queryClient.invalidateQueries({ queryKey: getListSecondBrainCandidatesQueryKey() });
+        setAssociatingCandidateId(null);
+        setAssociationQuery('');
+      },
+    },
+  });
 
   const memories = memoriesQuery.data?.memories ?? [];
   const hasFilters = Boolean(search || kind || status === 'archived');
@@ -112,6 +131,11 @@ export default function Memories() {
     if (reviewCandidateMutation.isPending) return;
     setReviewingCandidateId(id);
     reviewCandidateMutation.mutate({ candidateId: id, data: { status } });
+  }
+
+  function associateCandidate(candidateId: string, entityId: string) {
+    if (associateCandidateMutation.isPending) return;
+    associateCandidateMutation.mutate({ candidateId, data: { entityType: associationType, entityId } });
   }
 
   return (
@@ -252,7 +276,8 @@ export default function Memories() {
               {candidatesQuery.data?.candidates.map((candidate) => (
                 <article key={candidate.id} className="rounded-xl border border-border/60 bg-card/70 p-3">
                   {(() => {
-                    const aliasNeedsAssociation = candidate.kind === 'alias' && !candidate.entityAssociated;
+                      const aliasNeedsAssociation = candidate.kind === 'alias' && !candidate.entityAssociated;
+                      const associationUnavailable = aliasNeedsAssociation && candidate.entityType === 'financial_party';
                     return (
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -263,9 +288,32 @@ export default function Memories() {
                       <p className="mt-1 text-[11px] text-muted-foreground">
                         الثقة: {Math.round(candidate.confidence * 100)}٪ · {formatDate(candidate.createdAt)}
                       </p>
+                       {candidate.kind === 'alias' && candidate.entityType === 'financial_party' && !candidate.entityAssociated && (
+                         <p className="mt-2 text-[11px] text-amber-700">هذا الاسم مرتبط بطرف مالي؛ لا يتوفر البحث عنه هنا، لذلك سيظل غير معتمد بأمان.</p>
+                       )}
                     </div>
                     <div className="flex shrink-0 flex-wrap justify-end gap-2">
-                      <button
+                        {aliasNeedsAssociation && !associationUnavailable && (
+                         <div className="mt-3 w-full rounded-lg border border-border/60 bg-background/60 p-2">
+                           <div className="flex gap-2">
+                             <select value={associationType} onChange={(event) => setAssociationType(event.target.value as 'person' | 'project')} className="rounded-md border border-border bg-background px-2 text-xs">
+                               <option value="person">شخص</option>
+                               <option value="project">مشروع</option>
+                             </select>
+                             <input value={associatingCandidateId === candidate.id ? associationQuery : ''} onFocus={() => setAssociatingCandidateId(candidate.id)} onChange={(event) => { setAssociatingCandidateId(candidate.id); setAssociationQuery(event.target.value); }} placeholder="ابحث عن الكيان..." className="min-w-0 flex-1 bg-transparent text-xs outline-none" />
+                           </div>
+                           {associatingCandidateId === candidate.id && (entityCandidatesQuery.data?.length ?? 0) > 0 && (
+                             <div className="mt-2 space-y-1">
+                               {entityCandidatesQuery.data?.map((entity) => (
+                                 <button key={entity.id} type="button" onClick={() => associateCandidate(candidate.id, entity.id)} className="block w-full rounded-md px-2 py-1.5 text-right text-xs hover:bg-muted">
+                                   {entity.name}
+                                 </button>
+                               ))}
+                             </div>
+                           )}
+                         </div>
+                       )}
+                       <button
                         type="button"
                         onClick={() => reviewCandidate(candidate.id, 'approved')}
                         disabled={reviewCandidateMutation.isPending || aliasNeedsAssociation}

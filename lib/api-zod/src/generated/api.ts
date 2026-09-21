@@ -925,6 +925,8 @@ export const ListSecondBrainCandidatesResponse = zod.object({
   "confidence": zod.number(),
   "status": zod.enum(['pending_review', 'approved', 'rejected', 'needs_context']),
   "entityAssociated": zod.boolean(),
+  "entityType": zod.union([zod.literal('person'),zod.literal('project'),zod.literal('financial_party'),zod.literal(null)]).nullish(),
+  "entityId": zod.string().uuid().nullish(),
   "sourceConversationId": zod.string().nullable(),
   "sourceTurnId": zod.string().nullable(),
   "reviewerNote": zod.string().nullable(),
@@ -967,6 +969,8 @@ export const CreateSecondBrainCandidateResponse = zod.object({
   "confidence": zod.number(),
   "status": zod.enum(['pending_review', 'approved', 'rejected', 'needs_context']),
   "entityAssociated": zod.boolean(),
+  "entityType": zod.union([zod.literal('person'),zod.literal('project'),zod.literal('financial_party'),zod.literal(null)]).nullish(),
+  "entityId": zod.string().uuid().nullish(),
   "sourceConversationId": zod.string().nullable(),
   "sourceTurnId": zod.string().nullable(),
   "reviewerNote": zod.string().nullable(),
@@ -1015,6 +1019,54 @@ export const ReviewSecondBrainCandidateResponse = zod.object({
   "confidence": zod.number(),
   "status": zod.enum(['pending_review', 'approved', 'rejected', 'needs_context']),
   "entityAssociated": zod.boolean(),
+  "entityType": zod.union([zod.literal('person'),zod.literal('project'),zod.literal('financial_party'),zod.literal(null)]).nullish(),
+  "entityId": zod.string().uuid().nullish(),
+  "sourceConversationId": zod.string().nullable(),
+  "sourceTurnId": zod.string().nullable(),
+  "reviewerNote": zod.string().nullable(),
+  "promotedMemoryId": zod.string().uuid().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "reviewedAt": zod.coerce.date().nullable()
+}),
+  "memory": zod.union([zod.object({
+  "id": zod.string().uuid(),
+  "kind": zod.enum(['fact', 'preference', 'alias']),
+  "key": zod.string(),
+  "value": zod.string(),
+  "confidence": zod.number(),
+  "status": zod.enum(['active', 'archived']),
+  "sourceConversationId": zod.string().nullable(),
+  "sourceTurnId": zod.string().nullable(),
+  "updatedAt": zod.coerce.date(),
+  "lastConfirmedAt": zod.coerce.date().nullable()
+}),zod.null()])
+})
+
+
+/**
+ * @summary Associate an alias candidate with a canonical entity
+ */
+export const AssociateSecondBrainCandidateParams = zod.object({
+  "candidateId": zod.coerce.string().uuid()
+})
+
+export const AssociateSecondBrainCandidateBody = zod.object({
+  "entityType": zod.enum(['person', 'project', 'financial_party']),
+  "entityId": zod.string().uuid()
+})
+
+export const AssociateSecondBrainCandidateResponse = zod.object({
+  "candidate": zod.object({
+  "id": zod.string().uuid(),
+  "kind": zod.enum(['fact', 'preference', 'alias']),
+  "key": zod.string(),
+  "value": zod.string(),
+  "confidence": zod.number(),
+  "status": zod.enum(['pending_review', 'approved', 'rejected', 'needs_context']),
+  "entityAssociated": zod.boolean(),
+  "entityType": zod.union([zod.literal('person'),zod.literal('project'),zod.literal('financial_party'),zod.literal(null)]).nullish(),
+  "entityId": zod.string().uuid().nullish(),
   "sourceConversationId": zod.string().nullable(),
   "sourceTurnId": zod.string().nullable(),
   "reviewerNote": zod.string().nullable(),

@@ -645,6 +645,18 @@ export const SecondBrainCandidateStatus = {
   needs_context: 'needs_context',
 } as const;
 
+/**
+ * @nullable
+ */
+export type SecondBrainCandidateEntityType = typeof SecondBrainCandidateEntityType[keyof typeof SecondBrainCandidateEntityType] | null;
+
+
+export const SecondBrainCandidateEntityType = {
+  person: 'person',
+  project: 'project',
+  financial_party: 'financial_party',
+} as const;
+
 export interface SecondBrainCandidate {
   id: string;
   kind: SecondBrainCandidateKind;
@@ -653,6 +665,10 @@ export interface SecondBrainCandidate {
   confidence: number;
   status: SecondBrainCandidateStatus;
   entityAssociated: boolean;
+  /** @nullable */
+  entityType?: SecondBrainCandidateEntityType;
+  /** @nullable */
+  entityId?: string | null;
   /** @nullable */
   sourceConversationId: string | null;
   /** @nullable */
@@ -718,6 +734,20 @@ export interface SecondBrainCandidateReviewInput {
      * @nullable
      */
   note?: string | null;
+}
+
+export type SecondBrainCandidateAssociationInputEntityType = typeof SecondBrainCandidateAssociationInputEntityType[keyof typeof SecondBrainCandidateAssociationInputEntityType];
+
+
+export const SecondBrainCandidateAssociationInputEntityType = {
+  person: 'person',
+  project: 'project',
+  financial_party: 'financial_party',
+} as const;
+
+export interface SecondBrainCandidateAssociationInput {
+  entityType: SecondBrainCandidateAssociationInputEntityType;
+  entityId: string;
 }
 
 export interface SecondBrainCandidateResponse {

@@ -7,6 +7,9 @@ import {
   ReviewSecondBrainCandidateParams,
   ReviewSecondBrainCandidateBody,
   ReviewSecondBrainCandidateResponse,
+  AssociateSecondBrainCandidateParams,
+  AssociateSecondBrainCandidateBody,
+  AssociateSecondBrainCandidateResponse,
 } from "@workspace/api-zod";
 import { requestId, requireIdentity, sendRouteError } from "./route-context";
 import {
@@ -16,6 +19,8 @@ import {
   publicSecondBrainMemory,
   reviewSecondBrainCandidate,
   SecondBrainCandidateReviewError,
+  associateSecondBrainCandidate,
+  SecondBrainCandidateAssociationError,
 } from "../lib/second-brain";
 
 const router: IRouter = Router();
@@ -100,6 +105,39 @@ router.post("/memory-candidates/:candidateId/review", async (req, res): Promise<
       candidateId: parsedParams.data.candidateId,
     }, "Second Brain candidate review failed");
     sendRouteError(req, res, 500, "تعذر حفظ مراجعة مرشح الذاكرة.", "SECOND_BRAIN_CANDIDATE_REVIEW_FAILED");
+  }
+});
+
+router.post("/memory-candidates/:candidateId/associate", async (req, res): Promise<void> => {
+  const identity = requireIdentity(req, res);
+  if (!identity) return;
+  const parsedParams = AssociateSecondBrainCandidateParams.safeParse(req.params);
+  const parsedBody = AssociateSecondBrainCandidateBody.safeParse(req.body);
+  if (!parsedParams.success || !parsedBody.success) {
+    sendRouteError(req, res, 400, "بيانات ربط مرشح الذاكرة غير صحيحة.", "INVALID_MEMORY_CANDIDATE_ASSOCIATION");
+    return;
+  }
+  try {
+    const candidate = await associateSecondBrainCandidate(
+      identity,
+      parsedParams.data.candidateId,
+      parsedBody.data,
+    );
+    if (!candidate) {
+      sendRouteError(req, res, 404, "مرشح الذاكرة غير موجود.", "SECOND_BRAIN_CANDIDATE_NOT_FOUND");
+      return;
+    }
+    res.json(AssociateSecondBrainCandidateResponse.parse({
+      candidate: publicSecondBrainCandidate(candidate),
+      memory: null,
+    }));
+  } catch (error) {
+    if (error instanceof SecondBrainCandidateAssociationError) {
+      sendRouteError(req, res, 400, error.message, error.code);
+      return;
+    }
+    req.log.error({ error, requestId: requestId(req), candidateId: parsedParams.data.candidateId }, "Second Brain candidate association failed");
+    sendRouteError(req, res, 500, "تعذر ربط مرشح الذاكرة بالكيان.", "SECOND_BRAIN_CANDIDATE_ASSOCIATION_FAILED");
   }
 });
 

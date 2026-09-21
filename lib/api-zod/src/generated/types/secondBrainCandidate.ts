@@ -5,6 +5,7 @@
  * Personal Secretary API
  * OpenAPI spec version: 0.1.0
  */
+import type { SecondBrainCandidateEntityType } from './secondBrainCandidateEntityType';
 import type { SecondBrainCandidateKind } from './secondBrainCandidateKind';
 import type { SecondBrainCandidateStatus } from './secondBrainCandidateStatus';
 
@@ -16,6 +17,10 @@ export interface SecondBrainCandidate {
   confidence: number;
   status: SecondBrainCandidateStatus;
   entityAssociated: boolean;
+  /** @nullable */
+  entityType?: SecondBrainCandidateEntityType;
+  /** @nullable */
+  entityId?: string | null;
   /** @nullable */
   sourceConversationId: string | null;
   /** @nullable */

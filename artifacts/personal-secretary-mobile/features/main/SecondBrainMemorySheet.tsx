@@ -6,6 +6,9 @@ import {
   useListSecondBrainCandidates,
   useListSecondBrainMemories,
   useReviewSecondBrainCandidate,
+  useAssociateSecondBrainCandidate,
+  useGetCandidates,
+  getGetCandidatesQueryKey,
   useRestoreSecondBrainMemory,
   type SecondBrainMemory,
 } from '@workspace/api-client-react';
@@ -59,6 +62,9 @@ export function SecondBrainMemorySheet({
   const [archivingId, setArchivingId] = useState<string | null>(null);
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [reviewingCandidateId, setReviewingCandidateId] = useState<string | null>(null);
+  const [associatingCandidateId, setAssociatingCandidateId] = useState<string | null>(null);
+  const [associationType, setAssociationType] = useState<'person' | 'project'>('person');
+  const [associationQuery, setAssociationQuery] = useState('');
   const [searchDraft, setSearchDraft] = useState('');
   const [search, setSearch] = useState('');
   const [kind, setKind] = useState<ListSecondBrainMemoriesParams['kind']>();
@@ -112,6 +118,19 @@ export function SecondBrainMemorySheet({
       onError: () => setReviewingCandidateId(null),
     },
   });
+  const entityCandidatesQuery = useGetCandidates(
+    { type: associationType, q: associationQuery.trim() || ' ' },
+    { query: { queryKey: getGetCandidatesQueryKey({ type: associationType, q: associationQuery.trim() || ' ' }), enabled: visible && Boolean(associatingCandidateId && associationQuery.trim()), staleTime: 10_000 } },
+  );
+  const associateCandidateMutation = useAssociateSecondBrainCandidate({
+    mutation: {
+      onSuccess: async () => {
+        await queryClient.invalidateQueries({ queryKey: getListSecondBrainCandidatesQueryKey() });
+        setAssociatingCandidateId(null);
+        setAssociationQuery('');
+      },
+    },
+  });
 
   function archiveMemory(id: string) {
     if (archiveMutation.isPending || restoreMutation.isPending) return;
@@ -129,6 +148,11 @@ export function SecondBrainMemorySheet({
     if (reviewCandidateMutation.isPending) return;
     setReviewingCandidateId(id);
     reviewCandidateMutation.mutate({ candidateId: id, data: { status } });
+  }
+
+  function associateCandidate(candidateId: string, entityId: string) {
+    if (associateCandidateMutation.isPending) return;
+    associateCandidateMutation.mutate({ candidateId, data: { entityType: associationType, entityId } });
   }
 
   const memories = memoriesQuery.data?.memories ?? [];
@@ -294,6 +318,7 @@ export function SecondBrainMemorySheet({
                   <View key={candidate.id} style={[styles.candidateCard, { borderColor: colors.border, backgroundColor: colors.background }]}>
                     {(() => {
                       const aliasNeedsAssociation = candidate.kind === 'alias' && !candidate.entityAssociated;
+                      const associationUnavailable = aliasNeedsAssociation && candidate.entityType === 'financial_party';
                       return (
                       <>
                     <Text style={[styles.kind, { color: colors.primary }]}>{kindLabel(language, candidate.kind)}</Text>
@@ -301,6 +326,35 @@ export function SecondBrainMemorySheet({
                     <Text style={[styles.meta, { color: colors.mutedForeground }]}>
                       {localized(language, 'الثقة', 'Confidence')} · {Math.round(candidate.confidence * 100)}٪
                     </Text>
+                    {candidate.kind === 'alias' && candidate.entityType === 'financial_party' && !candidate.entityAssociated && (
+                      <Text style={[styles.meta, { color: colors.destructive }]}>
+                        {localized(language, 'هذا الاسم مرتبط بطرف مالي، ولا يمكن البحث عنه هنا؛ سيظل غير معتمد.', 'This alias targets a financial party; it cannot be searched here and will remain unapproved.')}
+                      </Text>
+                    )}
+                    {aliasNeedsAssociation && !associationUnavailable && (
+                      <View style={[styles.associationBox, { borderColor: colors.border }]}>
+                        <View style={styles.associationRow}>
+                          <Pressable onPress={() => setAssociationType(associationType === 'person' ? 'project' : 'person')} style={[styles.typeButton, { borderColor: colors.border }]}>
+                            <Text style={[styles.meta, { color: colors.foreground }]}>
+                              {associationType === 'person' ? localized(language, 'شخص', 'Person') : localized(language, 'مشروع', 'Project')}
+                            </Text>
+                          </Pressable>
+                          <TextInput
+                            value={associatingCandidateId === candidate.id ? associationQuery : ''}
+                            onFocus={() => setAssociatingCandidateId(candidate.id)}
+                            onChangeText={(value) => { setAssociatingCandidateId(candidate.id); setAssociationQuery(value); }}
+                            placeholder={localized(language, 'ابحث عن الكيان', 'Search entity')}
+                            placeholderTextColor={colors.mutedForeground}
+                            style={[styles.associationInput, { color: colors.foreground }]}
+                          />
+                        </View>
+                        {associatingCandidateId === candidate.id && entityCandidatesQuery.data?.map((entity) => (
+                          <Pressable key={entity.id} onPress={() => associateCandidate(candidate.id, entity.id)} style={styles.entityResult}>
+                            <Text style={[styles.meta, { color: colors.foreground }]}>{entity.name}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    )}
                     <View style={styles.candidateActions}>
                       <Pressable
                         accessibilityRole="button"
@@ -510,6 +564,34 @@ const styles = StyleSheet.create({
   candidateButtonText: {
     fontSize: 10,
     fontWeight: '700',
+  },
+  associationBox: {
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 8,
+    marginTop: 4,
+    gap: 6,
+  },
+  associationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  typeButton: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+  },
+  associationInput: {
+    flex: 1,
+    minHeight: 32,
+    fontSize: 12,
+    textAlign: 'right',
+  },
+  entityResult: {
+    paddingVertical: 7,
+    paddingHorizontal: 5,
   },
   explainer: {
     fontSize: 12,

@@ -3,6 +3,9 @@ import {
   db,
   secondBrainMemoriesTable,
   secondBrainCandidatesTable,
+  peopleTable,
+  projectsTable,
+  financialPartiesTable,
   type SecondBrainMemory,
   type SecondBrainCandidate,
 } from "@workspace/db";
@@ -105,6 +108,19 @@ export class SecondBrainCandidateReviewError extends Error {
   constructor() {
     super("An alias candidate must be associated with a canonical entity before approval.");
     this.name = "SecondBrainCandidateReviewError";
+  }
+}
+
+export class SecondBrainCandidateAssociationError extends Error {
+  constructor(
+    readonly code:
+      | "SECOND_BRAIN_CANDIDATE_NOT_ASSOCIABLE"
+      | "INVALID_MEMORY_CANDIDATE_ENTITY"
+      | "MEMORY_CANDIDATE_ENTITY_NOT_FOUND",
+    message: string,
+  ) {
+    super(message);
+    this.name = "SecondBrainCandidateAssociationError";
   }
 }
 
@@ -438,6 +454,76 @@ export async function listSecondBrainCandidates(
     ))
     .orderBy(desc(secondBrainCandidatesTable.updatedAt))
     .limit(100);
+}
+
+export async function associateSecondBrainCandidate(
+  identity: Identity,
+  candidateId: string,
+  input: {
+    entityType: "person" | "project" | "financial_party";
+    entityId: string;
+  },
+): Promise<SecondBrainCandidate | null> {
+  return db.transaction(async (tx) => {
+    const [candidate] = await tx
+      .select()
+      .from(secondBrainCandidatesTable)
+      .where(and(
+        eq(secondBrainCandidatesTable.id, candidateId),
+        eq(secondBrainCandidatesTable.tenantId, identity.tenantId),
+        eq(secondBrainCandidatesTable.ownerUserId, identity.userId),
+      ))
+      .limit(1);
+    if (!candidate) return null;
+    if (
+      candidate.kind !== "alias"
+      || (candidate.status !== "pending_review" && candidate.status !== "needs_context")
+    ) {
+      throw new SecondBrainCandidateAssociationError(
+        "SECOND_BRAIN_CANDIDATE_NOT_ASSOCIABLE",
+        "Only pending alias candidates can be associated with an entity.",
+      );
+    }
+
+    const table = input.entityType === "person"
+      ? peopleTable
+      : input.entityType === "project"
+        ? projectsTable
+        : financialPartiesTable;
+    const [entity] = await tx
+      .select({ id: table.id })
+      .from(table)
+      .where(and(
+        eq(table.id, input.entityId),
+        eq(table.tenantId, identity.tenantId),
+        eq(table.ownerUserId, identity.userId),
+      ))
+      .limit(1);
+    if (!entity) {
+      throw new SecondBrainCandidateAssociationError(
+        "MEMORY_CANDIDATE_ENTITY_NOT_FOUND",
+        "The selected entity was not found in your workspace.",
+      );
+    }
+
+    const [updated] = await tx
+      .update(secondBrainCandidatesTable)
+      .set({
+        metadata: {
+          ...candidate.metadata,
+          entityType: input.entityType,
+          entityId: input.entityId,
+        },
+        updatedAt: new Date(),
+      })
+      .where(and(
+        eq(secondBrainCandidatesTable.id, candidateId),
+        eq(secondBrainCandidatesTable.tenantId, identity.tenantId),
+        eq(secondBrainCandidatesTable.ownerUserId, identity.userId),
+      ))
+      .returning();
+    return updated ?? null;
+  });
 }
 
 export async function reviewSecondBrainCandidate(
@@ -918,6 +1004,12 @@ export function publicSecondBrainCandidate(candidate: SecondBrainCandidate) {
     confidence: candidate.confidenceBps / 10000,
     status: candidate.status,
     entityAssociated: typeof candidate.metadata?.entityId === "string",
+    entityType: typeof candidate.metadata?.entityType === "string"
+      ? candidate.metadata.entityType
+      : null,
+    entityId: typeof candidate.metadata?.entityId === "string"
+      ? candidate.metadata.entityId
+      : null,
     sourceConversationId: candidate.sourceConversationId,
     sourceTurnId: candidate.sourceTurnId,
     reviewerNote: candidate.reviewerNote,

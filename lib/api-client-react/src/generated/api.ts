@@ -64,6 +64,7 @@ import type {
   RegisterMobilePushTokenInput,
   RelationshipListResponse,
   RelationshipMutationInput,
+  SecondBrainCandidateAssociationInput,
   SecondBrainCandidateInput,
   SecondBrainCandidateListResponse,
   SecondBrainCandidateResponse,
@@ -3187,6 +3188,95 @@ export const useReviewSecondBrainCandidate = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getReviewSecondBrainCandidateMutationOptions(options));
+    }
+
+export const getAssociateSecondBrainCandidateUrl = (candidateId: string,) => {
+
+
+
+
+  return `/api/memory-candidates/${candidateId}/associate`
+}
+
+/**
+ * @summary Associate an alias candidate with a canonical entity
+ */
+export const associateSecondBrainCandidate = async (candidateId: string,
+    secondBrainCandidateAssociationInput: SecondBrainCandidateAssociationInput, options?: Parameters<typeof customFetch>[1]): Promise<SecondBrainCandidateResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<SecondBrainCandidateResponse>(getAssociateSecondBrainCandidateUrl(candidateId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(secondBrainCandidateAssociationInput)
+  }
+);}
+
+
+
+
+
+export const getAssociateSecondBrainCandidateMutationKey = () => ['associateSecondBrainCandidate'] as const;
+
+export const getAssociateSecondBrainCandidateMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof associateSecondBrainCandidate>>, TError,AssociateSecondBrainCandidateMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof associateSecondBrainCandidate>>, TError,AssociateSecondBrainCandidateMutationVariables, TContext> => {
+
+const mutationKey = getAssociateSecondBrainCandidateMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof associateSecondBrainCandidate>>, AssociateSecondBrainCandidateMutationVariables> = (props) => {
+          const {candidateId,data} = props ?? {};
+
+          return  associateSecondBrainCandidate(candidateId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AssociateSecondBrainCandidateMutationResult = NonNullable<Awaited<ReturnType<typeof associateSecondBrainCandidate>>>
+    export type AssociateSecondBrainCandidateMutationBody = BodyType<SecondBrainCandidateAssociationInput>
+    export type AssociateSecondBrainCandidateMutationError = ErrorType<ErrorResponse>
+    export type AssociateSecondBrainCandidateMutationVariables = {candidateId: string;data: BodyType<SecondBrainCandidateAssociationInput>}
+
+    /**
+ * @summary Associate an alias candidate with a canonical entity
+ */
+export const useAssociateSecondBrainCandidate = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof associateSecondBrainCandidate>>, TError,AssociateSecondBrainCandidateMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof associateSecondBrainCandidate>>,
+        TError,
+        AssociateSecondBrainCandidateMutationVariables,
+        TContext
+      > => {
+      return useMutation(getAssociateSecondBrainCandidateMutationOptions(options));
     }
 
 export const getCreateTurnUrl = () => {

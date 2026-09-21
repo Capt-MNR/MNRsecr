@@ -5,14 +5,19 @@ import {
   conversationMemoryTable,
   db,
   peopleTable,
+  projectsTable,
   secondBrainCandidatesTable,
   secondBrainMemoriesTable,
 } from "@workspace/db";
 import {
   parseSecondBrainCandidate,
   parseSecondBrainCommand,
+  createSecondBrainCandidate,
   rememberSecondBrain,
   searchSecondBrain,
+  associateSecondBrainCandidate,
+  reviewSecondBrainCandidate,
+  SecondBrainCandidateAssociationError,
 } from "../src/lib/second-brain.ts";
 import { Phase2AgentRuntime, type ModelGateway } from "../src/lib/phase2.ts";
 import { resolveEntity } from "../src/lib/entity-resolver.ts";
@@ -46,6 +51,18 @@ async function cleanup() {
   await db.delete(conversationMemoryTable).where(and(
     eq(conversationMemoryTable.tenantId, identity.tenantId),
     eq(conversationMemoryTable.ownerUserId, identity.userId),
+  ));
+  await db.delete(peopleTable).where(and(
+    eq(peopleTable.tenantId, identity.tenantId),
+    eq(peopleTable.ownerUserId, identity.userId),
+  ));
+  await db.delete(peopleTable).where(and(
+    eq(peopleTable.tenantId, otherIdentity.tenantId),
+    eq(peopleTable.ownerUserId, otherIdentity.userId),
+  ));
+  await db.delete(projectsTable).where(and(
+    eq(projectsTable.tenantId, identity.tenantId),
+    eq(projectsTable.ownerUserId, identity.userId),
   ));
 }
 
@@ -184,5 +201,54 @@ test("handles memory commands without calling the model gateway", async () => {
   assert.equal(suggested.action?.type, "second_brain_memory_candidate_created");
   assert.equal(recalled.assistantMessage, "لسه ما عنديش ملاحظات شخصية محفوظة عنك.");
   assert.equal(gatewayCalls, 0);
+  await cleanup();
+});
+
+test("associates alias candidates only with same-tenant entities before approval", async () => {
+  await cleanup();
+  const [person] = await db.insert(peopleTable).values({
+    tenantId: identity.tenantId,
+    ownerUserId: identity.userId,
+    name: "محمد أحمد",
+    nameKey: "محمد احمد",
+  }).returning();
+  const [otherPerson] = await db.insert(peopleTable).values({
+    tenantId: otherIdentity.tenantId,
+    ownerUserId: otherIdentity.userId,
+    name: "محمد أحمد",
+    nameKey: "محمد احمد",
+  }).returning();
+  const alias = await createSecondBrainCandidate(identity, {
+    memoryKind: "alias",
+    key: "alias:ميدو",
+    value: "محمد أحمد",
+    confidenceBps: 8000,
+  });
+  await assert.rejects(
+    () => associateSecondBrainCandidate(identity, alias.id, { entityType: "person", entityId: otherPerson.id }),
+    (error: unknown) => error instanceof SecondBrainCandidateAssociationError
+      && error.code === "MEMORY_CANDIDATE_ENTITY_NOT_FOUND",
+  );
+  const associated = await associateSecondBrainCandidate(identity, alias.id, {
+    entityType: "person",
+    entityId: person.id,
+  });
+  assert.equal(associated?.metadata?.entityType, "person");
+  assert.equal(associated?.metadata?.entityId, person.id);
+  const approved = await reviewSecondBrainCandidate(identity, alias.id, { status: "approved" });
+  assert.equal(approved?.candidate.status, "approved");
+  assert.equal(approved?.memory?.metadata?.entityId, person.id);
+
+  const fact = await createSecondBrainCandidate(identity, {
+    memoryKind: "fact",
+    key: "note:test",
+    value: "test",
+    confidenceBps: 7000,
+  });
+  await assert.rejects(
+    () => associateSecondBrainCandidate(identity, fact.id, { entityType: "person", entityId: person.id }),
+    (error: unknown) => error instanceof SecondBrainCandidateAssociationError
+      && error.code === "SECOND_BRAIN_CANDIDATE_NOT_ASSOCIABLE",
+  );
   await cleanup();
 });
