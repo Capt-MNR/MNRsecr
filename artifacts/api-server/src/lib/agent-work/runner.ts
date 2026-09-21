@@ -3,6 +3,11 @@ import { agentWorkAdapters } from "./factory";
 import { AgentWorkRuntime } from "./runtime";
 import { compareReadOnlyEvidence } from "./contract";
 import { readGitHubRepositorySource, readInternalRecordsSource } from "./sources";
+import {
+  createPendingOperation,
+  displayForOperation,
+  getOperation,
+} from "../secretary-operations";
 import type {
   AgentWorkAdapters,
   AgentWorkRecord,
@@ -117,13 +122,67 @@ type ExecutionPlan = {
   notificationBody: string;
   notificationData?: Record<string, unknown>;
   notify: boolean;
+  approvalOperationId?: string;
+  approvalAction?: string;
 };
+
+function delegatedTaskAction(work: AgentWorkRecord, current: {
+  repository: string;
+  value: number;
+  threshold: number;
+  operator: string;
+}, runId: string, nextRunAt: Date | null): {
+  toolName: "create_task";
+  args: Record<string, unknown>;
+} | null {
+  const action = asRecord(work.action);
+  if (action.type !== "create_task" && action.toolName !== "create_task") return null;
+  const title = typeof action.title === "string" && action.title.trim()
+    ? action.title.trim()
+    : `مراجعة GitHub ${current.repository}: العناصر المفتوحة ${current.value}`;
+  return {
+    toolName: "create_task",
+    args: {
+      title,
+      status: "pending",
+      ...(typeof action.dueAt === "string" ? { dueAt: action.dueAt } : {}),
+      agentWorkId: work.id,
+      agentWorkRunId: runId,
+      agentWorkSource: "github_repository",
+      agentWorkRepository: current.repository,
+      agentWorkConditionValue: current.value,
+      agentWorkConditionThreshold: current.threshold,
+      agentWorkConditionOperator: current.operator,
+      agentWorkResumeAt: nextRunAt?.toISOString() ?? null,
+    },
+  };
+}
+
+async function findLatestActionEvent(
+  adapters: AgentWorkAdapters,
+  identity: AgentWorkRecord["identity"],
+  workId: string,
+): Promise<{ operationId: string; conditionHash: string; status: string } | null> {
+  const events = await adapters.storage.listEvents(identity, workId, 30);
+  const event = events.find((item) => item.eventType === "approval_requested");
+  const metadata = asRecord(event?.metadata);
+  if (typeof metadata.operationId !== "string" || typeof metadata.conditionHash !== "string") return null;
+  const operation = await getOperation(identity, metadata.operationId);
+  return operation
+    ? { operationId: operation.operationId, conditionHash: metadata.conditionHash, status: operation.status }
+    : null;
+}
+
+function runIdForApproval(workId: string, now: Date): string {
+  return `${workId}:${now.toISOString()}`;
+}
 
 async function planExecution(
   adapters: AgentWorkAdapters,
   identity: AgentWorkRecord["identity"],
   work: AgentWorkRecord,
   now: Date,
+  runId: string,
 ): Promise<{ plan: ExecutionPlan; evidence: Record<string, unknown> }> {
   const schedule = asRecord(work.schedule);
   const nextRunAt = nextScheduledAt(now, schedule);
@@ -327,15 +386,49 @@ async function planExecution(
     }).format(now);
     const conditionText = `عدد العناصر المفتوحة في ${current.repository} ${operatorLabel} ${current.threshold}`;
     const currentValueText = `القيمة الحالية ${current.value}`;
+    const action = delegatedTaskAction(work, current, runId, nextRunAt);
+    const conditionHash = current.sourceHash;
+    const latestAction = action ? await findLatestActionEvent(adapters, identity, work.id) : null;
+    const conditionTriggered = current.conditionMet && previous?.snapshot.conditionMet !== true;
+    let approvalOperationId: string | undefined;
+    let approvalAction: string | undefined;
+    let approvalRequested = false;
+    if (action && current.conditionMet && conditionTriggered) {
+      const pending = await createPendingOperation(identity, {
+        conversationId: typeof work.source.conversationId === "string" ? work.source.conversationId : null,
+        sourceTurnId: typeof work.source.sourceTurnId === "string" ? work.source.sourceTurnId : `agent-work:${work.id}`,
+        idempotencyKey: `agent-work-action:${work.id}:${conditionHash}:${runIdForApproval(work.id, now)}`,
+        toolName: action.toolName,
+        args: action.args,
+        display: displayForOperation(action.toolName, action.args),
+      });
+      approvalOperationId = pending.operationId;
+      approvalAction = action.toolName;
+      approvalRequested = pending.status === "pending";
+    }
+    const actionWaiting = Boolean(action && current.conditionMet && (
+      approvalRequested
+      || (
+        latestAction?.conditionHash === conditionHash
+        && (latestAction.status === "pending" || latestAction.status === "executing")
+      )
+    ));
+    const effectiveStatus = actionWaiting ? "needs_review" : status;
+    const effectiveWorkStatus = actionWaiting ? "waiting" : "active";
+    const actionText = action
+      ? `الإجراء المقترح: إنشاء مهمة داخلية لمراجعة ${current.repository}.`
+      : "";
     const notificationBody = status === "verified"
-      ? `تحقق الشرط الذي طلبته في ${current.repository}: ${currentValueText}، والشرط هو ${conditionText}. تم التحقق ${checkedAt}.`
+      ? actionWaiting
+        ? `تحقق الشرط الذي طلبته في ${current.repository}: ${currentValueText}. ${actionText} وافق على الطلب من تفاصيل العمل.`
+        : `تحقق الشرط الذي طلبته في ${current.repository}: ${currentValueText}، والشرط هو ${conditionText}. تم التحقق ${checkedAt}.`
       : status === "uncertain"
         ? `تعذر التحقق من ${current.repository} بشكل موثوق. لم يتم إرسال تنبيه. تم الفحص ${checkedAt}.`
         : `لم يتغير شرط متابعة ${current.repository}: ${currentValueText}، والشرط هو ${conditionText}. آخر فحص ${checkedAt}.`;
     return {
       plan: {
-        status,
-        workStatus: recurring ? "active" : "active",
+         status: effectiveStatus,
+         workStatus: effectiveWorkStatus,
         nextRunAt,
         verification: {
           kind: "read_only_monitor",
@@ -346,8 +439,11 @@ async function planExecution(
           conditionMet: current.conditionMet,
           comparisonKnown: current.comparisonKnown,
           checkedAt: current.fetchedAt,
+           ...(approvalOperationId ? { approvalOperationId, action: approvalAction } : {}),
         },
-        notificationTitle: status === "verified"
+         notificationTitle: actionWaiting
+           ? `موافقة مطلوبة: ${current.repository}`
+           : status === "verified"
           ? `تحقق شرط GitHub: ${current.repository}`
           : `متابعة GitHub: ${current.repository}`,
         notificationBody,
@@ -361,7 +457,8 @@ async function planExecution(
           checkedAt: current.fetchedAt,
           deepLink: `/main?workId=${encodeURIComponent(work.id)}`,
         },
-        notify: status === "verified",
+         notify: status === "verified" || actionWaiting,
+         ...(approvalOperationId ? { approvalOperationId, approvalAction } : {}),
       },
       evidence: {
         sourceType: current.sourceType,
@@ -379,6 +476,11 @@ async function planExecution(
         comparisonKnown: current.comparisonKnown,
         checkedAt: current.fetchedAt,
         reason: current.reason,
+        ...(approvalOperationId ? {
+          approvalOperationId,
+          action: approvalAction,
+          actionDecision: "approval_requested",
+        } : {}),
       },
     };
   }
@@ -455,7 +557,7 @@ export class AgentWorkRunner {
       }
       result.claimed += 1;
       try {
-        const execution = await planExecution(this.adapters, identity, work, now);
+        const execution = await planExecution(this.adapters, identity, work, now, run.id);
         const plan = execution.plan;
         await this.adapters.storage.storeEvidenceSnapshot({
           identity,
@@ -473,6 +575,24 @@ export class AgentWorkRunner {
           nextRunAt: plan.nextRunAt,
           workStatus: plan.workStatus,
         });
+        if (plan.approvalOperationId) {
+          await this.adapters.storage.addEvent({
+            identity,
+            workId: work.id,
+            runId: run.id,
+            eventType: "approval_requested",
+            actorType: "agent",
+            summary: "تحقق الشرط وطلب الوكيل موافقتك على إنشاء المهمة.",
+            metadata: {
+              operationId: plan.approvalOperationId,
+              action: plan.approvalAction ?? "create_task",
+              conditionHash: typeof execution.evidence.sourceHash === "string"
+                ? execution.evidence.sourceHash
+                : null,
+            },
+            dedupeKey: `agent-work-approval-requested:${plan.approvalOperationId}`,
+          });
+        }
         if (plan.status === "failed") {
           await this.adapters.storage.addEvent({
             identity,

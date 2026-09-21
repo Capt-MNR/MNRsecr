@@ -52,3 +52,4 @@
 - [Agent Work migrations](agent-work-migrations.md) — invalid legacy Drizzle metadata requires reviewed additive schema changes until migration history is reconciled.
 - [Agent Work runner boundary](agent-work-runner-boundary.md) — background Work execution must enumerate durable tenant identities, claim leases, persist bounded evidence, and review unknown sources.
 - [Provider registry](provider-registry.md) — add or remove LLM providers through shared metadata and gateway protocols, not scattered routing branches.
+- [Delegated action approvals](delegated-action-approval.md) — Agent Work actions must reserve the existing secretary operation and resume only after verified approval execution.

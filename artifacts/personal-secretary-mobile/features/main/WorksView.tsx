@@ -2,9 +2,13 @@ import { Feather } from '@expo/vector-icons';
 import {
   AgentWorkStatus,
   getGetAgentWorkQueryKey,
+  getGetSecretaryOperationQueryKey,
   getListAgentWorksQueryKey,
+  useApproveSecretaryOperation,
   useChangeAgentWorkStatus,
   useGetAgentWork,
+  useGetSecretaryOperation,
+  useRejectSecretaryOperation,
   useListAgentWorks,
   type AgentWork,
   type AgentWorkDetails,
@@ -273,7 +277,47 @@ function WorkDetail({
     createdAt: '',
     updatedAt: '',
   } as AgentWork);
+  const queryClient = useQueryClient();
+  const approvalOperationId = useMemo(() => {
+    const event = details.events.find((item) => item.eventType === 'approval_requested');
+    const metadata = event?.metadata;
+    return metadata && typeof metadata.operationId === 'string' ? metadata.operationId : null;
+  }, [details.events]);
+  const operationQuery = useGetSecretaryOperation(approvalOperationId ?? '', {
+    query: {
+      queryKey: approvalOperationId
+        ? getGetSecretaryOperationQueryKey(approvalOperationId)
+        : ['/api/approvals/disabled'],
+      enabled: Boolean(approvalOperationId),
+      staleTime: 2_000,
+      refetchInterval: approvalOperationId ? 5_000 : false,
+    },
+  });
+  const approveMutation = useApproveSecretaryOperation({
+    mutation: {
+      onSuccess: () => {
+        void queryClient.invalidateQueries({ queryKey: getGetAgentWorkQueryKey(work.id ?? '') });
+        if (approvalOperationId) void queryClient.invalidateQueries({ queryKey: getGetSecretaryOperationQueryKey(approvalOperationId) });
+        onRefresh();
+      },
+    },
+  });
+  const rejectMutation = useRejectSecretaryOperation({
+    mutation: {
+      onSuccess: () => {
+        void queryClient.invalidateQueries({ queryKey: getGetAgentWorkQueryKey(work.id ?? '') });
+        if (approvalOperationId) void queryClient.invalidateQueries({ queryKey: getGetSecretaryOperationQueryKey(approvalOperationId) });
+        onRefresh();
+      },
+    },
+  });
   const actions = transitionActions(work.status ?? 'draft');
+  const operation = operationQuery.data;
+  const approvalVisible = Boolean(
+    operation
+    && approvalOperationId
+    && (operation.status === 'pending' || operation.status === 'executing'),
+  );
   return (
     <ScrollView
       testID="agent-work-detail"
@@ -334,6 +378,40 @@ function WorkDetail({
               </Pressable>
             );
           })}
+        </View>
+      )}
+
+      {approvalVisible && operation && approvalOperationId && (
+        <View style={[styles.approvalCard, { backgroundColor: `${colors.primary}0F`, borderColor: `${colors.primary}55` }]}>
+          <Text style={[styles.approvalTitle, { color: colors.foreground }]}>
+            {localized(language, 'موافقة مطلوبة قبل إنشاء المهمة', 'Approval required before creating the task')}
+          </Text>
+          <Text style={[styles.approvalCopy, { color: colors.mutedForeground }]}>
+            {operation.display.title}
+          </Text>
+          {operation.display.details.map((detail) => (
+            <Text key={detail} style={[styles.approvalDetail, { color: colors.mutedForeground }]}>{detail}</Text>
+          ))}
+          <View style={styles.approvalActions}>
+            <Pressable
+              testID="agent-work-approve"
+              accessibilityRole="button"
+              disabled={approveMutation.isPending || rejectMutation.isPending}
+              onPress={() => approveMutation.mutate({ operationId: approvalOperationId })}
+              style={({ pressed }) => [styles.approvalButton, { backgroundColor: colors.primary, opacity: pressed ? 0.7 : 1 }]}
+            >
+              <Text style={[styles.approvalButtonText, { color: colors.primaryForeground }]}>{localized(language, 'موافقة وتنفيذ', 'Approve and run')}</Text>
+            </Pressable>
+            <Pressable
+              testID="agent-work-reject"
+              accessibilityRole="button"
+              disabled={approveMutation.isPending || rejectMutation.isPending}
+              onPress={() => rejectMutation.mutate({ operationId: approvalOperationId })}
+              style={({ pressed }) => [styles.approvalButton, { borderColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
+            >
+              <Text style={[styles.approvalButtonText, { color: colors.mutedForeground }]}>{localized(language, 'رفض', 'Reject')}</Text>
+            </Pressable>
+          </View>
         </View>
       )}
 
@@ -573,6 +651,13 @@ const styles = StyleSheet.create({
   actionRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8, marginTop: 5, marginBottom: 6 },
   actionButton: { minHeight: 38, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 12, flexDirection: 'row-reverse', alignItems: 'center', gap: 6 },
   actionButtonText: { fontSize: 12, fontWeight: '700' },
+  approvalCard: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 16, padding: 14, gap: 8, marginTop: 4, marginBottom: 4 },
+  approvalTitle: { fontSize: 14, fontWeight: '700', textAlign: 'right' },
+  approvalCopy: { fontSize: 13, fontWeight: '600', textAlign: 'right' },
+  approvalDetail: { fontSize: 12, lineHeight: 18, textAlign: 'right' },
+  approvalActions: { flexDirection: 'row-reverse', gap: 8, marginTop: 4 },
+  approvalButton: { minHeight: 38, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 13, alignItems: 'center', justifyContent: 'center' },
+  approvalButtonText: { fontSize: 12, fontWeight: '700' },
   summaryGrid: { flexDirection: 'row-reverse', gap: 8, marginBottom: 12 },
   summaryCard: { flex: 1, borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, padding: 11, gap: 5 },
   explanationCard: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, padding: 13, gap: 6, marginBottom: 4 },

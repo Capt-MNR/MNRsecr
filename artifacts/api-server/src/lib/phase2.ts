@@ -4748,6 +4748,10 @@ function naturalAgentWorkArgs(message: string): Record<string, unknown> {
       && Number.isSafeInteger(githubThreshold)
       && githubThreshold >= 0,
   );
+  const delegatedTaskSignal = /(?:اعمل|أنشئ|انشئ|سجل|ضيف|أضف|اضف)\s+(?:لي\s+)?(?:مهمة|تاسك|task)|(?:create|add)\s+(?:a\s+)?task/iu.test(compact);
+  const delegatedTaskTitle = githubMonitor && delegatedTaskSignal
+    ? `مراجعة العناصر المفتوحة في ${githubRepositoryMatch?.[1]}`
+    : null;
   const taskThresholdMatch = compact.match(
     /(?:المهام|مهامي|المهام\s+المفتوحة|open\s+tasks?).*?(?:عن|فوق|اكتر\s+من|اكثر\s+من|أكثر\s+من|تزيد\s+عن|تعدي)\s*([0-9٠-٩]+)/iu,
   );
@@ -4790,12 +4794,19 @@ function naturalAgentWorkArgs(message: string): Record<string, unknown> {
           type: "user_defined",
           request: compact.slice(0, 500),
         },
-    action: {
-      type: "notify",
-      destination: "main_and_mobile",
-      include: ["what_changed", "current_value", "condition", "checked_at", "evidence"],
-      deepLink: "work_detail",
-    },
+    action: delegatedTaskTitle
+      ? {
+          type: "create_task",
+          toolName: "create_task",
+          title: delegatedTaskTitle,
+          requiresApproval: true,
+        }
+      : {
+          type: "notify",
+          destination: "main_and_mobile",
+          include: ["what_changed", "current_value", "condition", "checked_at", "evidence"],
+          deepLink: "work_detail",
+        },
     schedule,
     nextRunAt: new Date().toISOString(),
   };

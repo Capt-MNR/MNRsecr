@@ -5,12 +5,17 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   AgentWorkKind,
   getGetAgentWorkQueryKey,
+  getGetSecretaryOperationQueryKey,
   getListAgentWorksQueryKey,
   useChangeAgentWorkStatus,
   useCreateAgentWork,
   useGetAgentWork,
+  useGetSecretaryOperation,
+  useApproveSecretaryOperation,
+  useRejectSecretaryOperation,
   useListAgentWorks,
 } from '@workspace/api-client-react';
+import ApprovalForm from '../components/approval-form';
 
 const kindLabels: Record<AgentWorkKind, string> = {
   monitor: 'متابعة',
@@ -112,6 +117,37 @@ function WorkDetail({ workId }: { workId: string }) {
   const detailQuery = useGetAgentWork(workId, {
     query: { queryKey: getGetAgentWorkQueryKey(workId), staleTime: 5_000 },
   });
+  const approvalOperationId = useMemo(() => {
+    const event = detailQuery.data?.events.find((item) => item.eventType === 'approval_requested');
+    const metadata = event?.metadata;
+    return metadata && typeof metadata.operationId === 'string' ? metadata.operationId : null;
+  }, [detailQuery.data?.events]);
+  const operationQuery = useGetSecretaryOperation(approvalOperationId ?? '', {
+    query: {
+      queryKey: approvalOperationId
+        ? getGetSecretaryOperationQueryKey(approvalOperationId)
+        : ['/api/approvals/disabled'],
+      enabled: Boolean(approvalOperationId),
+      staleTime: 2_000,
+      refetchInterval: approvalOperationId ? 5_000 : false,
+    },
+  });
+  const approveMutation = useApproveSecretaryOperation({
+    mutation: {
+      onSuccess: () => {
+        void queryClient.invalidateQueries({ queryKey: getGetAgentWorkQueryKey(workId) });
+        if (approvalOperationId) void queryClient.invalidateQueries({ queryKey: getGetSecretaryOperationQueryKey(approvalOperationId) });
+      },
+    },
+  });
+  const rejectMutation = useRejectSecretaryOperation({
+    mutation: {
+      onSuccess: () => {
+        void queryClient.invalidateQueries({ queryKey: getGetAgentWorkQueryKey(workId) });
+        if (approvalOperationId) void queryClient.invalidateQueries({ queryKey: getGetSecretaryOperationQueryKey(approvalOperationId) });
+      },
+    },
+  });
   const statusMutation = useChangeAgentWorkStatus({
     mutation: {
       onSuccess: () => {
@@ -142,6 +178,12 @@ function WorkDetail({ workId }: { workId: string }) {
       : workStatus === 'paused' ? 'active'
         : null;
   const currentStatus = workStatus;
+  const operation = operationQuery.data;
+  const approvalVisible = Boolean(
+    operation
+    && approvalOperationId
+    && (operation.status === 'pending' || operation.status === 'executing'),
+  );
 
   function changeStatus(to: 'active' | 'paused' | 'cancelled') {
     statusMutation.mutate({
@@ -187,6 +229,23 @@ function WorkDetail({ workId }: { workId: string }) {
           <RefreshCw className="size-4" /> تحديث
         </button>
       </div>
+
+      {approvalVisible && operation && approvalOperationId && (
+        <div className="mt-6 rounded-2xl border border-primary/25 bg-primary/5 p-4">
+          <p className="mb-3 text-sm font-semibold">موافقة مطلوبة قبل إنشاء المهمة</p>
+          <ApprovalForm
+            operationId={approvalOperationId}
+            toolName={operation.toolName}
+            initialArgs={operation.args}
+            display={operation.display}
+            status={operation.status}
+            allowArgsOverride={false}
+            busy={approveMutation.isPending || rejectMutation.isPending}
+            onConfirm={() => approveMutation.mutate({ operationId: approvalOperationId })}
+            onReject={() => rejectMutation.mutate({ operationId: approvalOperationId })}
+          />
+        </div>
+      )}
 
       <div className="mt-7 grid gap-4 sm:grid-cols-3">
         <div className="rounded-2xl bg-background/70 p-4">

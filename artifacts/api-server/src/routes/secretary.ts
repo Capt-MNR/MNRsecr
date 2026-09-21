@@ -13,6 +13,10 @@ import {
   saveApprovedOperationTurn,
   type Identity,
 } from "../lib/secretary";
+import {
+  recordAgentWorkActionApproved,
+  recordAgentWorkActionRejected,
+} from "../lib/agent-work/delegated-actions";
 import { executeStructuredTool } from "../lib/phase2";
 import {
   claimOperation,
@@ -455,6 +459,14 @@ router.post("/approvals/:operationId/approve", async (req, res): Promise<void> =
     if (claim.kind === "existing") {
       if (claim.operation.status === "completed" && claim.operation.result) {
         try {
+          await recordAgentWorkActionApproved(identity, claim.operation, claim.operation.result);
+        } catch (error) {
+          req.log.warn({
+            operationId,
+            error: error instanceof Error ? error.message : "AGENT_WORK_ACTION_RECONCILIATION_FAILED",
+          }, "Completed delegated action reconciliation failed");
+        }
+        try {
           await saveApprovedOperationTurn(identity, claim.operation, claim.operation.result);
         } catch (error) {
           req.log.warn({
@@ -476,6 +488,14 @@ router.post("/approvals/:operationId/approve", async (req, res): Promise<void> =
     } catch (error) {
       const message = error instanceof Error ? error.message : "تعذر تنفيذ العملية.";
       const failed = await failOperation(identity, operationId, message);
+      try {
+        await recordAgentWorkActionRejected(identity, claim.operation, "failed");
+      } catch (reconciliationError) {
+        req.log.warn({
+          operationId,
+          error: reconciliationError instanceof Error ? reconciliationError.message : "AGENT_WORK_ACTION_RECONCILIATION_FAILED",
+        }, "Failed delegated action reconciliation failed");
+      }
       res.status(500).json({
         ...operationResultResponse(failed),
         error: "تعذر تنفيذ العملية.",
@@ -488,6 +508,14 @@ router.post("/approvals/:operationId/approve", async (req, res): Promise<void> =
     }
 
     const completed = await completeOperation(identity, operationId, result);
+    try {
+      await recordAgentWorkActionApproved(identity, completed, result);
+    } catch (error) {
+      req.log.warn({
+        operationId,
+        error: error instanceof Error ? error.message : "AGENT_WORK_ACTION_RECONCILIATION_FAILED",
+      }, "Delegated action reconciliation failed");
+    }
     try {
       await saveApprovedOperationTurn(identity, completed, result);
     } catch (error) {
@@ -522,6 +550,14 @@ router.post("/approvals/:operationId/reject", async (req, res): Promise<void> =>
       return;
     }
     const operation = await rejectOperation(identity, req.params.operationId);
+    try {
+      await recordAgentWorkActionRejected(identity, operation, "rejected");
+    } catch (error) {
+      req.log.warn({
+        operationId: req.params.operationId,
+        error: error instanceof Error ? error.message : "AGENT_WORK_ACTION_RECONCILIATION_FAILED",
+      }, "Rejected delegated action reconciliation failed");
+    }
     res.json(operationResultResponse(operation));
   } catch (error) {
     sendError(req, res, error instanceof Error && error.message === "Pending operation was not found."
