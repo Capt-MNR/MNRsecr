@@ -609,6 +609,39 @@ test("Groq primary can fail over to Gemini", async () => {
   assert.deepEqual(result.action?.providerTrace?.providersAttempted, ["groq", "gemini"]);
 });
 
+test("a daily token limit opens a cooldown and skips the provider on the next request", async () => {
+  const primary = new ScriptedProvider("gemini", () => {
+    throw providerResponseError("gemini", 429, "daily token limit reached");
+  });
+  const fallback = new ScriptedProvider("groq", () => finalResponse("أكملت الطلب من المزود الاحتياطي."));
+  const gateway = new FailoverModelGateway(
+    { gemini: primary, groq: fallback },
+    ["gemini", "groq"],
+  );
+  const runtime = new Phase2AgentRuntime(gateway);
+
+  const first = await runtime.run(identity("quota-cooldown-first"), {
+    message: "اعرض الملخص بالعربي",
+    requestId: "quota-cooldown-first-request",
+  }, { dryRun: true });
+  const second = await runtime.run(identity("quota-cooldown-second"), {
+    message: "اعرض الملخص بالعربي",
+    requestId: "quota-cooldown-second-request",
+  }, { dryRun: true });
+
+  assert.equal(first.provider, "groq");
+  assert.equal(second.provider, "groq");
+  assert.equal(first.assistantMessage.includes("gemini"), false);
+  assert.equal(second.assistantMessage.includes("gemini"), false);
+  assert.deepEqual(
+    second.action?.providerTrace?.providersAttempted,
+    ["groq"],
+  );
+  assert.equal(second.action?.providerTrace?.fallbackReason, "circuit_open");
+  assert.equal(primary.calls.length, 1);
+  assert.equal(fallback.calls.length, 2);
+});
+
 test("failover advances to a third provider after the selected fallback is rate limited", async () => {
   const primary = new ScriptedProvider("groq", () => {
     throw providerResponseError("groq", 429, "rate limited");
@@ -845,7 +878,7 @@ test("tool execution errors stay in the tool error contract and never fail over"
   assert.equal(fallback.calls.length, 0);
 });
 
-test("circuit breaker skips a repeatedly rate-limited primary for a short window", async () => {
+test("circuit breaker skips a rate-limited primary for a short window", async () => {
   const primary = new ScriptedProvider("gemini", () => {
     throw providerResponseError("gemini", 429, "rate limited");
   });
@@ -869,7 +902,7 @@ test("circuit breaker skips a repeatedly rate-limited primary for a short window
     requestId: "circuit-request-3",
   }, { dryRun: true });
 
-  assert.equal(primary.calls.length, 2);
+  assert.equal(primary.calls.length, 1);
   assert.equal(third.provider, "groq");
   assert.equal(third.action?.providerTrace?.fallbackReason, "circuit_open");
   assert.deepEqual(third.action?.providerTrace?.providersAttempted, ["groq"]);

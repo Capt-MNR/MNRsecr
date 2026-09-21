@@ -3734,8 +3734,14 @@ export class GeminiModelGateway implements ModelGateway {
           : providerExceptionError("gemini", error);
         logLlmFailure("gemini", model, context, 1, lastError);
         if (lastError instanceof SecretaryError
-          && (lastError.code === "PROVIDER_RATE_LIMIT"
-            || lastError.code === "PROVIDER_HTTP_ATTEMPT_BUDGET_EXCEEDED")) break;
+          && lastError.code === "PROVIDER_RATE_LIMIT") {
+          // A quota/token limit applies to the provider, not just this model.
+          // Do not spend another request on Gemini's model fallback before
+          // letting the outer gateway choose a different provider.
+          throw lastError;
+        }
+        if (lastError instanceof SecretaryError
+          && lastError.code === "PROVIDER_HTTP_ATTEMPT_BUDGET_EXCEEDED") break;
       } finally {
         clearTimeout(timeout);
       }
@@ -4171,6 +4177,8 @@ export class FailoverModelGateway implements ModelGateway {
     const consecutiveFailures = current.consecutiveFailures + 1;
     const providerCooldownMs = error.category === "provider_rate_limit" && error.retryAfterSeconds !== undefined
       ? Math.min(Math.max(error.retryAfterSeconds * 1000, CIRCUIT_OPEN_MS), MAX_CIRCUIT_COOLDOWN_MS)
+      : error.category === "provider_rate_limit"
+        ? CIRCUIT_OPEN_MS
       : undefined;
     this.circuits.set(provider, {
       consecutiveFailures,

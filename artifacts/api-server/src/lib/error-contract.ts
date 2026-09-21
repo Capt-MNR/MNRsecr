@@ -66,7 +66,9 @@ export function providerResponseError(
   providerError: string,
   retryAfterSeconds?: number,
 ): SecretaryError {
-  if (upstreamStatus === 429) {
+  const looksLikeQuotaLimit = /rate[-_ ]?limit|quota|token(?:s)?\s*(?:limit|per\s+(?:day|minute|month))|daily\s+(?:token\s+)?limit|exceeded\s+(?:the\s+)?(?:quota|token|rate)/i
+    .test(providerError);
+  if (upstreamStatus === 429 || looksLikeQuotaLimit) {
     return new SecretaryError("The configured provider rate limit was reached.", {
       status: 429,
       category: "provider_rate_limit",
