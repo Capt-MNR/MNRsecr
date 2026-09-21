@@ -37,6 +37,7 @@ import {
   type OperationExecutionResult,
   type PendingOperation,
 } from "./secretary-operations";
+import { persistedApprovalArgs } from "./approval-schemas";
 import { annotateApprovalAction, approvalMessage } from "./secretary-confirmation";
 import {
   loadConversationMemory,
@@ -1684,6 +1685,7 @@ export async function executeApprovedOperation(
       currency: expense.currency,
       personId: expense.personId,
       projectId: expense.projectId,
+      args: persistedApprovalArgs(operation.args),
       personName: operationStringArg(operation, "personName"),
       projectName: operationStringArg(operation, "projectName"),
       ...(Array.isArray(operation.args.projectCandidates)

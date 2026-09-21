@@ -55,7 +55,21 @@ export function persistedApprovalArgs(args: Record<string, unknown>): Record<str
   const {
     personCandidates: _personCandidates,
     projectCandidates: _projectCandidates,
+    personName,
+    projectName,
     ...persisted
   } = args;
-  return persisted;
+  return {
+    ...persisted,
+    ...(typeof args.personId === "string"
+      ? {}
+      : typeof personName === "string" && personName.trim()
+        ? { personName }
+        : {}),
+    ...(typeof args.projectId === "string"
+      ? {}
+      : typeof projectName === "string" && projectName.trim()
+        ? { projectName }
+        : {}),
+  };
 }

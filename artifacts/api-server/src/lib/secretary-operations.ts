@@ -299,7 +299,7 @@ export async function claimOperation(
     const operation = toOperation(claimed);
     return {
       kind: "claimed",
-      operation: argsOverride ? { ...operation, args: argsOverride } : operation,
+      operation: storedArgs ? { ...operation, args: storedArgs } : operation,
     };
   }
   const operation = await getOperation(identity, operationId);

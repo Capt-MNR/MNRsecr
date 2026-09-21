@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import {
   activityEventEntitiesTable,
   activityEventsTable,
+  conversationMemoryTable,
   db,
   expensesTable,
   financialObligationsTable,
@@ -63,6 +64,7 @@ async function cleanup() {
   for (const table of [
     activityEventEntitiesTable,
     activityEventsTable,
+    conversationMemoryTable,
     secretaryOperationsTable,
     idempotencyRecordsTable,
     obligationSettlementsTable,
@@ -410,6 +412,131 @@ test("HTTP approval is server-side on the first request and idempotent", async (
   } finally {
     process.env.SECRETARY_TENANT_ID = previousTenant;
   }
+});
+
+test("edited expense approval executes one scoped write and stores executable IDs in conversation memory", async () => {
+  const suffix = `${process.pid}-${Date.now()}`;
+  const [originalPerson] = await db.insert(peopleTable).values({
+    tenantId,
+    ownerUserId: userId,
+    name: `شخص قديم ${suffix}`,
+    nameKey: `شخص قديم ${suffix}`,
+  }).returning();
+  const [editedPerson] = await db.insert(peopleTable).values({
+    tenantId,
+    ownerUserId: userId,
+    name: `شخص معدل ${suffix}`,
+    nameKey: `شخص معدل ${suffix}`,
+  }).returning();
+  const [originalProject] = await db.insert(projectsTable).values({
+    tenantId,
+    ownerUserId: userId,
+    name: `مشروع قديم ${suffix}`,
+    nameKey: `مشروع قديم ${suffix}`,
+  }).returning();
+  const [editedProject] = await db.insert(projectsTable).values({
+    tenantId,
+    ownerUserId: userId,
+    name: `مشروع معدل ${suffix}`,
+    nameKey: `مشروع معدل ${suffix}`,
+  }).returning();
+  assert.ok(originalPerson && editedPerson && originalProject && editedProject);
+
+  const conversationId = `edited-approval-${suffix}`;
+  const pending = await request("/turns", "POST", {
+    message: `دفعت ل${originalPerson.name} 100 جنيه في مشروع ${originalProject.name}`,
+    conversationId,
+    channel: "main",
+  });
+  assert.equal(pending.status, 200, JSON.stringify(pending.body));
+  assert.equal(pending.body?.action?.type, "approval_required");
+  const operationId = pending.body?.action?.operationId as string;
+  assert.equal(typeof operationId, "string");
+
+  const editedArgs = {
+    amountMinor: 22500,
+    currency: "EGP",
+    description: `مصروف معدل ${suffix}`,
+    personId: editedPerson.id,
+    projectId: editedProject.id,
+    personName: editedPerson.name,
+    projectName: editedProject.name,
+    personCandidates: [{ id: editedPerson.id, name: editedPerson.name }],
+    projectCandidates: [{ id: editedProject.id, name: editedProject.name }],
+  };
+  const approved = await approve(operationId, { args: editedArgs });
+  assert.equal(approved.status, 200, JSON.stringify(approved.body));
+  assert.equal(approved.body?.status, "completed");
+  assert.equal(approved.body?.action?.args?.amountMinor, editedArgs.amountMinor);
+  assert.equal(approved.body?.action?.args?.personId, editedPerson.id);
+  assert.equal(approved.body?.action?.args?.projectId, editedProject.id);
+  assert.equal(approved.body?.action?.args?.personName, undefined);
+  assert.equal(approved.body?.action?.args?.projectName, undefined);
+
+  const saved = await db.select().from(expensesTable).where(and(
+    eq(expensesTable.tenantId, tenantId),
+    eq(expensesTable.ownerUserId, userId),
+    eq(expensesTable.description, editedArgs.description),
+  ));
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0]?.amountMinor, editedArgs.amountMinor);
+  assert.equal(saved[0]?.personId, editedPerson.id);
+  assert.equal(saved[0]?.projectId, editedProject.id);
+
+  const storedOperation = await db.select().from(secretaryOperationsTable).where(and(
+    eq(secretaryOperationsTable.tenantId, tenantId),
+    eq(secretaryOperationsTable.ownerUserId, userId),
+    eq(secretaryOperationsTable.id, operationId),
+  ));
+  assert.equal(storedOperation.length, 1);
+  const storedArgs = JSON.parse(storedOperation[0]!.argumentsJson) as Record<string, unknown>;
+  assert.equal(storedArgs.personId, editedPerson.id);
+  assert.equal(storedArgs.projectId, editedProject.id);
+  assert.equal(storedArgs.personName, undefined);
+  assert.equal(storedArgs.projectName, undefined);
+  assert.equal(storedArgs.personCandidates, undefined);
+  assert.equal(storedArgs.projectCandidates, undefined);
+
+  const memoryRows = await db.select().from(conversationMemoryTable).where(and(
+    eq(conversationMemoryTable.tenantId, tenantId),
+    eq(conversationMemoryTable.ownerUserId, userId),
+    eq(conversationMemoryTable.conversationId, conversationId),
+  ));
+  assert.equal(memoryRows.length, 1);
+  const recentTurns = JSON.parse(memoryRows[0]!.recentStateJson) as Array<{
+    turnId?: string;
+    action?: Record<string, any>;
+  }>;
+  const approvalTurn = recentTurns.find((turn) => turn.turnId === `approval:${operationId}`);
+  assert.ok(approvalTurn);
+  assert.equal(approvalTurn.action?.personId, editedPerson.id);
+  assert.equal(approvalTurn.action?.projectId, editedProject.id);
+  assert.equal(approvalTurn.action?.args?.personId, editedPerson.id);
+  assert.equal(approvalTurn.action?.args?.projectId, editedProject.id);
+  assert.equal(approvalTurn.action?.args?.amountMinor, editedArgs.amountMinor);
+  assert.equal(approvalTurn.action?.args?.personName, undefined);
+  assert.equal(approvalTurn.action?.args?.projectName, undefined);
+
+  const duplicate = await approve(operationId, {
+    args: {
+      ...editedArgs,
+      amountMinor: 99900,
+      personId: originalPerson.id,
+      projectId: originalProject.id,
+      personName: originalPerson.name,
+      projectName: originalProject.name,
+    },
+  });
+  assert.equal(duplicate.status, 200);
+  assert.equal(duplicate.body?.status, "completed");
+  assert.deepEqual(duplicate.body?.action?.args, approved.body?.action?.args);
+
+  const afterDuplicate = await db.select().from(expensesTable).where(and(
+    eq(expensesTable.tenantId, tenantId),
+    eq(expensesTable.ownerUserId, userId),
+    eq(expensesTable.description, editedArgs.description),
+  ));
+  assert.equal(afterDuplicate.length, 1);
 });
 
 test("HTTP record edits reject a stale approval instead of overwriting a newer edit", async () => {
