@@ -324,7 +324,7 @@ export type FinalResponse = {
   groundedFacts?: GroundedFact[];
 };
 
-export type ProviderName = "gemini" | "groq" | "mistral" | "cohere";
+export type ProviderName = "gemini" | "groq" | "mistral" | "cohere" | "deepseek";
 
 export type ToolScope = {
   name: "full" | "read_only" | "expense" | "reminder" | "person" | "project" | "task" | "commitment";
@@ -602,6 +602,8 @@ const MISTRAL_MODEL = process.env.MISTRAL_MODEL ?? "mistral-small-latest";
 const MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions";
 const COHERE_MODEL = process.env.COHERE_MODEL ?? "command-r-08-2024";
 const COHERE_API_URL = "https://api.cohere.com/v2/chat";
+const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL ?? "deepseek-chat";
+const DEEPSEEK_API_URL = process.env.DEEPSEEK_API_URL ?? "https://api.deepseek.com/chat/completions";
 const DEFAULT_TIMEZONE = "Africa/Cairo";
 
 function timeoutForDeadline(deadlineAt: number | undefined, maximumMs: number): number {
@@ -3919,17 +3921,27 @@ export class GroqModelGateway implements ModelGateway {
   }
 }
 
-export class MistralModelGateway implements ModelGateway {
-  readonly provider = "mistral" as const;
-  private readonly apiKey = process.env.MISTRAL_API_KEY;
-  readonly model = MISTRAL_MODEL;
+export class OpenAiCompatibleModelGateway implements ModelGateway {
+  private readonly apiKey: string | undefined;
+  readonly model: string;
+
+  constructor(
+    readonly provider: ProviderName,
+    private readonly apiUrl: string,
+    model: string,
+    apiKey: string | undefined,
+    private readonly apiKeyName: string,
+  ) {
+    this.model = model;
+    this.apiKey = apiKey;
+  }
 
   get modelName(): string {
     return this.model;
   }
 
   async generate(messages: ConversationMessage[], context: GatewayCallContext): Promise<GatewayResponse> {
-    if (!this.apiKey) throw new Error("MISTRAL_API_KEY is not configured.");
+    if (!this.apiKey) throw new Error(`${this.apiKeyName} is not configured.`);
     const tools = toOpenAiTools(context.toolScope, context.finalResponseOnly);
     const apiMessages = [
       {
@@ -4001,7 +4013,7 @@ export class MistralModelGateway implements ModelGateway {
       conversationChars: JSON.stringify(apiMessages.slice(1)).length,
     }, "agent llm call started");
     try {
-      const response = await fetch(MISTRAL_API_URL, {
+      const response = await fetch(this.apiUrl, {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -4080,6 +4092,18 @@ export class MistralModelGateway implements ModelGateway {
     } finally {
       clearTimeout(timeout);
     }
+  }
+}
+
+export class MistralModelGateway extends OpenAiCompatibleModelGateway {
+  constructor() {
+    super("mistral", MISTRAL_API_URL, MISTRAL_MODEL, process.env.MISTRAL_API_KEY, "MISTRAL_API_KEY");
+  }
+}
+
+export class DeepSeekModelGateway extends OpenAiCompatibleModelGateway {
+  constructor() {
+    super("deepseek", DEEPSEEK_API_URL, DEEPSEEK_MODEL, process.env.DEEPSEEK_API_KEY, "DEEPSEEK_API_KEY");
   }
 }
 
@@ -6071,6 +6095,7 @@ function asProvider(value: string | undefined): ProviderName | undefined {
     || normalized === "groq"
     || normalized === "mistral"
     || normalized === "cohere"
+    || normalized === "deepseek"
     ? normalized
     : undefined;
 }
@@ -6078,7 +6103,7 @@ function asProvider(value: string | undefined): ProviderName | undefined {
 export function configuredProviderOrder(): ProviderName[] {
   const fallbackPreference = featureFlags.providerRouting()
     ? providerOrder()
-    : (["groq", "gemini", "mistral", "cohere"] as ProviderName[]);
+    : (["groq", "gemini", "mistral", "cohere", "deepseek"] as ProviderName[]);
   const firstConfiguredByRouting = fallbackPreference.find((provider) => (
     provider === "groq"
       ? Boolean(process.env.GROQ_API_KEY)
@@ -6086,7 +6111,9 @@ export function configuredProviderOrder(): ProviderName[] {
         ? Boolean(process.env.GEMINI_API_KEY)
         : provider === "mistral"
           ? Boolean(process.env.MISTRAL_API_KEY)
-          : Boolean(process.env.COHERE_API_KEY)
+            : provider === "cohere"
+              ? Boolean(process.env.COHERE_API_KEY)
+              : Boolean(process.env.DEEPSEEK_API_KEY)
   ));
   const originalDefaultProvider = process.env.GEMINI_API_KEY
     ? "gemini"
@@ -6096,13 +6123,15 @@ export function configuredProviderOrder(): ProviderName[] {
         ? "mistral"
         : process.env.COHERE_API_KEY
           ? "cohere"
-          : undefined;
+          : process.env.DEEPSEEK_API_KEY
+            ? "deepseek"
+            : undefined;
   const primary = asProvider(process.env.AI_PRIMARY_PROVIDER)
     ?? asProvider(process.env.AI_PROVIDER)
     ?? (featureFlags.providerRouting() ? firstConfiguredByRouting : originalDefaultProvider);
   const autoFallbacks = (featureFlags.providerRouting()
     ? fallbackPreference
-    : (["groq", "gemini", "mistral", "cohere"] as ProviderName[]))
+    : (["groq", "gemini", "mistral", "cohere", "deepseek"] as ProviderName[]))
     .filter((provider) => provider !== primary)
     .filter((provider) => (
       provider === "groq"
@@ -6111,7 +6140,9 @@ export function configuredProviderOrder(): ProviderName[] {
           ? Boolean(process.env.GEMINI_API_KEY)
           : provider === "mistral"
             ? Boolean(process.env.MISTRAL_API_KEY)
-            : Boolean(process.env.COHERE_API_KEY)
+            : provider === "cohere"
+              ? Boolean(process.env.COHERE_API_KEY)
+              : Boolean(process.env.DEEPSEEK_API_KEY)
     ));
   return [
     primary,
@@ -6137,6 +6168,7 @@ function createGateway(provider: ProviderName): ModelGateway {
   if (provider === "groq") return new GroqModelGateway();
   if (provider === "mistral") return new MistralModelGateway();
   if (provider === "cohere") return new CohereModelGateway();
+  if (provider === "deepseek") return new DeepSeekModelGateway();
   return new GeminiModelGateway();
 }
 

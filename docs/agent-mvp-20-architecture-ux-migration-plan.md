@@ -571,3 +571,50 @@ Quick لا يصبح لوحة تشغيل مصغرة. دوره:
 10. ما بوابة القياس قبل إضافة مصدر أو فعل جديد؟
 
 إذا لم تكن الإجابة محددة، تبقى المرحلة في التخطيط ولا تُضاف إلى production.
+
+## 13. Portability / Adapter Architecture
+
+طبقة Agent Work لا تعتمد على Replit أو Expo أو مزود إشعارات بعينه. هذا شرط معماري من
+المرحلة الأولى لأن Work سيحتاج لاحقًا إلى Workers وProviders وقنوات Notification متعددة.
+
+### Ports
+
+يجب أن تكون الواجهات في `artifacts/api-server/src/lib/agent-work/types.ts`:
+
+- `SchedulerAdapter`: جدولة وإلغاء trigger فقط، بلا قرار domain أو retry داخله.
+- `IdentityAdapter`: تحويل سياق الطلب أو التشغيل الخلفي إلى owner صريح؛ يرفض الهوية
+  الناقصة ولا يخترع user أو tenant.
+- `NotificationAdapter`: تسليم event بعد dedupe، ولا يعتبر `accepted` دليلًا على أن
+  المستخدم رأى الإشعار.
+- `StorageAdapter`: stub في المرحلة الحالية؛ لا يحفظ source/provider payload قبل اعتماد
+  retention وredaction.
+
+### Implementations وdependency injection
+
+- كل implementation في ملف مستقل عن `types.ts`.
+- `factory.ts` هي نقطة الـdefault wiring الوحيدة.
+- يمكن تمرير adapters بديلة إلى runtime initialization والاختبارات.
+- business logic لا يستورد Replit أو Expo أو مزود التنفيذ؛ implementation وحده يملك
+  ذلك الاعتماد.
+- لا يحتوي adapter على state transition أو approval أو financial mutation.
+
+### Environment drivers
+
+| المتغير | القيم الحالية | الوظيفة |
+|---|---|---|
+| `AGENT_WORK_ENABLED` | `true/false` | بوابة تشغيل Agent Work |
+| `AGENT_WORK_SCHEDULER_DRIVER` | `development/stub` حاليًا، `replit` محجوز | اختيار scheduler |
+| `AGENT_WORK_IDENTITY_DRIVER` | `development/stub` حاليًا، `replit` محجوز | اختيار مصدر الهوية |
+| `AGENT_WORK_NOTIFICATION_DRIVER` | `development/expo` | اختيار قناة الإشعار |
+| `AGENT_WORK_STORAGE_DRIVER` | `stub` | يظل stub حتى اعتماد retention/redaction |
+| `AGENT_WORK_ALLOW_DEVELOPMENT_IDENTITY` | `true/false` | يسمح بهوية التطوير خارج production فقط |
+| `PROVIDER_ROUTING_ORDER` | قائمة providers | ترتيب التوصية داخل provider router |
+| `AI_PRIMARY_PROVIDER` | provider name | provider الأساسي الصريح |
+| `AI_FALLBACK_PROVIDER` | provider name | fallback الأول |
+| `AI_SECONDARY_FALLBACK_PROVIDER` | provider name | fallback الثاني |
+| `DEEPSEEK_API_KEY` | secret | تفعيل DeepSeek داخل ModelGateway |
+| `DEEPSEEK_MODEL` | `deepseek-chat` افتراضيًا | اسم موديل DeepSeek |
+| `DEEPSEEK_API_URL` | DeepSeek chat completions URL | endpoint القابل للتبديل في الاختبارات |
+
+لا تُقرأ مفاتيح المزود أو متغيرات Replit داخل Agent Work business logic، ولا يُسمح
+بتفعيل driver إنتاجي غير موصول بعقد identity وlease وnotification delivery.

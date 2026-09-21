@@ -1,6 +1,6 @@
 import { featureFlags } from "./feature-flags";
 
-export type RoutedProvider = "gemini" | "groq" | "mistral" | "cohere";
+export type RoutedProvider = "gemini" | "groq" | "mistral" | "cohere" | "deepseek";
 
 export type ProviderRoute = {
   provider: RoutedProvider;
@@ -9,14 +9,14 @@ export type ProviderRoute = {
   enabled: boolean;
 };
 
-const supportedProviders: RoutedProvider[] = ["gemini", "groq", "mistral", "cohere"];
+const supportedProviders: RoutedProvider[] = ["gemini", "groq", "mistral", "cohere", "deepseek"];
 
 function configuredOrder(): RoutedProvider[] {
   const configured = (process.env.PROVIDER_ROUTING_ORDER ?? "")
     .split(",")
     .map((value) => value.trim().toLowerCase())
     .filter((value): value is RoutedProvider => supportedProviders.includes(value as RoutedProvider));
-  return configured.length > 0 ? configured : ["gemini", "groq", "mistral", "cohere"];
+  return configured.length > 0 ? configured : ["gemini", "groq", "mistral", "cohere", "deepseek"];
 }
 
 export function routeProvider(message: string, preferred?: RoutedProvider): ProviderRoute {
