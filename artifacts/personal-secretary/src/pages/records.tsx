@@ -601,6 +601,18 @@ export default function Records() {
     refresh();
   }
 
+  async function handleUpdateError(error: unknown) {
+    const classified = classifySecretaryError(error);
+    if (classified.category !== 'conflict') return;
+    setEditing(null);
+    updateMutation.reset();
+    setStaleRecordMessage('رُفض التعديل لأن السجل تغيّر من نافذة أخرى. تم تحديث السجل الأحدث؛ راجعه قبل إعادة المحاولة.');
+    const refreshed = await recordsQuery.refetch();
+    if (!refreshed.isSuccess) {
+      setStaleRecordMessage('رُفض التعديل لأن السجل تغيّر من نافذة أخرى. تعذر عرض النسخة الأحدث، اضغط حاول مرة أخرى.');
+    }
+  }
+
   function applyApprovalResponse(response: ApprovalResponse) {
     setPendingApproval((current) => current
       ? { ...current, approval: { ...current.approval, status: response.status } }
@@ -728,7 +740,7 @@ export default function Records() {
         </>}
       </main>
       {creating && <EditModal kind={creating} record={null} isCreate people={data?.people ?? []} projects={data?.projects ?? []} onClose={() => setCreating(null)} isSaving={createMutation.isPending} onSave={(form) => createMutation.mutate({ data: form as RecordCreateInput }, { onSuccess: (response) => handleCreateResult(response, creating) })} />}
-      {editing && <EditModal kind={editing.kind} record={editing.record} isCreate={false} people={data?.people ?? []} projects={data?.projects ?? []} onClose={() => setEditing(null)} isSaving={updateMutation.isPending} onSave={(form) => updateMutation.mutate({ recordType: editing.kind, recordId: editing.record.id, data: form as RecordUpdateInput }, { onSuccess: (response) => handleMutationResult(response, editing.kind, editing.record.id) })} />}
+      {editing && <EditModal kind={editing.kind} record={editing.record} isCreate={false} people={data?.people ?? []} projects={data?.projects ?? []} onClose={() => setEditing(null)} isSaving={updateMutation.isPending} onSave={(form) => updateMutation.mutate({ recordType: editing.kind, recordId: editing.record.id, data: form as RecordUpdateInput }, { onSuccess: (response) => handleMutationResult(response, editing.kind, editing.record.id), onError: (error) => { void handleUpdateError(error); } })} />}
       {pendingApproval && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/35 p-4 backdrop-blur-[2px]" role="dialog" aria-modal="true">
           <div className="w-full max-w-md rounded-[24px] border border-border bg-card p-5 shadow-2xl sm:p-7" dir="rtl">
