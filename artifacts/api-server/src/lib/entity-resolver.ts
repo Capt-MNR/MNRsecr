@@ -235,7 +235,11 @@ async function ensureShadowTable(identity: Identity): Promise<void> {
   }
 }
 
-export async function recordResolverShadow(identity: Identity, message: string): Promise<void> {
+export async function recordResolverShadow(
+  identity: Identity,
+  message: string,
+  context: { requestId?: string; conversationId?: string } = {},
+): Promise<void> {
   if (!featureFlags.resolverShadow()) return;
   const mentions = extractMentions(message);
   if (mentions.length === 0) return;
@@ -258,9 +262,32 @@ export async function recordResolverShadow(identity: Identity, message: string):
           result.confidence,
           result.matchType,
           result.wouldChange,
-          JSON.stringify({ messageLength: message.length }),
+          JSON.stringify({
+            messageLength: message.length,
+            requestId: context.requestId ?? null,
+            conversationId: context.conversationId ?? null,
+            aliasHit: result.matchType === "alias",
+            ambiguityPreserved: result.matchType === "ambiguous",
+            selected: result.selected ?? null,
+            candidates: result.candidates,
+          }),
         ],
       );
+      logger.info({
+        requestId: context.requestId,
+        conversationId: context.conversationId,
+        entityResolver: "shadow",
+        entityType: result.entityType,
+        query: result.query,
+        selectedId: result.selected?.id ?? null,
+        candidateCount: result.candidates.length,
+        candidateIds: result.candidates.map((candidate) => candidate.id),
+        confidence: result.confidence,
+        matchType: result.matchType,
+        wouldChange: result.wouldChange,
+        aliasHit: result.matchType === "alias",
+        ambiguityPreserved: result.matchType === "ambiguous",
+      }, "resolver shadow decision");
     }
   } catch (error) {
     logger.warn({ error, entityResolver: "shadow" }, "resolver shadow logging failed");

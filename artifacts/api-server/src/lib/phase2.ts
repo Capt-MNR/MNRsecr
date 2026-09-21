@@ -96,7 +96,7 @@ import {
   type DeterministicDecision,
   type SemanticParse,
 } from "./deterministic-intelligence";
-import { resolveEntity, type ResolverResult } from "./entity-resolver";
+import { recordResolverShadow, resolveEntity, type ResolverResult } from "./entity-resolver";
 import { recordToolActivity, type DbExecutor } from "./entity-graph";
 import {
   createDonation,
@@ -5337,6 +5337,9 @@ export class Phase2AgentRuntime {
 
     const conversationId = input.conversationId || crypto.randomUUID();
     const conversationMemory = await loadConversationMemory(identity, conversationId);
+    // Shadow resolution is telemetry only. It must run before orchestration and
+    // never alter messages, tool scope, approvals, or persisted conversation state.
+    await recordResolverShadow(identity, input.message, { requestId, conversationId });
     if (!options.dryRun && isExplicitCancellationRequest(input.message)) {
       const rejected = await rejectPendingOperationForConversation(identity, conversationId);
       if (rejected) {

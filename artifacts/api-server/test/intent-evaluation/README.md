@@ -4,7 +4,7 @@ This is a test-only harness for evaluating the real LLM intent and tool selectio
 
 ## Dataset
 
-`dataset.json` contains 36 stable Arabic cases:
+`dataset.json` contains stable Arabic cases, including resolver shadow fixtures:
 
 - `A`: expense intent and Egyptian-Arabic variations.
 - `B`: explicit create-person requests.
@@ -12,6 +12,7 @@ This is a test-only harness for evaluating the real LLM intent and tool selectio
 - `D`: expense requests containing person, amount, and project.
 - `E`: correction/reference messages. These are marked `context_required`; without a persisted conversation fixture they are reported separately and excluded from accuracy.
 - `F`: negative guards preventing expense/create-person confusion and accidental person creation.
+- `G`: entity-resolution fixtures with persisted conversation state, aliases, role-separated candidates, and ambiguity checks.
 
 The dataset is versioned with the code. Do not edit expected results casually; update the version and record the reason when a prompt or tool contract intentionally changes.
 
@@ -82,6 +83,8 @@ Optional flags:
 - `--dataset path.json` evaluates a compatible dataset file.
 - `INTENT_EVAL_TENANT_ID` and `INTENT_EVAL_USER_ID` scope read-only fixtures.
 - `INTENT_EVAL_CONVERSATION_ID` marks context-required cases as having an externally prepared conversation fixture. The harness itself never creates that fixture.
+- `--resolver-shadow on|off` controls telemetry only. It never changes the LLM prompt, selected tools, approvals, or writes.
+- `--baseline path.json` requires the same dataset fingerprint and tenant/user scope as the after report.
 
 ## Reported measurements
 
@@ -115,6 +118,10 @@ The summary reports:
 - average/p50/p95 latency and conversation size;
 - cache hit/miss cases and cached tokens;
 - no-write violations.
+- resolver shadow events, candidate selections, alias hits, labeled accuracy, false positives, and preserved ambiguity.
+
+Resolver fixture rows and conversation memory are prepared before `rowCountsBefore` under the scoped evaluation tenant. The runtime then runs with
+`dryRun: true`; fixture setup is not part of the measured request and no domain row count may change during it.
 
 The diagnostic trace is emitted only in structured telemetry and is copied into each
 case result by the runner. It is not added to prompts, assistant responses, or

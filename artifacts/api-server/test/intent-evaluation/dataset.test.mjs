@@ -18,6 +18,7 @@ test("intent evaluation dataset has stable coverage across all requested categor
       "expense_with_project",
       "correction",
       "negative_guard",
+       "entity_resolution",
     ]),
   );
   assert.equal(
@@ -33,5 +34,19 @@ test("every dataset case is explicitly no-write and has an expected tool contrac
     assert.equal(typeof item.expected.primaryTool, "string", item.id);
     assert.ok(item.expected.acceptableTools.includes(item.expected.primaryTool), item.id);
     assert.ok(["none", "context_required"].includes(item.contextMode), item.id);
+  }
+});
+
+test("entity-resolution fixtures include real conversation state and labeled shadow outcomes", () => {
+  const fixtures = dataset.cases.filter((item) => item.fixture);
+  assert.ok(fixtures.length >= 3);
+  for (const item of fixtures) {
+    assert.ok(item.fixture.conversation?.length, item.id);
+    assert.ok(item.fixture.expectations?.length, item.id);
+    assert.ok(
+      item.fixture.expectations.some((expectation) => expectation.expectedMatchType === "ambiguous"
+        || expectation.expectedMatchType === "alias"),
+      item.id,
+    );
   }
 });

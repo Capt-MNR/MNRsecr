@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { and, count, eq } from "drizzle-orm";
 import {
   commitmentsTable,
+  conversationMemoryTable,
   db,
   expensesTable,
   peopleTable,
@@ -26,6 +27,13 @@ import {
   type ModelGateway,
   type ProviderName,
 } from "../../src/lib/phase2.ts";
+import {
+  emptyConversationState,
+  loadConversationMemory,
+  saveConversationTurn,
+  type ConversationState,
+} from "../../src/lib/conversation-memory.ts";
+import { rememberSecondBrain } from "../../src/lib/second-brain.ts";
 
 type EvaluationCase = {
   id: string;
@@ -39,11 +47,29 @@ type EvaluationCase = {
     clarification: boolean;
     write: boolean;
   };
+  fixture?: Fixture;
 };
 
 type Dataset = {
   version: number;
   cases: EvaluationCase[];
+};
+
+type Fixture = {
+  people?: Array<{ name: string; aliases?: string[]; role?: string }>;
+  projects?: Array<{ name: string; aliases?: string[]; role?: string }>;
+  conversation?: Array<{
+    userMessage: string;
+    assistantMessage: string;
+    people?: number[];
+    projects?: number[];
+  }>;
+  expectations?: Array<{
+    entityType: "person" | "project";
+    query: string;
+    expectedIndex?: number;
+    expectedMatchType: "exact" | "alias" | "fuzzy" | "ambiguous" | "none";
+  }>;
 };
 
 type RowCounts = {
@@ -158,6 +184,123 @@ async function rowCounts(identity: { tenantId: string; userId: string }): Promis
   };
 }
 
+async function prepareFixture(
+  identity: { tenantId: string; userId: string },
+  conversationId: string,
+  fixture: Fixture | undefined,
+): Promise<{ expectations: Array<Record<string, unknown>> }> {
+  if (!fixture) return { expectations: [] };
+
+  const people = [];
+  for (const person of fixture.people ?? []) {
+    const existing = await db.select().from(peopleTable).where(and(
+      eq(peopleTable.tenantId, identity.tenantId),
+      eq(peopleTable.ownerUserId, identity.userId),
+      eq(peopleTable.name, person.name),
+    )).limit(1);
+    const [row] = existing.length > 0
+      ? existing
+      : await db.insert(peopleTable).values({
+          tenantId: identity.tenantId,
+          ownerUserId: identity.userId,
+          name: person.name,
+          nameKey: person.name.toLocaleLowerCase("ar"),
+        }).returning();
+    if (!row) throw new Error(`Could not prepare fixture person: ${person.name}`);
+    people.push({ id: row.id, name: row.name, type: "person" as const });
+    for (const alias of person.aliases ?? []) {
+      await rememberSecondBrain(identity, {
+        memoryKind: "alias",
+        key: `intent-eval:${conversationId}:person:${alias}`,
+        value: person.name,
+        metadata: {
+          alias,
+          canonical: person.name,
+          entityType: "person",
+          entityId: row.id,
+        },
+      });
+    }
+  }
+
+  const projects = [];
+  for (const project of fixture.projects ?? []) {
+    const existing = await db.select().from(projectsTable).where(and(
+      eq(projectsTable.tenantId, identity.tenantId),
+      eq(projectsTable.ownerUserId, identity.userId),
+      eq(projectsTable.name, project.name),
+    )).limit(1);
+    const [row] = existing.length > 0
+      ? existing
+      : await db.insert(projectsTable).values({
+          tenantId: identity.tenantId,
+          ownerUserId: identity.userId,
+          name: project.name,
+          nameKey: project.name.toLocaleLowerCase("ar"),
+        }).returning();
+    if (!row) throw new Error(`Could not prepare fixture project: ${project.name}`);
+    projects.push({ id: row.id, name: row.name, type: "project" as const });
+    for (const alias of project.aliases ?? []) {
+      await rememberSecondBrain(identity, {
+        memoryKind: "alias",
+        key: `intent-eval:${conversationId}:project:${alias}`,
+        value: project.name,
+        metadata: {
+          alias,
+          canonical: project.name,
+          entityType: "project",
+          entityId: row.id,
+        },
+      });
+    }
+  }
+
+  if (fixture.conversation?.length) {
+    await db.delete(conversationMemoryTable).where(and(
+      eq(conversationMemoryTable.tenantId, identity.tenantId),
+      eq(conversationMemoryTable.ownerUserId, identity.userId),
+      eq(conversationMemoryTable.conversationId, conversationId),
+    ));
+    let state: ConversationState = emptyConversationState();
+    let snapshot = await loadConversationMemory(identity, conversationId);
+    for (const turn of fixture.conversation) {
+      const selectedPeople = (turn.people ?? [])
+        .map((index) => people[index])
+        .filter((item): item is (typeof people)[number] => Boolean(item));
+      const selectedProjects = (turn.projects ?? [])
+        .map((index) => projects[index])
+        .filter((item): item is (typeof projects)[number] => Boolean(item));
+      state = {
+        ...state,
+        people: selectedPeople,
+        projects: selectedProjects,
+        candidatePeople: selectedPeople,
+        candidateProjects: selectedProjects,
+        ...(selectedPeople.length === 1 ? { lastPerson: selectedPeople[0] } : {}),
+        ...(selectedProjects.length === 1 ? { lastProject: selectedProjects[0] } : {}),
+      };
+      snapshot = await saveConversationTurn(identity, snapshot, {
+        userMessage: turn.userMessage,
+        assistantMessage: turn.assistantMessage,
+        action: { type: "fixture_context", conversationState: state },
+      });
+    }
+  }
+
+  return {
+    expectations: (fixture.expectations ?? []).map((expectation) => ({
+      entityType: expectation.entityType,
+      query: expectation.query,
+      expectedMatchType: expectation.expectedMatchType,
+      expectedEntityId: expectation.expectedIndex === undefined
+        ? null
+        : (expectation.entityType === "person"
+          ? people[expectation.expectedIndex]?.id
+          : projects[expectation.expectedIndex]?.id) ?? null,
+    })),
+  };
+}
+
 async function main(): Promise<void> {
   const caseId = readArg("--case");
   const mode = readArg("--mode") ?? "groq";
@@ -180,6 +323,7 @@ async function main(): Promise<void> {
   };
   const conversationId = process.env.INTENT_EVAL_CONVERSATION_ID
     ?? `intent-eval-${mode}-${evaluationCase.id}`;
+  const fixture = await prepareFixture(identity, conversationId, evaluationCase.fixture);
   const startedAt = Date.now();
   const rowCountsBefore = await rowCounts(identity);
 
@@ -208,6 +352,7 @@ async function main(): Promise<void> {
         providerTrace: action.providerTrace,
       },
       tokenUsage: gateway.usage,
+      fixtureExpectations: fixture.expectations,
       rowCountsBefore,
       rowCountsAfter: await rowCounts(identity),
     })}\n`);
@@ -220,6 +365,7 @@ async function main(): Promise<void> {
       elapsedMs: Date.now() - startedAt,
       error: errorPayload(error),
       tokenUsage: gateway.usage,
+      fixtureExpectations: fixture.expectations,
       rowCountsBefore,
       rowCountsAfter: await rowCounts(identity),
     })}\n`);

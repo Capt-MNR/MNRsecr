@@ -1,7 +1,7 @@
 {
-  "version": 1,
-  "description": "Arabic intent and tool-selection regression dataset for real-provider evaluation.",
-  "contextPolicy": "Cases marked contextRequired are evaluated as standalone clarification cases unless a future runner supplies a persisted conversation fixture.",
+  "version": 2,
+  "description": "Arabic intent, tool-selection, and shadow entity-resolution regression dataset for real-provider evaluation.",
+  "contextPolicy": "Cases marked contextRequired use a persisted fixture when one is supplied; all cases remain explicit dry-run evaluations.",
   "cases": [
     {
       "id": "A01",
@@ -469,6 +469,124 @@
         "acceptableTools": ["find_person", "record_expense"],
         "clarification": false,
         "write": false
+      }
+    },
+    {
+      "id": "G01",
+      "category": "entity_resolution",
+      "message": "دفعت لميدو 7500 على مشروع التشطيبات",
+      "contextMode": "context_required",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": ["find_person", "find_project", "record_expense"],
+        "clarification": false,
+        "write": false
+      },
+      "fixture": {
+        "people": [
+          { "name": "محمد أحمد", "aliases": ["ميدو"], "role": "contractor" }
+        ],
+        "projects": [
+          { "name": "التشطيبات", "role": "construction" }
+        ],
+        "conversation": [
+          {
+            "userMessage": "محمد أحمد مسؤول عن التشطيبات.",
+            "assistantMessage": "سأستخدم هذه المحادثة لفهم الإشارة فقط، وسأتحقق من السجل عند الحاجة.",
+            "people": [0],
+            "projects": [0]
+          }
+        ],
+        "expectations": [
+          {
+            "entityType": "person",
+            "query": "ميدو",
+            "expectedIndex": 0,
+            "expectedMatchType": "alias"
+          },
+          {
+            "entityType": "project",
+            "query": "التشطيبات",
+            "expectedIndex": 0,
+            "expectedMatchType": "exact"
+          }
+        ]
+      }
+    },
+    {
+      "id": "G02",
+      "category": "entity_resolution",
+      "message": "دفعت لمحمد 500 جنيه",
+      "contextMode": "context_required",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": ["find_person", "record_expense", "final_response"],
+        "clarification": true,
+        "write": false
+      },
+      "fixture": {
+        "people": [
+          { "name": "محمد أحمد", "role": "contractor" },
+          { "name": "محمد علي", "role": "supplier" }
+        ],
+        "conversation": [
+          {
+            "userMessage": "عندي شخصان باسم محمد في أدوار مختلفة.",
+            "assistantMessage": "سأحافظ على الغموض إلى أن تحدد الشخص المقصود.",
+            "people": [0, 1]
+          }
+        ],
+        "expectations": [
+          {
+            "entityType": "person",
+            "query": "محمد",
+            "expectedMatchType": "ambiguous"
+          }
+        ]
+      }
+    },
+    {
+      "id": "G03",
+      "category": "entity_resolution",
+      "message": "دفعت لمحمد 900 جنيه على مشروع المكتب",
+      "contextMode": "context_required",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": ["find_person", "find_project", "record_expense"],
+        "clarification": false,
+        "write": false
+      },
+      "fixture": {
+        "people": [
+          { "name": "محمد حسن", "role": "designer" }
+        ],
+        "projects": [
+          { "name": "مكتب الشركة", "aliases": ["المكتب"], "role": "office" }
+        ],
+        "conversation": [
+          {
+            "userMessage": "محمد حسن يعمل على مكتب الشركة.",
+            "assistantMessage": "حفظت سياق المحادثة دون تنفيذ أي تغيير.",
+            "people": [0],
+            "projects": [0]
+          }
+        ],
+        "expectations": [
+          {
+            "entityType": "person",
+            "query": "محمد",
+            "expectedMatchType": "none"
+          },
+          {
+            "entityType": "project",
+            "query": "المكتب",
+            "expectedIndex": 0,
+            "expectedMatchType": "alias"
+          }
+        ]
       }
     }
   ]

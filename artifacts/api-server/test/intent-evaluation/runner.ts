@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 
@@ -14,6 +15,14 @@ type EvaluationCase = {
     acceptableTools: string[];
     clarification: boolean;
     write: boolean;
+  };
+  fixture?: {
+    expectations?: Array<{
+      entityType: "person" | "project";
+      query: string;
+      expectedIndex?: number;
+      expectedMatchType: "exact" | "alias" | "fuzzy" | "ambiguous" | "none";
+    }>;
   };
 };
 
@@ -55,6 +64,12 @@ type WorkerRecord = {
     providerTrace?: Record<string, unknown>;
   };
   tokenUsage?: unknown[];
+  fixtureExpectations?: Array<{
+    entityType: "person" | "project";
+    query: string;
+    expectedEntityId: string | null;
+    expectedMatchType: "exact" | "alias" | "fuzzy" | "ambiguous" | "none";
+  }>;
   rowCountsBefore?: Record<string, number>;
   rowCountsAfter?: Record<string, number>;
   error?: Record<string, unknown>;
@@ -104,6 +119,7 @@ type CaseResult = {
   rowCountsBefore: Record<string, number>;
   rowCountsAfter: Record<string, number>;
   rowCountChanged: boolean;
+  resolverShadow: ResolverShadowObservation[];
   approvalReached: boolean;
   wouldSelectWriteTool: boolean;
   writeOccurred: boolean;
@@ -112,6 +128,22 @@ type CaseResult = {
   toolSelectionMatch: boolean | null;
   clarificationMatch: boolean | null;
   error?: Record<string, unknown>;
+};
+
+type ResolverShadowObservation = {
+  entityType: "person" | "project" | "financial_party";
+  query: string;
+  selectedId: string | null;
+  candidateIds: string[];
+  candidateCount: number;
+  confidence: number | null;
+  matchType: string;
+  aliasHit: boolean;
+  ambiguityPreserved: boolean;
+  expectedEntityId: string | null;
+  expectedMatchType: string | null;
+  correct: boolean | null;
+  falsePositive: boolean;
 };
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
@@ -168,6 +200,7 @@ Output:
   --out path.json                Save results
   --baseline path.json           Print Before/After accuracy deltas
   --dataset path.json            Use another compatible dataset
+  --resolver-shadow on|off       Record resolver observations without changing behavior
 
 Examples:
   pnpm --filter @workspace/api-server run test:intent-eval -- --provider groq --case A01 --confirm-live
@@ -209,6 +242,54 @@ function selectedTools(logs: LogRecord[]): ToolSelection[] {
       arguments: record.arguments ?? {},
       dryRun: record.dryRun === true,
     }));
+}
+
+function resolverShadowObservations(
+  logs: LogRecord[],
+  worker: WorkerRecord | undefined,
+): ResolverShadowObservation[] {
+  const expectations = new Map(
+    (worker?.fixtureExpectations ?? []).map((expectation) => [
+      `${expectation.entityType}:${expectation.query}`,
+      expectation,
+    ]),
+  );
+  return logs
+    .filter((record) => record.msg === "resolver shadow decision")
+    .map((record) => {
+      const entityType = record.entityType === "financial_party"
+        ? "financial_party"
+        : record.entityType === "project" ? "project" : "person";
+      const query = typeof record.query === "string" ? record.query : "";
+      const selectedId = typeof record.selectedId === "string" ? record.selectedId : null;
+      const candidateIds = Array.isArray(record.candidateIds)
+        ? record.candidateIds.filter((value): value is string => typeof value === "string")
+        : [];
+      const expectation = expectations.get(`${entityType}:${query}`);
+      const expectedEntityId = expectation?.expectedEntityId ?? null;
+      const expectedMatchType = expectation?.expectedMatchType ?? null;
+      const correct = expectation
+        ? expectation.expectedMatchType === record.matchType
+          && (expectation.expectedEntityId === null || expectation.expectedEntityId === selectedId)
+        : null;
+      return {
+        entityType,
+        query,
+        selectedId,
+        candidateIds,
+        candidateCount: Number(record.candidateCount ?? candidateIds.length),
+        confidence: typeof record.confidence === "number" ? record.confidence : null,
+        matchType: typeof record.matchType === "string" ? record.matchType : "none",
+        aliasHit: record.aliasHit === true,
+        ambiguityPreserved: record.ambiguityPreserved === true,
+        expectedEntityId,
+        expectedMatchType,
+        correct,
+        falsePositive: Boolean(expectation && selectedId && (
+          expectation.expectedEntityId === null || expectation.expectedEntityId !== selectedId
+        )),
+      };
+    });
 }
 
 function actualIntent(
@@ -294,6 +375,7 @@ async function runWorker(
   evaluationCase: EvaluationCase,
   mode: string,
   datasetPath: string,
+  resolverShadow: boolean,
 ): Promise<{ worker?: WorkerRecord; logs: LogRecord[]; exitCode: number | null; stderr: string }> {
   return new Promise((resolvePromise) => {
     const child = spawn(TSX, [
@@ -310,6 +392,7 @@ async function runWorker(
         ...process.env,
         NODE_ENV: "production",
         LOG_LEVEL: "info",
+        RESOLVER_SHADOW: resolverShadow ? "1" : "0",
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -338,6 +421,7 @@ function makeCaseResult(
   const actualTool = nonFinalTools[0]
     ?? (names.includes("final_response") ? "final_response" : worker?.ok ? "text_response" : null);
   const trace = worker?.action?.providerTrace ?? {};
+  const resolverObservations = resolverShadowObservations(run.logs, worker);
   const usage = usageTotals(worker?.tokenUsage);
   const usageSummary = run.logs.find((record) => record.msg === "agent llm usage summary");
   const usageContext = usageSummary?.context && typeof usageSummary.context === "object"
@@ -367,7 +451,8 @@ function makeCaseResult(
   const noWriteViolation = writeOccurred;
   const providerError = !worker;
   const contextLimited = evaluationCase.contextMode === "context_required"
-    && !process.env.INTENT_EVAL_CONVERSATION_ID;
+    && !process.env.INTENT_EVAL_CONVERSATION_ID
+    && !evaluationCase.fixture?.conversation?.length;
   const status: CaseResult["status"] = providerError
     ? "runner_error"
     : worker.ok
@@ -452,6 +537,7 @@ function makeCaseResult(
     rowCountsBefore,
     rowCountsAfter,
     rowCountChanged,
+    resolverShadow: resolverObservations,
     approvalReached,
     wouldSelectWriteTool,
     writeOccurred,
@@ -498,6 +584,10 @@ function summarize(results: CaseResult[]) {
     noWriteViolations: results.filter((result) => result.noWriteViolation || result.writeOccurred).length,
     totalLogicalLlmCalls: results.reduce((sum, result) => sum + result.logicalLlmCalls, 0),
     totalHttpAttempts: results.reduce((sum, result) => sum + result.actualHttpAttempts, 0),
+    totalToolCalls: results.reduce(
+      (sum, result) => sum + result.actualTools.filter((tool) => tool !== "final_response").length,
+      0,
+    ),
     fallbackCases: results.filter((result) => result.fallback).length,
     totalInputTokens: sumMeasured(results.map((result) => result.inputTokens)),
     totalOutputTokens: sumMeasured(results.map((result) => result.outputTokens)),
@@ -525,6 +615,38 @@ function summarize(results: CaseResult[]) {
         0,
       ) / results.length),
     rowCountChanges: results.filter((result) => result.rowCountChanged).length,
+    resolverShadowEvents: results.reduce((sum, result) => sum + result.resolverShadow.length, 0),
+    resolverAliasHits: results.reduce(
+      (sum, result) => sum + result.resolverShadow.filter((observation) => observation.aliasHit).length,
+      0,
+    ),
+    resolverSelected: results.reduce(
+      (sum, result) => sum + result.resolverShadow.filter((observation) => observation.selectedId !== null).length,
+      0,
+    ),
+    resolverAmbiguities: results.reduce(
+      (sum, result) => sum + result.resolverShadow.filter((observation) => observation.ambiguityPreserved).length,
+      0,
+    ),
+    resolverFalsePositives: results.reduce(
+      (sum, result) => sum + result.resolverShadow.filter((observation) => observation.falsePositive).length,
+      0,
+    ),
+    resolverCorrect: results.reduce(
+      (sum, result) => sum + result.resolverShadow.filter((observation) => observation.correct === true).length,
+      0,
+    ),
+    resolverLabeledEvents: results.reduce(
+      (sum, result) => sum + result.resolverShadow.filter((observation) => observation.correct !== null).length,
+      0,
+    ),
+    resolverAccuracyPercent: (() => {
+      const labeled = results.flatMap((result) => result.resolverShadow)
+        .filter((observation) => observation.correct !== null);
+      return labeled.length === 0
+        ? null
+        : percentage(labeled.filter((observation) => observation.correct === true).length / labeled.length);
+    })(),
   };
 }
 
@@ -558,6 +680,7 @@ function printComparison(
         : current.clarificationAccuracyPercent - baseline.clarificationAccuracyPercent,
       totalLogicalLlmCalls: numericDelta(current.totalLogicalLlmCalls, baseline.totalLogicalLlmCalls),
       totalHttpAttempts: numericDelta(current.totalHttpAttempts, baseline.totalHttpAttempts),
+      totalToolCalls: numericDelta(current.totalToolCalls, baseline.totalToolCalls),
       totalInputTokens: numericDelta(current.totalInputTokens, baseline.totalInputTokens),
       totalOutputTokens: numericDelta(current.totalOutputTokens, baseline.totalOutputTokens),
       totalTokens: numericDelta(current.totalTokens, baseline.totalTokens),
@@ -570,8 +693,56 @@ function printComparison(
         current.averageConversationChars,
         baseline.averageConversationChars,
       ),
+      resolverShadowEvents: numericDelta(current.resolverShadowEvents, baseline.resolverShadowEvents),
+      resolverAliasHits: numericDelta(current.resolverAliasHits, baseline.resolverAliasHits),
+      resolverSelected: numericDelta(current.resolverSelected, baseline.resolverSelected),
+      resolverAmbiguities: numericDelta(current.resolverAmbiguities, baseline.resolverAmbiguities),
+      resolverFalsePositives: numericDelta(current.resolverFalsePositives, baseline.resolverFalsePositives),
+      resolverAccuracyPercent: current.resolverAccuracyPercent === null
+        || baseline.resolverAccuracyPercent === null
+        ? null
+        : current.resolverAccuracyPercent - baseline.resolverAccuracyPercent,
+      rowCountChanges: numericDelta(current.rowCountChanges, baseline.rowCountChanges),
     } : null,
   }, null, 2));
+}
+
+function behavioralDrift(
+  before: CaseResult[],
+  after: CaseResult[],
+): Array<{
+  id: string;
+  before: Pick<CaseResult, "actualIntent" | "actualTool" | "actualTools" | "clarificationAsked">;
+  after: Pick<CaseResult, "actualIntent" | "actualTool" | "actualTools" | "clarificationAsked">;
+}> {
+  const beforeById = new Map(before.map((result) => [result.id, result]));
+  return after.flatMap((current) => {
+    const previous = beforeById.get(current.id);
+    if (!previous) return [];
+    const beforeTools = [...previous.actualTools].sort();
+    const afterTools = [...current.actualTools].sort();
+    if (
+      previous.actualIntent === current.actualIntent
+      && previous.actualTool === current.actualTool
+      && JSON.stringify(beforeTools) === JSON.stringify(afterTools)
+      && previous.clarificationAsked === current.clarificationAsked
+    ) return [];
+    return [{
+      id: current.id,
+      before: {
+        actualIntent: previous.actualIntent,
+        actualTool: previous.actualTool,
+        actualTools: previous.actualTools,
+        clarificationAsked: previous.clarificationAsked,
+      },
+      after: {
+        actualIntent: current.actualIntent,
+        actualTool: current.actualTool,
+        actualTools: current.actualTools,
+        clarificationAsked: current.clarificationAsked,
+      },
+    }];
+  });
 }
 
 async function main(): Promise<void> {
@@ -615,10 +786,14 @@ async function main(): Promise<void> {
     throw new Error("Choose --case ID[,ID] or --all --max-cases N.");
   }
 
+  const resolverShadowMode = valueArg(args, "--resolver-shadow") ?? "on";
+  if (!["on", "off"].includes(resolverShadowMode)) {
+    throw new Error("--resolver-shadow must be on or off.");
+  }
   const results: CaseResult[] = [];
   for (const evaluationCase of cases) {
     console.log(`Running ${evaluationCase.id} (${mode}) in dry-run mode...`);
-    const run = await runWorker(evaluationCase, mode, datasetPath);
+    const run = await runWorker(evaluationCase, mode, datasetPath, resolverShadowMode === "on");
     results.push(makeCaseResult(evaluationCase, mode, run));
   }
 
@@ -627,18 +802,42 @@ async function main(): Promise<void> {
     ?? join(dirname(DEFAULT_DATASET), "results", `${mode}-${new Date().toISOString().replace(/[:.]/g, "-")}.json`));
   await mkdir(dirname(outputPath), { recursive: true });
 
+  const datasetFingerprint = createHash("sha256")
+    .update(await readFile(datasetPath))
+    .digest("hex");
+  const evaluationScope = {
+    tenantId: process.env.INTENT_EVAL_TENANT_ID ?? "worker-default-per-case",
+    userId: process.env.INTENT_EVAL_USER_ID ?? "intent-eval-read-only",
+  };
   let baselineSummary;
+  let baselineCases: CaseResult[] | undefined;
   const baselinePath = valueArg(args, "--baseline");
   if (baselinePath) {
     const baseline = JSON.parse(await readFile(resolve(baselinePath), "utf8")) as {
       summary?: ReturnType<typeof summarize>;
+      cases?: CaseResult[];
+      datasetFingerprint?: string;
+      evaluationScope?: typeof evaluationScope;
     };
     baselineSummary = baseline.summary;
+    baselineCases = baseline.cases;
+    if (baseline.datasetFingerprint !== datasetFingerprint) {
+      throw new Error("Baseline dataset fingerprint does not match the after dataset.");
+    }
+    if (
+      baseline.evaluationScope?.tenantId !== evaluationScope.tenantId
+      || baseline.evaluationScope?.userId !== evaluationScope.userId
+    ) {
+      throw new Error("Baseline and after reports must use the same tenant and user scope.");
+    }
   }
 
   const report = {
     datasetVersion: dataset.version,
+    datasetFingerprint,
+    evaluationScope,
     providerMode: mode,
+    resolverShadow: resolverShadowMode === "on",
     label: valueArg(args, "--label") ?? "after",
     dryRun: true,
     generatedAt: new Date().toISOString(),
@@ -646,6 +845,7 @@ async function main(): Promise<void> {
     comparison: baselineSummary ? {
       before: baselineSummary,
       after: summary,
+      behavioralDriftCases: baselineCases ? behavioralDrift(baselineCases, results) : null,
     } : undefined,
     cases: results,
   };
