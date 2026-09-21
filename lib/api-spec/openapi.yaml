@@ -362,6 +362,105 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /works:
+    get:
+      operationId: listAgentWorks
+      tags: [agent-work]
+      summary: List the user's persistent agent work
+      parameters:
+        - { name: status, in: query, required: false, schema: { type: string, enum: [draft, active, paused, waiting, needs_review, completed, failed, cancelled] } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        "200":
+          description: Persistent agent work
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  works:
+                    type: array
+                    items: { $ref: "#/components/schemas/AgentWork" }
+                required: [works]
+        "401": { description: Authentication required, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+    post:
+      operationId: createAgentWork
+      tags: [agent-work]
+      summary: Create persistent work for the agent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AgentWorkCreateInput" }
+      responses:
+        "201":
+          description: Work created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  work: { $ref: "#/components/schemas/AgentWork" }
+                required: [work]
+        "400": { description: Invalid work, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "401": { description: Authentication required, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+  /works/{workId}:
+    get:
+      operationId: getAgentWork
+      tags: [agent-work]
+      summary: Get work details, runs, events, and evidence
+      parameters:
+        - { name: workId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Work details
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AgentWorkDetails" }
+        "404": { description: Work not found, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+    post:
+      operationId: changeAgentWorkStatus
+      tags: [agent-work]
+      summary: Pause, resume, complete, or cancel agent work
+      parameters:
+        - { name: workId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AgentWorkStatusInput" }
+      responses:
+        "200":
+          description: Updated work
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  work: { $ref: "#/components/schemas/AgentWork" }
+                required: [work]
+        "409": { description: Status conflict, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+  /works/{workId}/runs:
+    post:
+      operationId: claimAgentWorkRun
+      tags: [agent-work]
+      summary: Claim one due work run with a lease
+      parameters:
+        - { name: workId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Claimed run or no due run
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  run:
+                    oneOf:
+                      - $ref: "#/components/schemas/AgentWorkRun"
+                      - type: "null"
+                required: [run]
+        "409": { description: Work cannot be claimed, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
   /today:
     get:
       operationId: getTodayContext
@@ -1223,6 +1322,99 @@ components:
         service:
           type: string
       required: [status]
+    AgentWork:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [monitor, reminder, recurring_task, external_action, research, workflow] }
+        title: { type: string }
+        description: { type: ["string", "null"] }
+        status: { type: string, enum: [draft, active, paused, waiting, needs_review, completed, failed, cancelled] }
+        source: { type: object, additionalProperties: true }
+        condition: { type: object, additionalProperties: true }
+        schedule: { type: object, additionalProperties: true }
+        nextRunAt: { type: ["string", "null"], format: date-time }
+        lastRunAt: { type: ["string", "null"], format: date-time }
+        lastRunStatus: { type: ["string", "null"] }
+        rowVersion: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      required: [id, kind, title, description, status, source, condition, schedule, nextRunAt, lastRunAt, lastRunStatus, rowVersion, createdAt, updatedAt]
+    AgentWorkRun:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        workId: { type: string, format: uuid }
+        attempt: { type: integer }
+        status: { type: string, enum: [queued, claimed, running, verifying, verified, unchanged, failed, uncertain, needs_review] }
+        idempotencyKey: { type: string }
+        leaseExpiresAt: { type: ["string", "null"], format: date-time }
+        startedAt: { type: ["string", "null"], format: date-time }
+        completedAt: { type: ["string", "null"], format: date-time }
+        verification: { type: ["object", "null"], additionalProperties: true }
+        error: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      required: [id, workId, attempt, status, idempotencyKey, leaseExpiresAt, startedAt, completedAt, verification, error, createdAt, updatedAt]
+    AgentWorkEvent:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string, format: uuid }
+        workId: { type: string, format: uuid }
+        runId: { type: ["string", "null"], format: uuid }
+        eventType: { type: string }
+        actorType: { type: string }
+        actorId: { type: ["string", "null"] }
+        summary: { type: string }
+        metadata: { type: object, additionalProperties: true }
+        occurredAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+      required: [id, workId, runId, eventType, actorType, actorId, summary, metadata, occurredAt, createdAt]
+    AgentWorkEvidence:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        workId: { type: string, format: uuid }
+        runId: { type: string, format: uuid }
+        snapshotHash: { type: string }
+        snapshot: { type: object, additionalProperties: true }
+        retentionClass: { type: string, enum: [standard, sensitive] }
+        expiresAt: { type: ["string", "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+      required: [id, workId, runId, snapshotHash, snapshot, retentionClass, expiresAt, createdAt]
+    AgentWorkCreateInput:
+      type: object
+      properties:
+        kind: { type: string, enum: [monitor, reminder, recurring_task, external_action, research, workflow] }
+        title: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: ["string", "null"], maxLength: 2000 }
+        source: { type: object, additionalProperties: true }
+        condition: { type: object, additionalProperties: true }
+        schedule: { type: object, additionalProperties: true }
+        nextRunAt: { type: ["string", "null"], format: date-time }
+      required: [kind, title]
+    AgentWorkStatusInput:
+      type: object
+      properties:
+        from: { type: string, enum: [draft, active, paused, waiting, needs_review, completed, failed, cancelled] }
+        to: { type: string, enum: [draft, active, paused, waiting, needs_review, completed, failed, cancelled] }
+        reason: { type: string, maxLength: 500 }
+      required: [from, to]
+    AgentWorkDetails:
+      type: object
+      properties:
+        work: { $ref: "#/components/schemas/AgentWork" }
+        runs:
+          type: array
+          items: { $ref: "#/components/schemas/AgentWorkRun" }
+        events:
+          type: array
+          items: { $ref: "#/components/schemas/AgentWorkEvent" }
+        evidence:
+          type: array
+          items: { $ref: "#/components/schemas/AgentWorkEvidence" }
+      required: [work, runs, events, evidence]
     ErrorResponse:
       type: object
       properties:

@@ -49,3 +49,4 @@
 - [HTTP integration provider fixture](api-integration-provider-fixture.md) — API integration tests need an explicit scripted/configured provider; development mode currently maps HTTP turns to provider-unavailable.
 - [Timeout-safe idempotency](timeout-safe-idempotency.md) — coordinate same-key retries while the original request is still running; a final database lookup alone leaves a duplicate-write race.
 - [Provider quota cooldowns](provider-quota-cooldowns.md) — quota responses without Retry-After still need an immediate circuit cooldown before the next secretary request.
+- [Agent Work migrations](agent-work-migrations.md) — invalid legacy Drizzle metadata requires reviewed additive schema changes until migration history is reconciled.

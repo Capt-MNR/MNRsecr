@@ -20,12 +20,18 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AgentWorkCreateInput,
+  AgentWorkDetails,
+  AgentWorkStatusInput,
   ApprovalInput,
   ApprovalOperation,
   ApprovalResponse,
   Candidate,
+  ChangeAgentWorkStatus200,
+  ClaimAgentWorkRun200,
   ConversationDetail,
   ConversationListResponse,
+  CreateAgentWork201,
   CreateTypedRelationshipParams,
   EntityGraphResponse,
   EntityTimelineResponse,
@@ -41,6 +47,8 @@ import type {
   LearningSignalListResponse,
   LearningSignalReviewInput,
   LearningSignalReviewResponse,
+  ListAgentWorks200,
+  ListAgentWorksParams,
   ListConversationsParams,
   ListSecondBrainCandidatesParams,
   ListSecondBrainMemoriesParams,
@@ -2198,6 +2206,418 @@ export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, 
 
 
 
+
+export const getListAgentWorksUrl = (params?: ListAgentWorksParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/works?${stringifiedParams}` : `/api/works`
+}
+
+/**
+ * @summary List the user's persistent agent work
+ */
+export const listAgentWorks = async (params?: ListAgentWorksParams, options?: Parameters<typeof customFetch>[1]): Promise<ListAgentWorks200> => {
+
+  return customFetch<ListAgentWorks200>(getListAgentWorksUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAgentWorksQueryKey = (params?: ListAgentWorksParams,) => {
+    return [
+    `/api/works`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListAgentWorksQueryOptions = <TData = Awaited<ReturnType<typeof listAgentWorks>>, TError = ErrorType<ErrorResponse>>(params?: ListAgentWorksParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAgentWorks>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAgentWorksQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAgentWorks>>> = ({ signal }) => listAgentWorks(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAgentWorks>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAgentWorksQueryResult = NonNullable<Awaited<ReturnType<typeof listAgentWorks>>>
+export type ListAgentWorksQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary List the user's persistent agent work
+ */
+
+export function useListAgentWorks<TData = Awaited<ReturnType<typeof listAgentWorks>>, TError = ErrorType<ErrorResponse>>(
+ params?: ListAgentWorksParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAgentWorks>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAgentWorksQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateAgentWorkUrl = () => {
+
+
+
+
+  return `/api/works`
+}
+
+/**
+ * @summary Create persistent work for the agent
+ */
+export const createAgentWork = async (agentWorkCreateInput: AgentWorkCreateInput, options?: Parameters<typeof customFetch>[1]): Promise<CreateAgentWork201> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<CreateAgentWork201>(getCreateAgentWorkUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(agentWorkCreateInput)
+  }
+);}
+
+
+
+
+
+export const getCreateAgentWorkMutationKey = () => ['createAgentWork'] as const;
+
+export const getCreateAgentWorkMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAgentWork>>, TError,CreateAgentWorkMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createAgentWork>>, TError,CreateAgentWorkMutationVariables, TContext> => {
+
+const mutationKey = getCreateAgentWorkMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createAgentWork>>, CreateAgentWorkMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createAgentWork(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateAgentWorkMutationResult = NonNullable<Awaited<ReturnType<typeof createAgentWork>>>
+    export type CreateAgentWorkMutationBody = BodyType<AgentWorkCreateInput>
+    export type CreateAgentWorkMutationError = ErrorType<ErrorResponse>
+    export type CreateAgentWorkMutationVariables = {data: BodyType<AgentWorkCreateInput>}
+
+    /**
+ * @summary Create persistent work for the agent
+ */
+export const useCreateAgentWork = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAgentWork>>, TError,CreateAgentWorkMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createAgentWork>>,
+        TError,
+        CreateAgentWorkMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateAgentWorkMutationOptions(options));
+    }
+
+export const getGetAgentWorkUrl = (workId: string,) => {
+
+
+
+
+  return `/api/works/${workId}`
+}
+
+/**
+ * @summary Get work details, runs, events, and evidence
+ */
+export const getAgentWork = async (workId: string, options?: Parameters<typeof customFetch>[1]): Promise<AgentWorkDetails> => {
+
+  return customFetch<AgentWorkDetails>(getGetAgentWorkUrl(workId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAgentWorkQueryKey = (workId: string,) => {
+    return [
+    `/api/works/${workId}`
+    ] as const;
+    }
+
+
+export const getGetAgentWorkQueryOptions = <TData = Awaited<ReturnType<typeof getAgentWork>>, TError = ErrorType<ErrorResponse>>(workId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAgentWork>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAgentWorkQueryKey(workId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAgentWork>>> = ({ signal }) => getAgentWork(workId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: workId !== null && workId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAgentWork>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAgentWorkQueryResult = NonNullable<Awaited<ReturnType<typeof getAgentWork>>>
+export type GetAgentWorkQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Get work details, runs, events, and evidence
+ */
+
+export function useGetAgentWork<TData = Awaited<ReturnType<typeof getAgentWork>>, TError = ErrorType<ErrorResponse>>(
+ workId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAgentWork>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAgentWorkQueryOptions(workId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getChangeAgentWorkStatusUrl = (workId: string,) => {
+
+
+
+
+  return `/api/works/${workId}`
+}
+
+/**
+ * @summary Pause, resume, complete, or cancel agent work
+ */
+export const changeAgentWorkStatus = async (workId: string,
+    agentWorkStatusInput: AgentWorkStatusInput, options?: Parameters<typeof customFetch>[1]): Promise<ChangeAgentWorkStatus200> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<ChangeAgentWorkStatus200>(getChangeAgentWorkStatusUrl(workId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(agentWorkStatusInput)
+  }
+);}
+
+
+
+
+
+export const getChangeAgentWorkStatusMutationKey = () => ['changeAgentWorkStatus'] as const;
+
+export const getChangeAgentWorkStatusMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changeAgentWorkStatus>>, TError,ChangeAgentWorkStatusMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof changeAgentWorkStatus>>, TError,ChangeAgentWorkStatusMutationVariables, TContext> => {
+
+const mutationKey = getChangeAgentWorkStatusMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof changeAgentWorkStatus>>, ChangeAgentWorkStatusMutationVariables> = (props) => {
+          const {workId,data} = props ?? {};
+
+          return  changeAgentWorkStatus(workId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ChangeAgentWorkStatusMutationResult = NonNullable<Awaited<ReturnType<typeof changeAgentWorkStatus>>>
+    export type ChangeAgentWorkStatusMutationBody = BodyType<AgentWorkStatusInput>
+    export type ChangeAgentWorkStatusMutationError = ErrorType<ErrorResponse>
+    export type ChangeAgentWorkStatusMutationVariables = {workId: string;data: BodyType<AgentWorkStatusInput>}
+
+    /**
+ * @summary Pause, resume, complete, or cancel agent work
+ */
+export const useChangeAgentWorkStatus = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changeAgentWorkStatus>>, TError,ChangeAgentWorkStatusMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof changeAgentWorkStatus>>,
+        TError,
+        ChangeAgentWorkStatusMutationVariables,
+        TContext
+      > => {
+      return useMutation(getChangeAgentWorkStatusMutationOptions(options));
+    }
+
+export const getClaimAgentWorkRunUrl = (workId: string,) => {
+
+
+
+
+  return `/api/works/${workId}/runs`
+}
+
+/**
+ * @summary Claim one due work run with a lease
+ */
+export const claimAgentWorkRun = async (workId: string, options?: Parameters<typeof customFetch>[1]): Promise<ClaimAgentWorkRun200> => {
+
+  return customFetch<ClaimAgentWorkRun200>(getClaimAgentWorkRunUrl(workId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getClaimAgentWorkRunMutationKey = () => ['claimAgentWorkRun'] as const;
+
+export const getClaimAgentWorkRunMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof claimAgentWorkRun>>, TError,ClaimAgentWorkRunMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof claimAgentWorkRun>>, TError,ClaimAgentWorkRunMutationVariables, TContext> => {
+
+const mutationKey = getClaimAgentWorkRunMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof claimAgentWorkRun>>, ClaimAgentWorkRunMutationVariables> = (props) => {
+          const {workId} = props ?? {};
+
+          return  claimAgentWorkRun(workId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ClaimAgentWorkRunMutationResult = NonNullable<Awaited<ReturnType<typeof claimAgentWorkRun>>>
+
+    export type ClaimAgentWorkRunMutationError = ErrorType<ErrorResponse>
+    export type ClaimAgentWorkRunMutationVariables = {workId: string}
+
+    /**
+ * @summary Claim one due work run with a lease
+ */
+export const useClaimAgentWorkRun = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof claimAgentWorkRun>>, TError,ClaimAgentWorkRunMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof claimAgentWorkRun>>,
+        TError,
+        ClaimAgentWorkRunMutationVariables,
+        TContext
+      > => {
+      return useMutation(getClaimAgentWorkRunMutationOptions(options));
+    }
 
 export const getGetTodayContextUrl = () => {
 

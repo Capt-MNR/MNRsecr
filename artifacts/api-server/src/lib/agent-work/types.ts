@@ -1,4 +1,4 @@
-export type AgentWorkDriver = "development" | "replit" | "expo" | "stub";
+export type AgentWorkDriver = "development" | "postgres" | "replit" | "expo" | "stub";
 
 export type AgentWorkIdentity = {
   tenantId: string;
@@ -14,6 +14,14 @@ export type AgentWorkStatus =
   | "completed"
   | "failed"
   | "cancelled";
+
+export type AgentWorkKind =
+  | "monitor"
+  | "reminder"
+  | "recurring_task"
+  | "external_action"
+  | "research"
+  | "workflow";
 
 export type AgentWorkRunStatus =
   | "queued"
@@ -92,6 +100,7 @@ export type EvidenceSnapshotInput = {
   runId: string;
   snapshot: Record<string, unknown>;
   retentionClass: "standard" | "sensitive";
+  expiresAt?: Date | null;
 };
 
 export type EvidenceSnapshotReference = {
@@ -100,13 +109,136 @@ export type EvidenceSnapshotReference = {
   driver: AgentWorkDriver;
 };
 
-/**
- * Storage is intentionally a stub in the first rollout. Agent Work must not
- * silently persist raw provider/source payloads until retention and redaction
- * rules are approved.
- */
+export type AgentWorkRecord = {
+  id: string;
+  identity: AgentWorkIdentity;
+  kind: AgentWorkKind;
+  title: string;
+  description: string | null;
+  status: AgentWorkStatus;
+  source: Record<string, unknown>;
+  condition: Record<string, unknown>;
+  schedule: Record<string, unknown>;
+  nextRunAt: Date | null;
+  lastRunAt: Date | null;
+  lastRunStatus: AgentWorkRunStatus | null;
+  rowVersion: number;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type AgentWorkRunRecord = {
+  id: string;
+  workId: string;
+  identity: AgentWorkIdentity;
+  attempt: number;
+  status: AgentWorkRunStatus;
+  idempotencyKey: string;
+  leaseToken: string | null;
+  leaseExpiresAt: Date | null;
+  startedAt: Date | null;
+  completedAt: Date | null;
+  verification: Record<string, unknown> | null;
+  error: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type AgentWorkEventRecord = {
+  id: string;
+  workId: string;
+  runId: string | null;
+  eventType: string;
+  actorType: string;
+  actorId: string | null;
+  summary: string;
+  metadata: Record<string, unknown>;
+  dedupeKey: string | null;
+  occurredAt: Date;
+  createdAt: Date;
+};
+
+export type AgentWorkEvidenceRecord = {
+  id: string;
+  workId: string;
+  runId: string;
+  snapshotHash: string;
+  snapshot: Record<string, unknown>;
+  retentionClass: "standard" | "sensitive";
+  expiresAt: Date | null;
+  createdAt: Date;
+};
+
+export type CreateAgentWorkInput = {
+  identity: AgentWorkIdentity;
+  kind: AgentWorkKind;
+  title: string;
+  description?: string | null;
+  source?: Record<string, unknown>;
+  condition?: Record<string, unknown>;
+  schedule?: Record<string, unknown>;
+  nextRunAt?: Date | null;
+};
+
+export type AgentWorkStatusChange = {
+  identity: AgentWorkIdentity;
+  workId: string;
+  from: AgentWorkStatus;
+  to: AgentWorkStatus;
+  actorType: "user" | "agent" | "system";
+  actorId?: string | null;
+  reason?: string;
+};
+
+export type ClaimAgentWorkRunInput = {
+  identity: AgentWorkIdentity;
+  workId: string;
+  now: Date;
+  leaseMs: number;
+  idempotencyKey: string;
+};
+
+export type CompleteAgentWorkRunInput = {
+  identity: AgentWorkIdentity;
+  runId: string;
+  status: AgentWorkRunStatus;
+  leaseToken: string;
+  verification?: Record<string, unknown> | null;
+  error?: string | null;
+  completedAt: Date;
+};
+
+export type CreateAgentWorkEventInput = {
+  identity: AgentWorkIdentity;
+  workId: string;
+  runId?: string | null;
+  eventType: string;
+  actorType?: string;
+  actorId?: string | null;
+  summary: string;
+  metadata?: Record<string, unknown>;
+  dedupeKey?: string | null;
+};
+
+export type ListAgentWorksInput = {
+  identity: AgentWorkIdentity;
+  status?: AgentWorkStatus;
+  limit?: number;
+};
+
 export interface StorageAdapter {
   readonly driver: AgentWorkDriver;
+  createWork(input: CreateAgentWorkInput): Promise<AgentWorkRecord>;
+  getWork(identity: AgentWorkIdentity, workId: string): Promise<AgentWorkRecord | null>;
+  listWorks(input: ListAgentWorksInput): Promise<AgentWorkRecord[]>;
+  changeWorkStatus(input: AgentWorkStatusChange): Promise<AgentWorkRecord>;
+  claimRun(input: ClaimAgentWorkRunInput): Promise<AgentWorkRunRecord | null>;
+  getRun(identity: AgentWorkIdentity, runId: string): Promise<AgentWorkRunRecord | null>;
+  listRuns(identity: AgentWorkIdentity, workId: string, limit?: number): Promise<AgentWorkRunRecord[]>;
+  completeRun(input: CompleteAgentWorkRunInput): Promise<AgentWorkRunRecord>;
+  addEvent(input: CreateAgentWorkEventInput): Promise<AgentWorkEventRecord>;
+  listEvents(identity: AgentWorkIdentity, workId: string, limit?: number): Promise<AgentWorkEventRecord[]>;
+  listEvidence(identity: AgentWorkIdentity, workId: string, limit?: number): Promise<AgentWorkEvidenceRecord[]>;
   storeEvidenceSnapshot(input: EvidenceSnapshotInput): Promise<EvidenceSnapshotReference>;
 }
 

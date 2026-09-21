@@ -19,5 +19,5 @@ export const featureFlags = {
   experimentalProviderClaims: () => envFlag("EXPERIMENTAL_PROVIDER_CLAIMS_ENABLED", false),
   decisionCache: () => envFlag("DECISION_CACHE_ENABLED", false),
   providerRouting: () => envFlag("PROVIDER_ROUTING_ENABLED", false),
-  agentWork: () => envFlag("AGENT_WORK_ENABLED", false),
+  agentWork: () => envFlag("AGENT_WORK_ENABLED", process.env.NODE_ENV !== "production"),
 };

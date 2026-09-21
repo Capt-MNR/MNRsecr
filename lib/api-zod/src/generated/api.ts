@@ -589,6 +589,203 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
+ * @summary List the user's persistent agent work
+ */
+export const listAgentWorksQueryLimitDefault = 50;
+export const listAgentWorksQueryLimitMax = 100;
+
+
+
+export const ListAgentWorksQueryParams = zod.object({
+  "status": zod.enum(['draft', 'active', 'paused', 'waiting', 'needs_review', 'completed', 'failed', 'cancelled']).optional(),
+  "limit": zod.coerce.number().int().min(1).max(listAgentWorksQueryLimitMax).default(listAgentWorksQueryLimitDefault)
+})
+
+export const ListAgentWorksResponse = zod.object({
+  "works": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "kind": zod.enum(['monitor', 'reminder', 'recurring_task', 'external_action', 'research', 'workflow']),
+  "title": zod.string(),
+  "description": zod.string().nullable(),
+  "status": zod.enum(['draft', 'active', 'paused', 'waiting', 'needs_review', 'completed', 'failed', 'cancelled']),
+  "source": zod.record(zod.string(), zod.unknown()),
+  "condition": zod.record(zod.string(), zod.unknown()),
+  "schedule": zod.record(zod.string(), zod.unknown()),
+  "nextRunAt": zod.coerce.date().nullable(),
+  "lastRunAt": zod.coerce.date().nullable(),
+  "lastRunStatus": zod.string().nullable(),
+  "rowVersion": zod.number().int(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Create persistent work for the agent
+ */
+export const createAgentWorkBodyTitleMax = 200;
+
+export const createAgentWorkBodyDescriptionMax = 2000;
+
+
+
+export const CreateAgentWorkBody = zod.object({
+  "kind": zod.enum(['monitor', 'reminder', 'recurring_task', 'external_action', 'research', 'workflow']),
+  "title": zod.string().min(1).max(createAgentWorkBodyTitleMax),
+  "description": zod.string().max(createAgentWorkBodyDescriptionMax).nullish(),
+  "source": zod.record(zod.string(), zod.unknown()).optional(),
+  "condition": zod.record(zod.string(), zod.unknown()).optional(),
+  "schedule": zod.record(zod.string(), zod.unknown()).optional(),
+  "nextRunAt": zod.coerce.date().nullish()
+})
+
+export const CreateAgentWorkResponse = zod.object({
+  "work": zod.object({
+  "id": zod.string().uuid(),
+  "kind": zod.enum(['monitor', 'reminder', 'recurring_task', 'external_action', 'research', 'workflow']),
+  "title": zod.string(),
+  "description": zod.string().nullable(),
+  "status": zod.enum(['draft', 'active', 'paused', 'waiting', 'needs_review', 'completed', 'failed', 'cancelled']),
+  "source": zod.record(zod.string(), zod.unknown()),
+  "condition": zod.record(zod.string(), zod.unknown()),
+  "schedule": zod.record(zod.string(), zod.unknown()),
+  "nextRunAt": zod.coerce.date().nullable(),
+  "lastRunAt": zod.coerce.date().nullable(),
+  "lastRunStatus": zod.string().nullable(),
+  "rowVersion": zod.number().int(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+})
+
+
+/**
+ * @summary Get work details, runs, events, and evidence
+ */
+export const GetAgentWorkParams = zod.object({
+  "workId": zod.coerce.string().uuid()
+})
+
+export const GetAgentWorkResponse = zod.object({
+  "work": zod.object({
+  "id": zod.string().uuid(),
+  "kind": zod.enum(['monitor', 'reminder', 'recurring_task', 'external_action', 'research', 'workflow']),
+  "title": zod.string(),
+  "description": zod.string().nullable(),
+  "status": zod.enum(['draft', 'active', 'paused', 'waiting', 'needs_review', 'completed', 'failed', 'cancelled']),
+  "source": zod.record(zod.string(), zod.unknown()),
+  "condition": zod.record(zod.string(), zod.unknown()),
+  "schedule": zod.record(zod.string(), zod.unknown()),
+  "nextRunAt": zod.coerce.date().nullable(),
+  "lastRunAt": zod.coerce.date().nullable(),
+  "lastRunStatus": zod.string().nullable(),
+  "rowVersion": zod.number().int(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}),
+  "runs": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "workId": zod.string().uuid(),
+  "attempt": zod.number().int(),
+  "status": zod.enum(['queued', 'claimed', 'running', 'verifying', 'verified', 'unchanged', 'failed', 'uncertain', 'needs_review']),
+  "idempotencyKey": zod.string(),
+  "leaseExpiresAt": zod.coerce.date().nullable(),
+  "startedAt": zod.coerce.date().nullable(),
+  "completedAt": zod.coerce.date().nullable(),
+  "verification": zod.record(zod.string(), zod.unknown()).nullable(),
+  "error": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "events": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "workId": zod.string().uuid(),
+  "runId": zod.string().uuid().nullable(),
+  "eventType": zod.string(),
+  "actorType": zod.string(),
+  "actorId": zod.string().nullable(),
+  "summary": zod.string(),
+  "metadata": zod.record(zod.string(), zod.unknown()),
+  "occurredAt": zod.coerce.date(),
+  "createdAt": zod.coerce.date()
+})),
+  "evidence": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "workId": zod.string().uuid(),
+  "runId": zod.string().uuid(),
+  "snapshotHash": zod.string(),
+  "snapshot": zod.record(zod.string(), zod.unknown()),
+  "retentionClass": zod.enum(['standard', 'sensitive']),
+  "expiresAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Pause, resume, complete, or cancel agent work
+ */
+export const ChangeAgentWorkStatusParams = zod.object({
+  "workId": zod.coerce.string().uuid()
+})
+
+export const changeAgentWorkStatusBodyReasonMax = 500;
+
+
+
+export const ChangeAgentWorkStatusBody = zod.object({
+  "from": zod.enum(['draft', 'active', 'paused', 'waiting', 'needs_review', 'completed', 'failed', 'cancelled']),
+  "to": zod.enum(['draft', 'active', 'paused', 'waiting', 'needs_review', 'completed', 'failed', 'cancelled']),
+  "reason": zod.string().max(changeAgentWorkStatusBodyReasonMax).optional()
+})
+
+export const ChangeAgentWorkStatusResponse = zod.object({
+  "work": zod.object({
+  "id": zod.string().uuid(),
+  "kind": zod.enum(['monitor', 'reminder', 'recurring_task', 'external_action', 'research', 'workflow']),
+  "title": zod.string(),
+  "description": zod.string().nullable(),
+  "status": zod.enum(['draft', 'active', 'paused', 'waiting', 'needs_review', 'completed', 'failed', 'cancelled']),
+  "source": zod.record(zod.string(), zod.unknown()),
+  "condition": zod.record(zod.string(), zod.unknown()),
+  "schedule": zod.record(zod.string(), zod.unknown()),
+  "nextRunAt": zod.coerce.date().nullable(),
+  "lastRunAt": zod.coerce.date().nullable(),
+  "lastRunStatus": zod.string().nullable(),
+  "rowVersion": zod.number().int(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+})
+
+
+/**
+ * @summary Claim one due work run with a lease
+ */
+export const ClaimAgentWorkRunParams = zod.object({
+  "workId": zod.coerce.string().uuid()
+})
+
+export const ClaimAgentWorkRunResponse = zod.object({
+  "run": zod.union([zod.object({
+  "id": zod.string().uuid(),
+  "workId": zod.string().uuid(),
+  "attempt": zod.number().int(),
+  "status": zod.enum(['queued', 'claimed', 'running', 'verifying', 'verified', 'unchanged', 'failed', 'uncertain', 'needs_review']),
+  "idempotencyKey": zod.string(),
+  "leaseExpiresAt": zod.coerce.date().nullable(),
+  "startedAt": zod.coerce.date().nullable(),
+  "completedAt": zod.coerce.date().nullable(),
+  "verification": zod.record(zod.string(), zod.unknown()).nullable(),
+  "error": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}),zod.null()])
+})
+
+
+/**
  * @summary Get the persisted today context
  */
 export const GetTodayContextResponse = zod.object({

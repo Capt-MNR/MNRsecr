@@ -6,7 +6,9 @@ import {
   ExpoNotificationAdapter,
   StubIdentityAdapter,
   StubSchedulerAdapter,
+  StubStorageAdapter,
 } from "./development-adapters";
+import { PostgresAgentWorkStorageAdapter } from "./postgres-storage";
 
 function driverFromEnvironment(name: string, fallback: AgentWorkDriver): AgentWorkDriver {
   const value = process.env[name]?.trim().toLowerCase();
@@ -52,7 +54,8 @@ export function createAgentWorkAdapters(overrides: Partial<AgentWorkAdapters> = 
   })();
   const storage = overrides.storage ?? (() => {
     const storageDriver = driverFromEnvironment("AGENT_WORK_STORAGE_DRIVER", defaults.storage.driver);
-    if (storageDriver === "stub") return defaults.storage;
+    if (storageDriver === "stub") return new StubStorageAdapter();
+    if (storageDriver === "postgres") return new PostgresAgentWorkStorageAdapter();
     throw new Error(`AGENT_WORK_STORAGE_DRIVER_UNSUPPORTED:${storageDriver}`);
   })();
   return {

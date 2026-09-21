@@ -9,6 +9,7 @@ import relationshipsRouter from "./relationships";
 import pushTokensRouter from "./push-tokens";
 import memoriesRouter from "./memories";
 import memoryCandidatesRouter from "./memory-candidates";
+import agentWorkRouter from "./agent-work";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use(relationshipsRouter);
 router.use(pushTokensRouter);
 router.use(memoriesRouter);
 router.use(memoryCandidatesRouter);
+router.use(agentWorkRouter);
 
 export default router;

@@ -10,6 +10,218 @@ export interface HealthStatus {
   service?: string;
 }
 
+export type AgentWorkKind = typeof AgentWorkKind[keyof typeof AgentWorkKind];
+
+
+export const AgentWorkKind = {
+  monitor: 'monitor',
+  reminder: 'reminder',
+  recurring_task: 'recurring_task',
+  external_action: 'external_action',
+  research: 'research',
+  workflow: 'workflow',
+} as const;
+
+export type AgentWorkStatus = typeof AgentWorkStatus[keyof typeof AgentWorkStatus];
+
+
+export const AgentWorkStatus = {
+  draft: 'draft',
+  active: 'active',
+  paused: 'paused',
+  waiting: 'waiting',
+  needs_review: 'needs_review',
+  completed: 'completed',
+  failed: 'failed',
+  cancelled: 'cancelled',
+} as const;
+
+export type AgentWorkSource = { [key: string]: unknown };
+
+export type AgentWorkCondition = { [key: string]: unknown };
+
+export type AgentWorkSchedule = { [key: string]: unknown };
+
+export interface AgentWork {
+  id: string;
+  kind: AgentWorkKind;
+  title: string;
+  /** @nullable */
+  description: string | null;
+  status: AgentWorkStatus;
+  source: AgentWorkSource;
+  condition: AgentWorkCondition;
+  schedule: AgentWorkSchedule;
+  /** @nullable */
+  nextRunAt: string | null;
+  /** @nullable */
+  lastRunAt: string | null;
+  /** @nullable */
+  lastRunStatus: string | null;
+  rowVersion: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AgentWorkRunStatus = typeof AgentWorkRunStatus[keyof typeof AgentWorkRunStatus];
+
+
+export const AgentWorkRunStatus = {
+  queued: 'queued',
+  claimed: 'claimed',
+  running: 'running',
+  verifying: 'verifying',
+  verified: 'verified',
+  unchanged: 'unchanged',
+  failed: 'failed',
+  uncertain: 'uncertain',
+  needs_review: 'needs_review',
+} as const;
+
+/**
+ * @nullable
+ */
+export type AgentWorkRunVerification = { [key: string]: unknown } | null;
+
+export interface AgentWorkRun {
+  id: string;
+  workId: string;
+  attempt: number;
+  status: AgentWorkRunStatus;
+  idempotencyKey: string;
+  /** @nullable */
+  leaseExpiresAt: string | null;
+  /** @nullable */
+  startedAt: string | null;
+  /** @nullable */
+  completedAt: string | null;
+  /** @nullable */
+  verification: AgentWorkRunVerification;
+  /** @nullable */
+  error: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AgentWorkEventMetadata = { [key: string]: unknown };
+
+export interface AgentWorkEvent {
+  id: string;
+  workId: string;
+  /** @nullable */
+  runId: string | null;
+  eventType: string;
+  actorType: string;
+  /** @nullable */
+  actorId: string | null;
+  summary: string;
+  metadata: AgentWorkEventMetadata;
+  occurredAt: string;
+  createdAt: string;
+  [key: string]: unknown;
+ }
+
+export type AgentWorkEvidenceSnapshot = { [key: string]: unknown };
+
+export type AgentWorkEvidenceRetentionClass = typeof AgentWorkEvidenceRetentionClass[keyof typeof AgentWorkEvidenceRetentionClass];
+
+
+export const AgentWorkEvidenceRetentionClass = {
+  standard: 'standard',
+  sensitive: 'sensitive',
+} as const;
+
+export interface AgentWorkEvidence {
+  id: string;
+  workId: string;
+  runId: string;
+  snapshotHash: string;
+  snapshot: AgentWorkEvidenceSnapshot;
+  retentionClass: AgentWorkEvidenceRetentionClass;
+  /** @nullable */
+  expiresAt: string | null;
+  createdAt: string;
+}
+
+export type AgentWorkCreateInputKind = typeof AgentWorkCreateInputKind[keyof typeof AgentWorkCreateInputKind];
+
+
+export const AgentWorkCreateInputKind = {
+  monitor: 'monitor',
+  reminder: 'reminder',
+  recurring_task: 'recurring_task',
+  external_action: 'external_action',
+  research: 'research',
+  workflow: 'workflow',
+} as const;
+
+export type AgentWorkCreateInputSource = { [key: string]: unknown };
+
+export type AgentWorkCreateInputCondition = { [key: string]: unknown };
+
+export type AgentWorkCreateInputSchedule = { [key: string]: unknown };
+
+export interface AgentWorkCreateInput {
+  kind: AgentWorkCreateInputKind;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  title: string;
+  /**
+     * @maxLength 2000
+     * @nullable
+     */
+  description?: string | null;
+  source?: AgentWorkCreateInputSource;
+  condition?: AgentWorkCreateInputCondition;
+  schedule?: AgentWorkCreateInputSchedule;
+  /** @nullable */
+  nextRunAt?: string | null;
+}
+
+export type AgentWorkStatusInputFrom = typeof AgentWorkStatusInputFrom[keyof typeof AgentWorkStatusInputFrom];
+
+
+export const AgentWorkStatusInputFrom = {
+  draft: 'draft',
+  active: 'active',
+  paused: 'paused',
+  waiting: 'waiting',
+  needs_review: 'needs_review',
+  completed: 'completed',
+  failed: 'failed',
+  cancelled: 'cancelled',
+} as const;
+
+export type AgentWorkStatusInputTo = typeof AgentWorkStatusInputTo[keyof typeof AgentWorkStatusInputTo];
+
+
+export const AgentWorkStatusInputTo = {
+  draft: 'draft',
+  active: 'active',
+  paused: 'paused',
+  waiting: 'waiting',
+  needs_review: 'needs_review',
+  completed: 'completed',
+  failed: 'failed',
+  cancelled: 'cancelled',
+} as const;
+
+export interface AgentWorkStatusInput {
+  from: AgentWorkStatusInputFrom;
+  to: AgentWorkStatusInputTo;
+  /** @maxLength 500 */
+  reason?: string;
+}
+
+export interface AgentWorkDetails {
+  work: AgentWork;
+  runs: AgentWorkRun[];
+  events: AgentWorkEvent[];
+  evidence: AgentWorkEvidence[];
+}
+
 export type ErrorResponseCategory = typeof ErrorResponseCategory[keyof typeof ErrorResponseCategory];
 
 
@@ -1032,6 +1244,45 @@ export const ListTypedRelationshipsSide = {
 
 export type CreateTypedRelationshipParams = {
 relation: string;
+};
+
+export type ListAgentWorksParams = {
+status?: ListAgentWorksStatus;
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+};
+
+export type ListAgentWorksStatus = typeof ListAgentWorksStatus[keyof typeof ListAgentWorksStatus];
+
+
+export const ListAgentWorksStatus = {
+  draft: 'draft',
+  active: 'active',
+  paused: 'paused',
+  waiting: 'waiting',
+  needs_review: 'needs_review',
+  completed: 'completed',
+  failed: 'failed',
+  cancelled: 'cancelled',
+} as const;
+
+export type ListAgentWorks200 = {
+  works: AgentWork[];
+};
+
+export type CreateAgentWork201 = {
+  work: AgentWork;
+};
+
+export type ChangeAgentWorkStatus200 = {
+  work: AgentWork;
+};
+
+export type ClaimAgentWorkRun200 = {
+  run: AgentWorkRun | null;
 };
 
 export type ListSecondBrainMemoriesParams = {

@@ -431,6 +431,10 @@ function Home() {
               <Brain className="size-4" />
               الذاكرة الشخصية
             </Link>
+            <Link href="/works" className="mt-2 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+              <Sparkles className="size-4" />
+              أعمال الوكيل
+            </Link>
           </div>
 
           <ConversationHistory

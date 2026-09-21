@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "export NODE_ENV=development && pnpm run build && pnpm run start",
+    "dev": "export NODE_ENV=development AGENT_WORK_ENABLED=${AGENT_WORK_ENABLED:-true} AGENT_WORK_ALLOW_DEVELOPMENT_IDENTITY=${AGENT_WORK_ALLOW_DEVELOPMENT_IDENTITY:-true} && pnpm run build && pnpm run start",
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",

@@ -1,5 +1,6 @@
 import { logger } from "../logger";
 import { dispatchMobilePush } from "../mobile-push";
+import { PostgresAgentWorkStorageAdapter } from "./postgres-storage";
 import type {
   AgentWorkIdentity,
   AgentWorkAdapters,
@@ -126,6 +127,50 @@ export class ExpoNotificationAdapter implements NotificationAdapter {
 export class StubStorageAdapter implements StorageAdapter {
   readonly driver = "stub" as const;
 
+  createWork(): Promise<never> {
+    return Promise.reject(new Error("AGENT_WORK_STORAGE_NOT_CONFIGURED"));
+  }
+
+  getWork(): Promise<never> {
+    return Promise.reject(new Error("AGENT_WORK_STORAGE_NOT_CONFIGURED"));
+  }
+
+  listWorks(): Promise<never> {
+    return Promise.reject(new Error("AGENT_WORK_STORAGE_NOT_CONFIGURED"));
+  }
+
+  changeWorkStatus(): Promise<never> {
+    return Promise.reject(new Error("AGENT_WORK_STORAGE_NOT_CONFIGURED"));
+  }
+
+  claimRun(): Promise<never> {
+    return Promise.reject(new Error("AGENT_WORK_STORAGE_NOT_CONFIGURED"));
+  }
+
+  getRun(): Promise<never> {
+    return Promise.reject(new Error("AGENT_WORK_STORAGE_NOT_CONFIGURED"));
+  }
+
+  listRuns(): Promise<never> {
+    return Promise.reject(new Error("AGENT_WORK_STORAGE_NOT_CONFIGURED"));
+  }
+
+  completeRun(): Promise<never> {
+    return Promise.reject(new Error("AGENT_WORK_STORAGE_NOT_CONFIGURED"));
+  }
+
+  addEvent(): Promise<never> {
+    return Promise.reject(new Error("AGENT_WORK_STORAGE_NOT_CONFIGURED"));
+  }
+
+  listEvents(): Promise<never> {
+    return Promise.reject(new Error("AGENT_WORK_STORAGE_NOT_CONFIGURED"));
+  }
+
+  listEvidence(): Promise<never> {
+    return Promise.reject(new Error("AGENT_WORK_STORAGE_NOT_CONFIGURED"));
+  }
+
   async storeEvidenceSnapshot(_input: EvidenceSnapshotInput): Promise<EvidenceSnapshotReference> {
     throw new Error("AGENT_WORK_STORAGE_NOT_CONFIGURED");
   }
@@ -136,6 +181,6 @@ export function createDevelopmentAdapters(): AgentWorkAdapters {
     scheduler: new DevelopmentSchedulerAdapter(),
     identity: new EnvironmentIdentityAdapter(),
     notification: new DevelopmentNotificationAdapter(),
-    storage: new StubStorageAdapter(),
+    storage: new PostgresAgentWorkStorageAdapter(),
   };
 }

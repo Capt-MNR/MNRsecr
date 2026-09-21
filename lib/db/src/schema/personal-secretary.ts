@@ -907,6 +907,143 @@ export const activityEventEntitiesTable = pgTable(
   ],
 );
 
+export const agentWorksTable = pgTable(
+  "agent_works",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    kind: text("kind").notNull(),
+    title: text("title").notNull(),
+    description: text("description"),
+    status: text("status").notNull().default("draft"),
+    source: jsonb("source").$type<Record<string, unknown>>().notNull().default({}),
+    condition: jsonb("condition").$type<Record<string, unknown>>().notNull().default({}),
+    schedule: jsonb("schedule").$type<Record<string, unknown>>().notNull().default({}),
+    nextRunAt: timestamp("next_run_at", { withTimezone: true }),
+    lastRunAt: timestamp("last_run_at", { withTimezone: true }),
+    lastRunStatus: text("last_run_status"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    rowVersion: integer("row_version").notNull().default(1),
+  },
+  (table) => [
+    index("agent_works_owner_status_next_run_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.status,
+      table.nextRunAt,
+    ),
+    index("agent_works_owner_updated_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.updatedAt,
+    ),
+  ],
+);
+
+export const agentWorkRunsTable = pgTable(
+  "agent_work_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    workId: uuid("work_id").notNull().references(() => agentWorksTable.id),
+    attempt: integer("attempt").notNull().default(1),
+    status: text("status").notNull().default("queued"),
+    idempotencyKey: text("idempotency_key").notNull(),
+    leaseToken: text("lease_token"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    verification: jsonb("verification").$type<Record<string, unknown> | null>(),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("agent_work_runs_owner_idempotency_unique").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.idempotencyKey,
+    ),
+    uniqueIndex("agent_work_runs_owner_attempt_unique").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.workId,
+      table.attempt,
+    ),
+    index("agent_work_runs_owner_work_created_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.workId,
+      table.createdAt,
+    ),
+    index("agent_work_runs_lease_idx").on(
+      table.status,
+      table.leaseExpiresAt,
+    ),
+  ],
+);
+
+export const agentWorkEventsTable = pgTable(
+  "agent_work_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    workId: uuid("work_id").notNull().references(() => agentWorksTable.id),
+    runId: uuid("run_id").references(() => agentWorkRunsTable.id),
+    eventType: text("event_type").notNull(),
+    actorType: text("actor_type").notNull().default("agent"),
+    actorId: text("actor_id"),
+    summary: text("summary").notNull(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+    dedupeKey: text("dedupe_key"),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("agent_work_events_owner_dedupe_unique").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.dedupeKey,
+    ),
+    index("agent_work_events_owner_work_occurred_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.workId,
+      table.occurredAt,
+    ),
+  ],
+);
+
+export const agentWorkEvidenceTable = pgTable(
+  "agent_work_evidence",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    workId: uuid("work_id").notNull().references(() => agentWorksTable.id),
+    runId: uuid("run_id").notNull().references(() => agentWorkRunsTable.id),
+    snapshotHash: text("snapshot_hash").notNull(),
+    snapshot: jsonb("snapshot").$type<Record<string, unknown>>().notNull(),
+    retentionClass: text("retention_class").notNull().default("standard"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("agent_work_evidence_owner_run_hash_unique").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.runId,
+      table.snapshotHash,
+    ),
+    index("agent_work_evidence_owner_work_created_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.workId,
+      table.createdAt,
+    ),
+  ],
+);
+
 export const insertPersonSchema = createInsertSchema(peopleTable).omit({
   id: true,
   createdAt: true,
@@ -958,6 +1095,10 @@ export type IncomeReceivable = typeof incomeReceivablesTable.$inferSelect;
 export type PaymentLink = typeof paymentLinksTable.$inferSelect;
 export type ActivityEvent = typeof activityEventsTable.$inferSelect;
 export type ActivityEventEntity = typeof activityEventEntitiesTable.$inferSelect;
+export type AgentWork = typeof agentWorksTable.$inferSelect;
+export type AgentWorkRun = typeof agentWorkRunsTable.$inferSelect;
+export type AgentWorkEvent = typeof agentWorkEventsTable.$inferSelect;
+export type AgentWorkEvidence = typeof agentWorkEvidenceTable.$inferSelect;
 export type InsertPerson = z.infer<typeof insertPersonSchema>;
 export type InsertProject = z.infer<typeof insertProjectSchema>;
 export type InsertExpense = z.infer<typeof insertExpenseSchema>;
