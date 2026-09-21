@@ -1,0 +1,644 @@
+بعد اكتمال #96 والتحقق من External Monitoring Vertical Slice، ابدأ مباشرة في #97.
+
+لا تبدأ Audit جديد.
+لا تعُد إلى التخطيط العام.
+لا تضف infrastructure لمجرد infrastructure.
+
+#97 هو امتداد مباشر لنفس الـAgent Work الموجود في #95 و#96، والهدف منه إثبات الانتقال من:
+
+Condition → Notify
+
+إلى:
+
+Condition → Decide → Ask/Approve → Act
+
+مع الحفاظ الكامل على الـWork architecture ومسارات الـapproval/execution الموجودة.
+
+---
+
+1. الهدف
+
+نريد أن يستطيع المستخدم إعطاء Agent تعليمات من نوع:
+
+«"لو حصل X اعمل Y."»
+
+ويصبح المسار:
+
+User Request
+→ Understand
+→ Create Work
+→ Approval
+→ Active Work
+→ Monitor
+→ Condition
+→ Decide
+→ Ask / Approval
+→ Existing Execution Path
+→ Act
+→ Verify
+→ Evidence
+→ Event
+→ Notify
+
+لا نريد إنشاء Agent execution architecture جديدة.
+
+نريد إثبات أن الـWork الذي أصبح قادرًا على Monitoring في #96 يستطيع لاحقًا تشغيل Action حقيقية باستخدام المسار الموجود أصلًا.
+
+---
+
+2. استخدم GitHub الموجود في #96
+
+لا تضف External Source جديد.
+
+استخدم:
+
+"github_repository"
+
+كمصدر الـCondition.
+
+اختَر Action واحدة فقط في #97 تكون مناسبة وآمنة للتجربة.
+
+لا تضف مجموعة Actions.
+
+الأولوية هي إثبات الـAgent loop، وليس عدد التكاملات.
+
+---
+
+3. اختيار الـAction
+
+قبل التنفيذ، افحص الـexecution/approval capabilities الموجودة حاليًا في المشروع.
+
+اختر Action واحدة فقط يمكن تنفيذها من خلال المسار الحالي دون إنشاء execution path جديد.
+
+يفضل أن تكون:
+
+- واضحة للمستخدم.
+- قابلة للتحقق.
+- لها نتيجة يمكن تخزينها كـEvidence.
+- لا تسبب تغييرًا غير قابل للعكس.
+- مناسبة لـGitHub use case.
+- ويمكن إيقافها/طلب approval لها بوضوح.
+
+إذا كانت هناك Action مناسبة موجودة بالفعل، استخدمها.
+
+إذا كانت تحتاج تعديلًا صغيرًا حتى تمر عبر الـapproval/execution path الحالي، نفذ الحد الأدنى فقط.
+
+ممنوع إنشاء Action framework جديد لمجرد #97.
+
+---
+
+4. Natural Delegation
+
+اجعل Main يفهم طلبًا طبيعيًا من نوع:
+
+«"لو العناصر المفتوحة في octocat/Hello-World عدت 10، اعمل X."»
+
+حيث X هي الـAction الوحيدة التي اخترتها.
+
+يجب أن يفهم الـAgent:
+
+- Source
+- Target
+- Condition
+- Threshold / comparison
+- Schedule
+- Action
+- Permission requirement
+
+ولا تجعل المستخدم مضطرًا لفتح Works يدويًا.
+
+---
+
+5. Generic Work
+
+لا تنشئ Work model جديد.
+
+استخدم Work architecture الموجودة.
+
+يجب أن يكون الـWork قادرًا منطقيًا على تمثيل:
+
+Monitor
++
+Condition
++
+Action
+
+بحيث لا تصبح GitHub Action حالة خاصة داخل الكود.
+
+إذا كان الـWork الحالي يحتاج extension صغير لدعم Action state أو approval state، نفذ أقل تغيير لازم.
+
+لا تعِد تصميم الـWork lifecycle.
+
+---
+
+6. أهم جزء: Condition → Decide
+
+عند تنفيذ Monitoring Run:
+
+Step 1 — Read
+
+اقرأ الحالة الحالية من GitHub باستخدام implementation #96.
+
+Step 2 — Compare
+
+قارنها بالـbaseline/state السابق.
+
+Step 3 — Verify
+
+تحقق من النتيجة والأدلة بنفس آلية #96.
+
+Step 4 — Evaluate Condition
+
+حدد deterministicًا هل الشرط تحقق أم لا.
+
+مثال:
+
+"open_items > 10"
+
+Step 5 — Decide
+
+إذا لم يتحقق الشرط:
+
+- لا Action.
+- لا Approval.
+- لا Notification غير ضرورية.
+- reschedule.
+
+إذا تحقق الشرط:
+
+الـAgent ينتقل إلى Action decision.
+
+لا تعتبر مجرد تحقق الشرط تنفيذًا تلقائيًا للـAction.
+
+---
+
+7. Ask / Approval
+
+عندما يصل الـWork إلى Action تحتاج Approval:
+
+لا تنفذ الـAction مباشرة إذا كانت قواعد الـapproval الحالية تتطلب موافقة المستخدم.
+
+استخدم نفس approval path الموجود في #95/#96.
+
+لا تنشئ:
+
+- approval system جديد
+- confirmation model جديد
+- execution queue جديدة
+- parallel action approval path
+
+يجب أن يرى المستخدم طلبًا مفهومًا مثل:
+
+«"تحقق الشرط الذي طلبته: العناصر المفتوحة أصبحت 11.
+
+الإجراء المقترح: [Action].
+
+هل تريدني أن أنفذ هذا الإجراء؟"»
+
+الصياغة النهائية تعتمد على الـAction التي اخترتها.
+
+المهم أن المستخدم يفهم:
+
+1. ماذا حدث؟
+2. لماذا يريد Agent تنفيذ Action؟
+3. ماذا سيحدث إذا وافق؟
+
+---
+
+8. Approval Semantics
+
+فرّق بوضوح بين:
+
+Monitoring
+
+قراءة ومقارنة والتحقق.
+
+Decision
+
+Agent قرر أن الشرط تحقق وأن Action مطلوبة.
+
+Approval
+
+المستخدم يوافق على تنفيذ Action إذا كانت قواعد الأمان الحالية تتطلب ذلك.
+
+Execution
+
+الـAction تمر عبر execution path الموجود.
+
+لا تجعل مجرد "condition=true" يعني "execute=true".
+
+---
+
+9. Execution
+
+بعد Approval:
+
+استخدم مسار التنفيذ الحالي حرفيًا قدر الإمكان.
+
+لا تنشئ مسارًا موازيًا خاصًا بالـAgent Work.
+
+المطلوب:
+
+Work
+→ approved action
+→ existing execution path
+→ result
+
+إذا كان execution path الحالي مصممًا للـmanual/user initiated action، عدّل أقل قدر ممكن لجعله يقبل نفس Action عندما تأتي من Agent Work بعد approval.
+
+لا تنشئ:
+
+"agent_execute_action()"
+
+إذا كان ذلك سيصبح execution system منفصلًا عن النظام الحالي.
+
+---
+
+10. Verify بعد التنفيذ
+
+بعد تنفيذ الـAction، لا تعتبر الـAPI response وحده نجاحًا نهائيًا إذا كان يمكن التحقق من النتيجة.
+
+يجب أن يكون المسار:
+
+Act → Verify → Evidence
+
+مثلاً:
+
+Action executed
+→ read resulting state
+→ verify expected change
+→ save evidence
+→ record event
+
+إذا تعذر verification:
+
+لا تسجل العملية كـsuccess مؤكد.
+
+يجب أن يظهر الفرق بين:
+
+- Action succeeded and verified
+- Action executed but verification failed
+- Action failed
+
+---
+
+11. Notification
+
+بعد الـAction:
+
+لا ترسل notification عامة.
+
+يجب أن تكون الرسالة مفهومة:
+
+قبل التنفيذ
+
+الشرط تحقق + ما الـAction التي تحتاج Approval.
+
+بعد Approval والتنفيذ
+
+ما الذي تم؟
+ولماذا؟
+ومتى؟
+وهل تم التحقق من النتيجة؟
+
+مثال مفاهيمي:
+
+«"تحقق الشرط الذي حددته.
+نفذت الإجراء X بعد موافقتك.
+تم التحقق من النتيجة."»
+
+مع Deep Link إلى Work Detail.
+
+---
+
+12. Prevent repeated Actions
+
+هذه نقطة حرجة.
+
+إذا كان:
+
+"condition = true"
+
+وظل true في كل Run لاحق، لا تنفذ Action مرة أخرى في كل Run.
+
+يجب أن يكون هناك transition/state logic واضح:
+
+false → true
+
+يؤدي إلى Action.
+
+لكن:
+
+true → true
+
+لا يعيد Action تلقائيًا.
+
+وعند:
+
+true → false
+
+يتم clear للحالة.
+
+ثم إذا أصبحت:
+
+false → true
+
+مرة أخرى، يمكن إنشاء Action cycle جديدة وفق قواعد الـWork.
+
+استخدم الـstate/evidence/events الموجودة.
+
+لا تنشئ deduplication system منفصل.
+
+---
+
+13. Approval Pending
+
+اختبر الحالة التي يتحقق فيها الشرط لكن المستخدم لم يوافق بعد.
+
+يجب ألا يؤدي كل Scheduled Run إلى:
+
+- Approval جديد.
+- Notification مكرر.
+- Action مكرر.
+
+يجب أن يبقى الـWork في حالة واضحة مثل pending approval وفق الـstate model الموجود.
+
+وعند الموافقة:
+
+يكمل نفس الـWork cycle.
+
+---
+
+14. Pause / Resume / Cancel
+
+اختبر:
+
+Pause قبل تحقق الشرط
+
+لا Monitoring Action.
+
+Pause بعد تحقق الشرط وقبل Approval
+
+لا Action.
+
+Pause بعد Approval وقبل Execution
+
+لا Action إذا كانت semantics الحالية تمنع التنفيذ أثناء pause.
+
+Cancel
+
+لا Action مستقبلية.
+
+Resume
+
+يستأنف الـWork وفق الحالة الصحيحة بدون duplicate execution.
+
+لا تضف lifecycle جديد.
+
+---
+
+15. Failure Handling
+
+اختبر على الأقل:
+
+- Condition evaluation failure.
+- External source failure.
+- Approval timeout / pending approval.
+- Action execution failure.
+- Verification failure بعد Action.
+- duplicate execution attempt.
+- Work paused.
+- Work cancelled.
+- tenant isolation.
+
+المهم:
+
+لا يتم اعتبار Action ناجحة إذا فشلت أو لم يتم التحقق منها.
+
+ولا يجب أن يؤدي فشل المصدر إلى Action.
+
+---
+
+16. Evidence & Events
+
+استخدم الـEvidence/Event system الموجود.
+
+يجب أن نستطيع تتبع الدورة:
+
+Condition detected
+→ Decision made
+→ Approval requested
+→ Approved
+→ Action executed
+→ Result verified
+
+بدون إنشاء event system جديد.
+
+Work Detail يجب أن يعرض للمستخدم النسخة المفهومة من هذا التسلسل.
+
+التفاصيل التقنية الداخلية تبقى hidden إلا إذا كانت مفيدة.
+
+---
+
+17. Work Detail
+
+حدّث Work Detail بأقل تغيير لازم.
+
+يجب أن يستطيع المستخدم فهم:
+
+- ماذا طلب من Agent؟
+- ماذا كان يتابع؟
+- ما الشرط؟
+- هل تحقق الشرط؟
+- ما الإجراء الذي قرره Agent؟
+- هل طلب Approval؟
+- هل تمت الموافقة؟
+- ماذا تم تنفيذه؟
+- هل تم التحقق من النتيجة؟
+- آخر Evidence.
+- الحالة الحالية.
+
+لا تعرض مصطلحات تقنية مثل:
+
+lease / claim / attempt / worker internals
+
+إلا إذا كانت ضرورية.
+
+---
+
+18. Security
+
+حافظ على كل protections الموجودة:
+
+- tenant scoped
+- owner scoped
+- authorization خارج الـLLM
+- لا يستطيع LLM تجاوز approval
+- لا يستطيع Work تنفيذ Action غير مصرح بها
+- لا يتم كشف secrets داخل prompts أو notifications
+- لا يمكن لـWork استخدام Action تخص Tenant آخر
+
+خصوصًا:
+
+لا تجعل الـLLM هو صاحب القرار النهائي في authorization.
+
+الـLLM يستطيع فهم الطلب واقتراح/تحديد الـAction، لكن الـsystem هو الذي يفرض permission وapproval وexecution rules.
+
+---
+
+19. Tests
+
+أضف اختبارات حقيقية للـfull Agent loop.
+
+على الأقل:
+
+1. Natural request → Work creation.
+2. Approval → Active Work.
+3. Condition false → no action.
+4. Condition true → decision created.
+5. Approval requested.
+6. Pending approval → no duplicate approval.
+7. Approval → existing execution path.
+8. Action executed.
+9. Action result verified.
+10. Evidence stored.
+11. Events recorded.
+12. Notification generated.
+13. "true → true" does not execute again.
+14. "true → false → true" creates a new action cycle.
+15. Action failure.
+16. Verification failure.
+17. External source failure.
+18. Pause.
+19. Resume.
+20. Cancel.
+21. Tenant isolation.
+22. Duplicate execution prevention.
+
+والأهم اختبار E2E حقيقي:
+
+Natural Request
+→ Approval
+→ Work
+→ Scheduled Run
+→ Condition
+→ Decision
+→ Ask/Approval
+→ Existing Execution
+→ Verify
+→ Evidence
+→ Event
+→ Notification
+
+---
+
+20. لا توسّع Scope
+
+في #97 ممنوع:
+
+- External source جديد.
+- Action جديدة متعددة.
+- Browser/Computer Use.
+- Learning Loop كامل.
+- A2A.
+- Workflow builder.
+- infrastructure جديدة غير مطلوبة.
+- notification architecture جديدة.
+- approval architecture جديدة.
+- execution architecture موازية.
+- إعادة Audit للمشروع.
+- إعادة بناء #95 أو #96.
+
+إذا وجدت مشكلة تمنع تنفيذ #97، أصلح الحد الأدنى اللازم فقط.
+
+---
+
+21. Mobile
+
+لا تعيد تصميم Mobile.
+
+حافظ على Work Detail الحالية.
+
+إذا كان الـApproval الحالي يحتاج Mobile support، استخدم نفس flow الموجود.
+
+Quick يظل:
+
+Notification + Fast Entry
+
+ولا يتحول إلى مكان إدارة Agent Work المعقدة.
+
+---
+
+22. Definition of Done
+
+لا تعتبر #97 مكتملًا إلا عندما يستطيع المستخدم إعطاء Agent تعليمات من نوع:
+
+«"لو حصل X اعمل Y."»
+
+ثم يستطيع النظام فعليًا:
+
+Understand
+→ Create Work
+→ Approval
+→ Monitor
+→ Detect Condition
+→ Decide
+→ Ask / Approval
+→ Execute using existing path
+→ Verify
+→ Evidence
+→ Event
+→ Notify
+→ Reschedule
+
+مع منع:
+
+- false execution
+- duplicate approval
+- duplicate action
+- duplicate notification
+- unauthorized execution.
+
+---
+
+القاعدة الأساسية لـ#97
+
+#95 أثبت:
+
+Agent Work lifecycle
+
+#96 أثبت:
+
+External Monitoring
+
+#97 يجب أن يثبت:
+
+Delegated Action
+
+أي أننا ننتقل من:
+
+"Agent لاحظ وأبلغني"
+
+إلى:
+
+"Agent لاحظ، فهم أن الشرط تحقق، طلب الإذن عندما يلزم، ثم نفّذ الإجراء من خلال مسار التنفيذ الموجود، وتحقق من النتيجة."
+
+لا تحاول جعل الـAgent autonomous بالكامل في #97.
+
+نريد أولًا إثبات:
+
+Condition → Decide → Ask/Approve → Act
+
+بشكل آمن وقابل للتتبع وقابل للتوسع.
+
+ابدأ التنفيذ مباشرة، ثم أعطني تقريرًا مختصرًا يتضمن:
+
+- الـAction الوحيدة التي تم اختيارها ولماذا.
+- الـfull flow الذي تم تنفيذه.
+- كيف تم ربطه بمسار الـapproval/execution الموجود.
+- نتائج الاختبارات.
+- حالات الفشل التي تم اختبارها.
+- أي limitations حقيقية.
+- ما الذي لم يتم تنفيذه.
+
+لا ترجع بخطة طويلة قبل التنفيذ.
