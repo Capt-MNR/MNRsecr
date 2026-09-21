@@ -4115,7 +4115,7 @@ export const getGetCandidatesUrl = (params: GetCandidatesParams,) => {
 }
 
 /**
- * @summary Search scoped person or project candidates
+ * @summary Search scoped person, project, or financial party candidates
  */
 export const getCandidates = async (params: GetCandidatesParams, options?: Parameters<typeof customFetch>[1]): Promise<Candidate[]> => {
 
@@ -4162,7 +4162,7 @@ export type GetCandidatesQueryError = ErrorType<ErrorResponse>
 
 
 /**
- * @summary Search scoped person or project candidates
+ * @summary Search scoped person, project, or financial party candidates
  */
 
 export function useGetCandidates<TData = Awaited<ReturnType<typeof getCandidates>>, TError = ErrorType<ErrorResponse>>(

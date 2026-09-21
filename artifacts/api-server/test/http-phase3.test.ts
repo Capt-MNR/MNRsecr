@@ -139,6 +139,30 @@ test("Secretary turn contract validates channel, bounded context, and peer metad
   assert.equal(invalidContext.status, 400);
 });
 
+test("candidate lookup includes tenant-scoped financial parties", async () => {
+  const [party] = await db.insert(financialPartiesTable).values({
+    tenantId,
+    ownerUserId: userId,
+    partyType: "vendor",
+    name: "مكتب النور",
+    nameKey: "مكتب النور",
+  }).returning();
+
+  try {
+    const response = await request(`/candidates?type=financial_party&q=${encodeURIComponent("النور")}`);
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.body, [{
+      id: party?.id,
+      name: "مكتب النور",
+      status: "vendor",
+    }]);
+  } finally {
+    if (party) {
+      await db.delete(financialPartiesTable).where(eq(financialPartiesTable.id, party.id));
+    }
+  }
+});
+
 test("HTTP approval is server-side on the first request and idempotent", async () => {
   const [person] = await db.insert(peopleTable).values({
     tenantId,
@@ -322,6 +346,7 @@ test("HTTP approval is server-side on the first request and idempotent", async (
   assert.equal(concurrentEvents.filter((event) => event.sourceId === concurrentExpenses[0]?.id).length, 1);
 
   const updatePending = await request(`/records/expense/${saved[0]?.id}`, "PATCH", {
+    expectedRowVersion: saved[0]?.rowVersion,
     amountMinor: 26000,
     currency: "EGP",
     description: "مصروف موافق عليه بعد تعديل",

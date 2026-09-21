@@ -63,7 +63,7 @@ export function SecondBrainMemorySheet({
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [reviewingCandidateId, setReviewingCandidateId] = useState<string | null>(null);
   const [associatingCandidateId, setAssociatingCandidateId] = useState<string | null>(null);
-  const [associationType, setAssociationType] = useState<'person' | 'project'>('person');
+  const [associationType, setAssociationType] = useState<'person' | 'project' | 'financial_party'>('person');
   const [associationQuery, setAssociationQuery] = useState('');
   const [searchDraft, setSearchDraft] = useState('');
   const [search, setSearch] = useState('');
@@ -318,7 +318,6 @@ export function SecondBrainMemorySheet({
                   <View key={candidate.id} style={[styles.candidateCard, { borderColor: colors.border, backgroundColor: colors.background }]}>
                     {(() => {
                       const aliasNeedsAssociation = candidate.kind === 'alias' && !candidate.entityAssociated;
-                      const associationUnavailable = aliasNeedsAssociation && candidate.entityType === 'financial_party';
                       return (
                       <>
                     <Text style={[styles.kind, { color: colors.primary }]}>{kindLabel(language, candidate.kind)}</Text>
@@ -326,17 +325,25 @@ export function SecondBrainMemorySheet({
                     <Text style={[styles.meta, { color: colors.mutedForeground }]}>
                       {localized(language, 'الثقة', 'Confidence')} · {Math.round(candidate.confidence * 100)}٪
                     </Text>
-                    {candidate.kind === 'alias' && candidate.entityType === 'financial_party' && !candidate.entityAssociated && (
-                      <Text style={[styles.meta, { color: colors.destructive }]}>
-                        {localized(language, 'هذا الاسم مرتبط بطرف مالي، ولا يمكن البحث عنه هنا؛ سيظل غير معتمد.', 'This alias targets a financial party; it cannot be searched here and will remain unapproved.')}
-                      </Text>
-                    )}
-                    {aliasNeedsAssociation && !associationUnavailable && (
+                    {aliasNeedsAssociation && (
                       <View style={[styles.associationBox, { borderColor: colors.border }]}>
                         <View style={styles.associationRow}>
-                          <Pressable onPress={() => setAssociationType(associationType === 'person' ? 'project' : 'person')} style={[styles.typeButton, { borderColor: colors.border }]}>
+                          <Pressable
+                            onPress={() => setAssociationType(
+                              associationType === 'person'
+                                ? 'project'
+                                : associationType === 'project'
+                                  ? 'financial_party'
+                                  : 'person',
+                            )}
+                            style={[styles.typeButton, { borderColor: colors.border }]}
+                          >
                             <Text style={[styles.meta, { color: colors.foreground }]}>
-                              {associationType === 'person' ? localized(language, 'شخص', 'Person') : localized(language, 'مشروع', 'Project')}
+                              {associationType === 'person'
+                                ? localized(language, 'شخص', 'Person')
+                                : associationType === 'project'
+                                  ? localized(language, 'مشروع', 'Project')
+                                  : localized(language, 'طرف مالي', 'Financial party')}
                             </Text>
                           </Pressable>
                           <TextInput

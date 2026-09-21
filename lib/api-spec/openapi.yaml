@@ -1051,14 +1051,14 @@ paths:
     get:
       operationId: getCandidates
       tags: [records]
-      summary: Search scoped person or project candidates
+      summary: Search scoped person, project, or financial party candidates
       parameters:
         - name: type
           in: query
           required: true
           schema:
             type: string
-            enum: [person, project]
+            enum: [person, project, financial_party]
         - name: q
           in: query
           required: true

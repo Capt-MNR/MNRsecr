@@ -4,6 +4,7 @@ import {
   commitmentsTable,
   db,
   expensesTable,
+  financialPartiesTable,
   peopleTable,
   projectsTable,
   purposesTable,
@@ -141,7 +142,10 @@ router.get("/candidates", async (req, res): Promise<void> => {
   if (!identity) return;
   const type = typeof req.query.type === "string" ? req.query.type : "";
   const query = typeof req.query.q === "string" ? req.query.q.trim() : "";
-  if ((type !== "person" && type !== "project") || !query) {
+  if (
+    (type !== "person" && type !== "project" && type !== "financial_party")
+    || !query
+  ) {
     sendRouteError(req, res, 400, "نوع البحث والنص مطلوبان.", "INVALID_CANDIDATE_QUERY");
     return;
   }
@@ -157,6 +161,19 @@ router.get("/candidates", async (req, res): Promise<void> => {
         ilike(peopleTable.name, pattern),
       )).orderBy(peopleTable.name).limit(10);
       res.json(people.map((person) => ({ ...person, status: "active" })));
+      return;
+    }
+    if (type === "financial_party") {
+      const parties = await db.select({
+        id: financialPartiesTable.id,
+        name: financialPartiesTable.name,
+        status: financialPartiesTable.partyType,
+      }).from(financialPartiesTable).where(and(
+        eq(financialPartiesTable.tenantId, identity.tenantId),
+        eq(financialPartiesTable.ownerUserId, identity.userId),
+        ilike(financialPartiesTable.name, pattern),
+      )).orderBy(financialPartiesTable.name).limit(10);
+      res.json(parties);
       return;
     }
     const projects = await db.select({

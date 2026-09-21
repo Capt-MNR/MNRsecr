@@ -12,4 +12,5 @@ export type GetCandidatesType = typeof GetCandidatesType[keyof typeof GetCandida
 export const GetCandidatesType = {
   person: 'person',
   project: 'project',
+  financial_party: 'financial_party',
 } as const;

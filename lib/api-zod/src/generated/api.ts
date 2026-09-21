@@ -1457,13 +1457,13 @@ export const ListRecordsResponse = zod.object({
 
 
 /**
- * @summary Search scoped person or project candidates
+ * @summary Search scoped person, project, or financial party candidates
  */
 
 
 
 export const GetCandidatesQueryParams = zod.object({
-  "type": zod.enum(['person', 'project']),
+  "type": zod.enum(['person', 'project', 'financial_party']),
   "q": zod.coerce.string().min(1)
 })
 

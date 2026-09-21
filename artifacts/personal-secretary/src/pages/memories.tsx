@@ -47,7 +47,7 @@ export default function Memories() {
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [reviewingCandidateId, setReviewingCandidateId] = useState<string | null>(null);
   const [associatingCandidateId, setAssociatingCandidateId] = useState<string | null>(null);
-  const [associationType, setAssociationType] = useState<'person' | 'project'>('person');
+  const [associationType, setAssociationType] = useState<'person' | 'project' | 'financial_party'>('person');
   const [associationQuery, setAssociationQuery] = useState('');
   const filters: ListSecondBrainMemoriesParams = {
     ...(search ? { search } : {}),
@@ -277,7 +277,6 @@ export default function Memories() {
                 <article key={candidate.id} className="rounded-xl border border-border/60 bg-card/70 p-3">
                   {(() => {
                       const aliasNeedsAssociation = candidate.kind === 'alias' && !candidate.entityAssociated;
-                      const associationUnavailable = aliasNeedsAssociation && candidate.entityType === 'financial_party';
                     return (
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -288,17 +287,15 @@ export default function Memories() {
                       <p className="mt-1 text-[11px] text-muted-foreground">
                         الثقة: {Math.round(candidate.confidence * 100)}٪ · {formatDate(candidate.createdAt)}
                       </p>
-                       {candidate.kind === 'alias' && candidate.entityType === 'financial_party' && !candidate.entityAssociated && (
-                         <p className="mt-2 text-[11px] text-amber-700">هذا الاسم مرتبط بطرف مالي؛ لا يتوفر البحث عنه هنا، لذلك سيظل غير معتمد بأمان.</p>
-                       )}
                     </div>
                     <div className="flex shrink-0 flex-wrap justify-end gap-2">
-                        {aliasNeedsAssociation && !associationUnavailable && (
+                        {aliasNeedsAssociation && (
                          <div className="mt-3 w-full rounded-lg border border-border/60 bg-background/60 p-2">
                            <div className="flex gap-2">
-                             <select value={associationType} onChange={(event) => setAssociationType(event.target.value as 'person' | 'project')} className="rounded-md border border-border bg-background px-2 text-xs">
+                              <select value={associationType} onChange={(event) => setAssociationType(event.target.value as 'person' | 'project' | 'financial_party')} className="rounded-md border border-border bg-background px-2 text-xs">
                                <option value="person">شخص</option>
                                <option value="project">مشروع</option>
+                                <option value="financial_party">طرف مالي</option>
                              </select>
                              <input value={associatingCandidateId === candidate.id ? associationQuery : ''} onFocus={() => setAssociatingCandidateId(candidate.id)} onChange={(event) => { setAssociatingCandidateId(candidate.id); setAssociationQuery(event.target.value); }} placeholder="ابحث عن الكيان..." className="min-w-0 flex-1 bg-transparent text-xs outline-none" />
                            </div>
