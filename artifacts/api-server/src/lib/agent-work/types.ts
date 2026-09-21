@@ -157,6 +157,7 @@ export type AgentWorkEventRecord = {
   dedupeKey: string | null;
   occurredAt: Date;
   createdAt: Date;
+  created?: boolean;
 };
 
 export type AgentWorkEvidenceRecord = {
@@ -242,6 +243,7 @@ export interface StorageAdapter {
   getWork(identity: AgentWorkIdentity, workId: string): Promise<AgentWorkRecord | null>;
   listWorks(input: ListAgentWorksInput): Promise<AgentWorkRecord[]>;
   listDueWorks(input: { now: Date; limit?: number }): Promise<DueAgentWorkRecord[]>;
+  listWaitingWorks(input: { limit?: number }): Promise<DueAgentWorkRecord[]>;
   changeWorkStatus(input: AgentWorkStatusChange): Promise<AgentWorkRecord>;
   claimRun(input: ClaimAgentWorkRunInput): Promise<AgentWorkRunRecord | null>;
   getRun(identity: AgentWorkIdentity, runId: string): Promise<AgentWorkRunRecord | null>;

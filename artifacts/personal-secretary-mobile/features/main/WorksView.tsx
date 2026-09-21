@@ -318,6 +318,13 @@ function WorkDetail({
     && approvalOperationId
     && (operation.status === 'pending' || operation.status === 'executing'),
   );
+  const approvalOutcome = operation?.status === 'expired'
+    ? localized(language, 'انتهت صلاحية الموافقة، لذلك لم تُنشأ المهمة. ستستمر المتابعة دون طلب موافقة جديدة حتى يتحقق الشرط مرة أخرى.', 'The approval expired, so the task was not created. Monitoring will continue without asking again until the condition is met again.')
+    : operation?.status === 'rejected'
+      ? localized(language, 'تم رفض الموافقة، لذلك لم تُنشأ المهمة.', 'The approval was rejected, so the task was not created.')
+      : operation?.status === 'failed'
+        ? localized(language, 'تعذر تنفيذ المهمة بعد الموافقة، ولم تُعتبر منشأة.', 'The action failed after approval, so the task was not considered created.')
+        : null;
   return (
     <ScrollView
       testID="agent-work-detail"
@@ -412,6 +419,11 @@ function WorkDetail({
               <Text style={[styles.approvalButtonText, { color: colors.mutedForeground }]}>{localized(language, 'رفض', 'Reject')}</Text>
             </Pressable>
           </View>
+        </View>
+      )}
+      {approvalOutcome && (
+        <View style={[styles.approvalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.approvalCopy, { color: colors.mutedForeground }]}>{approvalOutcome}</Text>
         </View>
       )}
 

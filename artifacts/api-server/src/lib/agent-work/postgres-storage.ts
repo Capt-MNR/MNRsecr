@@ -205,6 +205,24 @@ export class PostgresAgentWorkStorageAdapter implements StorageAdapter {
     }));
   }
 
+  async listWaitingWorks(input: { limit?: number } = {}): Promise<DueAgentWorkRecord[]> {
+    const rows = await db.select({
+      workId: agentWorksTable.id,
+      tenantId: agentWorksTable.tenantId,
+      ownerUserId: agentWorksTable.ownerUserId,
+      nextRunAt: agentWorksTable.nextRunAt,
+    }).from(agentWorksTable).where(
+      eq(agentWorksTable.status, "waiting"),
+    ).orderBy(
+      asc(agentWorksTable.updatedAt),
+    ).limit(boundedLimit(input.limit));
+    return rows.map((row) => ({
+      identity: { tenantId: row.tenantId, userId: row.ownerUserId },
+      workId: row.workId,
+      nextRunAt: row.nextRunAt,
+    }));
+  }
+
   async changeWorkStatus(input: {
     identity: AgentWorkIdentity;
     workId: string;
@@ -391,14 +409,14 @@ export class PostgresAgentWorkStorageAdapter implements StorageAdapter {
       metadata: input.metadata ?? {},
       dedupeKey: input.dedupeKey ?? null,
     }).onConflictDoNothing().returning();
-    if (row) return mapEvent(row);
+    if (row) return { ...mapEvent(row), created: true };
     const [existing] = await db.select().from(agentWorkEventsTable).where(and(
       eq(agentWorkEventsTable.tenantId, input.identity.tenantId),
       eq(agentWorkEventsTable.ownerUserId, input.identity.userId),
       eq(agentWorkEventsTable.dedupeKey, input.dedupeKey ?? ""),
     ));
     if (!existing) throw new Error("AGENT_WORK_EVENT_CREATE_FAILED");
-    return mapEvent(existing);
+    return { ...mapEvent(existing), created: false };
   }
 
   async listEvents(identity: AgentWorkIdentity, workId: string, limit = defaultLimit): Promise<AgentWorkEventRecord[]> {

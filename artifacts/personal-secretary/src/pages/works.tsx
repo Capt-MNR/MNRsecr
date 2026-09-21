@@ -184,6 +184,13 @@ function WorkDetail({ workId }: { workId: string }) {
     && approvalOperationId
     && (operation.status === 'pending' || operation.status === 'executing'),
   );
+  const approvalOutcome = operation?.status === 'expired'
+    ? 'انتهت صلاحية الموافقة، لذلك لم تُنشأ المهمة. ستستمر المتابعة، ولن أطلب موافقة جديدة إلا بعد تحقق الشرط مرة أخرى.'
+    : operation?.status === 'rejected'
+      ? 'تم رفض الموافقة، لذلك لم تُنشأ المهمة.'
+      : operation?.status === 'failed'
+        ? 'تعذر تنفيذ المهمة بعد الموافقة، ولم تُعتبر منشأة.'
+        : null;
 
   function changeStatus(to: 'active' | 'paused' | 'cancelled') {
     statusMutation.mutate({
@@ -244,6 +251,11 @@ function WorkDetail({ workId }: { workId: string }) {
             onConfirm={() => approveMutation.mutate({ operationId: approvalOperationId })}
             onReject={() => rejectMutation.mutate({ operationId: approvalOperationId })}
           />
+        </div>
+      )}
+      {approvalOutcome && (
+        <div className="mt-6 rounded-2xl border border-border/70 bg-background/65 p-4 text-sm text-muted-foreground">
+          {approvalOutcome}
         </div>
       )}
 

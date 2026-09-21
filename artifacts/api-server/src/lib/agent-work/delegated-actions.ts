@@ -126,11 +126,28 @@ export async function recordAgentWorkActionRejected(
   const context = agentWorkContext(operation);
   if (!context) return;
   const nextStatus = reason === "failed" ? "needs_review" : "active";
+  await adapters.storage.storeEvidenceSnapshot({
+    identity,
+    workId: context.workId,
+    runId: context.runId,
+    retentionClass: "standard",
+    snapshot: {
+      sourceType: "github_repository",
+      actionType: operation.toolName,
+      actionState: "not_executed",
+      operationId: operation.operationId,
+      reason,
+    },
+  });
   await adapters.storage.addEvent({
     identity,
     workId: context.workId,
     runId: context.runId,
-    eventType: reason === "rejected" ? "action_rejected" : "action_failed",
+    eventType: reason === "rejected"
+      ? "action_rejected"
+      : reason === "expired"
+        ? "action_expired"
+        : "action_failed",
     actorType: "system",
     summary: reason === "rejected"
       ? "لم تتم الموافقة، لذلك لم تُنشأ المهمة."
@@ -141,4 +158,41 @@ export async function recordAgentWorkActionRejected(
     dedupeKey: `agent-work-action-${reason}:${operation.operationId}`,
   });
   await resumeWork(adapters, identity, context.workId, nextStatus, `حالة موافقة الإجراء: ${reason}.`);
+  if (reason === "expired") {
+    const notificationEvent = await adapters.storage.addEvent({
+      identity,
+      workId: context.workId,
+      runId: context.runId,
+      eventType: "action_expired_notification",
+      actorType: "system",
+      summary: "انتهت صلاحية الموافقة ولم تُنفذ المهمة.",
+      metadata: { operationId: operation.operationId, actionType: operation.toolName },
+      dedupeKey: `agent-work-action-expired-notification:${operation.operationId}`,
+    });
+    if (notificationEvent.created !== false) {
+      const delivery = await adapters.notification.notify({
+        identity,
+        eventId: notificationEvent.id,
+        title: "انتهت صلاحية الموافقة",
+        body: "انتهت صلاحية الموافقة، لذلك لم تُنشأ المهمة. يمكنك متابعة العمل بعد تحقق الشرط مرة أخرى.",
+        data: {
+          workId: context.workId,
+          operationId: operation.operationId,
+          action: operation.toolName,
+          deepLink: `/main?workId=${encodeURIComponent(context.workId)}`,
+        },
+        dedupeKey: `agent-work-action-expired-delivery:${operation.operationId}`,
+      });
+      await adapters.storage.addEvent({
+        identity,
+        workId: context.workId,
+        runId: context.runId,
+        eventType: "notification_delivery",
+        actorType: "system",
+        summary: delivery.status === "accepted" ? "تم إرسال نتيجة انتهاء الموافقة." : "تعذر إرسال نتيجة انتهاء الموافقة.",
+        metadata: { status: delivery.status, driver: delivery.driver },
+        dedupeKey: `agent-work-action-expired-delivery-record:${operation.operationId}`,
+      });
+    }
+  }
 }

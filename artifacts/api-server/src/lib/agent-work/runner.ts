@@ -3,6 +3,7 @@ import { agentWorkAdapters } from "./factory";
 import { AgentWorkRuntime } from "./runtime";
 import { compareReadOnlyEvidence } from "./contract";
 import { readGitHubRepositorySource, readInternalRecordsSource } from "./sources";
+import { recordAgentWorkActionRejected } from "./delegated-actions";
 import {
   createPendingOperation,
   displayForOperation,
@@ -171,6 +172,22 @@ async function findLatestActionEvent(
   return operation
     ? { operationId: operation.operationId, conditionHash: metadata.conditionHash, status: operation.status }
     : null;
+}
+
+async function reconcileExpiredApproval(
+  adapters: AgentWorkAdapters,
+  identity: AgentWorkRecord["identity"],
+  work: AgentWorkRecord,
+): Promise<boolean> {
+  if (work.status !== "waiting") return false;
+  const action = asRecord(work.action);
+  if (action.type !== "create_task" && action.toolName !== "create_task") return false;
+  const latestAction = await findLatestActionEvent(adapters, identity, work.id);
+  if (!latestAction || latestAction.status !== "expired") return false;
+  const operation = await getOperation(identity, latestAction.operationId);
+  if (!operation || operation.status !== "expired") return false;
+  await recordAgentWorkActionRejected(identity, operation, "expired", adapters);
+  return true;
 }
 
 function runIdForApproval(workId: string, now: Date): string {
@@ -524,10 +541,14 @@ export class AgentWorkRunner {
   async tick(now = this.now()): Promise<AgentWorkRunnerTickResult> {
     const empty = { enabled: false, inspected: 0, claimed: 0, completed: 0, skipped: 0, failed: 0 };
     if (!featureFlags.agentWork() || !runnerEnabled()) return empty;
-    const due = await this.adapters.storage.listDueWorks({ now, limit: MAX_DUE_WORKS });
-    const result: AgentWorkRunnerTickResult = { ...empty, enabled: true, inspected: due.length };
+    const [due, waiting] = await Promise.all([
+      this.adapters.storage.listDueWorks({ now, limit: MAX_DUE_WORKS }),
+      this.adapters.storage.listWaitingWorks({ limit: MAX_DUE_WORKS }),
+    ]);
+    const candidates = [...due, ...waiting];
+    const result: AgentWorkRunnerTickResult = { ...empty, enabled: true, inspected: candidates.length };
 
-    for (const candidate of due) {
+    for (const candidate of candidates) {
       const identity = this.adapters.identity.resolveBackground({
         tenantId: candidate.identity.tenantId,
         userId: candidate.identity.userId,
@@ -538,7 +559,20 @@ export class AgentWorkRunner {
         continue;
       }
       const work = await this.adapters.storage.getWork(identity, candidate.workId);
-      if (!work || work.status !== "active") {
+      if (!work) {
+        result.skipped += 1;
+        continue;
+      }
+      if (work.status === "waiting") {
+        try {
+          if (await reconcileExpiredApproval(this.adapters, identity, work)) result.completed += 1;
+          else result.skipped += 1;
+        } catch {
+          result.failed += 1;
+        }
+        continue;
+      }
+      if (work.status !== "active") {
         result.skipped += 1;
         continue;
       }

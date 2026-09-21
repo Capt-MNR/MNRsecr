@@ -36,9 +36,11 @@ export function createAgentWorkAdapters(overrides: Partial<AgentWorkAdapters> = 
     throw new Error(`AGENT_WORK_SCHEDULER_DRIVER_UNSUPPORTED:${schedulerDriver}`);
   })();
   const identity = overrides.identity ?? (() => {
+    const defaultIdentityDriver: AgentWorkDriver =
+      process.env.NODE_ENV === "production" ? "postgres" : defaults.identity.driver;
     const identityDriver = driverFromEnvironment(
       "AGENT_WORK_IDENTITY_DRIVER",
-      defaults.identity.driver,
+      defaultIdentityDriver,
     );
     if (identityDriver === "stub") return new StubIdentityAdapter();
     if (identityDriver === "development") return new EnvironmentIdentityAdapter();

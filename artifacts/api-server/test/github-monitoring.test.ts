@@ -117,6 +117,7 @@ function createHarness() {
       listDueWorks: async () => work.status === "active" && work.nextRunAt && work.nextRunAt <= currentNow
         ? [{ identity, workId: work.id, nextRunAt: work.nextRunAt }]
         : [],
+      listWaitingWorks: async () => [],
       getWork: async (requestedIdentity: typeof identity, workId: string) =>
         requestedIdentity.tenantId === identity.tenantId
         && requestedIdentity.userId === identity.userId

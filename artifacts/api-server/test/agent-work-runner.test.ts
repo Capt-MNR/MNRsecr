@@ -70,6 +70,7 @@ function adaptersFor(inputWork: AgentWorkRecord): {
     storage: {
       driver: "stub",
       listDueWorks: async () => [{ identity: inputWork.identity, workId: inputWork.id, nextRunAt: inputWork.nextRunAt }],
+      listWaitingWorks: async () => [],
       getWork: async () => inputWork,
       claimRun: async () => run,
       storeEvidenceSnapshot: async () => {
