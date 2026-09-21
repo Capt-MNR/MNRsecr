@@ -1,0 +1,3006 @@
+{
+  "datasetVersion": 1,
+  "providerMode": "groq",
+  "label": "after",
+  "dryRun": true,
+  "generatedAt": "2026-09-21T09:40:11.190Z",
+  "summary": {
+    "totalCases": 12,
+    "evaluatedCases": 11,
+    "providerErrors": 0,
+    "contextNotProvided": 1,
+    "runnerErrors": 0,
+    "intentAccuracyPercent": 36.36,
+    "toolSelectionAccuracyPercent": 72.73,
+    "clarificationAccuracyPercent": 72.73,
+    "noWriteViolations": 0,
+    "totalLogicalLlmCalls": 17,
+    "totalHttpAttempts": 17,
+    "fallbackCases": 0,
+    "totalInputTokens": 22054,
+    "totalOutputTokens": 380,
+    "totalTokens": 22434,
+    "totalCachedTokens": null,
+    "cacheHitCases": 0,
+    "cacheMissCases": 0,
+    "totalRequestBytes": 249641,
+    "averageLatencyMs": 438,
+    "latencyP50Ms": 447,
+    "latencyP95Ms": 939,
+    "averageConversationChars": 845,
+    "rowCountChanges": 0
+  },
+  "comparison": {
+    "before": {
+      "totalCases": 36,
+      "evaluatedCases": 9,
+      "providerErrors": 25,
+      "contextNotProvided": 2,
+      "runnerErrors": 0,
+      "intentAccuracyPercent": 100,
+      "toolSelectionAccuracyPercent": 44.44,
+      "clarificationAccuracyPercent": 100,
+      "noWriteViolations": 1,
+      "totalLogicalLlmCalls": 51,
+      "totalHttpAttempts": 51,
+      "totalInputTokens": 62728,
+      "totalOutputTokens": 1219,
+      "totalTokens": 63947,
+      "totalCachedTokens": 14336,
+      "cacheHitCases": 0,
+      "cacheMissCases": 0,
+      "totalRequestBytes": 260683,
+      "averageLatencyMs": 534,
+      "averageConversationChars": 71
+    },
+    "after": {
+      "totalCases": 12,
+      "evaluatedCases": 11,
+      "providerErrors": 0,
+      "contextNotProvided": 1,
+      "runnerErrors": 0,
+      "intentAccuracyPercent": 36.36,
+      "toolSelectionAccuracyPercent": 72.73,
+      "clarificationAccuracyPercent": 72.73,
+      "noWriteViolations": 0,
+      "totalLogicalLlmCalls": 17,
+      "totalHttpAttempts": 17,
+      "fallbackCases": 0,
+      "totalInputTokens": 22054,
+      "totalOutputTokens": 380,
+      "totalTokens": 22434,
+      "totalCachedTokens": null,
+      "cacheHitCases": 0,
+      "cacheMissCases": 0,
+      "totalRequestBytes": 249641,
+      "averageLatencyMs": 438,
+      "latencyP50Ms": 447,
+      "latencyP95Ms": 939,
+      "averageConversationChars": 845,
+      "rowCountChanges": 0
+    }
+  },
+  "cases": [
+    {
+      "id": "A01",
+      "category": "expense_intent",
+      "message": "دفعت لمحمد 7500",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": [
+          "find_person",
+          "record_expense"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": "clarification",
+      "actualTool": "find_person",
+      "actualTools": [
+        "find_person"
+      ],
+      "toolArguments": [
+        {
+          "name": "find_person",
+          "arguments": {},
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": true,
+      "logicalLlmCalls": 2,
+      "actualHttpAttempts": 2,
+      "httpAttemptsByProvider": {
+        "groq": 2
+      },
+      "provider": "groq",
+      "model": "openai/gpt-oss-20b",
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 901,
+      "tokenUsage": [
+        {
+          "queue_time": 0.162360432,
+          "prompt_tokens": 2607,
+          "prompt_time": 0.153293916,
+          "completion_tokens": 29,
+          "completion_time": 0.029681482,
+          "total_tokens": 2636,
+          "total_time": 0.182975398,
+          "completion_tokens_details": {
+            "reasoning_tokens": 6
+          }
+        },
+        {
+          "queue_time": 0.031993602,
+          "prompt_tokens": 2645,
+          "prompt_time": 0.144625363,
+          "completion_tokens": 51,
+          "completion_time": 0.055239242,
+          "total_tokens": 2696,
+          "total_time": 0.199864605,
+          "completion_tokens_details": {
+            "reasoning_tokens": 8
+          }
+        }
+      ],
+      "inputTokens": 5252,
+      "outputTokens": 80,
+      "totalTokens": 5332,
+      "cachedTokens": null,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {
+        "groq": 30818
+      },
+      "maxRequestBytes": 15586,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 5779,
+      "toolDefinitionsCount": 12,
+      "maxConversationChars": 1087,
+      "contextBreakdown": {
+        "systemPromptChars": 6500,
+        "requestGuidanceChars": 3384,
+        "userMessageChars": 30,
+        "recentConversationChars": 0,
+        "summaryChars": 0,
+        "structuredStateChars": 0,
+        "toolResultChars": 51,
+        "otherConversationChars": 1138,
+        "conversationChars": 1219,
+        "toolDefinitionsChars": 11558,
+        "requestBytes": 30818
+      },
+      "diagnosticTrace": {
+        "version": 1,
+        "calls": [
+          {
+            "logicalCallNumber": 1,
+            "phase": "tool_round",
+            "scope": "expense",
+            "requestedTools": [
+              "final_response",
+              "find_person",
+              "find_project",
+              "query_expenses",
+              "rank_expense_projects",
+              "get_person_expense_total",
+              "get_project_expense_total",
+              "query_reminders",
+              "recall_context",
+              "record_expense",
+              "update_expense",
+              "delete_expense"
+            ],
+            "finalResponseOnly": false,
+            "attempts": [
+              {
+                "requestId": "intent-eval-groq-A01-16836f38-9c67-4c25-8dd6-ed63f4a90aee",
+                "conversationId": "intent-eval-groq-A01",
+                "provider": "groq",
+                "model": "openai/gpt-oss-20b",
+                "logicalCallNumber": 1,
+                "attemptNumber": 1,
+                "scope": "expense",
+                "toolsAvailable": [
+                  "final_response",
+                  "find_person",
+                  "find_project",
+                  "record_expense",
+                  "update_expense",
+                  "query_expenses",
+                  "rank_expense_projects",
+                  "get_person_expense_total",
+                  "get_project_expense_total",
+                  "delete_expense",
+                  "query_reminders",
+                  "recall_context"
+                ],
+                "inputTokens": 2607,
+                "outputTokens": 29,
+                "totalTokens": 2636,
+                "cachedTokens": null,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null,
+                "cacheHit": false,
+                "cacheRetry": false,
+                "fallback": false,
+                "retry": false,
+                "httpRequestSent": true,
+                "latencyMs": 528,
+                "success": true,
+                "failureReason": null,
+                "outputChars": 94,
+                "context": {
+                  "systemPromptChars": 3250,
+                  "requestGuidanceChars": 1692,
+                  "userMessageChars": 15,
+                  "recentConversationChars": 0,
+                  "summaryChars": 0,
+                  "structuredStateChars": 0,
+                  "toolResultChars": 0,
+                  "otherConversationChars": 569,
+                  "conversationChars": 584,
+                  "toolDefinitionsChars": 5779,
+                  "requestBytes": 15232,
+                  "systemPromptTokens": null,
+                  "conversationTokens": null,
+                  "toolDefinitionsTokens": null,
+                  "toolResultTokens": null
+                }
+              }
+            ],
+            "selectedTools": [
+              {
+                "callId": "fc_aaf62122-1420-42c1-bf27-b83b62950f86",
+                "name": "find_person",
+                "arguments": {
+                  "name": "محمد"
+                },
+                "argumentChars": 15,
+                "argumentBytes": 19,
+                "result": {
+                  "ok": true,
+                  "keys": [
+                    "matches",
+                    "needsClarification",
+                    "ok"
+                  ],
+                  "resultChars": 51,
+                  "resultBytes": 51,
+                  "promptChars": 51,
+                  "pendingApproval": false,
+                  "errorCode": null
+                }
+              }
+            ],
+            "nextDecision": {
+              "kind": "continue_after_tool_results",
+              "reason": "Tool results were appended to the conversation; the next call continues orchestration.",
+              "nextLogicalCallNumber": 2,
+              "nextCallKind": "tool_round",
+              "nextScope": "expense"
+            }
+          },
+          {
+            "logicalCallNumber": 2,
+            "phase": "tool_round",
+            "scope": "expense",
+            "requestedTools": [
+              "final_response",
+              "find_person",
+              "find_project",
+              "query_expenses",
+              "rank_expense_projects",
+              "get_person_expense_total",
+              "get_project_expense_total",
+              "query_reminders",
+              "recall_context",
+              "record_expense",
+              "update_expense",
+              "delete_expense"
+            ],
+            "finalResponseOnly": false,
+            "attempts": [
+              {
+                "requestId": "intent-eval-groq-A01-16836f38-9c67-4c25-8dd6-ed63f4a90aee",
+                "conversationId": "intent-eval-groq-A01",
+                "provider": "groq",
+                "model": "openai/gpt-oss-20b",
+                "logicalCallNumber": 2,
+                "attemptNumber": 2,
+                "scope": "expense",
+                "toolsAvailable": [
+                  "final_response",
+                  "find_person",
+                  "find_project",
+                  "record_expense",
+                  "update_expense",
+                  "query_expenses",
+                  "rank_expense_projects",
+                  "get_person_expense_total",
+                  "get_project_expense_total",
+                  "delete_expense",
+                  "query_reminders",
+                  "recall_context"
+                ],
+                "inputTokens": 2645,
+                "outputTokens": 51,
+                "totalTokens": 2696,
+                "cachedTokens": null,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null,
+                "cacheHit": false,
+                "cacheRetry": false,
+                "fallback": false,
+                "retry": false,
+                "httpRequestSent": true,
+                "latencyMs": 314,
+                "success": true,
+                "failureReason": null,
+                "outputChars": 184,
+                "context": {
+                  "systemPromptChars": 3250,
+                  "requestGuidanceChars": 1692,
+                  "userMessageChars": 15,
+                  "recentConversationChars": 0,
+                  "summaryChars": 0,
+                  "structuredStateChars": 0,
+                  "toolResultChars": 51,
+                  "otherConversationChars": 569,
+                  "conversationChars": 635,
+                  "toolDefinitionsChars": 5779,
+                  "requestBytes": 15586,
+                  "systemPromptTokens": null,
+                  "conversationTokens": null,
+                  "toolDefinitionsTokens": null,
+                  "toolResultTokens": null
+                }
+              }
+            ],
+            "selectedTools": [
+              {
+                "callId": "fc_37d0fdc3-6cdb-4d92-879a-3a989f66d213",
+                "name": "final_response",
+                "arguments": {
+                  "groundedFacts": [],
+                  "kind": "clarification",
+                  "message": "هل تريد إنشاء شخص باسم محمد قبل تسجيل المصروف؟"
+                },
+                "argumentChars": 102,
+                "argumentBytes": 140,
+                "result": null
+              }
+            ],
+            "nextDecision": {
+              "kind": "return_final_response",
+              "reason": "Provider returned only the final_response tool.",
+              "nextLogicalCallNumber": null,
+              "nextCallKind": null,
+              "nextScope": "expense"
+            }
+          }
+        ]
+      },
+      "rowCountsBefore": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountsAfter": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountChanged": false,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": false,
+      "toolSelectionMatch": true,
+      "clarificationMatch": false
+    },
+    {
+      "id": "A02",
+      "category": "expense_intent",
+      "message": "محمد خد مني 7500",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": [
+          "find_person",
+          "record_expense"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": null,
+      "actualTool": "text_response",
+      "actualTools": [],
+      "toolArguments": [],
+      "clarificationAsked": false,
+      "logicalLlmCalls": 1,
+      "actualHttpAttempts": 1,
+      "httpAttemptsByProvider": {
+        "groq": 1
+      },
+      "provider": "groq",
+      "model": "openai/gpt-oss-20b",
+      "fallback": false,
+      "fallbackReason": "PROVIDER_RATE_LIMIT",
+      "latencyMs": 222,
+      "tokenUsage": null,
+      "inputTokens": null,
+      "outputTokens": null,
+      "totalTokens": null,
+      "cachedTokens": null,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {
+        "groq": 27023
+      },
+      "maxRequestBytes": 27023,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 17560,
+      "toolDefinitionsCount": 42,
+      "maxConversationChars": 738,
+      "contextBreakdown": {
+        "systemPromptChars": 3250,
+        "requestGuidanceChars": 1692,
+        "userMessageChars": 16,
+        "recentConversationChars": 0,
+        "summaryChars": 0,
+        "structuredStateChars": 0,
+        "toolResultChars": 0,
+        "otherConversationChars": 569,
+        "conversationChars": 585,
+        "toolDefinitionsChars": 17560,
+        "requestBytes": 27023
+      },
+      "diagnosticTrace": {
+        "version": 1,
+        "calls": [
+          {
+            "logicalCallNumber": 1,
+            "phase": "tool_round",
+            "scope": "full",
+            "requestedTools": [
+              "final_response",
+              "find_person",
+              "create_person",
+              "update_person",
+              "find_project",
+              "create_project",
+              "update_project",
+              "link_person_to_project",
+              "update_person_project_relationship",
+              "create_typed_relationship",
+              "delete_typed_relationship",
+              "record_expense",
+              "create_financial_party",
+              "create_financial_obligation",
+              "create_financial_payment",
+              "settle_financial_obligation",
+              "create_donation",
+              "create_income_receivable",
+              "create_payment_link",
+              "update_financial_obligation",
+              "update_financial_payment",
+              "update_donation",
+              "update_income_receivable",
+              "update_expense",
+              "query_expenses",
+              "rank_expense_projects",
+              "get_person_expense_total",
+              "get_project_expense_total",
+              "create_task",
+              "create_commitment",
+              "create_reminder",
+              "update_task",
+              "update_commitment",
+              "update_reminder",
+              "delete_expense",
+              "delete_person",
+              "delete_project",
+              "delete_task",
+              "delete_commitment",
+              "delete_reminder",
+              "query_reminders",
+              "recall_context"
+            ],
+            "finalResponseOnly": false,
+            "attempts": [
+              {
+                "requestId": "intent-eval-groq-A02-b715f01c-109a-4ea0-b1c6-e849adf159a3",
+                "conversationId": "intent-eval-groq-A02",
+                "provider": "groq",
+                "model": "openai/gpt-oss-20b",
+                "logicalCallNumber": 1,
+                "attemptNumber": 1,
+                "scope": "full",
+                "toolsAvailable": [
+                  "final_response",
+                  "find_person",
+                  "create_person",
+                  "update_person",
+                  "find_project",
+                  "create_project",
+                  "update_project",
+                  "link_person_to_project",
+                  "update_person_project_relationship",
+                  "create_typed_relationship",
+                  "delete_typed_relationship",
+                  "record_expense",
+                  "create_financial_party",
+                  "create_financial_obligation",
+                  "create_financial_payment",
+                  "settle_financial_obligation",
+                  "create_donation",
+                  "create_income_receivable",
+                  "create_payment_link",
+                  "update_financial_obligation",
+                  "update_financial_payment",
+                  "update_donation",
+                  "update_income_receivable",
+                  "update_expense",
+                  "query_expenses",
+                  "rank_expense_projects",
+                  "get_person_expense_total",
+                  "get_project_expense_total",
+                  "create_task",
+                  "create_commitment",
+                  "create_reminder",
+                  "update_task",
+                  "update_commitment",
+                  "update_reminder",
+                  "delete_expense",
+                  "delete_person",
+                  "delete_project",
+                  "delete_task",
+                  "delete_commitment",
+                  "delete_reminder",
+                  "query_reminders",
+                  "recall_context"
+                ],
+                "inputTokens": null,
+                "outputTokens": null,
+                "totalTokens": null,
+                "cachedTokens": null,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null,
+                "cacheHit": false,
+                "cacheRetry": false,
+                "fallback": false,
+                "retry": false,
+                "httpRequestSent": true,
+                "latencyMs": 194,
+                "success": false,
+                "failureReason": "PROVIDER_RATE_LIMIT",
+                "outputChars": 0,
+                "context": {
+                  "systemPromptChars": 3250,
+                  "requestGuidanceChars": 1692,
+                  "userMessageChars": 16,
+                  "recentConversationChars": 0,
+                  "summaryChars": 0,
+                  "structuredStateChars": 0,
+                  "toolResultChars": 0,
+                  "otherConversationChars": 569,
+                  "conversationChars": 585,
+                  "toolDefinitionsChars": 17560,
+                  "requestBytes": 27023,
+                  "systemPromptTokens": null,
+                  "conversationTokens": null,
+                  "toolDefinitionsTokens": null,
+                  "toolResultTokens": null
+                }
+              }
+            ],
+            "selectedTools": [],
+            "nextDecision": {
+              "kind": "error",
+              "reason": "PROVIDER_RATE_LIMIT",
+              "nextLogicalCallNumber": null,
+              "nextCallKind": null,
+              "nextScope": "full"
+            }
+          }
+        ]
+      },
+      "rowCountsBefore": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountsAfter": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountChanged": false,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": false,
+      "toolSelectionMatch": false,
+      "clarificationMatch": true
+    },
+    {
+      "id": "A03",
+      "category": "expense_intent",
+      "message": "اديت محمد 7500",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": [
+          "find_person",
+          "record_expense"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": "clarification",
+      "actualTool": "find_person",
+      "actualTools": [
+        "find_person"
+      ],
+      "toolArguments": [
+        {
+          "name": "find_person",
+          "arguments": {},
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": true,
+      "logicalLlmCalls": 2,
+      "actualHttpAttempts": 2,
+      "httpAttemptsByProvider": {
+        "groq": 2
+      },
+      "provider": "groq",
+      "model": "openai/gpt-oss-20b",
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 939,
+      "tokenUsage": [
+        {
+          "queue_time": 0.127477909,
+          "prompt_tokens": 2606,
+          "prompt_time": 0.132355569,
+          "completion_tokens": 29,
+          "completion_time": 0.071574192,
+          "total_tokens": 2635,
+          "total_time": 0.203929761,
+          "completion_tokens_details": {
+            "reasoning_tokens": 6
+          }
+        },
+        {
+          "queue_time": 0.115520157,
+          "prompt_tokens": 2644,
+          "prompt_time": 0.142208104,
+          "completion_tokens": 51,
+          "completion_time": 0.066513289,
+          "total_tokens": 2695,
+          "total_time": 0.208721393,
+          "completion_tokens_details": {
+            "reasoning_tokens": 8
+          }
+        }
+      ],
+      "inputTokens": 5250,
+      "outputTokens": 80,
+      "totalTokens": 5330,
+      "cachedTokens": null,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {
+        "groq": 30814
+      },
+      "maxRequestBytes": 15584,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 5779,
+      "toolDefinitionsCount": 12,
+      "maxConversationChars": 1086,
+      "contextBreakdown": {
+        "systemPromptChars": 6500,
+        "requestGuidanceChars": 3384,
+        "userMessageChars": 28,
+        "recentConversationChars": 0,
+        "summaryChars": 0,
+        "structuredStateChars": 0,
+        "toolResultChars": 51,
+        "otherConversationChars": 1138,
+        "conversationChars": 1217,
+        "toolDefinitionsChars": 11558,
+        "requestBytes": 30814
+      },
+      "diagnosticTrace": {
+        "version": 1,
+        "calls": [
+          {
+            "logicalCallNumber": 1,
+            "phase": "tool_round",
+            "scope": "expense",
+            "requestedTools": [
+              "final_response",
+              "find_person",
+              "find_project",
+              "query_expenses",
+              "rank_expense_projects",
+              "get_person_expense_total",
+              "get_project_expense_total",
+              "query_reminders",
+              "recall_context",
+              "record_expense",
+              "update_expense",
+              "delete_expense"
+            ],
+            "finalResponseOnly": false,
+            "attempts": [
+              {
+                "requestId": "intent-eval-groq-A03-37587260-3218-43b8-be72-b364a51db316",
+                "conversationId": "intent-eval-groq-A03",
+                "provider": "groq",
+                "model": "openai/gpt-oss-20b",
+                "logicalCallNumber": 1,
+                "attemptNumber": 1,
+                "scope": "expense",
+                "toolsAvailable": [
+                  "final_response",
+                  "find_person",
+                  "find_project",
+                  "record_expense",
+                  "update_expense",
+                  "query_expenses",
+                  "rank_expense_projects",
+                  "get_person_expense_total",
+                  "get_project_expense_total",
+                  "delete_expense",
+                  "query_reminders",
+                  "recall_context"
+                ],
+                "inputTokens": 2606,
+                "outputTokens": 29,
+                "totalTokens": 2635,
+                "cachedTokens": null,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null,
+                "cacheHit": false,
+                "cacheRetry": false,
+                "fallback": false,
+                "retry": false,
+                "httpRequestSent": true,
+                "latencyMs": 492,
+                "success": true,
+                "failureReason": null,
+                "outputChars": 94,
+                "context": {
+                  "systemPromptChars": 3250,
+                  "requestGuidanceChars": 1692,
+                  "userMessageChars": 14,
+                  "recentConversationChars": 0,
+                  "summaryChars": 0,
+                  "structuredStateChars": 0,
+                  "toolResultChars": 0,
+                  "otherConversationChars": 569,
+                  "conversationChars": 583,
+                  "toolDefinitionsChars": 5779,
+                  "requestBytes": 15230,
+                  "systemPromptTokens": null,
+                  "conversationTokens": null,
+                  "toolDefinitionsTokens": null,
+                  "toolResultTokens": null
+                }
+              }
+            ],
+            "selectedTools": [
+              {
+                "callId": "fc_7f203ff0-52fd-4eb3-8acf-32828004a81f",
+                "name": "find_person",
+                "arguments": {
+                  "name": "محمد"
+                },
+                "argumentChars": 15,
+                "argumentBytes": 19,
+                "result": {
+                  "ok": true,
+                  "keys": [
+                    "matches",
+                    "needsClarification",
+                    "ok"
+                  ],
+                  "resultChars": 51,
+                  "resultBytes": 51,
+                  "promptChars": 51,
+                  "pendingApproval": false,
+                  "errorCode": null
+                }
+              }
+            ],
+            "nextDecision": {
+              "kind": "continue_after_tool_results",
+              "reason": "Tool results were appended to the conversation; the next call continues orchestration.",
+              "nextLogicalCallNumber": 2,
+              "nextCallKind": "tool_round",
+              "nextScope": "expense"
+            }
+          },
+          {
+            "logicalCallNumber": 2,
+            "phase": "tool_round",
+            "scope": "expense",
+            "requestedTools": [
+              "final_response",
+              "find_person",
+              "find_project",
+              "query_expenses",
+              "rank_expense_projects",
+              "get_person_expense_total",
+              "get_project_expense_total",
+              "query_reminders",
+              "recall_context",
+              "record_expense",
+              "update_expense",
+              "delete_expense"
+            ],
+            "finalResponseOnly": false,
+            "attempts": [
+              {
+                "requestId": "intent-eval-groq-A03-37587260-3218-43b8-be72-b364a51db316",
+                "conversationId": "intent-eval-groq-A03",
+                "provider": "groq",
+                "model": "openai/gpt-oss-20b",
+                "logicalCallNumber": 2,
+                "attemptNumber": 2,
+                "scope": "expense",
+                "toolsAvailable": [
+                  "final_response",
+                  "find_person",
+                  "find_project",
+                  "record_expense",
+                  "update_expense",
+                  "query_expenses",
+                  "rank_expense_projects",
+                  "get_person_expense_total",
+                  "get_project_expense_total",
+                  "delete_expense",
+                  "query_reminders",
+                  "recall_context"
+                ],
+                "inputTokens": 2644,
+                "outputTokens": 51,
+                "totalTokens": 2695,
+                "cachedTokens": null,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null,
+                "cacheHit": false,
+                "cacheRetry": false,
+                "fallback": false,
+                "retry": false,
+                "httpRequestSent": true,
+                "latencyMs": 405,
+                "success": true,
+                "failureReason": null,
+                "outputChars": 184,
+                "context": {
+                  "systemPromptChars": 3250,
+                  "requestGuidanceChars": 1692,
+                  "userMessageChars": 14,
+                  "recentConversationChars": 0,
+                  "summaryChars": 0,
+                  "structuredStateChars": 0,
+                  "toolResultChars": 51,
+                  "otherConversationChars": 569,
+                  "conversationChars": 634,
+                  "toolDefinitionsChars": 5779,
+                  "requestBytes": 15584,
+                  "systemPromptTokens": null,
+                  "conversationTokens": null,
+                  "toolDefinitionsTokens": null,
+                  "toolResultTokens": null
+                }
+              }
+            ],
+            "selectedTools": [
+              {
+                "callId": "fc_bffc3a13-ac76-41ff-a996-f2da31a8728d",
+                "name": "final_response",
+                "arguments": {
+                  "groundedFacts": [],
+                  "kind": "clarification",
+                  "message": "هل تريد إنشاء شخص باسم محمد قبل تسجيل المصروف؟"
+                },
+                "argumentChars": 102,
+                "argumentBytes": 140,
+                "result": null
+              }
+            ],
+            "nextDecision": {
+              "kind": "return_final_response",
+              "reason": "Provider returned only the final_response tool.",
+              "nextLogicalCallNumber": null,
+              "nextCallKind": null,
+              "nextScope": "expense"
+            }
+          }
+        ]
+      },
+      "rowCountsBefore": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountsAfter": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountChanged": false,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": false,
+      "toolSelectionMatch": true,
+      "clarificationMatch": false
+    },
+    {
+      "id": "A04",
+      "category": "expense_intent",
+      "message": "أنا دفعت لمحمد سبعة آلاف ونص",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": [
+          "find_person",
+          "record_expense"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": null,
+      "actualTool": "text_response",
+      "actualTools": [],
+      "toolArguments": [],
+      "clarificationAsked": false,
+      "logicalLlmCalls": 1,
+      "actualHttpAttempts": 1,
+      "httpAttemptsByProvider": {
+        "groq": 1
+      },
+      "provider": "groq",
+      "model": "openai/gpt-oss-20b",
+      "fallback": false,
+      "fallbackReason": "PROVIDER_RATE_LIMIT",
+      "latencyMs": 190,
+      "tokenUsage": null,
+      "inputTokens": null,
+      "outputTokens": null,
+      "totalTokens": null,
+      "cachedTokens": null,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {
+        "groq": 15259
+      },
+      "maxRequestBytes": 15259,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 5779,
+      "toolDefinitionsCount": 12,
+      "maxConversationChars": 750,
+      "contextBreakdown": {
+        "systemPromptChars": 3250,
+        "requestGuidanceChars": 1692,
+        "userMessageChars": 28,
+        "recentConversationChars": 0,
+        "summaryChars": 0,
+        "structuredStateChars": 0,
+        "toolResultChars": 0,
+        "otherConversationChars": 569,
+        "conversationChars": 597,
+        "toolDefinitionsChars": 5779,
+        "requestBytes": 15259
+      },
+      "diagnosticTrace": {
+        "version": 1,
+        "calls": [
+          {
+            "logicalCallNumber": 1,
+            "phase": "tool_round",
+            "scope": "expense",
+            "requestedTools": [
+              "final_response",
+              "find_person",
+              "find_project",
+              "query_expenses",
+              "rank_expense_projects",
+              "get_person_expense_total",
+              "get_project_expense_total",
+              "query_reminders",
+              "recall_context",
+              "record_expense",
+              "update_expense",
+              "delete_expense"
+            ],
+            "finalResponseOnly": false,
+            "attempts": [
+              {
+                "requestId": "intent-eval-groq-A04-5d40bad8-3a17-4bf7-85b2-96de2f535f05",
+                "conversationId": "intent-eval-groq-A04",
+                "provider": "groq",
+                "model": "openai/gpt-oss-20b",
+                "logicalCallNumber": 1,
+                "attemptNumber": 1,
+                "scope": "expense",
+                "toolsAvailable": [
+                  "final_response",
+                  "find_person",
+                  "find_project",
+                  "record_expense",
+                  "update_expense",
+                  "query_expenses",
+                  "rank_expense_projects",
+                  "get_person_expense_total",
+                  "get_project_expense_total",
+                  "delete_expense",
+                  "query_reminders",
+                  "recall_context"
+                ],
+                "inputTokens": null,
+                "outputTokens": null,
+                "totalTokens": null,
+                "cachedTokens": null,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null,
+                "cacheHit": false,
+                "cacheRetry": false,
+                "fallback": false,
+                "retry": false,
+                "httpRequestSent": true,
+                "latencyMs": 162,
+                "success": false,
+                "failureReason": "PROVIDER_RATE_LIMIT",
+                "outputChars": 0,
+                "context": {
+                  "systemPromptChars": 3250,
+                  "requestGuidanceChars": 1692,
+                  "userMessageChars": 28,
+                  "recentConversationChars": 0,
+                  "summaryChars": 0,
+                  "structuredStateChars": 0,
+                  "toolResultChars": 0,
+                  "otherConversationChars": 569,
+                  "conversationChars": 597,
+                  "toolDefinitionsChars": 5779,
+                  "requestBytes": 15259,
+                  "systemPromptTokens": null,
+                  "conversationTokens": null,
+                  "toolDefinitionsTokens": null,
+                  "toolResultTokens": null
+                }
+              }
+            ],
+            "selectedTools": [],
+            "nextDecision": {
+              "kind": "error",
+              "reason": "PROVIDER_RATE_LIMIT",
+              "nextLogicalCallNumber": null,
+              "nextCallKind": null,
+              "nextScope": "expense"
+            }
+          }
+        ]
+      },
+      "rowCountsBefore": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountsAfter": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountChanged": false,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": false,
+      "toolSelectionMatch": false,
+      "clarificationMatch": true
+    },
+    {
+      "id": "A05",
+      "category": "expense_intent",
+      "message": "النهارده دفعت لمحمد 7500 جنيه",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": [
+          "find_person",
+          "record_expense"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": null,
+      "actualTool": "find_person",
+      "actualTools": [
+        "find_person"
+      ],
+      "toolArguments": [
+        {
+          "name": "find_person",
+          "arguments": {},
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": false,
+      "logicalLlmCalls": 2,
+      "actualHttpAttempts": 2,
+      "httpAttemptsByProvider": {
+        "groq": 2
+      },
+      "provider": "groq",
+      "model": "openai/gpt-oss-20b",
+      "fallback": false,
+      "fallbackReason": "PROVIDER_RATE_LIMIT",
+      "latencyMs": 447,
+      "tokenUsage": [
+        {
+          "queue_time": 0.00333542,
+          "prompt_tokens": 2612,
+          "prompt_time": 0.133571078,
+          "completion_tokens": 29,
+          "completion_time": 0.036082783,
+          "total_tokens": 2641,
+          "total_time": 0.169653861,
+          "completion_tokens_details": {
+            "reasoning_tokens": 6
+          }
+        }
+      ],
+      "inputTokens": 2612,
+      "outputTokens": 29,
+      "totalTokens": 2641,
+      "cachedTokens": null,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {
+        "groq": 30870
+      },
+      "maxRequestBytes": 15612,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 5779,
+      "toolDefinitionsCount": 12,
+      "maxConversationChars": 1101,
+      "contextBreakdown": {
+        "systemPromptChars": 6500,
+        "requestGuidanceChars": 3384,
+        "userMessageChars": 58,
+        "recentConversationChars": 0,
+        "summaryChars": 0,
+        "structuredStateChars": 0,
+        "toolResultChars": 51,
+        "otherConversationChars": 1138,
+        "conversationChars": 1247,
+        "toolDefinitionsChars": 11558,
+        "requestBytes": 30870
+      },
+      "diagnosticTrace": {
+        "version": 1,
+        "calls": [
+          {
+            "logicalCallNumber": 1,
+            "phase": "tool_round",
+            "scope": "expense",
+            "requestedTools": [
+              "final_response",
+              "find_person",
+              "find_project",
+              "query_expenses",
+              "rank_expense_projects",
+              "get_person_expense_total",
+              "get_project_expense_total",
+              "query_reminders",
+              "recall_context",
+              "record_expense",
+              "update_expense",
+              "delete_expense"
+            ],
+            "finalResponseOnly": false,
+            "attempts": [
+              {
+                "requestId": "intent-eval-groq-A05-8659bc56-33df-4953-a7ef-e8546af2bf6a",
+                "conversationId": "intent-eval-groq-A05",
+                "provider": "groq",
+                "model": "openai/gpt-oss-20b",
+                "logicalCallNumber": 1,
+                "attemptNumber": 1,
+                "scope": "expense",
+                "toolsAvailable": [
+                  "final_response",
+                  "find_person",
+                  "find_project",
+                  "record_expense",
+                  "update_expense",
+                  "query_expenses",
+                  "rank_expense_projects",
+                  "get_person_expense_total",
+                  "get_project_expense_total",
+                  "delete_expense",
+                  "query_reminders",
+                  "recall_context"
+                ],
+                "inputTokens": 2612,
+                "outputTokens": 29,
+                "totalTokens": 2641,
+                "cachedTokens": null,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null,
+                "cacheHit": false,
+                "cacheRetry": false,
+                "fallback": false,
+                "retry": false,
+                "httpRequestSent": true,
+                "latencyMs": 319,
+                "success": true,
+                "failureReason": null,
+                "outputChars": 94,
+                "context": {
+                  "systemPromptChars": 3250,
+                  "requestGuidanceChars": 1692,
+                  "userMessageChars": 29,
+                  "recentConversationChars": 0,
+                  "summaryChars": 0,
+                  "structuredStateChars": 0,
+                  "toolResultChars": 0,
+                  "otherConversationChars": 569,
+                  "conversationChars": 598,
+                  "toolDefinitionsChars": 5779,
+                  "requestBytes": 15258,
+                  "systemPromptTokens": null,
+                  "conversationTokens": null,
+                  "toolDefinitionsTokens": null,
+                  "toolResultTokens": null
+                }
+              }
+            ],
+            "selectedTools": [
+              {
+                "callId": "fc_7067bc49-4b7b-4d47-9374-ed11c48173ed",
+                "name": "find_person",
+                "arguments": {
+                  "name": "محمد"
+                },
+                "argumentChars": 15,
+                "argumentBytes": 19,
+                "result": {
+                  "ok": true,
+                  "keys": [
+                    "matches",
+                    "needsClarification",
+                    "ok"
+                  ],
+                  "resultChars": 51,
+                  "resultBytes": 51,
+                  "promptChars": 51,
+                  "pendingApproval": false,
+                  "errorCode": null
+                }
+              }
+            ],
+            "nextDecision": {
+              "kind": "continue_after_tool_results",
+              "reason": "Tool results were appended to the conversation; the next call continues orchestration.",
+              "nextLogicalCallNumber": 2,
+              "nextCallKind": "tool_round",
+              "nextScope": "expense"
+            }
+          },
+          {
+            "logicalCallNumber": 2,
+            "phase": "tool_round",
+            "scope": "expense",
+            "requestedTools": [
+              "final_response",
+              "find_person",
+              "find_project",
+              "query_expenses",
+              "rank_expense_projects",
+              "get_person_expense_total",
+              "get_project_expense_total",
+              "query_reminders",
+              "recall_context",
+              "record_expense",
+              "update_expense",
+              "delete_expense"
+            ],
+            "finalResponseOnly": false,
+            "attempts": [
+              {
+                "requestId": "intent-eval-groq-A05-8659bc56-33df-4953-a7ef-e8546af2bf6a",
+                "conversationId": "intent-eval-groq-A05",
+                "provider": "groq",
+                "model": "openai/gpt-oss-20b",
+                "logicalCallNumber": 2,
+                "attemptNumber": 2,
+                "scope": "expense",
+                "toolsAvailable": [
+                  "final_response",
+                  "find_person",
+                  "find_project",
+                  "record_expense",
+                  "update_expense",
+                  "query_expenses",
+                  "rank_expense_projects",
+                  "get_person_expense_total",
+                  "get_project_expense_total",
+                  "delete_expense",
+                  "query_reminders",
+                  "recall_context"
+                ],
+                "inputTokens": null,
+                "outputTokens": null,
+                "totalTokens": null,
+                "cachedTokens": null,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null,
+                "cacheHit": false,
+                "cacheRetry": false,
+                "fallback": false,
+                "retry": false,
+                "httpRequestSent": true,
+                "latencyMs": 97,
+                "success": false,
+                "failureReason": "PROVIDER_RATE_LIMIT",
+                "outputChars": 0,
+                "context": {
+                  "systemPromptChars": 3250,
+                  "requestGuidanceChars": 1692,
+                  "userMessageChars": 29,
+                  "recentConversationChars": 0,
+                  "summaryChars": 0,
+                  "structuredStateChars": 0,
+                  "toolResultChars": 51,
+                  "otherConversationChars": 569,
+                  "conversationChars": 649,
+                  "toolDefinitionsChars": 5779,
+                  "requestBytes": 15612,
+                  "systemPromptTokens": null,
+                  "conversationTokens": null,
+                  "toolDefinitionsTokens": null,
+                  "toolResultTokens": null
+                }
+              }
+            ],
+            "selectedTools": [],
+            "nextDecision": {
+              "kind": "error",
+              "reason": "PROVIDER_RATE_LIMIT",
+              "nextLogicalCallNumber": null,
+              "nextCallKind": null,
+              "nextScope": "expense"
+            }
+          }
+        ]
+      },
+      "rowCountsBefore": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountsAfter": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountChanged": false,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": false,
+      "toolSelectionMatch": true,
+      "clarificationMatch": true
+    },
+    {
+      "id": "A06",
+      "category": "expense_intent",
+      "message": "الـ7500 اللي دفعتها لمحمد سجلها",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": [
+          "find_person",
+          "record_expense"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": "clarification",
+      "actualTool": "text_response",
+      "actualTools": [],
+      "toolArguments": [],
+      "clarificationAsked": true,
+      "logicalLlmCalls": 0,
+      "actualHttpAttempts": 0,
+      "httpAttemptsByProvider": {},
+      "provider": "groq",
+      "model": "openai/gpt-oss-20b",
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 25,
+      "tokenUsage": null,
+      "inputTokens": null,
+      "outputTokens": null,
+      "totalTokens": null,
+      "cachedTokens": null,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {},
+      "maxRequestBytes": 0,
+      "systemPromptChars": 0,
+      "toolDefinitionsChars": 0,
+      "toolDefinitionsCount": 0,
+      "maxConversationChars": 0,
+      "contextBreakdown": {
+        "systemPromptChars": null,
+        "requestGuidanceChars": null,
+        "userMessageChars": null,
+        "recentConversationChars": null,
+        "summaryChars": null,
+        "structuredStateChars": null,
+        "toolResultChars": null,
+        "otherConversationChars": null,
+        "conversationChars": null,
+        "toolDefinitionsChars": null,
+        "requestBytes": null
+      },
+      "diagnosticTrace": {
+        "version": 1,
+        "calls": []
+      },
+      "rowCountsBefore": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountsAfter": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountChanged": false,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": false,
+      "toolSelectionMatch": false,
+      "clarificationMatch": false
+    },
+    {
+      "id": "A07",
+      "category": "expense_intent",
+      "message": "سجلها على محمد",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": [
+          "find_person",
+          "record_expense",
+          "final_response"
+        ],
+        "clarification": true,
+        "write": false
+      },
+      "contextMode": "context_required",
+      "status": "context_not_provided",
+      "actualIntent": "clarification",
+      "actualTool": "text_response",
+      "actualTools": [],
+      "toolArguments": [],
+      "clarificationAsked": true,
+      "logicalLlmCalls": 0,
+      "actualHttpAttempts": 0,
+      "httpAttemptsByProvider": {},
+      "provider": "groq",
+      "model": "openai/gpt-oss-20b",
+      "fallback": false,
+      "fallbackReason": null,
+      "latencyMs": 25,
+      "tokenUsage": null,
+      "inputTokens": null,
+      "outputTokens": null,
+      "totalTokens": null,
+      "cachedTokens": null,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {},
+      "maxRequestBytes": 0,
+      "systemPromptChars": 0,
+      "toolDefinitionsChars": 0,
+      "toolDefinitionsCount": 0,
+      "maxConversationChars": 0,
+      "contextBreakdown": {
+        "systemPromptChars": null,
+        "requestGuidanceChars": null,
+        "userMessageChars": null,
+        "recentConversationChars": null,
+        "summaryChars": null,
+        "structuredStateChars": null,
+        "toolResultChars": null,
+        "otherConversationChars": null,
+        "conversationChars": null,
+        "toolDefinitionsChars": null,
+        "requestBytes": null
+      },
+      "diagnosticTrace": {
+        "version": 1,
+        "calls": []
+      },
+      "rowCountsBefore": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountsAfter": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountChanged": false,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": null,
+      "toolSelectionMatch": null,
+      "clarificationMatch": null
+    },
+    {
+      "id": "A08",
+      "category": "expense_intent",
+      "message": "حولت لمحمد ألفين جنيه امبارح",
+      "expected": {
+        "intent": "expense",
+        "primaryTool": "record_expense",
+        "acceptableTools": [
+          "find_person",
+          "record_expense"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": null,
+      "actualTool": "find_person",
+      "actualTools": [
+        "find_person"
+      ],
+      "toolArguments": [
+        {
+          "name": "find_person",
+          "arguments": {},
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": false,
+      "logicalLlmCalls": 2,
+      "actualHttpAttempts": 2,
+      "httpAttemptsByProvider": {
+        "groq": 2
+      },
+      "provider": "groq",
+      "model": "openai/gpt-oss-20b",
+      "fallback": false,
+      "fallbackReason": "PROVIDER_RATE_LIMIT",
+      "latencyMs": 704,
+      "tokenUsage": [
+        {
+          "queue_time": 0.223073264,
+          "prompt_tokens": 2610,
+          "prompt_time": 0.13435659,
+          "completion_tokens": 55,
+          "completion_time": 0.072133042,
+          "total_tokens": 2665,
+          "total_time": 0.206489632,
+          "completion_tokens_details": {
+            "reasoning_tokens": 32
+          }
+        }
+      ],
+      "inputTokens": 2610,
+      "outputTokens": 55,
+      "totalTokens": 2665,
+      "cachedTokens": null,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {
+        "groq": 30872
+      },
+      "maxRequestBytes": 15613,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 5779,
+      "toolDefinitionsCount": 12,
+      "maxConversationChars": 1099,
+      "contextBreakdown": {
+        "systemPromptChars": 6500,
+        "requestGuidanceChars": 3384,
+        "userMessageChars": 56,
+        "recentConversationChars": 0,
+        "summaryChars": 0,
+        "structuredStateChars": 0,
+        "toolResultChars": 51,
+        "otherConversationChars": 1136,
+        "conversationChars": 1243,
+        "toolDefinitionsChars": 11558,
+        "requestBytes": 30872
+      },
+      "diagnosticTrace": {
+        "version": 1,
+        "calls": [
+          {
+            "logicalCallNumber": 1,
+            "phase": "tool_round",
+            "scope": "expense",
+            "requestedTools": [
+              "final_response",
+              "find_person",
+              "find_project",
+              "query_expenses",
+              "rank_expense_projects",
+              "get_person_expense_total",
+              "get_project_expense_total",
+              "query_reminders",
+              "recall_context",
+              "record_expense",
+              "update_expense",
+              "delete_expense"
+            ],
+            "finalResponseOnly": false,
+            "attempts": [
+              {
+                "requestId": "intent-eval-groq-A08-72c40eaa-02fc-4804-9046-475a1f42d960",
+                "conversationId": "intent-eval-groq-A08",
+                "provider": "groq",
+                "model": "openai/gpt-oss-20b",
+                "logicalCallNumber": 1,
+                "attemptNumber": 1,
+                "scope": "expense",
+                "toolsAvailable": [
+                  "final_response",
+                  "find_person",
+                  "find_project",
+                  "record_expense",
+                  "update_expense",
+                  "query_expenses",
+                  "rank_expense_projects",
+                  "get_person_expense_total",
+                  "get_project_expense_total",
+                  "delete_expense",
+                  "query_reminders",
+                  "recall_context"
+                ],
+                "inputTokens": 2610,
+                "outputTokens": 55,
+                "totalTokens": 2665,
+                "cachedTokens": null,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null,
+                "cacheHit": false,
+                "cacheRetry": false,
+                "fallback": false,
+                "retry": false,
+                "httpRequestSent": true,
+                "latencyMs": 576,
+                "success": true,
+                "failureReason": null,
+                "outputChars": 94,
+                "context": {
+                  "systemPromptChars": 3250,
+                  "requestGuidanceChars": 1692,
+                  "userMessageChars": 28,
+                  "recentConversationChars": 0,
+                  "summaryChars": 0,
+                  "structuredStateChars": 0,
+                  "toolResultChars": 0,
+                  "otherConversationChars": 568,
+                  "conversationChars": 596,
+                  "toolDefinitionsChars": 5779,
+                  "requestBytes": 15259,
+                  "systemPromptTokens": null,
+                  "conversationTokens": null,
+                  "toolDefinitionsTokens": null,
+                  "toolResultTokens": null
+                }
+              }
+            ],
+            "selectedTools": [
+              {
+                "callId": "fc_7c94fb94-d93b-46f3-bd10-bd730d65cad0",
+                "name": "find_person",
+                "arguments": {
+                  "name": "محمد"
+                },
+                "argumentChars": 15,
+                "argumentBytes": 19,
+                "result": {
+                  "ok": true,
+                  "keys": [
+                    "matches",
+                    "needsClarification",
+                    "ok"
+                  ],
+                  "resultChars": 51,
+                  "resultBytes": 51,
+                  "promptChars": 51,
+                  "pendingApproval": false,
+                  "errorCode": null
+                }
+              }
+            ],
+            "nextDecision": {
+              "kind": "continue_after_tool_results",
+              "reason": "Tool results were appended to the conversation; the next call continues orchestration.",
+              "nextLogicalCallNumber": 2,
+              "nextCallKind": "tool_round",
+              "nextScope": "expense"
+            }
+          },
+          {
+            "logicalCallNumber": 2,
+            "phase": "tool_round",
+            "scope": "expense",
+            "requestedTools": [
+              "final_response",
+              "find_person",
+              "find_project",
+              "query_expenses",
+              "rank_expense_projects",
+              "get_person_expense_total",
+              "get_project_expense_total",
+              "query_reminders",
+              "recall_context",
+              "record_expense",
+              "update_expense",
+              "delete_expense"
+            ],
+            "finalResponseOnly": false,
+            "attempts": [
+              {
+                "requestId": "intent-eval-groq-A08-72c40eaa-02fc-4804-9046-475a1f42d960",
+                "conversationId": "intent-eval-groq-A08",
+                "provider": "groq",
+                "model": "openai/gpt-oss-20b",
+                "logicalCallNumber": 2,
+                "attemptNumber": 2,
+                "scope": "expense",
+                "toolsAvailable": [
+                  "final_response",
+                  "find_person",
+                  "find_project",
+                  "record_expense",
+                  "update_expense",
+                  "query_expenses",
+                  "rank_expense_projects",
+                  "get_person_expense_total",
+                  "get_project_expense_total",
+                  "delete_expense",
+                  "query_reminders",
+                  "recall_context"
+                ],
+                "inputTokens": null,
+                "outputTokens": null,
+                "totalTokens": null,
+                "cachedTokens": null,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null,
+                "cacheHit": false,
+                "cacheRetry": false,
+                "fallback": false,
+                "retry": false,
+                "httpRequestSent": true,
+                "latencyMs": 96,
+                "success": false,
+                "failureReason": "PROVIDER_RATE_LIMIT",
+                "outputChars": 0,
+                "context": {
+                  "systemPromptChars": 3250,
+                  "requestGuidanceChars": 1692,
+                  "userMessageChars": 28,
+                  "recentConversationChars": 0,
+                  "summaryChars": 0,
+                  "structuredStateChars": 0,
+                  "toolResultChars": 51,
+                  "otherConversationChars": 568,
+                  "conversationChars": 647,
+                  "toolDefinitionsChars": 5779,
+                  "requestBytes": 15613,
+                  "systemPromptTokens": null,
+                  "conversationTokens": null,
+                  "toolDefinitionsTokens": null,
+                  "toolResultTokens": null
+                }
+              }
+            ],
+            "selectedTools": [],
+            "nextDecision": {
+              "kind": "error",
+              "reason": "PROVIDER_RATE_LIMIT",
+              "nextLogicalCallNumber": null,
+              "nextCallKind": null,
+              "nextScope": "expense"
+            }
+          }
+        ]
+      },
+      "rowCountsBefore": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountsAfter": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountChanged": false,
+      "approvalReached": false,
+      "wouldSelectWriteTool": false,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": false,
+      "toolSelectionMatch": true,
+      "clarificationMatch": true
+    },
+    {
+      "id": "B01",
+      "category": "create_person",
+      "message": "أضف محمد كشخص",
+      "expected": {
+        "intent": "create_person",
+        "primaryTool": "create_person",
+        "acceptableTools": [
+          "create_person"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": "create_person",
+      "actualTool": "create_person",
+      "actualTools": [
+        "create_person",
+        "create_person"
+      ],
+      "toolArguments": [
+        {
+          "name": "create_person",
+          "arguments": {},
+          "dryRun": true
+        },
+        {
+          "name": "create_person",
+          "arguments": {},
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": false,
+      "logicalLlmCalls": 2,
+      "actualHttpAttempts": 2,
+      "httpAttemptsByProvider": {
+        "groq": 2
+      },
+      "provider": "groq",
+      "model": "openai/gpt-oss-20b",
+      "fallback": false,
+      "fallbackReason": "PROVIDER_RATE_LIMIT",
+      "latencyMs": 618,
+      "tokenUsage": [
+        {
+          "queue_time": 0.192592082,
+          "prompt_tokens": 2109,
+          "prompt_time": 0.13090411,
+          "completion_tokens": 33,
+          "completion_time": 0.036666354,
+          "total_tokens": 2142,
+          "total_time": 0.167570464,
+          "completion_tokens_details": {
+            "reasoning_tokens": 10
+          }
+        }
+      ],
+      "inputTokens": 2109,
+      "outputTokens": 33,
+      "totalTokens": 2142,
+      "cachedTokens": null,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {
+        "groq": 24020
+      },
+      "maxRequestBytes": 12167,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 2410,
+      "toolDefinitionsCount": 6,
+      "maxConversationChars": 1026,
+      "contextBreakdown": {
+        "systemPromptChars": 6500,
+        "requestGuidanceChars": 3384,
+        "userMessageChars": 26,
+        "recentConversationChars": 0,
+        "summaryChars": 0,
+        "structuredStateChars": 0,
+        "toolResultChars": 11,
+        "otherConversationChars": 1104,
+        "conversationChars": 1141,
+        "toolDefinitionsChars": 4820,
+        "requestBytes": 24020
+      },
+      "diagnosticTrace": {
+        "version": 1,
+        "calls": [
+          {
+            "logicalCallNumber": 1,
+            "phase": "tool_round",
+            "scope": "person",
+            "requestedTools": [
+              "final_response",
+              "find_person",
+              "recall_context",
+              "create_person",
+              "update_person",
+              "delete_person"
+            ],
+            "finalResponseOnly": false,
+            "attempts": [
+              {
+                "requestId": "intent-eval-groq-B01-54554056-73aa-49d2-a929-f93f2b1643a8",
+                "conversationId": "intent-eval-groq-B01",
+                "provider": "groq",
+                "model": "openai/gpt-oss-20b",
+                "logicalCallNumber": 1,
+                "attemptNumber": 1,
+                "scope": "person",
+                "toolsAvailable": [
+                  "final_response",
+                  "find_person",
+                  "create_person",
+                  "update_person",
+                  "delete_person",
+                  "recall_context"
+                ],
+                "inputTokens": 2109,
+                "outputTokens": 33,
+                "totalTokens": 2142,
+                "cachedTokens": null,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null,
+                "cacheHit": false,
+                "cacheRetry": false,
+                "fallback": false,
+                "retry": false,
+                "httpRequestSent": true,
+                "latencyMs": 520,
+                "success": true,
+                "failureReason": null,
+                "outputChars": 96,
+                "context": {
+                  "systemPromptChars": 3250,
+                  "requestGuidanceChars": 1692,
+                  "userMessageChars": 13,
+                  "recentConversationChars": 0,
+                  "summaryChars": 0,
+                  "structuredStateChars": 0,
+                  "toolResultChars": 0,
+                  "otherConversationChars": 552,
+                  "conversationChars": 565,
+                  "toolDefinitionsChars": 2410,
+                  "requestBytes": 11853,
+                  "systemPromptTokens": null,
+                  "conversationTokens": null,
+                  "toolDefinitionsTokens": null,
+                  "toolResultTokens": null
+                }
+              }
+            ],
+            "selectedTools": [
+              {
+                "callId": "fc_7e23c6bc-03ea-4f40-8e33-9d403a2d8b99",
+                "name": "create_person",
+                "arguments": {
+                  "name": "محمد"
+                },
+                "argumentChars": 15,
+                "argumentBytes": 19,
+                "result": {
+                  "ok": true,
+                  "keys": [
+                    "arguments",
+                    "dryRun",
+                    "ok",
+                    "wouldExecute"
+                  ],
+                  "resultChars": 84,
+                  "resultBytes": 88,
+                  "promptChars": 11,
+                  "pendingApproval": false,
+                  "errorCode": null
+                }
+              }
+            ],
+            "nextDecision": {
+              "kind": "continue_after_tool_results",
+              "reason": "Tool results were appended to the conversation; the next call continues orchestration.",
+              "nextLogicalCallNumber": 2,
+              "nextCallKind": "tool_round",
+              "nextScope": "person"
+            }
+          },
+          {
+            "logicalCallNumber": 2,
+            "phase": "tool_round",
+            "scope": "person",
+            "requestedTools": [
+              "final_response",
+              "find_person",
+              "recall_context",
+              "create_person",
+              "update_person",
+              "delete_person"
+            ],
+            "finalResponseOnly": false,
+            "attempts": [
+              {
+                "requestId": "intent-eval-groq-B01-54554056-73aa-49d2-a929-f93f2b1643a8",
+                "conversationId": "intent-eval-groq-B01",
+                "provider": "groq",
+                "model": "openai/gpt-oss-20b",
+                "logicalCallNumber": 2,
+                "attemptNumber": 2,
+                "scope": "person",
+                "toolsAvailable": [
+                  "final_response",
+                  "find_person",
+                  "create_person",
+                  "update_person",
+                  "delete_person",
+                  "recall_context"
+                ],
+                "inputTokens": null,
+                "outputTokens": null,
+                "totalTokens": null,
+                "cachedTokens": null,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null,
+                "cacheHit": false,
+                "cacheRetry": false,
+                "fallback": false,
+                "retry": false,
+                "httpRequestSent": true,
+                "latencyMs": 66,
+                "success": false,
+                "failureReason": "PROVIDER_RATE_LIMIT",
+                "outputChars": 0,
+                "context": {
+                  "systemPromptChars": 3250,
+                  "requestGuidanceChars": 1692,
+                  "userMessageChars": 13,
+                  "recentConversationChars": 0,
+                  "summaryChars": 0,
+                  "structuredStateChars": 0,
+                  "toolResultChars": 11,
+                  "otherConversationChars": 552,
+                  "conversationChars": 576,
+                  "toolDefinitionsChars": 2410,
+                  "requestBytes": 12167,
+                  "systemPromptTokens": null,
+                  "conversationTokens": null,
+                  "toolDefinitionsTokens": null,
+                  "toolResultTokens": null
+                }
+              }
+            ],
+            "selectedTools": [],
+            "nextDecision": {
+              "kind": "error",
+              "reason": "PROVIDER_RATE_LIMIT",
+              "nextLogicalCallNumber": null,
+              "nextCallKind": null,
+              "nextScope": "person"
+            }
+          }
+        ]
+      },
+      "rowCountsBefore": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountsAfter": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountChanged": false,
+      "approvalReached": false,
+      "wouldSelectWriteTool": true,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": true,
+      "toolSelectionMatch": true,
+      "clarificationMatch": true
+    },
+    {
+      "id": "B02",
+      "category": "create_person",
+      "message": "عايز أضيف شخص اسمه محمد",
+      "expected": {
+        "intent": "create_person",
+        "primaryTool": "create_person",
+        "acceptableTools": [
+          "create_person"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": "create_person",
+      "actualTool": "create_person",
+      "actualTools": [
+        "create_person",
+        "create_person"
+      ],
+      "toolArguments": [
+        {
+          "name": "create_person",
+          "arguments": {},
+          "dryRun": true
+        },
+        {
+          "name": "create_person",
+          "arguments": {},
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": false,
+      "logicalLlmCalls": 2,
+      "actualHttpAttempts": 2,
+      "httpAttemptsByProvider": {
+        "groq": 2
+      },
+      "provider": "groq",
+      "model": "openai/gpt-oss-20b",
+      "fallback": false,
+      "fallbackReason": "PROVIDER_RATE_LIMIT",
+      "latencyMs": 564,
+      "tokenUsage": [
+        {
+          "queue_time": 0.086077881,
+          "prompt_tokens": 2111,
+          "prompt_time": 0.131195632,
+          "completion_tokens": 70,
+          "completion_time": 0.078211311,
+          "total_tokens": 2181,
+          "total_time": 0.209406943,
+          "completion_tokens_details": {
+            "reasoning_tokens": 47
+          }
+        }
+      ],
+      "inputTokens": 2111,
+      "outputTokens": 70,
+      "totalTokens": 2181,
+      "cachedTokens": null,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {
+        "groq": 24056
+      },
+      "maxRequestBytes": 12185,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 2410,
+      "toolDefinitionsCount": 6,
+      "maxConversationChars": 1036,
+      "contextBreakdown": {
+        "systemPromptChars": 6500,
+        "requestGuidanceChars": 3384,
+        "userMessageChars": 46,
+        "recentConversationChars": 0,
+        "summaryChars": 0,
+        "structuredStateChars": 0,
+        "toolResultChars": 11,
+        "otherConversationChars": 1104,
+        "conversationChars": 1161,
+        "toolDefinitionsChars": 4820,
+        "requestBytes": 24056
+      },
+      "diagnosticTrace": {
+        "version": 1,
+        "calls": [
+          {
+            "logicalCallNumber": 1,
+            "phase": "tool_round",
+            "scope": "person",
+            "requestedTools": [
+              "final_response",
+              "find_person",
+              "recall_context",
+              "create_person",
+              "update_person",
+              "delete_person"
+            ],
+            "finalResponseOnly": false,
+            "attempts": [
+              {
+                "requestId": "intent-eval-groq-B02-aca9848a-d315-4ccd-b534-f2a9ec7e0f9b",
+                "conversationId": "intent-eval-groq-B02",
+                "provider": "groq",
+                "model": "openai/gpt-oss-20b",
+                "logicalCallNumber": 1,
+                "attemptNumber": 1,
+                "scope": "person",
+                "toolsAvailable": [
+                  "final_response",
+                  "find_person",
+                  "create_person",
+                  "update_person",
+                  "delete_person",
+                  "recall_context"
+                ],
+                "inputTokens": 2111,
+                "outputTokens": 70,
+                "totalTokens": 2181,
+                "cachedTokens": null,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null,
+                "cacheHit": false,
+                "cacheRetry": false,
+                "fallback": false,
+                "retry": false,
+                "httpRequestSent": true,
+                "latencyMs": 448,
+                "success": true,
+                "failureReason": null,
+                "outputChars": 96,
+                "context": {
+                  "systemPromptChars": 3250,
+                  "requestGuidanceChars": 1692,
+                  "userMessageChars": 23,
+                  "recentConversationChars": 0,
+                  "summaryChars": 0,
+                  "structuredStateChars": 0,
+                  "toolResultChars": 0,
+                  "otherConversationChars": 552,
+                  "conversationChars": 575,
+                  "toolDefinitionsChars": 2410,
+                  "requestBytes": 11871,
+                  "systemPromptTokens": null,
+                  "conversationTokens": null,
+                  "toolDefinitionsTokens": null,
+                  "toolResultTokens": null
+                }
+              }
+            ],
+            "selectedTools": [
+              {
+                "callId": "fc_cdb995f5-a1e9-46ae-ad1a-aa5a07f327f3",
+                "name": "create_person",
+                "arguments": {
+                  "name": "محمد"
+                },
+                "argumentChars": 15,
+                "argumentBytes": 19,
+                "result": {
+                  "ok": true,
+                  "keys": [
+                    "arguments",
+                    "dryRun",
+                    "ok",
+                    "wouldExecute"
+                  ],
+                  "resultChars": 84,
+                  "resultBytes": 88,
+                  "promptChars": 11,
+                  "pendingApproval": false,
+                  "errorCode": null
+                }
+              }
+            ],
+            "nextDecision": {
+              "kind": "continue_after_tool_results",
+              "reason": "Tool results were appended to the conversation; the next call continues orchestration.",
+              "nextLogicalCallNumber": 2,
+              "nextCallKind": "tool_round",
+              "nextScope": "person"
+            }
+          },
+          {
+            "logicalCallNumber": 2,
+            "phase": "tool_round",
+            "scope": "person",
+            "requestedTools": [
+              "final_response",
+              "find_person",
+              "recall_context",
+              "create_person",
+              "update_person",
+              "delete_person"
+            ],
+            "finalResponseOnly": false,
+            "attempts": [
+              {
+                "requestId": "intent-eval-groq-B02-aca9848a-d315-4ccd-b534-f2a9ec7e0f9b",
+                "conversationId": "intent-eval-groq-B02",
+                "provider": "groq",
+                "model": "openai/gpt-oss-20b",
+                "logicalCallNumber": 2,
+                "attemptNumber": 2,
+                "scope": "person",
+                "toolsAvailable": [
+                  "final_response",
+                  "find_person",
+                  "create_person",
+                  "update_person",
+                  "delete_person",
+                  "recall_context"
+                ],
+                "inputTokens": null,
+                "outputTokens": null,
+                "totalTokens": null,
+                "cachedTokens": null,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null,
+                "cacheHit": false,
+                "cacheRetry": false,
+                "fallback": false,
+                "retry": false,
+                "httpRequestSent": true,
+                "latencyMs": 86,
+                "success": false,
+                "failureReason": "PROVIDER_RATE_LIMIT",
+                "outputChars": 0,
+                "context": {
+                  "systemPromptChars": 3250,
+                  "requestGuidanceChars": 1692,
+                  "userMessageChars": 23,
+                  "recentConversationChars": 0,
+                  "summaryChars": 0,
+                  "structuredStateChars": 0,
+                  "toolResultChars": 11,
+                  "otherConversationChars": 552,
+                  "conversationChars": 586,
+                  "toolDefinitionsChars": 2410,
+                  "requestBytes": 12185,
+                  "systemPromptTokens": null,
+                  "conversationTokens": null,
+                  "toolDefinitionsTokens": null,
+                  "toolResultTokens": null
+                }
+              }
+            ],
+            "selectedTools": [],
+            "nextDecision": {
+              "kind": "error",
+              "reason": "PROVIDER_RATE_LIMIT",
+              "nextLogicalCallNumber": null,
+              "nextCallKind": null,
+              "nextScope": "person"
+            }
+          }
+        ]
+      },
+      "rowCountsBefore": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountsAfter": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountChanged": false,
+      "approvalReached": false,
+      "wouldSelectWriteTool": true,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": true,
+      "toolSelectionMatch": true,
+      "clarificationMatch": true
+    },
+    {
+      "id": "B03",
+      "category": "create_person",
+      "message": "سجل محمد عندي كشخص",
+      "expected": {
+        "intent": "create_person",
+        "primaryTool": "create_person",
+        "acceptableTools": [
+          "create_person"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": "create_person",
+      "actualTool": "create_person",
+      "actualTools": [
+        "create_person",
+        "create_person"
+      ],
+      "toolArguments": [
+        {
+          "name": "create_person",
+          "arguments": {},
+          "dryRun": true
+        },
+        {
+          "name": "create_person",
+          "arguments": {},
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": false,
+      "logicalLlmCalls": 2,
+      "actualHttpAttempts": 2,
+      "httpAttemptsByProvider": {
+        "groq": 2
+      },
+      "provider": "groq",
+      "model": "openai/gpt-oss-20b",
+      "fallback": false,
+      "fallbackReason": "PROVIDER_RATE_LIMIT",
+      "latencyMs": 415,
+      "tokenUsage": [
+        {
+          "queue_time": 0.003575984,
+          "prompt_tokens": 2110,
+          "prompt_time": 0.107062094,
+          "completion_tokens": 33,
+          "completion_time": 0.057292981,
+          "total_tokens": 2143,
+          "total_time": 0.164355075,
+          "completion_tokens_details": {
+            "reasoning_tokens": 10
+          }
+        }
+      ],
+      "inputTokens": 2110,
+      "outputTokens": 33,
+      "totalTokens": 2143,
+      "cachedTokens": null,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {
+        "groq": 24038
+      },
+      "maxRequestBytes": 12176,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 2410,
+      "toolDefinitionsCount": 6,
+      "maxConversationChars": 1031,
+      "contextBreakdown": {
+        "systemPromptChars": 6500,
+        "requestGuidanceChars": 3384,
+        "userMessageChars": 36,
+        "recentConversationChars": 0,
+        "summaryChars": 0,
+        "structuredStateChars": 0,
+        "toolResultChars": 11,
+        "otherConversationChars": 1104,
+        "conversationChars": 1151,
+        "toolDefinitionsChars": 4820,
+        "requestBytes": 24038
+      },
+      "diagnosticTrace": {
+        "version": 1,
+        "calls": [
+          {
+            "logicalCallNumber": 1,
+            "phase": "tool_round",
+            "scope": "person",
+            "requestedTools": [
+              "final_response",
+              "find_person",
+              "recall_context",
+              "create_person",
+              "update_person",
+              "delete_person"
+            ],
+            "finalResponseOnly": false,
+            "attempts": [
+              {
+                "requestId": "intent-eval-groq-B03-aaa28c72-979e-463e-aa65-3fc9177cb89c",
+                "conversationId": "intent-eval-groq-B03",
+                "provider": "groq",
+                "model": "openai/gpt-oss-20b",
+                "logicalCallNumber": 1,
+                "attemptNumber": 1,
+                "scope": "person",
+                "toolsAvailable": [
+                  "final_response",
+                  "find_person",
+                  "create_person",
+                  "update_person",
+                  "delete_person",
+                  "recall_context"
+                ],
+                "inputTokens": 2110,
+                "outputTokens": 33,
+                "totalTokens": 2143,
+                "cachedTokens": null,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null,
+                "cacheHit": false,
+                "cacheRetry": false,
+                "fallback": false,
+                "retry": false,
+                "httpRequestSent": true,
+                "latencyMs": 323,
+                "success": true,
+                "failureReason": null,
+                "outputChars": 96,
+                "context": {
+                  "systemPromptChars": 3250,
+                  "requestGuidanceChars": 1692,
+                  "userMessageChars": 18,
+                  "recentConversationChars": 0,
+                  "summaryChars": 0,
+                  "structuredStateChars": 0,
+                  "toolResultChars": 0,
+                  "otherConversationChars": 552,
+                  "conversationChars": 570,
+                  "toolDefinitionsChars": 2410,
+                  "requestBytes": 11862,
+                  "systemPromptTokens": null,
+                  "conversationTokens": null,
+                  "toolDefinitionsTokens": null,
+                  "toolResultTokens": null
+                }
+              }
+            ],
+            "selectedTools": [
+              {
+                "callId": "fc_352b2dfe-fa66-47e2-93dc-5764d4c3911c",
+                "name": "create_person",
+                "arguments": {
+                  "name": "محمد"
+                },
+                "argumentChars": 15,
+                "argumentBytes": 19,
+                "result": {
+                  "ok": true,
+                  "keys": [
+                    "arguments",
+                    "dryRun",
+                    "ok",
+                    "wouldExecute"
+                  ],
+                  "resultChars": 84,
+                  "resultBytes": 88,
+                  "promptChars": 11,
+                  "pendingApproval": false,
+                  "errorCode": null
+                }
+              }
+            ],
+            "nextDecision": {
+              "kind": "continue_after_tool_results",
+              "reason": "Tool results were appended to the conversation; the next call continues orchestration.",
+              "nextLogicalCallNumber": 2,
+              "nextCallKind": "tool_round",
+              "nextScope": "person"
+            }
+          },
+          {
+            "logicalCallNumber": 2,
+            "phase": "tool_round",
+            "scope": "person",
+            "requestedTools": [
+              "final_response",
+              "find_person",
+              "recall_context",
+              "create_person",
+              "update_person",
+              "delete_person"
+            ],
+            "finalResponseOnly": false,
+            "attempts": [
+              {
+                "requestId": "intent-eval-groq-B03-aaa28c72-979e-463e-aa65-3fc9177cb89c",
+                "conversationId": "intent-eval-groq-B03",
+                "provider": "groq",
+                "model": "openai/gpt-oss-20b",
+                "logicalCallNumber": 2,
+                "attemptNumber": 2,
+                "scope": "person",
+                "toolsAvailable": [
+                  "final_response",
+                  "find_person",
+                  "create_person",
+                  "update_person",
+                  "delete_person",
+                  "recall_context"
+                ],
+                "inputTokens": null,
+                "outputTokens": null,
+                "totalTokens": null,
+                "cachedTokens": null,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null,
+                "cacheHit": false,
+                "cacheRetry": false,
+                "fallback": false,
+                "retry": false,
+                "httpRequestSent": true,
+                "latencyMs": 62,
+                "success": false,
+                "failureReason": "PROVIDER_RATE_LIMIT",
+                "outputChars": 0,
+                "context": {
+                  "systemPromptChars": 3250,
+                  "requestGuidanceChars": 1692,
+                  "userMessageChars": 18,
+                  "recentConversationChars": 0,
+                  "summaryChars": 0,
+                  "structuredStateChars": 0,
+                  "toolResultChars": 11,
+                  "otherConversationChars": 552,
+                  "conversationChars": 581,
+                  "toolDefinitionsChars": 2410,
+                  "requestBytes": 12176,
+                  "systemPromptTokens": null,
+                  "conversationTokens": null,
+                  "toolDefinitionsTokens": null,
+                  "toolResultTokens": null
+                }
+              }
+            ],
+            "selectedTools": [],
+            "nextDecision": {
+              "kind": "error",
+              "reason": "PROVIDER_RATE_LIMIT",
+              "nextLogicalCallNumber": null,
+              "nextCallKind": null,
+              "nextScope": "person"
+            }
+          }
+        ]
+      },
+      "rowCountsBefore": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountsAfter": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountChanged": false,
+      "approvalReached": false,
+      "wouldSelectWriteTool": true,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": true,
+      "toolSelectionMatch": true,
+      "clarificationMatch": true
+    },
+    {
+      "id": "B04",
+      "category": "create_person",
+      "message": "اعمل شخص جديد اسمه محمد",
+      "expected": {
+        "intent": "create_person",
+        "primaryTool": "create_person",
+        "acceptableTools": [
+          "create_person"
+        ],
+        "clarification": false,
+        "write": false
+      },
+      "contextMode": "none",
+      "status": "evaluated",
+      "actualIntent": "create_person",
+      "actualTool": "create_person",
+      "actualTools": [
+        "create_person"
+      ],
+      "toolArguments": [
+        {
+          "name": "create_person",
+          "arguments": {},
+          "dryRun": true
+        }
+      ],
+      "clarificationAsked": false,
+      "logicalLlmCalls": 1,
+      "actualHttpAttempts": 1,
+      "httpAttemptsByProvider": {
+        "groq": 1
+      },
+      "provider": "groq",
+      "model": "openai/gpt-oss-20b",
+      "fallback": false,
+      "fallbackReason": "PROVIDER_RATE_LIMIT",
+      "latencyMs": 209,
+      "tokenUsage": null,
+      "inputTokens": null,
+      "outputTokens": null,
+      "totalTokens": null,
+      "cachedTokens": null,
+      "cacheHit": false,
+      "cacheMiss": false,
+      "requestBytesByProvider": {
+        "groq": 11871
+      },
+      "maxRequestBytes": 11871,
+      "systemPromptChars": 4943,
+      "toolDefinitionsChars": 2410,
+      "toolDefinitionsCount": 6,
+      "maxConversationChars": 726,
+      "contextBreakdown": {
+        "systemPromptChars": 3250,
+        "requestGuidanceChars": 1692,
+        "userMessageChars": 23,
+        "recentConversationChars": 0,
+        "summaryChars": 0,
+        "structuredStateChars": 0,
+        "toolResultChars": 0,
+        "otherConversationChars": 552,
+        "conversationChars": 575,
+        "toolDefinitionsChars": 2410,
+        "requestBytes": 11871
+      },
+      "diagnosticTrace": {
+        "version": 1,
+        "calls": [
+          {
+            "logicalCallNumber": 1,
+            "phase": "tool_round",
+            "scope": "person",
+            "requestedTools": [
+              "final_response",
+              "find_person",
+              "recall_context",
+              "create_person",
+              "update_person",
+              "delete_person"
+            ],
+            "finalResponseOnly": false,
+            "attempts": [
+              {
+                "requestId": "intent-eval-groq-B04-02ded496-9984-4a25-8021-ea36468a7560",
+                "conversationId": "intent-eval-groq-B04",
+                "provider": "groq",
+                "model": "openai/gpt-oss-20b",
+                "logicalCallNumber": 1,
+                "attemptNumber": 1,
+                "scope": "person",
+                "toolsAvailable": [
+                  "final_response",
+                  "find_person",
+                  "create_person",
+                  "update_person",
+                  "delete_person",
+                  "recall_context"
+                ],
+                "inputTokens": null,
+                "outputTokens": null,
+                "totalTokens": null,
+                "cachedTokens": null,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null,
+                "cacheHit": false,
+                "cacheRetry": false,
+                "fallback": false,
+                "retry": false,
+                "httpRequestSent": true,
+                "latencyMs": 173,
+                "success": false,
+                "failureReason": "PROVIDER_RATE_LIMIT",
+                "outputChars": 0,
+                "context": {
+                  "systemPromptChars": 3250,
+                  "requestGuidanceChars": 1692,
+                  "userMessageChars": 23,
+                  "recentConversationChars": 0,
+                  "summaryChars": 0,
+                  "structuredStateChars": 0,
+                  "toolResultChars": 0,
+                  "otherConversationChars": 552,
+                  "conversationChars": 575,
+                  "toolDefinitionsChars": 2410,
+                  "requestBytes": 11871,
+                  "systemPromptTokens": null,
+                  "conversationTokens": null,
+                  "toolDefinitionsTokens": null,
+                  "toolResultTokens": null
+                }
+              }
+            ],
+            "selectedTools": [],
+            "nextDecision": {
+              "kind": "error",
+              "reason": "PROVIDER_RATE_LIMIT",
+              "nextLogicalCallNumber": null,
+              "nextCallKind": null,
+              "nextScope": "person"
+            }
+          }
+        ]
+      },
+      "rowCountsBefore": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountsAfter": {
+        "people": 0,
+        "projects": 0,
+        "expenses": 0,
+        "tasks": 0,
+        "reminders": 0,
+        "commitments": 0,
+        "projectPeople": 0
+      },
+      "rowCountChanged": false,
+      "approvalReached": false,
+      "wouldSelectWriteTool": true,
+      "writeOccurred": false,
+      "noWriteViolation": false,
+      "intentMatch": true,
+      "toolSelectionMatch": true,
+      "clarificationMatch": true
+    }
+  ]
+}

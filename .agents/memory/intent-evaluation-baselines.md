@@ -14,3 +14,9 @@ Dry-run no-write validation must treat approval as safe, identify writes only fo
 **Why:** The old harness interpreted ordinary read results as writes and counted approval-required paths as violations.
 
 **How to apply:** Use row-count snapshots plus write-tool result classification; never infer a write from approval reaching alone.
+
+A case can be scored as evaluated even when one individual provider attempt fails and a later attempt completes the same orchestration. Report both case-level provider errors and per-attempt failure reasons.
+
+**Why:** A real-provider Arabic audit had a recovered provider-unavailable attempt inside an otherwise valid case; treating the whole case as NLU failure would hide the distinction.
+
+**How to apply:** Use the diagnostic trace for HTTP attempt failures, retries, and fallback flags, while using the runner status for accuracy inclusion.
