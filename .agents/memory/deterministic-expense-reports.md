@@ -15,6 +15,12 @@ For scoped expense totals, the detail-row limit is only for the returned list; t
 
 **How to apply:** Reuse one filtered predicate for both the limited detail query and an unbounded aggregate query, and preserve the existing raw-minor-unit contract for clients that format money.
 
+When matching expenses contain multiple currencies, never expose a singular total or choose one currency with `min`; return per-currency minor-unit totals and make the response explicitly non-additive. Keep the legacy singular fields for the one-currency case.
+
+**Why:** Adding amounts from different currencies creates a plausible-looking number that has no financial meaning and can be mistaken for a verified total.
+
+**How to apply:** Group database aggregates by currency, omit the singular total when more than one group exists, and format each group separately in deterministic and recovery responses.
+
 Relative-period totals may bypass the model only for a complete, unscoped phrase that maps to a server-known period such as this week or last month; mentions of people, projects, or arbitrary dates remain on the model path.
 
 **Why:** The server can calculate fixed relative boundaries consistently, but entity names and free-form dates still require resolution and ambiguity handling.

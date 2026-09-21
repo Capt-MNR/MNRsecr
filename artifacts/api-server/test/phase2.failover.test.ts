@@ -807,6 +807,51 @@ test("expense total summaries include matching rows beyond the detail limit", as
   });
 });
 
+test("expense totals keep different currencies separate", async () => {
+  const testIdentity = identity("expense-summary-mixed-currency");
+  await db.insert(expensesTable).values([
+    {
+      tenantId: testIdentity.tenantId,
+      ownerUserId: testIdentity.userId,
+      description: "رحلة عمل",
+      amountMinor: 10_000,
+      currency: "EGP",
+    },
+    {
+      tenantId: testIdentity.tenantId,
+      ownerUserId: testIdentity.userId,
+      description: "رحلة عمل",
+      amountMinor: 2_000,
+      currency: "USD",
+    },
+  ]);
+
+  const result = await executeStructuredTool(
+    testIdentity,
+    "query_expenses",
+    { description: "رحلة عمل", limit: 50 },
+    { requestId: "expense-summary-mixed-currency-request" },
+  );
+
+  assert.equal(result.ok, true);
+  const summary = result.summary as {
+    count: number;
+    totalMinor?: number;
+    currency?: string;
+    currencyTotals?: Array<{ currency: string; totalMinor: number; count: number }>;
+  };
+  assert.equal(summary.count, 2);
+  assert.equal(summary.totalMinor, undefined);
+  assert.equal(summary.currency, undefined);
+  assert.deepEqual(
+    summary.currencyTotals?.slice().sort((left, right) => left.currency.localeCompare(right.currency)),
+    [
+      { currency: "EGP", totalMinor: 10_000, count: 1 },
+      { currency: "USD", totalMinor: 2_000, count: 1 },
+    ].sort((left, right) => left.currency.localeCompare(right.currency)),
+  );
+});
+
 test("multiple write tools remain separate pending approvals", async () => {
   const testIdentity = identity("multiple-writes");
   const primary = new ScriptedProvider("gemini", () => ({

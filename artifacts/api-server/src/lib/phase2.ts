@@ -710,13 +710,40 @@ function jsonSafe(value: unknown): unknown {
   );
 }
 
-function expenseRowsSummary(rows: unknown[]): {
-  count: number;
-  totalMinor: number;
+type ExpenseCurrencyTotal = {
   currency: string;
+  totalMinor: number;
+  count: number;
+};
+
+type ExpenseSummary = {
+  count: number;
   projectCount: number;
-} {
+  currencyTotals?: ExpenseCurrencyTotal[];
+  totalMinor?: number;
+  currency?: string;
+};
+
+function expenseSummaryFromCurrencyTotals(
+  currencyTotals: ExpenseCurrencyTotal[],
+  projectCount = 0,
+): ExpenseSummary {
+  const summary: ExpenseSummary = {
+    count: currencyTotals.reduce((count, item) => count + item.count, 0),
+    projectCount,
+  };
+  if (currencyTotals.length === 1) {
+    summary.totalMinor = currencyTotals[0].totalMinor;
+    summary.currency = currencyTotals[0].currency;
+  } else if (currencyTotals.length > 1) {
+    summary.currencyTotals = currencyTotals;
+  }
+  return summary;
+}
+
+function expenseRowsSummary(rows: unknown[]): ExpenseSummary {
   const totals = new Map<string, number>();
+  const counts = new Map<string, number>();
   const projects = new Set<string>();
   for (const row of rows) {
     if (!row || typeof row !== "object") continue;
@@ -727,23 +754,59 @@ function expenseRowsSummary(rows: unknown[]): {
     const currency = typeof expense.currency === "string" ? expense.currency : "EGP";
     const amountMinor = typeof expense.amountMinor === "number" ? expense.amountMinor : 0;
     totals.set(currency, (totals.get(currency) ?? 0) + amountMinor);
+    counts.set(currency, (counts.get(currency) ?? 0) + 1);
     const projectName = typeof outer.projectName === "string"
       ? outer.projectName
       : typeof expense.projectId === "string" ? expense.projectId : null;
     if (projectName) projects.add(projectName);
   }
-  const [currency, totalMinor] = [...totals.entries()][0] ?? ["EGP", 0];
-  return { count: rows.length, totalMinor, currency, projectCount: projects.size };
+  return expenseSummaryFromCurrencyTotals(
+    [...totals.entries()].map(([currency, totalMinor]) => ({
+      currency,
+      totalMinor,
+      count: counts.get(currency) ?? 0,
+    })),
+    projects.size,
+  );
 }
 
 function broadExpenseReportResponse(
   result: ToolResult,
   period?: DeterministicExpensePeriod,
 ): FinalResponse {
-  const summary = result.summary && typeof result.summary === "object"
-    ? result.summary as { count?: unknown; totalMinor?: unknown; currency?: unknown; projectCount?: unknown }
-    : {};
+  const summary: ExpenseSummary = result.summary && typeof result.summary === "object"
+    ? result.summary as ExpenseSummary
+    : { count: 0, projectCount: 0 };
   const count = typeof summary.count === "number" ? summary.count : 0;
+  const currencyTotals = Array.isArray(summary.currencyTotals)
+    ? summary.currencyTotals.filter((item): item is ExpenseCurrencyTotal =>
+        !!item
+        && typeof item === "object"
+        && typeof item.currency === "string"
+        && Number.isSafeInteger(item.totalMinor)
+        && item.totalMinor >= 0
+        && Number.isSafeInteger(item.count)
+        && item.count >= 0,
+      )
+    : [];
+  if (currencyTotals.length > 1) {
+    const parts = currencyTotals.map((item) =>
+      `${new Intl.NumberFormat("ar-EG", { style: "currency", currency: item.currency }).format(item.totalMinor / 100)} عبر ${item.count}`,
+    );
+    return {
+      kind: "answer",
+      message: `لا يمكن جمع المصروفات في إجمالي واحد لأنها مسجلة بأكثر من عملة: ${parts.join("، ")}. إجمالي عدد المصروفات ${count}.`,
+      groundedFacts: [
+        ...currencyTotals.map((item) => ({
+          type: "money" as const,
+          value: item.totalMinor,
+          currency: item.currency,
+          label: "إجمالي المصروفات",
+        })),
+        { type: "count", value: count, label: "عدد المصروفات" },
+      ],
+    };
+  }
   const totalMinor = typeof summary.totalMinor === "number" ? summary.totalMinor : 0;
   const currency = typeof summary.currency === "string" ? summary.currency : "EGP";
   const amount = new Intl.NumberFormat("ar-EG", {
@@ -2490,21 +2553,28 @@ async function executeTool(
         .where(expenseWhere)
         .orderBy(desc(expensesTable.occurredAt))
         .limit(limit);
-      const [aggregate] = await db.select({
-        count: sql<number>`count(*)::int`,
+      const aggregates = await db.select({
         totalMinor: sql<number>`coalesce(sum(${expensesTable.amountMinor}), 0)::bigint`,
-        currency: sql<string>`coalesce(min(${expensesTable.currency}), 'EGP')`,
+        count: sql<number>`count(*)::int`,
+        currency: expensesTable.currency,
+      }).from(expensesTable)
+        .where(expenseWhere)
+        .groupBy(expensesTable.currency);
+      const currencyTotals = aggregates.map((aggregate) => ({
+        currency: aggregate.currency || "EGP",
+        totalMinor: Number(aggregate.totalMinor ?? 0),
+        count: Number(aggregate.count ?? 0),
+      }));
+      const projectAggregate = await db.select({
         projectCount: sql<number>`count(distinct ${expensesTable.projectId})::int`,
       }).from(expensesTable).where(expenseWhere);
       result = {
         ok: true,
         expenses: rows,
-        summary: {
-          count: Number(aggregate?.count ?? 0),
-          totalMinor: Number(aggregate?.totalMinor ?? 0),
-          currency: aggregate?.currency ?? "EGP",
-          projectCount: Number(aggregate?.projectCount ?? 0),
-        },
+        summary: expenseSummaryFromCurrencyTotals(
+          currencyTotals,
+          Number(projectAggregate[0]?.projectCount ?? 0),
+        ),
       };
       break;
     }
@@ -2546,26 +2616,48 @@ async function executeTool(
     }
     case "get_person_expense_total": {
       if (!personId) return { ok: false, error: "personId is required." };
-      const [total] = await db.select({
+      const totals = await db.select({
         amountMinor: sql<number>`coalesce(sum(${expensesTable.amountMinor}), 0)::bigint`,
         count: sql<number>`count(*)::int`,
-        currency: sql<string>`coalesce(min(${expensesTable.currency}), 'unknown')`,
+        currency: expensesTable.currency,
       }).from(expensesTable).where(and(
         identityWhere(identity, expensesTable), eq(expensesTable.personId, personId),
-      ));
-      result = { ok: true, total: { amountMinor: Number(total?.amountMinor ?? 0), count: Number(total?.count ?? 0), currency: total?.currency ?? "unknown" } };
+      )).groupBy(expensesTable.currency);
+      const currencyTotals = totals.map((total) => ({
+        currency: total.currency || "EGP",
+        totalMinor: Number(total.amountMinor ?? 0),
+        count: Number(total.count ?? 0),
+      }));
+      const summary = expenseSummaryFromCurrencyTotals(currencyTotals);
+      result = { ok: true, total: {
+        count: summary.count,
+        ...(summary.currencyTotals ? { currencyTotals: summary.currencyTotals } : {}),
+        ...(summary.totalMinor !== undefined ? { amountMinor: summary.totalMinor } : {}),
+        ...(summary.currency ? { currency: summary.currency } : {}),
+      } };
       break;
     }
     case "get_project_expense_total": {
       if (!projectId) return { ok: false, error: "projectId is required." };
-      const [total] = await db.select({
+      const totals = await db.select({
         amountMinor: sql<number>`coalesce(sum(${expensesTable.amountMinor}), 0)::bigint`,
         count: sql<number>`count(*)::int`,
-        currency: sql<string>`coalesce(min(${expensesTable.currency}), 'unknown')`,
+        currency: expensesTable.currency,
       }).from(expensesTable).where(and(
         identityWhere(identity, expensesTable), eq(expensesTable.projectId, projectId),
-      ));
-      result = { ok: true, total: { amountMinor: Number(total?.amountMinor ?? 0), count: Number(total?.count ?? 0), currency: total?.currency ?? "unknown" } };
+      )).groupBy(expensesTable.currency);
+      const currencyTotals = totals.map((total) => ({
+        currency: total.currency || "EGP",
+        totalMinor: Number(total.amountMinor ?? 0),
+        count: Number(total.count ?? 0),
+      }));
+      const summary = expenseSummaryFromCurrencyTotals(currencyTotals);
+      result = { ok: true, total: {
+        count: summary.count,
+        ...(summary.currencyTotals ? { currencyTotals: summary.currencyTotals } : {}),
+        ...(summary.totalMinor !== undefined ? { amountMinor: summary.totalMinor } : {}),
+        ...(summary.currency ? { currency: summary.currency } : {}),
+      } };
       break;
     }
     case "create_financial_party":
@@ -4548,6 +4640,36 @@ function canonicalExpenseTotal(
         : null;
   if (!summary) return null;
 
+  const currencyTotals = Array.isArray(summary.currencyTotals)
+    ? summary.currencyTotals.filter((item): item is ExpenseCurrencyTotal =>
+        !!item
+        && typeof item === "object"
+        && typeof item.currency === "string"
+        && Number.isSafeInteger(item.totalMinor)
+        && item.totalMinor >= 0
+        && Number.isSafeInteger(item.count)
+        && item.count >= 0,
+      )
+    : [];
+  if (currencyTotals.length > 1) {
+    const count = currencyTotals.reduce((total, item) => total + item.count, 0);
+    const parts = currencyTotals.map((item) =>
+      `${exactMoneyLabel(item.totalMinor, item.currency)} عبر ${item.count}`,
+    );
+    return {
+      message: `لا يمكن جمع المصروفات في إجمالي واحد لأنها مسجلة بأكثر من عملة: ${parts.join("، ")}. إجمالي عدد المصروفات ${count}.`,
+      facts: [
+        ...currencyTotals.map((item) => ({
+          type: "money" as const,
+          value: item.totalMinor,
+          currency: item.currency,
+          label: "إجمالي المصروفات",
+        })),
+        { type: "count", value: count, label: "عدد المصروفات" },
+      ],
+    };
+  }
+
   const totalMinor = Number(summary.totalMinor ?? summary.amountMinor);
   const count = Number(summary.count);
   const currency = typeof summary.currency === "string" ? summary.currency : "EGP";
@@ -4698,9 +4820,37 @@ function recoveryResponseAfterToolLimit(history: ToolHistoryEntry[]): FinalRespo
           count?: unknown;
           totalMinor?: unknown;
           currency?: unknown;
+          currencyTotals?: unknown;
         }
       : {};
     const count = typeof summary.count === "number" ? summary.count : 0;
+    const currencyTotals = Array.isArray(summary.currencyTotals)
+      ? summary.currencyTotals.filter((item): item is ExpenseCurrencyTotal =>
+          !!item
+          && typeof item === "object"
+          && typeof item.currency === "string"
+          && Number.isSafeInteger(item.totalMinor)
+          && item.totalMinor >= 0
+          && Number.isSafeInteger(item.count)
+          && item.count >= 0,
+        )
+      : [];
+    if (currencyTotals.length > 1) {
+      return safeFinalResponse(
+        "answer",
+        `راجعت المصروفات المحفوظة، لكنها مسجلة بأكثر من عملة ولا يصح جمعها في رقم واحد: ${currencyTotals.map((item) => `${exactMoneyLabel(item.totalMinor, item.currency)} عبر ${item.count}`).join("، ")}.`,
+        history,
+        [
+          ...currencyTotals.map((item) => ({
+            type: "money" as const,
+            value: item.totalMinor,
+            currency: item.currency,
+            label: "إجمالي المصروفات",
+          })),
+          { type: "count", value: count, label: "عدد المصروفات" },
+        ],
+      );
+    }
     const totalMinor = typeof summary.totalMinor === "number" ? summary.totalMinor : 0;
     const currency = typeof summary.currency === "string" ? summary.currency : "EGP";
     const amount = new Intl.NumberFormat("ar-EG", {
