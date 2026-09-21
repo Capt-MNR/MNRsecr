@@ -19,7 +19,7 @@ function configuredOrder(): RoutedProvider[] {
     .split(",")
     .map((value) => value.trim().toLowerCase())
     .filter(isProviderName);
-  return configured.length > 0 ? configured : [...defaultProviderOrder];
+  return configured.length > 0 ? configured : defaultProviderOrder();
 }
 
 export function routeProvider(message: string, preferred?: RoutedProvider): ProviderRoute {

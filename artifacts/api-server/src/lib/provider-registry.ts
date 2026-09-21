@@ -1,6 +1,8 @@
+type ProviderProtocol = "gemini" | "openai-compatible" | "cohere";
+
 export type ProviderDefinition = {
   name: string;
-  protocol: "gemini" | "openai-compatible" | "cohere";
+  protocol: ProviderProtocol;
   apiKeyEnv: string;
   modelEnv: string;
   defaultModel: string;
@@ -8,7 +10,7 @@ export type ProviderDefinition = {
   defaultApiUrl?: string;
 };
 
-export const providerDefinitions = [
+const builtInProviderDefinitions: ProviderDefinition[] = [
   {
     name: "gemini",
     protocol: "gemini",
@@ -58,20 +60,71 @@ export const providerDefinitions = [
     apiUrlEnv: "QWEN_API_URL",
     defaultApiUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
   },
-] as const satisfies readonly ProviderDefinition[];
+];
 
-export type ProviderName = typeof providerDefinitions[number]["name"];
+export type ProviderName = string;
 
-export const defaultProviderOrder: ProviderName[] = providerDefinitions.map(
-  (definition) => definition.name,
-);
+function validIdentifier(value: unknown): value is string {
+  return typeof value === "string" && /^[a-z][a-z0-9_-]{1,63}$/u.test(value);
+}
+
+function validEnvironmentName(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Z][A-Z0-9_]{1,127}$/u.test(value);
+}
+
+function validProviderDefinition(value: unknown): value is ProviderDefinition {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Record<string, unknown>;
+  if (!validIdentifier(item.name)) return false;
+  if (item.protocol !== "openai-compatible") return false;
+  if (!validEnvironmentName(item.apiKeyEnv) || !validEnvironmentName(item.modelEnv)) return false;
+  if (typeof item.defaultModel !== "string" || item.defaultModel.trim().length === 0) return false;
+  if (item.apiUrlEnv !== undefined && !validEnvironmentName(item.apiUrlEnv)) return false;
+  if (typeof item.defaultApiUrl !== "string" || !/^https:\/\//u.test(item.defaultApiUrl)) return false;
+  return true;
+}
+
+function configuredProviderDefinitions(): ProviderDefinition[] {
+  const raw = process.env.AI_PROVIDER_CATALOG?.trim();
+  if (!raw) return builtInProviderDefinitions.map((definition) => ({ ...definition }));
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("INVALID_AI_PROVIDER_CATALOG:expected_json");
+  }
+  const entries = Array.isArray(parsed)
+    ? parsed
+    : parsed && typeof parsed === "object" && Array.isArray((parsed as Record<string, unknown>).providers)
+      ? (parsed as { providers: unknown[] }).providers
+      : null;
+  if (!entries || entries.length === 0 || entries.some((entry) => !validProviderDefinition(entry))) {
+    throw new Error("INVALID_AI_PROVIDER_CATALOG:expected_openai_compatible_providers");
+  }
+  const definitions = entries as ProviderDefinition[];
+  const names = new Set<string>();
+  for (const definition of definitions) {
+    if (names.has(definition.name)) throw new Error(`INVALID_AI_PROVIDER_CATALOG:duplicate:${definition.name}`);
+    names.add(definition.name);
+  }
+  return definitions.map((definition) => ({ ...definition }));
+}
+
+export function providerDefinitions(): ProviderDefinition[] {
+  return configuredProviderDefinitions();
+}
+
+export function defaultProviderOrder(): ProviderName[] {
+  return providerDefinitions().map((definition) => definition.name);
+}
 
 export function isProviderName(value: string | undefined): value is ProviderName {
-  return providerDefinitions.some((definition) => definition.name === value);
+  return Boolean(value) && providerDefinitions().some((definition) => definition.name === value);
 }
 
 export function providerDefinition(provider: ProviderName): ProviderDefinition {
-  const definition = providerDefinitions.find((item) => item.name === provider);
+  const definition = providerDefinitions().find((item) => item.name === provider);
   if (!definition) throw new Error(`UNKNOWN_PROVIDER:${provider}`);
   return definition;
 }

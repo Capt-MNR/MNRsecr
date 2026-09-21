@@ -74,6 +74,7 @@ import { budgetContext } from "./context-budgeter";
 import { envFlag, featureFlags } from "./feature-flags";
 import { providerOrder } from "./provider-router";
 import {
+  defaultProviderOrder,
   isProviderName,
   providerApiUrl,
   providerDefinition,
@@ -6283,27 +6284,15 @@ function asProvider(value: string | undefined): ProviderName | undefined {
 export function configuredProviderOrder(): ProviderName[] {
   const fallbackPreference = featureFlags.providerRouting()
     ? providerOrder()
-    : (["groq", "gemini", "mistral", "cohere", "deepseek", "qwen"] as ProviderName[]);
+    : defaultProviderOrder();
   const firstConfiguredByRouting = fallbackPreference.find(providerIsConfigured);
-  const originalDefaultProvider = process.env.GEMINI_API_KEY
-    ? "gemini"
-    : process.env.GROQ_API_KEY
-      ? "groq"
-      : process.env.MISTRAL_API_KEY
-        ? "mistral"
-        : process.env.COHERE_API_KEY
-          ? "cohere"
-          : process.env.DEEPSEEK_API_KEY
-            ? "deepseek"
-            : process.env.QWEN_API_KEY
-              ? "qwen"
-              : undefined;
+  const originalDefaultProvider = defaultProviderOrder().find(providerIsConfigured);
   const primary = asProvider(process.env.AI_PRIMARY_PROVIDER)
     ?? asProvider(process.env.AI_PROVIDER)
     ?? (featureFlags.providerRouting() ? firstConfiguredByRouting : originalDefaultProvider);
   const autoFallbacks = (featureFlags.providerRouting()
     ? fallbackPreference
-    : (["groq", "gemini", "mistral", "cohere", "deepseek", "qwen"] as ProviderName[]))
+    : defaultProviderOrder())
     .filter((provider) => provider !== primary)
     .filter(providerIsConfigured);
   return [
