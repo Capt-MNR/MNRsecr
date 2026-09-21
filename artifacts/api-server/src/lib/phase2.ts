@@ -2470,6 +2470,16 @@ async function executeTool(
         dateRange.from ? gte(expensesTable.occurredAt, dateRange.from) : undefined,
         dateRange.to ? lt(expensesTable.occurredAt, dateRange.to) : undefined,
       ];
+      const expenseWhere = and(
+        identityWhere(identity, expensesTable),
+        personId ? eq(expensesTable.personId, personId) : undefined,
+        projectId ? eq(expensesTable.projectId, projectId) : undefined,
+        excludeProjectId
+          ? or(isNull(expensesTable.projectId), ne(expensesTable.projectId, excludeProjectId))
+          : undefined,
+        description ? ilike(expensesTable.description, `%${description}%`) : undefined,
+        ...dateFilters,
+      );
       const rows = await db.select({
         expense: expensesTable,
         personName: peopleTable.name,
@@ -2477,25 +2487,24 @@ async function executeTool(
       }).from(expensesTable)
         .leftJoin(peopleTable, eq(expensesTable.personId, peopleTable.id))
         .leftJoin(projectsTable, eq(expensesTable.projectId, projectsTable.id))
-        .where(and(
-          identityWhere(identity, expensesTable),
-          personId ? eq(expensesTable.personId, personId) : undefined,
-          projectId ? eq(expensesTable.projectId, projectId) : undefined,
-          excludeProjectId
-            ? or(isNull(expensesTable.projectId), ne(expensesTable.projectId, excludeProjectId))
-            : undefined,
-          description ? ilike(expensesTable.description, `%${description}%`) : undefined,
-          ...dateFilters,
-        ))
+        .where(expenseWhere)
         .orderBy(desc(expensesTable.occurredAt))
         .limit(limit);
+      const [aggregate] = await db.select({
+        count: sql<number>`count(*)::int`,
+        totalMinor: sql<number>`coalesce(sum(${expensesTable.amountMinor}), 0)::bigint`,
+        currency: sql<string>`coalesce(min(${expensesTable.currency}), 'EGP')`,
+        projectCount: sql<number>`count(distinct ${expensesTable.projectId})::int`,
+      }).from(expensesTable).where(expenseWhere);
       result = {
         ok: true,
         expenses: rows,
-        summary: expenseRowsSummary(rows.map((row) => ({
-          ...row.expense,
-          projectName: row.projectName,
-        }))),
+        summary: {
+          count: Number(aggregate?.count ?? 0),
+          totalMinor: Number(aggregate?.totalMinor ?? 0),
+          currency: aggregate?.currency ?? "EGP",
+          projectCount: Number(aggregate?.projectCount ?? 0),
+        },
       };
       break;
     }
@@ -2839,7 +2848,7 @@ const systemInstruction = `أنت سكرتير شخصي عربي يعمل داخ
 12. إذا كانت النية واضحة والمعلومة ناقصة، اسأل عن المعلومة الناقصة فقط؛ لا تطلب إعادة صياغة الطلب كاملًا. مثال: "عايز أسجل مصروف لمحمد" يتبعه سؤال عن المبلغ، والرد "7500" يكمل الطلب.
 13. افهم المرادفات الطبيعية مثل دفع، ادى، أعطى، خد مني، سجل مصروف، ولا تجعل علامات الترقيم شرطًا للفهم.
 14. عند وجود عدة نتائج من أداة، لا تنسخ JSON أو تسرد الصفوف واحدًا تلو الآخر. استخدم العدد والإجمالي المحسوبين من الأداة، واذكر التوزيع على المشاريع عند الحاجة. اعرض التفاصيل الفردية فقط إذا طلبها المستخدم صراحة.
-15. لا تحسب إجماليًا ماليًا بنفسك إذا أعادت الأداة total أو summary؛ استخدم القيم المحسوبة من قاعدة البيانات كما هي.
+15. لا تحسب إجماليًا ماليًا بنفسك إذا أعادت الأداة total أو summary؛ استخدم القيم المحسوبة من قاعدة البيانات كما هي. انتبه أن amountMinor وtotalMinor بوحدات العملة الصغرى: لا تعرضهما كجنيهات مباشرة، وحوّل القيمة إلى الوحدة الرئيسية مرة واحدة فقط عند صياغة الرد.
 16. اعتبر حالة المحادثة المنظمة سياقًا لفهم "ده" و"التاني" و"له" و"الفلوس دي" فقط؛ تحقق دائمًا من IDs عبر الأدوات.
 17. لا تذكر رقمًا ماليًا أو عددًا ماليًا من الذاكرة أو التخمين. بعد الأدوات استخدم final_response، وضع كل رقم مالي مؤكد في groundedFacts كما أعادته الأداة. الرسالة نفسها يجب أن تكون طبيعية وليست قالبًا.
 18. لا تستخدم final_response قبل إكمال الأدوات اللازمة. إذا كانت البيانات ناقصة أو الأسماء متكررة، اجعل kind = clarification بدل التخمين.

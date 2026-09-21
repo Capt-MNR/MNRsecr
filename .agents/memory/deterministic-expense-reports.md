@@ -9,6 +9,12 @@ Broad, unscoped expense-report phrases should be recognized before the model too
 
 **How to apply:** Keep the broad-intent matcher narrow, cap the canonical read, and test equivalent phrases plus repeated requests in one conversation. Do not change stored expenses as a way to normalize report output.
 
+For scoped expense totals, the detail-row limit is only for the returned list; the summary count and total must aggregate all rows matching the same tenant, entity, description, project, and date filters. `amountMinor` remains the API fact unit while user-facing formatters divide by 100 once.
+
+**Why:** Summing a limited result set can undercount a real category total, while treating minor units as major units can inflate the displayed amount by 100×.
+
+**How to apply:** Reuse one filtered predicate for both the limited detail query and an unbounded aggregate query, and preserve the existing raw-minor-unit contract for clients that format money.
+
 Relative-period totals may bypass the model only for a complete, unscoped phrase that maps to a server-known period such as this week or last month; mentions of people, projects, or arbitrary dates remain on the model path.
 
 **Why:** The server can calculate fixed relative boundaries consistently, but entity names and free-form dates still require resolution and ambiguity handling.

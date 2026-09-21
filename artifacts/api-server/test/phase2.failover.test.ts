@@ -17,6 +17,7 @@ import {
   CohereModelGateway,
   classifyToolScope,
   configuredProviderOrder,
+  executeStructuredTool,
   toCohereSchema,
   toGeminiSchema,
   toOpenAiSchema,
@@ -732,7 +733,7 @@ test("expense totals use one exact numeric representation instead of model-writt
     tenantId: testIdentity.tenantId,
     ownerUserId: testIdentity.userId,
     description: "تشطيب الشقة",
-    amountMinor: 517_960_000,
+    amountMinor: 4_800_000,
     currency: "EGP",
   });
 
@@ -746,8 +747,8 @@ test("expense totals use one exact numeric representation instead of model-writt
             name: "final_response",
             args: {
               kind: "answer",
-              message: "الإجمالي خمسة ملايين وتسعة وسبعون ألفًا وستمائة جنيه مصري.",
-              groundedFacts: [{ type: "money", value: 517_960_000, currency: "EGP" }],
+              message: "الإجمالي ثمانية وأربعون ألف جنيه مصري.",
+              groundedFacts: [{ type: "money", value: 4_800_000, currency: "EGP" }],
             },
           }],
         },
@@ -761,9 +762,49 @@ test("expense totals use one exact numeric representation instead of model-writt
 
   assert.equal(
     result.response?.message,
-    "الإجمالي الدقيق المسجل في السجلات هو 5,179,600 جنيه مصري عبر 1 مصروف.",
+    "الإجمالي الدقيق المسجل في السجلات هو 48,000 جنيه مصري عبر 1 مصروف.",
   );
-  assert.doesNotMatch(result.response?.message ?? "", /خمسة|مائة|سبعة/);
+  assert.deepEqual(result.response?.groundedFacts, [{
+    type: "money",
+    value: 4_800_000,
+    currency: "EGP",
+    label: "إجمالي المصروفات",
+  }, {
+    type: "count",
+    value: 1,
+    label: "عدد المصروفات",
+  }]);
+  assert.doesNotMatch(result.response?.message ?? "", /مليون|ثلاثة|ثمانية/);
+});
+
+test("expense total summaries include matching rows beyond the detail limit", async () => {
+  const testIdentity = identity("expense-summary-limit");
+  await db.insert(expensesTable).values(
+    Array.from({ length: 3 }, (_, index) => ({
+      tenantId: testIdentity.tenantId,
+      ownerUserId: testIdentity.userId,
+      description: "تشطيب الشقة",
+      amountMinor: 1_600_000,
+      currency: "EGP",
+      occurredAt: new Date(Date.now() - index * 1_000),
+    })),
+  );
+
+  const result = await executeStructuredTool(
+    testIdentity,
+    "query_expenses",
+    { description: "تشطيب الشقة", limit: 1 },
+    { requestId: "expense-summary-limit-request" },
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal((result.expenses as unknown[]).length, 1);
+  assert.deepEqual(result.summary, {
+    count: 3,
+    totalMinor: 4_800_000,
+    currency: "EGP",
+    projectCount: 0,
+  });
 });
 
 test("multiple write tools remain separate pending approvals", async () => {
