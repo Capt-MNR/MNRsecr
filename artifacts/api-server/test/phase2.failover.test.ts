@@ -556,6 +556,40 @@ test("429, timeout, and unavailable primary providers fail over without changing
   }
 });
 
+test("a delayed retry shares one failover execution for the same idempotency key", async () => {
+  const primary = new ScriptedProvider("gemini", async () => {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    throw providerTimeoutError("gemini");
+  });
+  const fallback = new ScriptedProvider("groq", async () => {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    return finalResponse("تم الحفظ من المزود الاحتياطي.");
+  });
+  const gateway = new FailoverModelGateway(
+    { gemini: primary, groq: fallback },
+    ["gemini", "groq"],
+  );
+  const runtime = new Phase2AgentRuntime(gateway);
+  const testIdentity = identity("delayed-retry");
+  const request = {
+    message: "إيه عندي النهارده؟",
+    conversationId: "delayed-retry-conversation",
+    idempotencyKey: "delayed-retry-key",
+  };
+
+  const [first, retry] = await Promise.all([
+    runtime.run(testIdentity, { ...request, requestId: "delayed-first" }, { dryRun: true }),
+    runtime.run(testIdentity, { ...request, requestId: "delayed-retry" }, { dryRun: true }),
+  ]);
+
+  assert.equal(first.provider, "groq");
+  assert.equal(retry.provider, first.provider);
+  assert.equal(retry.assistantMessage, first.assistantMessage);
+  assert.equal(retry.action?.providerTrace?.fallbackReason, first.action?.providerTrace?.fallbackReason);
+  assert.equal(primary.calls.length, 1);
+  assert.equal(fallback.calls.length, 1);
+});
+
 test("Groq primary can fail over to Gemini", async () => {
   const primary = new ScriptedProvider("groq", () => {
     throw providerResponseError("groq", 429, "rate limited");

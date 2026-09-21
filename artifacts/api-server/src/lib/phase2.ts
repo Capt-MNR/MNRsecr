@@ -107,6 +107,7 @@ import {
   type BrainDecisionEnvelope,
   type BrainVerificationState,
 } from "./brain-contract";
+import { runWithIdempotencyLock } from "./idempotency-lock";
 
 const db = database;
 
@@ -4829,6 +4830,15 @@ export class Phase2AgentRuntime {
   constructor(private readonly gateway: ModelGateway) {}
 
   async run(
+    identity: Identity,
+    input: Phase2TurnInput,
+    options: Phase2RunOptions = {},
+  ): Promise<Phase2TurnResult> {
+    return runWithIdempotencyLock(identity, input.idempotencyKey, () =>
+      this.runUncoordinated(identity, input, options));
+  }
+
+  private async runUncoordinated(
     identity: Identity,
     input: Phase2TurnInput,
     options: Phase2RunOptions = {},

@@ -109,6 +109,13 @@ function approvalFromAction(action: Record<string, unknown> | undefined): LocalM
   };
 }
 
+type PendingSend = {
+  message: string;
+  conversationId: string | null;
+  idempotencyKey: string;
+  context: { recordType: string; recordId: string; title: string } | null;
+};
+
 function Home() {
   const [location, setLocation] = useLocation();
   const searchString = useSearch();
@@ -124,6 +131,7 @@ function Home() {
   const [messages, setMessages] = useState<LocalMessage[]>([starterMessage]);
   const [approvalError, setApprovalError] = useState<string | null>(null);
   const [sendError, setSendError] = useState<ReturnType<typeof classifySecretaryError> | null>(null);
+  const [uncertainSend, setUncertainSend] = useState<PendingSend | null>(null);
   const sendingRef = useRef(false);
 
   const todayQuery = useGetTodayContext({
@@ -165,7 +173,7 @@ function Home() {
     .map((message) => message.approval!.operationId);
   const context = todayQuery.data?.context;
   const sendErrorMessage = sendError?.category === 'timeout'
-    ? 'لم يصل الرد في الوقت المتوقع. قد يكون الطلب ما زال قيد التنفيذ؛ لا تعيد إرسال طلب حفظ الآن، وتحقق من السجلات أولًا.'
+    ? 'لم يصل الرد في الوقت المتوقع. قد يكون الحفظ ما زال قيد التنفيذ؛ لا تنشئ طلب حفظ جديدًا، استخدم «تحقق من النتيجة» بنفس المفتاح.'
     : sendError?.message;
 
   const dateLabel = useMemo(
@@ -206,7 +214,7 @@ function Home() {
     target.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [highlightedTurnId, messages]);
 
-  const canSend = draft.trim().length > 0 && !createTurn.isPending;
+  const canSend = draft.trim().length > 0 && !createTurn.isPending && !uncertainSend;
   const healthLabel = healthQuery.isPending
     ? 'جاري فحص الاتصال'
     : healthQuery.isError
@@ -244,35 +252,52 @@ function Home() {
     setSelectedConversationId(undefined);
     setHighlightedTurnId(undefined);
     setMessages([starterMessage]);
+    setSendError(null);
+    setUncertainSend(null);
     setIsHistoryOpen(false);
   }
 
-  function sendMessage(value = draft) {
-    const message = value.trim();
-    if (!message || createTurn.isPending || sendingRef.current) return;
+  function sendMessage(value = draft, retryUncertain = false) {
+    const pending = retryUncertain ? uncertainSend : null;
+    const message = pending?.message ?? value.trim();
+    if (!message || createTurn.isPending || sendingRef.current || (uncertainSend && !retryUncertain)) return;
+    const request = pending ?? {
+      message,
+      conversationId: conversationId ?? null,
+      idempotencyKey: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `turn-${Date.now()}`,
+      context: askContext
+        ? {
+            recordType: askContext.entityType,
+            recordId: askContext.entityId,
+            title: askContext.entityName,
+          }
+        : null,
+    };
     sendingRef.current = true;
     setSendError(null);
-    const sentAt = new Date().toISOString();
-    setDraft('');
-    setAskContext(null);
-    setMessages((current) => [
-      ...current,
-      { id: `user-${sentAt}`, role: 'user', text: message, time: formatTime(sentAt) },
-    ]);
+    if (!retryUncertain) {
+      const sentAt = new Date().toISOString();
+      setDraft('');
+      setAskContext(null);
+      setMessages((current) => [
+        ...current,
+        { id: `user-${sentAt}`, role: 'user', text: message, time: formatTime(sentAt) },
+      ]);
+    }
 
     createTurn.mutate(
       {
         data: {
           message,
-          conversationId: conversationId ?? null,
-          idempotencyKey: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `turn-${Date.now()}`,
+          conversationId: request.conversationId,
+          idempotencyKey: request.idempotencyKey,
           channel: 'main',
-          ...(askContext
+          ...(request.context
             ? {
                 context: {
-                  recordType: askContext.entityType,
-                  recordId: askContext.entityId,
-                  title: askContext.entityName,
+                  recordType: request.context.recordType,
+                  recordId: request.context.recordId,
+                  title: request.context.title,
                 },
               }
             : {}),
@@ -282,6 +307,7 @@ function Home() {
         onSuccess: (response) => {
           sendingRef.current = false;
           setSendError(null);
+          setUncertainSend(null);
           const approval = approvalFromAction(response.action);
           setConversationId(response.conversationId);
           setSelectedConversationId(response.conversationId);
@@ -304,7 +330,11 @@ function Home() {
         },
         onError: (error) => {
           sendingRef.current = false;
-          setSendError(classifySecretaryError(error));
+          const classified = classifySecretaryError(error);
+          setSendError(classified);
+          if (classified.category === 'timeout') {
+            setUncertainSend(request);
+          }
         },
       },
     );
@@ -594,6 +624,17 @@ function Home() {
                     >
                       <CircleAlert className="size-3.5 shrink-0" />
                       {sendErrorMessage}
+                      {uncertainSend && (
+                        <button
+                          type="button"
+                          onClick={() => sendMessage(undefined, true)}
+                          disabled={createTurn.isPending}
+                          className="mr-auto shrink-0 rounded-lg border border-destructive/30 px-2 py-1 font-semibold hover:bg-destructive/10 disabled:opacity-50"
+                          data-testid="button-reconcile-timeout"
+                        >
+                          تحقق من النتيجة
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>

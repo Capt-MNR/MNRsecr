@@ -220,6 +220,7 @@ test("persists a natural-language expense and deduplicates an idempotent retry",
   const body = {
     message: "دفعت لاختبار المرحلة الثانية 275 جنيه اختبار تكامل",
     idempotencyKey: `phase2-integration-${Date.now()}`,
+    channel: "main",
   };
   const first = await fetch(`${baseUrl}/turns`, {
     method: "POST",
@@ -262,6 +263,46 @@ test("persists a natural-language expense and deduplicates an idempotent retry",
       (expense) => expense.id === approved.action.expenseId,
     ),
   );
+});
+
+test("a retry after the client gives up keeps one pending save", async () => {
+  const body = {
+    message: "دفعت لاختبار المهلة 276 جنيه اختبار إعادة المحاولة",
+    idempotencyKey: `phase2-timeout-${Date.now()}`,
+    channel: "main",
+  };
+  const controller = new AbortController();
+  const firstRequest = fetch(`${baseUrl}/turns`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+    signal: controller.signal,
+  }).catch((error) => {
+    if (error.name === "AbortError") return null;
+    throw error;
+  });
+  setTimeout(() => controller.abort(), 1);
+  await new Promise((resolve) => setTimeout(resolve, 5));
+
+  const retry = await fetch(`${baseUrl}/turns`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
+  assert.equal(retry.status, 200);
+  const retryPayload = await retry.json();
+  assert.equal(retryPayload.action.type, "approval_required");
+
+  const firstPayload = await firstRequest;
+  if (firstPayload) {
+    assert.equal(firstPayload.status, 200);
+    const firstBody = await firstPayload.json();
+    assert.equal(firstBody.action.operationId, retryPayload.action.operationId);
+  }
+  assert.equal(Number(queryDb(
+    `SELECT count(*) FROM secretary_operations WHERE ${scopedWhere} AND id = '${retryPayload.action.operationId}'`,
+  )), 1);
+  await rejectOperation(retryPayload.action.operationId);
 });
 
 test("read-only turns do not create approval operations", async () => {

@@ -237,6 +237,7 @@ export class ResponseParseError extends Error {
 export class FetchTimeoutError extends Error {
   readonly name = "FetchTimeoutError";
   readonly timeoutMs: number;
+  readonly requestMayStillBeRunning = true;
 
   constructor(timeoutMs: number) {
     super(`Request timed out after ${timeoutMs}ms`);

@@ -58,6 +58,7 @@ import {
   normalizeArabicClockHour,
 } from "./deterministic-intelligence";
 import type { SecretaryChatContext, SecretaryChatPeer, TurnInputChannel } from "@workspace/api-zod";
+import { runWithIdempotencyLock } from "./idempotency-lock";
 
 export type Identity = {
   tenantId: string;
@@ -1083,6 +1084,22 @@ export class DeterministicAgentRuntime {
   constructor(private readonly persistence: PersistencePort) {}
 
   async run(
+    identity: Identity,
+    input: {
+      message: string;
+      conversationId?: string | null;
+      idempotencyKey?: string | null;
+      channel?: TurnInputChannel;
+      context?: SecretaryChatContext | null;
+      peer?: SecretaryChatPeer | null;
+      requestId?: string;
+    },
+  ): Promise<TurnResult> {
+    return runWithIdempotencyLock(identity, input.idempotencyKey, () =>
+      this.runUncoordinated(identity, input));
+  }
+
+  private async runUncoordinated(
     identity: Identity,
     input: {
       message: string;
