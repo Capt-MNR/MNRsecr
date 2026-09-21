@@ -1,0 +1,473 @@
+كفاية مرحلة audits والتخطيط والبنية التحتية كهدف في حد ذاته.
+
+بعد دمج #79 و#80–#82، وإضافة Portability/Adapters وDeepSeek والـAgent Work contracts، أريد الآن الانتقال إلى تنفيذ الرؤية الكاملة لـMNRsecr كـPersonal AI Agent.
+
+لا تعتبر API Monitor أو Agent Work الحالي هو المنتج النهائي. اعتبرهما أول foundation داخل Agent Runtime الكامل.
+
+الهدف
+
+نحوّل MNRsecr من:
+
+"مساعد يستقبل طلبًا وينفذه"
+
+إلى:
+
+Personal AI Agent يعرف المستخدم، يفهم سياقه، يستطيع أن يُكلَّف بعمل، يتابع العالم، يعود للمستخدم عند الحاجة، ينفذ المسموح له، ويتعلم من طريقة استخدامه — مع بقاء المستخدم صاحب القرار.
+
+الرؤية الأساسية:
+
+Remember → Understand → Monitor → Act → Delegate → Anticipate
+
+ومع الوقت:
+
+Learn → Repeat → Adapt → Improve
+
+---
+
+1. Agent يجب أن يصبح First-Class Product
+
+اجعل الـAgent كيانًا وتجربة أساسية في المنتج، وليس مجرد layer خلف chat.
+
+المستخدم يجب أن يستطيع من Main أن:
+
+- يسأل Agent
+- يخبره بمعلومة ويحفظها
+- يطلب منه تنفيذ شيء
+- يكلفه بعمل مستمر
+- يطلب منه مراقبة شيء
+- يحدد له شرطًا
+- يطلب منه تذكيره أو متابعته
+- يراجع الأعمال الجارية
+- يرى ما الذي فعله
+- يرى لماذا فعله
+- يوافق على الأشياء الحساسة
+- يوقف أو يعدل أو يستأنف Work
+- يعود لاحقًا ويجد أن الـAgent ما زال يعرف أين وصل
+
+لا تجعل التجربة تبدو كـ"chatbot + tools".
+
+---
+
+2. Work هو قلب الـAgent
+
+استخدم Agent Work foundation الموجودة، ووسعها تدريجيًا لتدعم أنواع العمل المختلفة بدون إعادة بناء الـUX أو الـbackend لكل نوع.
+
+صمم Work Type architecture قابلة للتوسع على الأقل لهذه الأنواع:
+
+- Monitor
+- Reminder
+- Recurring Task
+- External Action
+- Research / Information Gathering
+- Workflow
+- Learned Workflow لاحقًا
+- Browser/Computer Work لاحقًا
+- A2A Work لاحقًا
+
+لا تنفذ كل هذه الأنواع الآن بنفس العمق، لكن البنية والـUX يجب أن تكون مستعدة لها من البداية.
+
+المهم أن Work لا يكون مرتبطًا بالـAPI Monitor.
+
+---
+
+3. تجربة المستخدم الأساسية
+
+Main = مركز التحكم الكامل في الـAgent.
+
+Quick = طبقة الوصول السريع والإشعارات، وليس Mini Agent.
+
+من Main يجب أن توجد تجربة واضحة لـ:
+
+Agent / Works / Activity / Approvals / Memory / Records
+
+لكن لا تحول الواجهة إلى لوحة تحكم تقنية.
+
+المستخدم العادي يجب أن يفهمها بدون معرفة أي شيء عن:
+API / Worker / Scheduler / Tool / Provider / Run / Lease.
+
+مثال:
+
+المستخدم يقول:
+
+«"تابع الدولار ولو عدى 52 جنيه بلغني."»
+
+الـAgent يفهم المطلوب ويحول الكلام إلى Work.
+
+ثم يقول للمستخدم بشكل طبيعي:
+
+«"تمام، هتابع السعر وأنبهك أول ما يتخطى 52 جنيه."»
+
+ويظل الـWork موجودًا حتى بعد انتهاء المحادثة.
+
+---
+
+4. Monitoring يجب أن يصبح مفهومًا عامًا
+
+لا تبنِ Monitor مخصوصًا للدولار أو الذهب.
+
+ابنِ abstraction:
+
+Source → Condition → Check → Change → Verification → Event → Notification
+
+بحيث يمكن لاحقًا استخدامها في:
+
+- سعر
+- موعد
+- مباراة
+- تذكرة
+- منتج
+- سهم
+- نتيجة
+- موعد حجز
+- حالة طلب
+- معلومة من خدمة خارجية
+- أي مصدر يمكن الوصول إليه بشكل موثوق
+
+ابدأ بالمصادر الآمنة والمحددة التي يمكن التحقق منها.
+
+لا تضف scraping عشوائي أو Browser Automation لمجرد إثبات الفكرة.
+
+---
+
+5. Agent Memory
+
+استخدم الـSecond Brain الموجود فعليًا، ولا تعِد بناءه.
+
+لكن اجعله جزءًا فعليًا من Agent cognition:
+
+Conversation + Structured Records + Second Brain + Current Work State
+
+يتم استدعاؤها selectively حسب الحاجة.
+
+لا تقرأ كل الذاكرة في كل request.
+
+Second Brain ليس مصدرًا رسميًا للبيانات المالية أو الصلاحيات، لكن Agent يستطيع استخدامه لفهم:
+
+- تفضيلات المستخدم
+- الأشخاص
+- العلاقات
+- المشاريع
+- السياق السابق
+- القرارات السابقة
+- طريقة تعامل المستخدم مع الأشياء
+
+والهدف ليس فقط تحسين الإجابة؛ الهدف أيضًا:
+
+تقليل إعادة التفكير، تقليل الـcontext، وتقليل LLM calls والتكلفة.
+
+---
+
+6. Agent يجب أن يستطيع "Delegate"
+
+هذه أهم نقلة في المنتج.
+
+المستخدم لا يريد دائمًا إجابة.
+
+أحيانًا يريد أن يقول:
+
+«"خليك متابع الموضوع ده."»
+
+أو:
+
+«"اعمل ده كل يوم الساعة 9."»
+
+أو:
+
+«"لو حصل كذا اعمل كذا."»
+
+أو:
+
+«"أنا هعلمك تعمل الحاجة دي مرة، وبعد كده كررها."»
+
+هذه هي هوية المنتج.
+
+ابدأ الآن ببناء foundation للـdelegation حتى لو بعض القدرات المتقدمة ستأتي لاحقًا.
+
+---
+
+7. Learning Loop
+
+جهز architecture وتجربة المستخدم لـ:
+
+Teach → Execute → Observe → Verify → Learn → Repeat → Adapt
+
+مثال مستقبلي:
+
+«"عايز أعلمك تعمل التقرير ده كل يوم."»
+
+Agent:
+
+1. يفهم المطلوب.
+2. يطلب من المستخدم demonstration عندما يحتاج.
+3. يحفظ semantic workflow وليس screen coordinates فقط.
+4. ينفذه.
+5. يتحقق من النتيجة.
+6. إذا تغير الموقع أو الخطوات، يتوقف بدل التخمين.
+7. يطلب correction.
+8. يتعلم التصحيح.
+9. يعيد استخدام الـworkflow.
+
+لا تنفذ Browser Computer Use كامل الآن، لكن لا تبنِ Agent Work بطريقة تجعل إضافته لاحقًا تحتاج إعادة architecture.
+
+---
+
+8. Act مع Permission
+
+Agent لا يكون مجرد مراقب.
+
+يجب أن يستطيع مستقبلاً:
+
+Understand → Decide → Ask Permission → Execute → Verify → Report
+
+لكن permission تكون بلغة المستخدم، وليس لغة tools.
+
+مثال:
+
+«"لقيت إن السعر نزل لـ850 جنيه. تحب أطلبه؟"»
+
+وليس:
+
+«"Allow purchase tool?"»
+
+كل action حساس يجب أن يمر عبر approval/execution paths الحالية.
+
+لا تنشئ execution path موازيًا.
+
+---
+
+9. Proactive Agent
+
+ابنِ foundation تجعل Agent قادرًا لاحقًا على:
+
+IF condition → Agent notices → Agent evaluates → Notify / Ask / Act
+
+لكن لا تجعل proactive engine عبارة عن notification spam.
+
+Agent يجب أن يعرف الفرق بين:
+
+- معلومة
+- تنبيه
+- حاجة لموافقة
+- Action
+- حالة تحتاج تدخل المستخدم
+
+---
+
+10. External World
+
+الـAgent ليس محصورًا داخل MNRsecr.
+
+صمم integrations كقدرات قابلة للإضافة:
+
+- Google
+- Calendar
+- Gmail
+- Telegram
+- WhatsApp لاحقًا
+- APIs
+- Browser workers
+- Computer-use workers
+- A2A لاحقًا
+
+استخدم نفس adapter/provider/integration philosophy.
+
+المستخدم لا يجب أن يعرف تفاصيل API keys في التجربة النهائية.
+
+---
+
+11. A2A
+
+لا تنفذ Multi-Agent system ضخم الآن.
+
+لكن حافظ على Agent architecture بحيث يكون من الممكن لاحقًا:
+
+MNRsecr Agent ↔ External Agent
+
+والـA2A Work يكون نوعًا من Work، وليس architecture منفصلة.
+
+---
+
+12. Plans / Entitlements
+
+لا تبنِ Free وPremium كـif statements متناثرة.
+
+استخدم:
+
+Capability → Entitlement → Plan
+
+بحيث نستطيع تغيير حدود الخطط لاحقًا بدون إعادة كتابة المنتج.
+
+الرؤية المبدئية:
+
+Free
+
+- Remember
+- Understand
+- basic records
+- conversations
+- basic tasks/appointments
+- basic Quick
+- basic actions
+
+Plus
+
+- Monitor
+- proactive notifications
+- recurring monitoring
+- richer reports
+
+Pro
+
+- Delegate
+- Execute
+- workflows
+- integrations
+- learned workflows
+- browser/computer work عندما تصبح متاحة
+
+Max / Business
+
+- advanced agent work
+- high-volume monitoring
+- advanced automation
+- multiple agents/subagents
+- A2A
+- higher resource limits
+
+هذه الحدود قابلة للتعديل لاحقًا، لذلك architecture يجب أن تكون capability-based.
+
+---
+
+13. Mobile-first
+
+MNRsecr Agent هو Mobile-first.
+
+الموبايل هو:
+
+Control Surface + Window into the Agent
+
+وليس بالضرورة الجهاز الذي ينفذ كل شيء.
+
+الـAgent يمكن أن يعمل في Workers في الخلفية، بينما المستخدم يرى من الهاتف:
+
+- ماذا يعمل؟
+- ماذا وجد؟
+- ماذا يحتاج مني؟
+- ماذا نفذ؟
+- ماذا فشل؟
+- ماذا ينتظر؟
+- ماذا يحتاج approval؟
+
+Main للتفاصيل والتحكم.
+
+Quick للوصول السريع والإشعارات.
+
+---
+
+14. أهم قاعدة UX
+
+لا تحول المنتج إلى dashboard تقنية.
+
+كل التعقيد يجب أن يكون في architecture.
+
+الواجهة للمستخدم العادي يجب أن تظل بسيطة.
+
+لكن يجب أن تكون architecture/UI component system مستعدة لإضافة:
+
+Monitor → Workflow → Browser Work → Learned Work → A2A
+
+بدون إعادة تصميم المنتج كل مرة.
+
+استخدم progressive disclosure.
+
+---
+
+15. Provider Strategy
+
+استخدم Provider Layer الحالية.
+
+اختبر:
+
+- DeepSeek
+- GPT-OSS providers
+- Cohere
+- Gemini/Groq/Mistral عند الحاجة
+
+ولا تجعل الـAgent مربوطًا بموديل واحد.
+
+الـRouter هو المسؤول عن اختيار النموذج حسب المهمة.
+
+اجعل logging يسمح لنا لاحقًا بمعرفة:
+
+- model
+- provider
+- tokens
+- latency
+- tool calls
+- success/failure
+- estimated cost
+
+والهدف هو الوصول لأفضل Agent capability / cost ratio، وليس مجرد استخدام أكبر موديل.
+
+---
+
+16. ما لا نريده
+
+لا:
+
+- تعيد بناء Second Brain
+- تعيد بناء Provider Layer
+- تعيد بناء Structured Records
+- تعيد بناء Approval Execution
+- تنشئ execution path موازي
+- تربط Agent Work بـReplit
+- تربط Agent logic مباشرة بـExpo أو Notification provider
+- تجعل API Monitor هو المنتج
+- تبني Browser/Computer Use كامل الآن
+- تبني A2A/Multi-Agent كامل الآن
+- تدخل Kubernetes
+- تعمل architecture منفصلة لكل capability
+- تحول الواجهة إلى technical dashboard
+- تضيف features لمجرد زيادة عدد الـfeatures
+
+---
+
+17. طريقة التنفيذ
+
+لا أريد audit جديد طويل كبديل عن التنفيذ.
+
+استخدم الـarchitecture والـcontracts التي تم اعتمادها كـfoundation، ثم:
+
+1. أكمل persistence/restart safety اللازمة لـAgent Work.
+2. ابنِ Agent Work runtime العام.
+3. ابنِ Work creation UX.
+4. ابنِ Work List + Work Detail.
+5. اربط Activity / Evidence / Verification / Notification.
+6. وسّع Monitor إلى generic Work capability.
+7. ابنِ delegation flow.
+8. ابنِ proactive/event loop.
+9. جهز workflow/learning extension points.
+10. جهز integrations extension points.
+11. طبّق capability/entitlement architecture.
+12. حسّن Main وQuick ليظهرا كواجهة Agent حقيقية.
+13. بعد استقرار الأساس، ابدأ إضافة القدرات المتقدمة واحدة واحدة.
+
+كل مرحلة يجب أن تكون قابلة للاختبار والـrollback، لكن لا توقف التنفيذ عند مرحلة documentation جديدة طالما الـcontract الحالي يسمح بالتنفيذ.
+
+معيار النجاح الحقيقي
+
+لا أريد في النهاية مجرد:
+
+"API Monitor يعمل."
+
+أريد أن أستطيع كمستخدم أن أقول:
+
+«"تابع الموضوع ده."»
+
+والـMNRsecr:
+
+يفهم → يحول الطلب إلى Work → يحفظه → ينفذه في الخلفية → يراقبه → يتحقق → يعود إليّ عند الحاجة → يطلب إذني عندما يلزم → ويظل فاكرًا أين وصل.
+
+هذا هو الـMNRsecr Agent الذي نبنيه.
+
+ابدأ التنفيذ من الـfoundation الموجودة حاليًا، ولا تنشئ مشروعًا جديدًا ولا Agent منفصلًا عن MNRsecr.
