@@ -1,11 +1,12 @@
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { getGetTodayContextQueryKey, getListRecordsQueryKey, useGetEntityGraph, useGetTodayContext, useListRecords, type ConversationListResponse, type RecordsResponse, type TodayContext, type TurnResponse } from '@workspace/api-client-react';
+import { getGetTodayContextQueryKey, getListRecordsQueryKey, useGetEntityGraph, useGetTodayContext, useListRecords, useUpdateRecord, type ApprovalRequest, type CommitmentRecord, type ConversationListResponse, type ExpenseRecord, type PersonRecord, type ProjectRecord, type RecordMutationResponse, type RecordType, type RecordsResponse, type RecordUpdateInput, type ReminderRecord, type TaskRecord, type TodayContext, type TurnResponse } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Modal,
   PanResponder,
   Platform,
   Pressable,
@@ -91,6 +92,7 @@ export type MobileRecordRow = {
   title: string;
   subtitle: string;
   trailing?: string;
+  rowVersion?: number;
   origin?: RecordOrigin | null;
   related?: MobileRecordRow[];
 };
@@ -219,6 +221,7 @@ function recordSections(records: RecordsResponse | undefined): MobileRecordSecti
           .filter(Boolean)
           .join(' · '),
         trailing: money(expense.amountMinor, expense.currency),
+        rowVersion: expense.rowVersion,
         origin: expense.origin,
         related: [
           expense.personId && expense.personName
@@ -242,6 +245,7 @@ function recordSections(records: RecordsResponse | undefined): MobileRecordSecti
         recordType: 'person',
         title: person.name,
         subtitle: person.phone ?? person.notes ?? 'لا توجد ملاحظات',
+        rowVersion: person.rowVersion,
       })),
     },
     {
@@ -254,6 +258,7 @@ function recordSections(records: RecordsResponse | undefined): MobileRecordSecti
         title: project.name,
         subtitle: recordDate(project.updatedAt),
         trailing: statusLabel(project.status),
+        rowVersion: project.rowVersion,
       })),
     },
     {
@@ -266,6 +271,7 @@ function recordSections(records: RecordsResponse | undefined): MobileRecordSecti
         title: task.title,
         subtitle: task.dueAt ? `موعدها ${recordDate(task.dueAt)}` : 'مهمة مستمرة',
         trailing: statusLabel(task.status),
+        rowVersion: task.rowVersion,
         origin: task.origin,
       })),
     },
@@ -279,6 +285,7 @@ function recordSections(records: RecordsResponse | undefined): MobileRecordSecti
         title: reminder.text,
         subtitle: `${recordDate(reminder.dueAt)} · ${reminder.timezone}`,
         trailing: statusLabel(reminder.status),
+        rowVersion: reminder.rowVersion,
         origin: reminder.origin,
       })),
     },
@@ -292,6 +299,7 @@ function recordSections(records: RecordsResponse | undefined): MobileRecordSecti
         title: commitment.title,
         subtitle: commitment.personName ?? 'بدون طرف محدد',
         trailing: commitment.dueAt ? recordDate(commitment.dueAt) : statusLabel(commitment.status),
+        rowVersion: commitment.rowVersion,
         origin: commitment.origin as RecordOrigin | null,
       })),
     },
@@ -341,6 +349,130 @@ function relatedRow(key: string, value: unknown): MobileRecordRow | null {
     subtitle: detail,
     ...(amountMinor !== null ? { trailing: money(amountMinor, currency) } : {}),
   };
+}
+
+type EditableRecord = ExpenseRecord | PersonRecord | ProjectRecord | TaskRecord | ReminderRecord | CommitmentRecord;
+type EditFormValues = Record<string, string>;
+
+const editableRecordCollections: Record<RecordType, keyof RecordsResponse> = {
+  expense: 'expenses',
+  person: 'people',
+  project: 'projects',
+  task: 'tasks',
+  reminder: 'reminders',
+  commitment: 'commitments',
+};
+
+export function findEditableRecord(
+  records: RecordsResponse | undefined,
+  record: Pick<MobileRecordRow, 'recordType' | 'id'>,
+): EditableRecord | null {
+  if (!records || !(record.recordType in editableRecordCollections)) return null;
+  const collection = records[editableRecordCollections[record.recordType as RecordType]] as EditableRecord[];
+  return collection.find((candidate) => candidate.id === record.id) ?? null;
+}
+
+function localDateTime(value: string | null | undefined) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value.slice(0, 16);
+  const pad = (part: number) => String(part).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function editableRecordRow(record: EditableRecord, recordType: RecordType): MobileRecordRow {
+  if (recordType === 'expense') {
+    const expense = record as ExpenseRecord;
+    return {
+      id: expense.id,
+      recordType,
+      title: expense.description,
+      subtitle: [expense.personName ?? expense.projectName, recordDate(expense.occurredAt)].filter(Boolean).join(' · '),
+      trailing: money(expense.amountMinor, expense.currency),
+      rowVersion: expense.rowVersion,
+      origin: expense.origin,
+    };
+  }
+  if (recordType === 'person') {
+    const person = record as PersonRecord;
+    return { id: person.id, recordType, title: person.name, subtitle: person.phone ?? person.notes ?? 'لا توجد ملاحظات', rowVersion: person.rowVersion };
+  }
+  if (recordType === 'project') {
+    const project = record as ProjectRecord;
+    return { id: project.id, recordType, title: project.name, subtitle: recordDate(project.updatedAt), trailing: statusLabel(project.status), rowVersion: project.rowVersion };
+  }
+  if (recordType === 'task') {
+    const task = record as TaskRecord;
+    return { id: task.id, recordType, title: task.title, subtitle: task.dueAt ? `موعدها ${recordDate(task.dueAt)}` : 'مهمة مستمرة', trailing: statusLabel(task.status), rowVersion: task.rowVersion, origin: task.origin };
+  }
+  if (recordType === 'reminder') {
+    const reminder = record as ReminderRecord;
+    return { id: reminder.id, recordType, title: reminder.text, subtitle: `${recordDate(reminder.dueAt)} · ${reminder.timezone}`, trailing: statusLabel(reminder.status), rowVersion: reminder.rowVersion, origin: reminder.origin };
+  }
+  const commitment = record as CommitmentRecord;
+  return { id: commitment.id, recordType, title: commitment.title, subtitle: commitment.personName ?? 'بدون طرف محدد', trailing: commitment.dueAt ? recordDate(commitment.dueAt) : statusLabel(commitment.status), rowVersion: commitment.rowVersion, origin: commitment.origin as RecordOrigin | null };
+}
+
+export function editFormForRecord(record: EditableRecord, recordType: RecordType): EditFormValues {
+  const expense = recordType === 'expense' ? record as ExpenseRecord : undefined;
+  const person = recordType === 'person' ? record as PersonRecord : undefined;
+  const project = recordType === 'project' ? record as ProjectRecord : undefined;
+  const task = recordType === 'task' ? record as TaskRecord : undefined;
+  const reminder = recordType === 'reminder' ? record as ReminderRecord : undefined;
+  const commitment = recordType === 'commitment' ? record as CommitmentRecord : undefined;
+  return {
+    amountMinor: expense ? String(expense.amountMinor) : '',
+    currency: expense?.currency ?? 'EGP',
+    description: expense?.description ?? '',
+    personId: expense?.personId ?? '',
+    projectId: expense?.projectId ?? '',
+    occurredAt: localDateTime(expense?.occurredAt),
+    name: person?.name ?? project?.name ?? '',
+    phone: person?.phone ?? '',
+    notes: person?.notes ?? '',
+    title: task?.title ?? commitment?.title ?? '',
+    text: reminder?.text ?? '',
+    dueAt: localDateTime(task?.dueAt ?? reminder?.dueAt ?? commitment?.dueAt),
+    timezone: reminder?.timezone ?? 'Africa/Cairo',
+    status: project?.status ?? task?.status ?? reminder?.status ?? commitment?.status ?? '',
+  };
+}
+
+export function updateInputForRecord(
+  record: EditableRecord,
+  recordType: RecordType,
+  form: EditFormValues,
+): RecordUpdateInput {
+  const input: RecordUpdateInput = { expectedRowVersion: record.rowVersion };
+  if (recordType === 'expense') {
+    input.amountMinor = Number(form.amountMinor);
+    input.currency = form.currency.trim();
+    input.description = form.description.trim();
+    input.personId = form.personId || null;
+    input.projectId = form.projectId || null;
+    input.occurredAt = new Date(form.occurredAt).toISOString();
+  } else if (recordType === 'person') {
+    input.name = form.name.trim();
+    input.phone = form.phone.trim() || null;
+    input.notes = form.notes.trim() || null;
+  } else if (recordType === 'project') {
+    input.name = form.name.trim();
+    input.status = form.status;
+  } else if (recordType === 'task') {
+    input.title = form.title.trim();
+    input.dueAt = form.dueAt ? new Date(form.dueAt).toISOString() : null;
+    input.status = form.status;
+  } else if (recordType === 'reminder') {
+    input.text = form.text.trim();
+    input.dueAt = new Date(form.dueAt).toISOString();
+    input.timezone = form.timezone.trim();
+    input.status = form.status;
+  } else {
+    input.title = form.title.trim();
+    input.dueAt = form.dueAt ? new Date(form.dueAt).toISOString() : null;
+    input.status = form.status;
+  }
+  return input;
 }
 
 export function approvalFromAction(action: TurnResponse['action']): Approval | undefined {
@@ -2310,6 +2442,96 @@ export function MainOffice({
   );
 }
 
+const editStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  sheet: {
+    maxHeight: '92%',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+  },
+  content: {
+    padding: 20,
+    paddingBottom: 34,
+    gap: 14,
+  },
+  heading: {
+    flexDirection: 'row-reverse',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  headingCopy: {
+    alignItems: 'flex-end',
+    gap: 3,
+  },
+  eyebrow: {
+    fontSize: 11,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: '700',
+  },
+  field: {
+    gap: 6,
+  },
+  fieldLabel: {
+    fontSize: 12,
+    textAlign: 'right',
+  },
+  input: {
+    minHeight: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+  },
+  multiline: {
+    minHeight: 84,
+    textAlignVertical: 'top',
+  },
+  chips: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingVertical: 2,
+  },
+  chip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+  },
+  error: {
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'right',
+  },
+  actions: {
+    gap: 10,
+    marginTop: 5,
+  },
+  primaryAction: {
+    minHeight: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryAction: {
+    minHeight: 44,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+});
+
 const detailStyles = StyleSheet.create({
   detailScreen: {
     flex: 1,
@@ -2534,6 +2756,97 @@ const detailStyles = StyleSheet.create({
   },
 });
 
+function approvalForRequest(request: ApprovalRequest): Approval {
+  return {
+    operationId: request.operationId,
+    title: request.display.title,
+    details: request.display.details,
+    status: request.status as ApprovalStatus,
+    toolName: request.toolName,
+  };
+}
+
+function MobileEditSheet({
+  record,
+  kind,
+  colors,
+  people,
+  projects,
+  isSaving,
+  error,
+  onClose,
+  onSave,
+}: {
+  record: EditableRecord;
+  kind: RecordType;
+  colors: ReturnType<typeof useColors>;
+  people: PersonRecord[];
+  projects: ProjectRecord[];
+  isSaving: boolean;
+  error: string | null;
+  onClose: () => void;
+  onSave: (form: EditFormValues) => void;
+}) {
+  const [form, setForm] = useState<EditFormValues>(() => editFormForRecord(record, kind));
+  const update = (key: string, value: string) => setForm((current) => ({ ...current, [key]: value }));
+  const label = kind === 'expense' ? 'مصروف' : kind === 'person' ? 'شخص' : kind === 'project' ? 'مشروع' : kind === 'task' ? 'مهمة' : kind === 'reminder' ? 'تذكير' : 'التزام';
+  const statuses = kind === 'project' ? ['active', 'archived'] : kind === 'task' ? ['pending', 'in_progress', 'completed', 'cancelled'] : kind === 'reminder' ? ['scheduled', 'completed', 'cancelled'] : ['open', 'completed', 'cancelled'];
+  const field = (key: string, labelText: string, keyboardType?: 'default' | 'numeric' | 'phone-pad', multiline = false) => (
+    <View style={editStyles.field} key={key}>
+      <Text style={[editStyles.fieldLabel, { color: colors.mutedForeground }]}>{labelText}</Text>
+      <TextInput
+        testID={`record-edit-${key}`}
+        value={form[key] ?? ''}
+        onChangeText={(value) => update(key, value)}
+        keyboardType={keyboardType}
+        multiline={multiline}
+        numberOfLines={multiline ? 3 : 1}
+        textAlign="right"
+        placeholderTextColor={colors.mutedForeground}
+        style={[editStyles.input, { color: colors.foreground, backgroundColor: colors.input, borderColor: colors.border }, multiline && editStyles.multiline]}
+      />
+    </View>
+  );
+  return (
+    <Modal visible animationType="slide" transparent onRequestClose={onClose}>
+      <View style={editStyles.backdrop}>
+        <View style={[editStyles.sheet, { backgroundColor: colors.card }]}>
+          <ScrollView contentContainerStyle={editStyles.content} keyboardShouldPersistTaps="handled">
+            <View style={editStyles.heading}>
+              <View style={editStyles.headingCopy}>
+                <Text style={[editStyles.eyebrow, { color: colors.mutedForeground }]}>تعديل السجل</Text>
+                <Text style={[editStyles.title, { color: colors.foreground }]}>تعديل {label}</Text>
+              </View>
+              <Pressable testID="record-edit-close" accessibilityRole="button" accessibilityLabel="إغلاق تعديل السجل" onPress={onClose}><Feather name="x" size={21} color={colors.foreground} /></Pressable>
+            </View>
+            {error && <Text style={[editStyles.error, { color: colors.destructive }]}>{error}</Text>}
+            {kind === 'expense' && <>{field('amountMinor', 'المبلغ بالوحدات الصغرى', 'numeric')}{field('currency', 'العملة')}{field('description', 'الوصف')}{field('occurredAt', 'التاريخ (YYYY-MM-DDTHH:mm)')}</>}
+            {(kind === 'person' || kind === 'project') && field('name', 'الاسم')}
+            {kind === 'person' && <>{field('phone', 'رقم الهاتف', 'phone-pad')}{field('notes', 'ملاحظات', undefined, true)}</>}
+            {kind === 'task' && field('title', 'عنوان المهمة')}
+            {kind === 'commitment' && field('title', 'عنوان الالتزام')}
+            {kind === 'reminder' && <>{field('text', 'نص التذكير')}{field('timezone', 'المنطقة الزمنية')}</>}
+            {(kind === 'task' || kind === 'reminder' || kind === 'commitment') && field('dueAt', 'الموعد (YYYY-MM-DDTHH:mm)')}
+            {(kind === 'project' || kind === 'task' || kind === 'reminder' || kind === 'commitment') && (
+              <View style={editStyles.field}>
+                <Text style={[editStyles.fieldLabel, { color: colors.mutedForeground }]}>الحالة</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={editStyles.chips}>
+                  {statuses.map((status) => <Pressable key={status} testID={`record-edit-status-${status}`} onPress={() => update('status', status)} style={[editStyles.chip, { borderColor: colors.border, backgroundColor: form.status === status ? colors.primary : colors.background }]}><Text style={{ color: form.status === status ? colors.primaryForeground : colors.foreground }}>{status}</Text></Pressable>)}
+                </ScrollView>
+              </View>
+            )}
+            {kind === 'expense' && <><Text style={[editStyles.fieldLabel, { color: colors.mutedForeground }]}>الربط (اختياري)</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={editStyles.chips}><Pressable testID="record-edit-person-none" onPress={() => update('personId', '')} style={[editStyles.chip, { borderColor: colors.border, backgroundColor: !form.personId ? colors.primary : colors.background }]}><Text style={{ color: !form.personId ? colors.primaryForeground : colors.foreground }}>بدون شخص</Text></Pressable>{people.map((person) => <Pressable key={person.id} testID={`record-edit-person-${person.id}`} onPress={() => update('personId', person.id)} style={[editStyles.chip, { borderColor: colors.border, backgroundColor: form.personId === person.id ? colors.primary : colors.background }]}><Text style={{ color: form.personId === person.id ? colors.primaryForeground : colors.foreground }}>{person.name}</Text></Pressable>)}<Pressable testID="record-edit-project-none" onPress={() => update('projectId', '')} style={[editStyles.chip, { borderColor: colors.border, backgroundColor: !form.projectId ? colors.primary : colors.background }]}><Text style={{ color: !form.projectId ? colors.primaryForeground : colors.foreground }}>بدون مشروع</Text></Pressable>{projects.map((project) => <Pressable key={project.id} testID={`record-edit-project-${project.id}`} onPress={() => update('projectId', project.id)} style={[editStyles.chip, { borderColor: colors.border, backgroundColor: form.projectId === project.id ? colors.primary : colors.background }]}><Text style={{ color: form.projectId === project.id ? colors.primaryForeground : colors.foreground }}>{project.name}</Text></Pressable>)}</ScrollView></>}
+            <View style={editStyles.actions}>
+              <Pressable testID="record-edit-save" accessibilityRole="button" accessibilityLabel="حفظ تعديل السجل" disabled={isSaving} onPress={() => onSave(form)} style={[editStyles.primaryAction, { backgroundColor: colors.primary, opacity: isSaving ? 0.55 : 1 }]}><Text style={[editStyles.actionText, { color: colors.primaryForeground }]}>{isSaving ? 'جاري الحفظ…' : 'حفظ التعديل'}</Text></Pressable>
+              <Pressable testID="record-edit-cancel" accessibilityRole="button" accessibilityLabel="إلغاء تعديل السجل" onPress={onClose} style={[editStyles.secondaryAction, { borderColor: colors.border }]}><Text style={[editStyles.actionText, { color: colors.foreground }]}>إلغاء</Text></Pressable>
+            </View>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 export function RecordDetailView({
   record,
   colors,
@@ -2548,6 +2861,8 @@ export function RecordDetailView({
   chatBusy,
   onApprove,
   onReject,
+  onPendingApproval,
+  onRecordSaved,
   busyOperationId,
   chatContext,
 }: {
@@ -2564,9 +2879,19 @@ export function RecordDetailView({
   chatBusy: boolean;
   onApprove: (approval: Approval, args?: Record<string, unknown>) => void;
   onReject: (approval: Approval) => void;
+  onPendingApproval: (approval: Approval) => void;
+  onRecordSaved: () => void;
   busyOperationId: string | null;
   chatContext: MobileRecordRow | null;
 }) {
+  const queryClient = useQueryClient();
+  const recordsQuery = useListRecords({ query: { queryKey: getListRecordsQueryKey(), staleTime: 20_000 } });
+  const updateMutation = useUpdateRecord();
+  const [editingRecord, setEditingRecord] = useState<EditableRecord | null>(null);
+  const [editingError, setEditingError] = useState<string | null>(null);
+  const [latestRecord, setLatestRecord] = useState<MobileRecordRow | null>(null);
+  const editableKind = (record.recordType in editableRecordCollections) ? record.recordType as RecordType : null;
+  const displayRecord = latestRecord ?? record;
   const isEntity = record.recordType === 'person'
     || record.recordType === 'project'
     || record.recordType === 'financial_party';
@@ -2575,7 +2900,7 @@ export function RecordDetailView({
     : record.recordType === 'financial_party'
       ? 'financial_party'
       : 'person';
-  const entityQuery = useGetEntityGraph(entityType, record.id, {
+  const entityQuery = useGetEntityGraph(entityType, displayRecord.id, {
     query: {
       enabled: isEntity,
       queryKey: [`/api/entities/${entityType}/${record.id}`],
@@ -2585,11 +2910,11 @@ export function RecordDetailView({
   const entityData = objectValue(entityQuery.data);
   const entity = objectValue(entityData.entity);
   const related = objectValue(entityData.related);
-  const entityName = stringValue(entity.name, record.title);
-  const entitySubtitle = record.recordType === 'person'
-    ? stringValue(entity.notes, stringValue(entity.phone, record.subtitle))
-    : record.recordType === 'project'
-      ? `الحالة: ${stringValue(entity.status, record.trailing ?? 'غير محددة')}`
+  const entityName = stringValue(entity.name, displayRecord.title);
+  const entitySubtitle = displayRecord.recordType === 'person'
+    ? stringValue(entity.notes, stringValue(entity.phone, displayRecord.subtitle))
+    : displayRecord.recordType === 'project'
+      ? `الحالة: ${stringValue(entity.status, displayRecord.trailing ?? 'غير محددة')}`
       : 'فتح مركز الطرف المالي';
   const relatedGroups = Object.entries(related)
     .map(([key, value]) => ({ key, count: arrayValue(value).length }))
@@ -2602,6 +2927,58 @@ export function RecordDetailView({
   const allRelatedRows = [...(record.related ?? []), ...graphRelatedRows]
     .filter((item, index, rows) => rows.findIndex((candidate) => candidate.recordType === item.recordType && candidate.id === item.id) === index);
   const timelineRows = arrayValue(entityData.timeline).slice(0, 8);
+  async function openEditor() {
+    if (!editableKind || recordsQuery.isFetching) return;
+    setEditingError(null);
+    const refreshed = await recordsQuery.refetch();
+    const fresh = findEditableRecord(refreshed.data, record);
+    if (!refreshed.isSuccess || !fresh) {
+      setEditingError('تعذر تحديث السجل قبل التعديل. لم نفتح نسخة قديمة.');
+      return;
+    }
+    setLatestRecord(editableRecordRow(fresh, editableKind));
+    setEditingRecord(fresh);
+  }
+  async function saveEdit(form: EditFormValues) {
+    if (!editingRecord || !editableKind) return;
+    setEditingError(null);
+    try {
+      const data = updateInputForRecord(editingRecord, editableKind, form);
+      updateMutation.mutate(
+        { recordType: editableKind, recordId: editingRecord.id, data },
+        {
+          onSuccess: async (response: RecordMutationResponse) => {
+            setEditingRecord(null);
+            if (response.pendingApproval && response.approval) {
+              onPendingApproval(approvalForRequest(response.approval));
+              return;
+            }
+            await Promise.all([
+              queryClient.invalidateQueries({ queryKey: getListRecordsQueryKey() }),
+              queryClient.invalidateQueries({ queryKey: getGetTodayContextQueryKey() }),
+            ]);
+            onRecordSaved();
+          },
+          onError: async (error: unknown) => {
+            const status = typeof (error as { status?: unknown })?.status === 'number'
+              ? (error as { status: number }).status
+              : undefined;
+            if (status !== 409) {
+              setEditingError('تعذر حفظ التعديل. تحقق من البيانات وحاول مرة أخرى.');
+              return;
+            }
+            setEditingRecord(null);
+            const refreshed = await recordsQuery.refetch();
+            const fresh = findEditableRecord(refreshed.data, record);
+            if (fresh && editableKind) setLatestRecord(editableRecordRow(fresh, editableKind));
+            setEditingError('رُفض التعديل لأن السجل تغيّر من نافذة أخرى. تم عرض النسخة الأحدث دون إعادة المحاولة.');
+          },
+        },
+      );
+    } catch {
+      setEditingError('تحقق من قيم التاريخ والمبلغ ثم حاول مرة أخرى.');
+    }
+  }
 
   return (
     <ScrollView
@@ -2630,15 +3007,28 @@ export function RecordDetailView({
       </View>
 
       <View style={[detailStyles.detailCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <Text style={[detailStyles.detailTitle, { color: colors.foreground }]}>{isEntity ? entityName : record.title}</Text>
+         <Text style={[detailStyles.detailTitle, { color: colors.foreground }]}>{isEntity ? entityName : displayRecord.title}</Text>
         <Text style={[detailStyles.detailSubtitle, { color: colors.mutedForeground }]}>
-          {isEntity ? entitySubtitle : record.subtitle}
+          {isEntity ? entitySubtitle : displayRecord.subtitle}
         </Text>
         {isEntity && typeof entity.phone === 'string' && (
           <Text style={[detailStyles.detailMeta, { color: colors.mutedForeground }]}>{entity.phone}</Text>
         )}
-        {!isEntity && record.trailing && <Text style={[detailStyles.detailValue, { color: colors.primary }]}>{record.trailing}</Text>}
+        {!isEntity && displayRecord.trailing && <Text style={[detailStyles.detailValue, { color: colors.primary }]}>{displayRecord.trailing}</Text>}
       </View>
+      {editableKind && (
+        <Pressable
+          testID="record-detail-edit"
+          accessibilityRole="button"
+          accessibilityLabel="تعديل السجل"
+          onPress={() => void openEditor()}
+          style={({ pressed }) => [detailStyles.detailSecondaryAction, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}
+        >
+          <Feather name="edit-2" size={16} color={colors.foreground} />
+          <Text style={[detailStyles.detailSecondaryActionText, { color: colors.foreground }]}>تعديل السجل</Text>
+        </Pressable>
+      )}
+      {editingError && !editingRecord && <Text testID="record-edit-message" style={[detailStyles.detailStateText, { color: colors.destructive }]}>{editingError}</Text>}
 
       {isEntity && entityQuery.isLoading && (
         <View style={detailStyles.detailState}>
@@ -2762,7 +3152,7 @@ export function RecordDetailView({
         <Feather name="message-circle" size={16} color={colors.primaryForeground} />
         <Text style={[detailStyles.detailPrimaryActionText, { color: colors.primaryForeground }]}>اسأل السكرتير عن هذا</Text>
       </Pressable>
-      {chatContext?.id === record.id && (
+      {chatContext?.id === displayRecord.id && (
         <CentralSecretaryChat
           colors={colors}
           messages={chatMessages}
@@ -2776,6 +3166,19 @@ export function RecordDetailView({
           onOpenRecord={onOpenRelatedRecord}
           context={record}
           compact
+        />
+      )}
+      {editingRecord && editableKind && (
+        <MobileEditSheet
+          record={editingRecord}
+          kind={editableKind}
+          colors={colors}
+          people={(recordsQuery.data?.people ?? []) as PersonRecord[]}
+          projects={(recordsQuery.data?.projects ?? []) as ProjectRecord[]}
+          isSaving={updateMutation.isPending}
+          error={editingError}
+          onClose={() => setEditingRecord(null)}
+          onSave={(form) => void saveEdit(form)}
         />
       )}
     </ScrollView>
