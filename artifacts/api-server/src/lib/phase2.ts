@@ -1017,8 +1017,8 @@ export const phase2Tools: ToolDefinition[] = [
     description: { type: "STRING" },
     sourceType: {
       type: "STRING",
-      enum: ["clock", "heartbeat", "internal_records", "user_defined"],
-      description: "Use internal_records only with an allowlisted tenant-scoped record condition; use user_defined when an external source is not connected yet.",
+      enum: ["clock", "heartbeat", "internal_records", "github_repository", "user_defined"],
+      description: "Use github_repository only for the supported read-only GitHub repository monitor; use internal_records only with an allowlisted tenant-scoped record condition.",
     },
     condition: { type: "OBJECT" },
     action: { type: "OBJECT", description: "The extensible next step, such as notify, ask, or an approved action." },
@@ -2844,7 +2844,7 @@ const systemInstruction = `أنت سكرتير شخصي عربي يعمل داخ
 17. لا تذكر رقمًا ماليًا أو عددًا ماليًا من الذاكرة أو التخمين. بعد الأدوات استخدم final_response، وضع كل رقم مالي مؤكد في groundedFacts كما أعادته الأداة. الرسالة نفسها يجب أن تكون طبيعية وليست قالبًا.
 18. لا تستخدم final_response قبل إكمال الأدوات اللازمة. إذا كانت البيانات ناقصة أو الأسماء متكررة، اجعل kind = clarification بدل التخمين.
 19. عند تسجيل مصروف، اسم الشخص المستلم اختياري. إذا لم يذكره المستخدم لا توقف التسجيل بسببه؛ اسأل مرة واحدة إن كان يريد إضافته، واقبل "بدون اسم" ثم أكمل.
-20. إذا طلب المستخدم منك أن تتابع أو تذكّر أو تكرر عملًا لاحقًا، استخدم create_agent_work. لا تدّعي اتصالًا بمصدر خارجي؛ استخدم user_defined عندما لا يوجد مصدر آمن موصول، ووضّح أن المتابعة تحتاج مراجعة أو ربطًا لاحقًا.
+20. إذا طلب المستخدم منك أن تتابع أو تذكّر أو تكرر عملًا لاحقًا، استخدم create_agent_work. لمراقبة repository عام على GitHub استخدم github_repository مع owner وrepository وmetric وoperator وthreshold، ولا تستخدم URL من المستخدم كمصدر مباشر.
 20. قبل اعتماد المصروف اسأل عن اسم المشروع أو الغرض إذا لم يذكره المستخدم. إذا ذكر غرضًا وليس مشروعًا، خزّنه في description ولا تنشئ مشروعًا جديدًا من تلقاء نفسك. لا تعتبر الغرض مشروعًا إلا بعد التحقق من وجوده أو تأكيد المستخدم.
 21. عند طلب تذكير أو موعد بيوم نسبي مثل "بكرة" دون ساعة دقيقة، اسأل عن الوقت بشكل اختياري. اقبل ساعة مثل "5 مساءً"، أو "أي وقت" واستخدم 09:00 بتوقيت Africa/Cairo. لا تنفذ التذكير قبل اكتمال dueAt.
 22. إذا فشل مزود، لا تعرض رسالة تقنية ولا تقل إن الكتابة تمت. استخدم final_response برسالة عربية قصيرة توضّح أن الطلب لم يكتمل وأن البيانات لم تتغير.`;
@@ -4731,6 +4731,23 @@ function naturalAgentWorkArgs(message: string): Record<string, unknown> {
   const compact = message.replace(/\s+/g, " ").trim();
   const recurring = /(?:كل\s+يوم|يوميا|يوميًا|every\s+day)/iu.test(compact);
   const time = parseArabicTimeOfDay(compact);
+  const githubRepositoryMatch = compact.match(
+    /(?:github|جيت\s*هاب)?(?:\s+(?:repo|repository|مستودع|مخزن))?\s*([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)/iu,
+  );
+  const githubIssueSignal = /(?:github|جيت\s*هاب|issues?|إيشوز|مشاكل|قضايا|العناصر\s+المفتوحة)/iu.test(compact);
+  const githubThresholdMatch = compact.match(
+    /(?:issues?|إيشوز|مشاكل|قضايا|العناصر\s+المفتوحة).*?(?:عن|فوق|اكتر\s+من|اكثر\s+من|أكثر\s+من|تزيد\s+عن|تعدي)\s*([0-9٠-٩]+)/iu,
+  );
+  const githubThreshold = githubThresholdMatch
+    ? Number(arabicDigitsToAscii(githubThresholdMatch[1]))
+    : null;
+  const githubMonitor = Boolean(
+    githubRepositoryMatch?.[1]
+      && githubIssueSignal
+      && githubThreshold !== null
+      && Number.isSafeInteger(githubThreshold)
+      && githubThreshold >= 0,
+  );
   const taskThresholdMatch = compact.match(
     /(?:المهام|مهامي|المهام\s+المفتوحة|open\s+tasks?).*?(?:عن|فوق|اكتر\s+من|اكثر\s+من|أكثر\s+من|تزيد\s+عن|تعدي)\s*([0-9٠-٩]+)/iu,
   );
@@ -4748,11 +4765,21 @@ function naturalAgentWorkArgs(message: string): Record<string, unknown> {
       }
     : { frequency: "interval", minutes: 60 };
   return {
-    kind: internalTaskMonitor ? "monitor" : recurring ? "recurring_task" : "monitor",
-    title: compact.slice(0, 200),
+    kind: githubMonitor || internalTaskMonitor ? "monitor" : recurring ? "recurring_task" : "monitor",
+    title: githubMonitor ? `متابعة GitHub ${githubRepositoryMatch?.[1]}` : compact.slice(0, 200),
     description: compact.slice(0, 2000),
-    sourceType: internalTaskMonitor ? "internal_records" : "user_defined",
-    condition: internalTaskMonitor
+    sourceType: githubMonitor ? "github_repository" : internalTaskMonitor ? "internal_records" : "user_defined",
+    condition: githubMonitor
+      ? {
+          provider: "github",
+          entity: "repository",
+          metric: "open_issues_count",
+          owner: githubRepositoryMatch?.[1]?.split("/")[0],
+          repository: githubRepositoryMatch?.[1]?.split("/")[1],
+          operator: "gt",
+          threshold: githubThreshold,
+        }
+      : internalTaskMonitor
       ? {
           entity: "tasks",
           metric: "open_task_count",
@@ -4766,7 +4793,7 @@ function naturalAgentWorkArgs(message: string): Record<string, unknown> {
     action: {
       type: "notify",
       destination: "main_and_mobile",
-      include: ["what_changed", "current_value", "condition", "checked_at"],
+      include: ["what_changed", "current_value", "condition", "checked_at", "evidence"],
       deepLink: "work_detail",
     },
     schedule,

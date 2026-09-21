@@ -152,6 +152,24 @@ export function displayForOperation(
       return { title: "إضافة شخص", details: [stringArg("name") ?? "شخص جديد"] };
     case "create_project":
       return { title: "إضافة مشروع", details: [stringArg("name") ?? "مشروع جديد"] };
+    case "create_agent_work": {
+      const workTitle = stringArg("title") ?? "متابعة جديدة";
+      const sourceType = stringArg("sourceType");
+      const condition = args.condition && typeof args.condition === "object" && !Array.isArray(args.condition)
+        ? args.condition as Record<string, unknown>
+        : {};
+      const repository = typeof condition.owner === "string" && typeof condition.repository === "string"
+        ? `${condition.owner}/${condition.repository}`
+        : undefined;
+      return {
+        title: "إضافة متابعة للوكيل",
+        details: [
+          workTitle,
+          ...(sourceType === "github_repository" && repository ? [`مصدر GitHub: ${repository}`] : []),
+          ...(stringArg("description") ? [`التفاصيل: ${stringArg("description")}`] : []),
+        ],
+      };
+    }
     case "delete_person":
       return { title: "حذف شخص", details: [stringArg("personName") ?? "السجل المحدد"] };
     case "delete_project":

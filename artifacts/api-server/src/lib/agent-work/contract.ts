@@ -107,6 +107,7 @@ export function redactEvidenceSnapshot(
 export function compareReadOnlyEvidence(input: {
   previousHash?: string | null;
   currentHash?: string | null;
+  previousConditionMet?: boolean | null;
   conditionMet: boolean;
   comparisonKnown: boolean;
 }): EvidenceComparison {
@@ -126,6 +127,25 @@ export function compareReadOnlyEvidence(input: {
       previousHash,
       currentHash,
       reason: "source_unchanged",
+    };
+  }
+  if (
+    typeof input.previousConditionMet === "boolean"
+    && input.previousConditionMet === input.conditionMet
+  ) {
+    return {
+      state: "unchanged",
+      previousHash,
+      currentHash,
+      reason: input.conditionMet ? "condition_still_met" : "condition_still_clear",
+    };
+  }
+  if (input.previousConditionMet === true && input.conditionMet === false) {
+    return {
+      state: "unchanged",
+      previousHash,
+      currentHash,
+      reason: "condition_cleared",
     };
   }
   return {

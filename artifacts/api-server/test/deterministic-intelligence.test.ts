@@ -367,6 +367,46 @@ test("Phase2 turns a natural task monitor into an approval-backed Work", async (
   assert.equal(args?.action?.deepLink, "work_detail");
 });
 
+test("Phase2 turns a natural GitHub monitor into the existing approval path", async () => {
+  class UnreachableGateway implements ModelGateway {
+    readonly provider = "gemini" as const;
+    readonly modelName = "unreachable";
+
+    async generate(): Promise<never> {
+      throw new Error("provider should not be called");
+    }
+  }
+
+  const runtime = new Phase2AgentRuntime(new UnreachableGateway());
+  const result = await runtime.run({
+    tenantId: `github-work-${process.pid}-${Date.now()}`,
+    userId: "github-work-user",
+  }, {
+    message: "تابعلي GitHub octocat/Hello-World ولو الـissues المفتوحة زادت عن ٥ بلغني كل يوم",
+    conversationId: `github-work-conversation-${Date.now()}`,
+  });
+
+  assert.equal(result.response?.kind, "clarification");
+  assert.equal(result.action?.type, "approval_required");
+  assert.equal(result.action?.toolName, "create_agent_work");
+  const args = result.action?.args as {
+    sourceType?: string;
+    condition?: Record<string, unknown>;
+    schedule?: Record<string, unknown>;
+  } | undefined;
+  assert.equal(args?.sourceType, "github_repository");
+  assert.deepEqual(args?.condition, {
+    provider: "github",
+    entity: "repository",
+    metric: "open_issues_count",
+    owner: "octocat",
+    repository: "Hello-World",
+    operator: "gt",
+    threshold: 5,
+  });
+  assert.equal(args?.schedule?.frequency, "daily");
+});
+
 test("Phase2 prepares an unlinked expense when the user gives an amount and purpose", async () => {
   class UnreachableGateway implements ModelGateway {
     readonly provider = "gemini" as const;

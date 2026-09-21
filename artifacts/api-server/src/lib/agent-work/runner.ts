@@ -2,7 +2,7 @@ import { featureFlags } from "../feature-flags";
 import { agentWorkAdapters } from "./factory";
 import { AgentWorkRuntime } from "./runtime";
 import { compareReadOnlyEvidence } from "./contract";
-import { readInternalRecordsSource } from "./sources";
+import { readGitHubRepositorySource, readInternalRecordsSource } from "./sources";
 import type {
   AgentWorkAdapters,
   AgentWorkRecord,
@@ -187,9 +187,13 @@ async function planExecution(
     const previousHash = priorEvidence
       .map((item) => item.snapshot.sourceHash)
       .find((value): value is string => typeof value === "string") ?? null;
+    const previousConditionMet = priorEvidence
+      .map((item) => item.snapshot.conditionMet)
+      .find((value): value is boolean => typeof value === "boolean") ?? null;
     const comparison = compareReadOnlyEvidence({
       previousHash,
       currentHash: current.sourceHash,
+      previousConditionMet,
       conditionMet: current.conditionMet,
       comparisonKnown: current.comparisonKnown,
     });
@@ -254,6 +258,127 @@ async function planExecution(
         sourceHash: current.sourceHash,
         conditionMet: current.conditionMet,
         comparisonKnown: current.comparisonKnown,
+      },
+    };
+  }
+
+  if (source.type === "github_repository") {
+    const sourceRead = await readGitHubRepositorySource(identity, work, { now });
+    const schedule = asRecord(work.schedule);
+    const nextRunAt = nextScheduledAt(now, schedule);
+    const recurring = nextRunAt !== null;
+    if (!sourceRead.ok) {
+      const checkedAt = new Intl.DateTimeFormat("ar-EG", {
+        dateStyle: "medium",
+        timeStyle: "short",
+        timeZone: "Africa/Cairo",
+      }).format(now);
+      return {
+        plan: {
+          status: "failed",
+          workStatus: "active",
+          nextRunAt,
+          verification: {
+            kind: "external_read_failed",
+            source: "github_repository",
+            reason: sourceRead.reason,
+            safe: false,
+          },
+          error: `GITHUB_MONITOR_${sourceRead.reason.toUpperCase()}`,
+          notificationTitle: `تعذر فحص ${title}`,
+          notificationBody: `لم أرسل تنبيهًا لأن فحص GitHub لم يكتمل بشكل موثوق. وقت المحاولة: ${checkedAt}.`,
+          notify: false,
+        },
+        evidence: {
+          sourceType: "github_repository",
+          status: "failed",
+          reason: sourceRead.reason,
+          checkedAt: now.toISOString(),
+        },
+      };
+    }
+    const current = sourceRead.snapshot;
+    const priorEvidence = await adapters.storage.listEvidence(identity, work.id, 10);
+    const previous = priorEvidence.find((item) =>
+      typeof item.snapshot.sourceHash === "string"
+      && typeof item.snapshot.conditionMet === "boolean");
+    const comparison = compareReadOnlyEvidence({
+      previousHash: typeof previous?.snapshot.sourceHash === "string" ? previous.snapshot.sourceHash : null,
+      currentHash: current.sourceHash,
+      previousConditionMet: typeof previous?.snapshot.conditionMet === "boolean" ? previous.snapshot.conditionMet : null,
+      conditionMet: current.conditionMet,
+      comparisonKnown: current.comparisonKnown,
+    });
+    const firstBaseline = previous === undefined && !current.conditionMet;
+    const status = firstBaseline ? "unchanged" : comparison.state;
+    const operatorLabel = current.operator === "gt"
+      ? "أكبر من"
+      : current.operator === "gte"
+        ? "أكبر من أو يساوي"
+        : current.operator === "eq"
+          ? "يساوي"
+          : current.operator === "lt"
+            ? "أقل من"
+            : "أقل من أو يساوي";
+    const checkedAt = new Intl.DateTimeFormat("ar-EG", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "Africa/Cairo",
+    }).format(now);
+    const conditionText = `عدد العناصر المفتوحة في ${current.repository} ${operatorLabel} ${current.threshold}`;
+    const currentValueText = `القيمة الحالية ${current.value}`;
+    const notificationBody = status === "verified"
+      ? `تحقق الشرط الذي طلبته في ${current.repository}: ${currentValueText}، والشرط هو ${conditionText}. تم التحقق ${checkedAt}.`
+      : status === "uncertain"
+        ? `تعذر التحقق من ${current.repository} بشكل موثوق. لم يتم إرسال تنبيه. تم الفحص ${checkedAt}.`
+        : `لم يتغير شرط متابعة ${current.repository}: ${currentValueText}، والشرط هو ${conditionText}. آخر فحص ${checkedAt}.`;
+    return {
+      plan: {
+        status,
+        workStatus: recurring ? "active" : "active",
+        nextRunAt,
+        verification: {
+          kind: "read_only_monitor",
+          source: "github_repository",
+          repository: current.repository,
+          ...comparison,
+          ...(firstBaseline ? { reason: "baseline_established" } : {}),
+          conditionMet: current.conditionMet,
+          comparisonKnown: current.comparisonKnown,
+          checkedAt: current.fetchedAt,
+        },
+        notificationTitle: status === "verified"
+          ? `تحقق شرط GitHub: ${current.repository}`
+          : `متابعة GitHub: ${current.repository}`,
+        notificationBody,
+        notificationData: {
+          source: current.sourceType,
+          provider: current.provider,
+          repository: current.repository,
+          value: current.value,
+          threshold: current.threshold,
+          operator: current.operator,
+          checkedAt: current.fetchedAt,
+          deepLink: `/main?workId=${encodeURIComponent(work.id)}`,
+        },
+        notify: status === "verified",
+      },
+      evidence: {
+        sourceType: current.sourceType,
+        provider: current.provider,
+        repository: current.repository,
+        repositoryId: current.repositoryId,
+        metric: current.metric,
+        operator: current.operator,
+        threshold: current.threshold,
+        value: current.value,
+        updatedAt: current.updatedAt,
+        responseDate: current.responseDate,
+        sourceHash: current.sourceHash,
+        conditionMet: current.conditionMet,
+        comparisonKnown: current.comparisonKnown,
+        checkedAt: current.fetchedAt,
+        reason: current.reason,
       },
     };
   }
@@ -348,6 +473,20 @@ export class AgentWorkRunner {
           nextRunAt: plan.nextRunAt,
           workStatus: plan.workStatus,
         });
+        if (plan.status === "failed") {
+          await this.adapters.storage.addEvent({
+            identity,
+            workId: work.id,
+            runId: run.id,
+            eventType: "run_failed",
+            actorType: "system",
+            summary: "فشل الفحص الخارجي، ولم يتم اعتبار الشرط متحققًا.",
+            metadata: { status: plan.status, verification: plan.verification, error: plan.error ?? null },
+            dedupeKey: `agent-work-failed:${run.id}`,
+          });
+          result.failed += 1;
+          continue;
+        }
         if (!plan.notify) {
           await this.adapters.storage.addEvent({
             identity,

@@ -50,6 +50,19 @@ function conditionLabel(condition: Record<string, unknown>) {
       : condition.operator === 'eq' ? 'يساوي' : 'أكبر من';
     return `عدد المهام المفتوحة ${operator} ${condition.threshold}`;
   }
+  if (
+    condition.provider === 'github'
+    && condition.entity === 'repository'
+    && condition.metric === 'open_issues_count'
+    && typeof condition.owner === 'string'
+    && typeof condition.repository === 'string'
+    && typeof condition.threshold === 'number'
+  ) {
+    const operator = condition.operator === 'gte' ? 'أكبر من أو يساوي'
+      : condition.operator === 'eq' ? 'يساوي'
+        : 'أكبر من';
+    return `العناصر المفتوحة في GitHub ${condition.owner}/${condition.repository} ${operator} ${condition.threshold} (حسب GitHub API)`;
+  }
   if (typeof condition.request === 'string') return condition.request;
   return 'شرط متابعة يحتاج مراجعة.';
 }
@@ -57,7 +70,11 @@ function conditionLabel(condition: Record<string, unknown>) {
 function evidenceLabel(snapshot: Record<string, unknown>) {
   const value = typeof snapshot.value === 'number' ? `القيمة الحالية: ${snapshot.value}` : 'تم الفحص بدون قيمة قابلة للعرض.';
   const checkedAt = typeof snapshot.checkedAt === 'string' ? `تم التحقق ${formatDate(snapshot.checkedAt)}` : '';
-  return [value, checkedAt].filter(Boolean).join(' — ');
+  const source = typeof snapshot.repository === 'string' ? `المصدر: GitHub/${snapshot.repository}` : '';
+  const reason = typeof snapshot.reason === 'string' && snapshot.reason === 'github_api_read_verified'
+    ? 'تم التحقق من المصدر الرسمي'
+    : '';
+  return [source, value, reason, checkedAt].filter(Boolean).join(' — ');
 }
 
 function statusStyle(status: string) {

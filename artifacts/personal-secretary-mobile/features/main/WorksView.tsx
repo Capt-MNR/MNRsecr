@@ -83,6 +83,23 @@ function workConditionLabel(condition: Record<string, unknown>, language: AppLan
         : localized(language, 'أكبر من', 'more than');
     return localized(language, `عدد المهام المفتوحة ${operator} ${condition.threshold}`, `Open tasks ${operator} ${condition.threshold}`);
   }
+  if (
+    condition.provider === 'github'
+    && condition.entity === 'repository'
+    && condition.metric === 'open_issues_count'
+    && typeof condition.owner === 'string'
+    && typeof condition.repository === 'string'
+    && typeof condition.threshold === 'number'
+  ) {
+    const operator = condition.operator === 'gte' ? localized(language, 'أكبر من أو يساوي', 'at least')
+      : condition.operator === 'eq' ? localized(language, 'يساوي', 'equals')
+        : localized(language, 'أكبر من', 'more than');
+    return localized(
+      language,
+      `العناصر المفتوحة في GitHub ${condition.owner}/${condition.repository} ${operator} ${condition.threshold}`,
+      `GitHub ${condition.owner}/${condition.repository} open items ${operator} ${condition.threshold}`,
+    );
+  }
   if (typeof condition.request === 'string') return condition.request;
   return localized(language, 'يتابع هذا العمل شرطًا يحتاج مراجعتك.', 'This work follows a condition that needs review.');
 }
@@ -90,7 +107,8 @@ function workConditionLabel(condition: Record<string, unknown>, language: AppLan
 function evidenceValueLabel(snapshot: Record<string, unknown> | null | undefined, language: AppLanguage): string {
   if (!snapshot) return localized(language, 'لا توجد نتيجة بعد', 'No result yet');
   if (typeof snapshot.value === 'number') {
-    return localized(language, `القيمة الحالية: ${snapshot.value}`, `Current value: ${snapshot.value}`);
+    const repository = typeof snapshot.repository === 'string' ? ` — GitHub/${snapshot.repository}` : '';
+    return localized(language, `القيمة الحالية: ${snapshot.value}${repository}`, `Current value: ${snapshot.value}${repository}`);
   }
   return localized(language, 'تم الفحص بدون قيمة قابلة للعرض.', 'Checked without a displayable value.');
 }
