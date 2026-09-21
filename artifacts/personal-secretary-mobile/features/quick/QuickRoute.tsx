@@ -40,6 +40,7 @@ import { ReceiptReviewCard } from '../receipt-review';
 import {
   addOrigin,
   approvalFromAction,
+  approvalsFromAction,
   localized,
   messagesFromConversation,
   objectValue,
@@ -70,6 +71,7 @@ export default function QuickRoute() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const inputRef = useRef<TextInput>(null);
+  const retryKeyRef = useRef<{ message: string; key: string } | null>(null);
   const [messages, setMessages] = useState<LocalMessage[]>([starterMessage]);
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [draft, setDraft] = useState('');
@@ -163,6 +165,10 @@ export default function QuickRoute() {
     setDraft('');
     const submittedInputId = inputReview?.inputId ?? null;
     const submittedInputAttachment = inputReview?.localAttachment ?? null;
+    const idempotencyKey = retryKeyRef.current?.message === message
+      ? retryKeyRef.current.key
+      : `mobile-turn-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    retryKeyRef.current = { message, key: idempotencyKey };
     setInputReview(null);
     setLocalError(null);
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -181,7 +187,9 @@ export default function QuickRoute() {
         channel: 'quick',
         context: null,
         inputId: submittedInputId,
+        idempotencyKey,
       });
+      if (retryKeyRef.current?.key === idempotencyKey) retryKeyRef.current = null;
       setConversationId(result.conversationId);
       await queryClient.invalidateQueries({ queryKey: ['secretary-chat-conversations'] });
       const linked = recordLinkFromAction(result.action);
@@ -191,7 +199,12 @@ export default function QuickRoute() {
         text: result.assistantMessage || result.response?.message || 'تم استلام طلبك.',
         createdAt: new Date().toISOString(),
         ...(result.turnId ? { turnId: result.turnId } : {}),
-        approval: approvalFromAction(result.action),
+        ...(() => {
+          const approvals = approvalsFromAction(result.action);
+          return approvals.length > 0
+            ? { approval: approvals[0], ...(approvals.length > 1 ? { approvals } : {}) }
+            : {};
+        })(),
         ...(linked ? { recordLink: addOrigin(linked, result.conversationId, typeof objectValue(result.action).operationId === 'string' ? objectValue(result.action).operationId as string : null, result.turnId) } : {}),
       });
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -210,9 +223,19 @@ export default function QuickRoute() {
         ? await secretaryChat.approveOperation(approval.operationId)
         : await secretaryChat.rejectOperation(approval.operationId);
       const linked = recordLinkFromAction(response.action);
-      setMessages((current) => current.map((message) => message.approval?.operationId === approval.operationId
-        ? { ...message, approval: { ...approval, status: response.status as ApprovalStatus }, ...(linked ? { recordLink: addOrigin(linked, response.conversationId, response.operationId, response.turnId) } : {}) }
-        : message));
+      setMessages((current) => current.map((message) => {
+        const approvals = message.approvals ?? (message.approval ? [message.approval] : []);
+        if (!approvals.some((item) => item.operationId === approval.operationId)) return message;
+        const updatedApprovals = approvals.map((item) => item.operationId === approval.operationId
+          ? { ...item, status: response.status as ApprovalStatus }
+          : item);
+        return {
+          ...message,
+          approval: updatedApprovals[0],
+          ...(updatedApprovals.length > 1 ? { approvals: updatedApprovals } : {}),
+          ...(linked ? { recordLink: addOrigin(linked, response.conversationId, response.operationId, response.turnId) } : {}),
+        };
+      }));
       setConversationId(response.conversationId);
       await queryClient.invalidateQueries({ queryKey: ['secretary-chat-conversations'] });
       if (response.assistantMessage) appendMessage({ id: `approval-${Date.now()}`, role: 'assistant', text: response.assistantMessage, createdAt: new Date().toISOString(), ...(linked ? { recordLink: addOrigin(linked, response.conversationId, response.operationId, response.turnId) } : {}) });

@@ -79,6 +79,7 @@ import {
   parseSemanticRequest,
   validateDeterministicPayload,
   isProductionDeterministicIntent,
+  isExplicitCancellationRequest,
   type DeterministicRequestMetrics,
   type DeterministicDecision,
   type SemanticParse,
@@ -340,6 +341,7 @@ export type GatewayCallContext = {
   providerFallback?: boolean;
   currentUserMessage?: string;
   metrics?: GatewayRequestMetrics;
+  deadlineAt?: number;
 };
 
 export type GatewayRequestMetrics = {
@@ -578,6 +580,7 @@ const MAX_TOOL_CALLS = 8;
 const MAX_LOGICAL_LLM_CALLS = 4;
 const MAX_PROVIDER_HTTP_ATTEMPTS = 6;
 const MAX_GROQ_HTTP_ATTEMPTS = 1;
+const MODEL_REQUEST_DEADLINE_MS = 45_000;
 const MAX_CIRCUIT_COOLDOWN_MS = 15 * 60_000;
 const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.6-flash";
 const GEMINI_FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL ?? "gemini-3-flash-preview";
@@ -599,6 +602,30 @@ const MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions";
 const COHERE_MODEL = process.env.COHERE_MODEL ?? "command-r-08-2024";
 const COHERE_API_URL = "https://api.cohere.com/v2/chat";
 const DEFAULT_TIMEZONE = "Africa/Cairo";
+
+function timeoutForDeadline(deadlineAt: number | undefined, maximumMs: number): number {
+  if (deadlineAt === undefined) return maximumMs;
+  const remainingMs = deadlineAt - Date.now();
+  if (remainingMs <= 0) {
+    throw new SecretaryError("The model request deadline was exceeded.", {
+      status: 504,
+      category: "provider_unavailable",
+      code: "MODEL_REQUEST_DEADLINE_EXCEEDED",
+      retryable: false,
+    });
+  }
+  return Math.min(maximumMs, remainingMs);
+}
+
+function deadlineExceeded(provider?: ProviderName): SecretaryError {
+  return new SecretaryError("The model request deadline was exceeded.", {
+    status: 504,
+    category: "provider_unavailable",
+    code: "MODEL_REQUEST_DEADLINE_EXCEEDED",
+    retryable: false,
+    ...(provider ? { provider } : {}),
+  });
+}
 const WRITE_TOOLS = new Set([
   "create_person",
   "create_person_and_link_person_to_project",
@@ -645,6 +672,10 @@ function normalize(value: string): string {
     .replace(/[\u064B-\u065F]/g, "")
     .replace(/\s+/g, " ")
     .toLocaleLowerCase("ar");
+}
+
+function escapeLikePattern(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
 }
 
 function identityWhere(identity: Identity, table: { tenantId: any; ownerUserId: any }) {
@@ -1158,7 +1189,7 @@ function budgetMessages(messages: ConversationMessage[]): ConversationMessage[] 
 }
 
 async function findPeople(identity: Identity, name: string): Promise<Person[]> {
-  const exact = normalize(name);
+  const exact = escapeLikePattern(normalize(name));
   const rows = await db
     .select()
     .from(peopleTable)
@@ -1174,7 +1205,7 @@ async function findPeople(identity: Identity, name: string): Promise<Person[]> {
 }
 
 async function findProjects(identity: Identity, name: string): Promise<Project[]> {
-  const exact = normalize(name);
+  const exact = escapeLikePattern(normalize(name));
   return db
     .select()
     .from(projectsTable)
@@ -1710,7 +1741,8 @@ async function executeTool(
     requestId: options.requestId,
     tool: name,
     toolCallId: options.callId,
-    arguments: jsonSafe(args),
+    argumentKeys: Object.keys(args).sort(),
+    argumentCount: Object.keys(args).length,
     dryRun: options.dryRun ?? false,
   }, "agent tool selected");
 
@@ -3410,20 +3442,24 @@ export class GeminiModelGateway implements ModelGateway {
     toolDefinitions: unknown[],
     cacheKey: string,
     requestId: string,
+    deadlineAt?: number,
   ): Promise<string | null> {
     const existingFlight = this.cacheCreationFlights.get(cacheKey);
     if (existingFlight) return existingFlight;
 
     const creation = (async () => {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10_000);
+      const timeout = setTimeout(() => controller.abort(), timeoutForDeadline(deadlineAt, 10_000));
       const startedAt = Date.now();
       try {
         const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/cachedContents?key=${encodeURIComponent(this.apiKey ?? "")}`,
+          "https://generativelanguage.googleapis.com/v1beta/cachedContents",
           {
             method: "POST",
-            headers: { "content-type": "application/json" },
+            headers: {
+              "content-type": "application/json",
+              "x-goog-api-key": this.apiKey ?? "",
+            },
             body: JSON.stringify({
               model: model.startsWith("models/") ? model : `models/${model}`,
               systemInstruction: { parts: [{ text: systemText }] },
@@ -3494,6 +3530,7 @@ export class GeminiModelGateway implements ModelGateway {
     finalResponseOnly: boolean,
     requestId: string,
     metrics?: GatewayRequestMetrics,
+    deadlineAt?: number,
   ): Promise<{ name?: string; cacheKey: string; hit: boolean }> {
     const cacheKey = this.cachedContentKey(model, systemText, toolDefinitions, finalResponseOnly);
     const cached = this.cachedContents.get(cacheKey);
@@ -3512,6 +3549,7 @@ export class GeminiModelGateway implements ModelGateway {
       toolDefinitions,
       cacheKey,
       requestId,
+      deadlineAt,
     );
     return { name: name ?? undefined, cacheKey, hit: false };
   }
@@ -3529,7 +3567,7 @@ export class GeminiModelGateway implements ModelGateway {
     for (const [modelIndex, model] of models.entries()) {
       if (modelIndex > 0 && context.metrics) context.metrics.modelFallbackAttempts += 1;
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 25_000);
+      const timeout = setTimeout(() => controller.abort(), timeoutForDeadline(context.deadlineAt, 25_000));
       const startedAt = Date.now();
       let activeAttempt: LlmAttemptStart | undefined;
       try {
@@ -3544,6 +3582,7 @@ export class GeminiModelGateway implements ModelGateway {
               context.finalResponseOnly ?? false,
               context.requestId,
               context.metrics,
+              context.deadlineAt,
             )
           : { name: undefined, cacheKey: "", hit: false };
         let useCachedContent = Boolean(cache.name);
@@ -3596,10 +3635,13 @@ export class GeminiModelGateway implements ModelGateway {
           }, "agent llm call started");
 
           const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(this.apiKey)}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
             {
               method: "POST",
-              headers: { "content-type": "application/json" },
+              headers: {
+                "content-type": "application/json",
+                "x-goog-api-key": this.apiKey,
+              },
               body: requestBody,
               signal: controller.signal,
             },
@@ -3773,7 +3815,7 @@ export class GroqModelGateway implements ModelGateway {
         retry: attempt > 0,
       });
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 25_000);
+      const timeout = setTimeout(() => controller.abort(), timeoutForDeadline(context.deadlineAt, 25_000));
       const startedAt = Date.now();
       logger.info({
         requestId: context.requestId,
@@ -3942,7 +3984,7 @@ export class MistralModelGateway implements ModelGateway {
       fallback: Boolean(context.providerFallback),
     });
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 25_000);
+    const timeout = setTimeout(() => controller.abort(), timeoutForDeadline(context.deadlineAt, 25_000));
     const startedAt = Date.now();
     logger.info({
       requestId: context.requestId,
@@ -4203,6 +4245,9 @@ export class FailoverModelGateway implements ModelGateway {
     let primaryError = request?.primaryError;
 
     for (const [index, provider] of providersToTry.entries()) {
+      if (context.deadlineAt !== undefined && Date.now() >= context.deadlineAt) {
+        throw deadlineExceeded(provider);
+      }
       const gateway = this.gateways[provider];
       if (!gateway) continue;
       if (provider !== this.order[0] && !trace.fallbackOccurred) {
@@ -4235,6 +4280,9 @@ export class FailoverModelGateway implements ModelGateway {
         });
         return response;
       } catch (error) {
+        if (context.deadlineAt !== undefined && Date.now() >= context.deadlineAt) {
+          throw deadlineExceeded(provider);
+        }
         const classified = error instanceof SecretaryError
           ? error
           : providerExceptionError(provider, error);
@@ -4794,7 +4842,7 @@ export class Phase2AgentRuntime {
 
     const conversationId = input.conversationId || crypto.randomUUID();
     const conversationMemory = await loadConversationMemory(identity, conversationId);
-    if (!options.dryRun && /(?:غيرت\s+رأيي|غيرت\s+رايي|مش\s+عايز|لا\s+خلاص|تراجعت)/u.test(input.message)) {
+    if (!options.dryRun && isExplicitCancellationRequest(input.message)) {
       const rejected = await rejectPendingOperationForConversation(identity, conversationId);
       if (rejected) {
         const result: Phase2TurnResult = {
@@ -5532,6 +5580,7 @@ export class Phase2AgentRuntime {
                 finalResponseOnly: true,
                 currentUserMessage: input.message.trim(),
                 metrics,
+                deadlineAt: startedAt + MODEL_REQUEST_DEADLINE_MS,
               });
               const finalCall = finalization.toolCalls.find((call) => call.name === "final_response");
               if (finalCall) {
@@ -5608,6 +5657,7 @@ export class Phase2AgentRuntime {
             toolScope: activeToolScope,
             currentUserMessage: input.message.trim(),
             metrics,
+            deadlineAt: startedAt + MODEL_REQUEST_DEADLINE_MS,
           });
         } catch (error) {
           setDiagnosticDecision(diagnosticCall, {
@@ -5666,6 +5716,14 @@ export class Phase2AgentRuntime {
           return persistResult(finalResponseFromArgs(finalCall.args, toolHistory));
         }
 
+        const writeCallCount = response.toolCalls.filter((call) => WRITE_TOOLS.has(call.name)).length;
+        const pendingApprovals: Array<{
+          operationId: string;
+          status: unknown;
+          toolName: unknown;
+          display: { title: string; details: string[] };
+          args: unknown;
+        }> = [];
         for (const call of response.toolCalls) {
           if (call.name === "final_response") {
             continue;
@@ -5679,7 +5737,9 @@ export class Phase2AgentRuntime {
               callId: call.id,
               dryRun: options.dryRun,
               conversationId,
-              idempotencyKey: input.idempotencyKey,
+              idempotencyKey: writeCallCount > 1
+                ? `${input.idempotencyKey ?? requestId}:${call.id}`
+                : input.idempotencyKey,
               channel: input.channel,
             });
           } catch (error) {
@@ -5716,28 +5776,12 @@ export class Phase2AgentRuntime {
             const details = Array.isArray(display.details)
               ? display.details.filter((detail): detail is string => typeof detail === "string")
               : [];
-            setDiagnosticDecision(diagnosticCall, {
-              kind: "return_approval",
-              reason: "The write tool returned a pending approval operation.",
-              nextLogicalCallNumber: null,
-              nextCallKind: null,
-              nextScope: activeToolScope.name,
-            });
-            action = annotateApprovalAction({
-              type: "approval_required",
-              operationId: approval.operationId,
+            pendingApprovals.push({
+              operationId: String(approval.operationId),
               status: approval.status,
               toolName: approval.toolName,
               display: { title, details },
               args: approval.args,
-            }, input.channel);
-            return persistResult({
-              kind: "clarification",
-              message: approvalMessage(
-                action,
-                `قبل ما أنفذ ${title}${details.length > 0 ? ` (${details.join(" — ")})` : ""}، هل توافق؟`,
-                input.channel,
-              ),
             });
           }
           messages.push({
@@ -5745,6 +5789,35 @@ export class Phase2AgentRuntime {
             toolCallId: call.id,
             toolName: call.name,
             text: compactToolResultForPrompt(toolResult),
+          });
+        }
+        if (pendingApprovals.length > 0) {
+          const first = pendingApprovals[0];
+          setDiagnosticDecision(diagnosticCall, {
+            kind: "return_approval",
+            reason: `The response returned ${pendingApprovals.length} write operation(s), each pending independent approval.`,
+            nextLogicalCallNumber: null,
+            nextCallKind: null,
+            nextScope: activeToolScope.name,
+          });
+          action = annotateApprovalAction({
+            type: "approval_required",
+            operationId: first.operationId,
+            status: first.status,
+            toolName: first.toolName,
+            display: first.display,
+            args: first.args,
+            approvals: pendingApprovals,
+          }, input.channel);
+          return persistResult({
+            kind: "clarification",
+            message: pendingApprovals.length === 1
+              ? approvalMessage(
+                  action,
+                  `قبل ما أنفذ ${first.display.title}${first.display.details.length > 0 ? ` (${first.display.details.join(" — ")})` : ""}، هل توافق؟`,
+                  input.channel,
+                )
+              : `الطلب يحتوي على ${pendingApprovals.length} تغييرات. راجع كل موافقة على حدة قبل التنفيذ.`,
           });
         }
         if (toolCalls >= MAX_TOOL_CALLS) {
@@ -5876,7 +5949,7 @@ export class CohereModelGateway implements ModelGateway {
       fallback: Boolean(context.providerFallback),
     });
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 25_000);
+    const timeout = setTimeout(() => controller.abort(), timeoutForDeadline(context.deadlineAt, 25_000));
     const startedAt = Date.now();
     logger.info({
       requestId: context.requestId,

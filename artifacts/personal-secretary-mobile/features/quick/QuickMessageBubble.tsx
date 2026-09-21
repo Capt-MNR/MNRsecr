@@ -37,13 +37,7 @@ export function QuickMessageBubble({
   busyOperationId: string | null;
 }) {
   const isUser = message.role === 'user';
-  const approval = message.approval;
-  const approvalBusy = approval && busyOperationId === approval.operationId;
-  const isResolved = approval?.status === 'completed'
-    || approval?.status === 'rejected'
-    || approval?.status === 'expired'
-    || approval?.status === 'failed';
-  const canQuickApprove = approval?.status === 'pending' && approval.quickApprove === true;
+  const approvals = message.approvals ?? (message.approval ? [message.approval] : []);
 
   return (
     <View style={[styles.messageRow, isUser ? styles.userRow : styles.assistantRow]}>
@@ -65,8 +59,15 @@ export function QuickMessageBubble({
           {messageTime(message.createdAt)}
         </Text>
 
-        {approval && (
-          <View style={[styles.approvalCard, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+        {approvals.map((approval) => {
+          const approvalBusy = busyOperationId === approval.operationId;
+          const isResolved = approval.status === 'completed'
+            || approval.status === 'rejected'
+            || approval.status === 'expired'
+            || approval.status === 'failed';
+          const canQuickApprove = approval.status === 'pending' && approval.quickApprove === true;
+          return (
+          <View key={approval.operationId} style={[styles.approvalCard, { backgroundColor: colors.muted, borderColor: colors.border }]}>
             <View style={styles.approvalHeading}>
               <Feather name="shield" size={15} color={colors.primary} />
               <Text style={[styles.approvalTitle, { color: colors.foreground }]}>{approval.title}</Text>
@@ -140,7 +141,8 @@ export function QuickMessageBubble({
               </View>
             )}
           </View>
-        )}
+          );
+        })}
 
         {message.recordLink && (
           <Pressable

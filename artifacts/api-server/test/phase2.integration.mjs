@@ -79,7 +79,7 @@ async function sendTurn(message, conversationId, idempotencyKey = `${conversatio
   const response = await fetch(`${baseUrl}/turns`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ message, conversationId, idempotencyKey }),
+    body: JSON.stringify({ message, conversationId, idempotencyKey, channel: "main" }),
   });
   if (response.status !== 200) {
     const body = await response.text();
@@ -203,7 +203,7 @@ test("returns a provider-unavailable error instead of a connection error", async
   const response = await fetch(`${baseUrl}/turns`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ message: "اختبار مزود غير متاح" }),
+    body: JSON.stringify({ message: "اختبار مزود غير متاح", channel: "main" }),
   });
   assert.equal(response.status, 503);
   const payload = await response.json();

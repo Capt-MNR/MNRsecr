@@ -6,6 +6,7 @@ import {
   expensesTable,
   projectsTable,
   conversationMemoryTable,
+  secretaryOperationsTable,
 } from "@workspace/db";
 import {
   FailoverModelGateway,
@@ -656,6 +657,45 @@ test("a write tool creates approval without executing or falling back", async ()
   assert.equal(primary.calls.length, 1);
   assert.equal(fallback.calls.length, 0);
   assert.equal(expenses.length, 0);
+});
+
+test("multiple write tools remain separate pending approvals", async () => {
+  const testIdentity = identity("multiple-writes");
+  const primary = new ScriptedProvider("gemini", () => ({
+    text: "",
+    toolCalls: [
+      {
+        id: "expense-call",
+        name: "record_expense",
+        args: { amountMinor: 750000, description: "مصروف أول" },
+      },
+      {
+        id: "reminder-call",
+        name: "create_reminder",
+        args: {
+          text: "اتصل بمحمد",
+          dueAt: "2030-01-01T09:00:00.000Z",
+          timezone: "Africa/Cairo",
+        },
+      },
+    ],
+  }));
+  const result = await new Phase2AgentRuntime(
+    new FailoverModelGateway({ gemini: primary }, ["gemini"]),
+  ).run(testIdentity, {
+    message: "سجل مصروفًا واحفظ تذكيرًا",
+    requestId: "multiple-writes-request",
+  });
+
+  const operations = await db.select().from(secretaryOperationsTable).where(and(
+    eq(secretaryOperationsTable.tenantId, testIdentity.tenantId),
+    eq(secretaryOperationsTable.ownerUserId, testIdentity.userId),
+  ));
+  assert.equal(result.action?.type, "approval_required");
+  assert.equal(Array.isArray(result.action?.approvals), true);
+  assert.equal((result.action?.approvals as unknown[]).length, 2);
+  assert.equal(new Set(operations.map((operation) => operation.id)).size, 2);
+  assert.deepEqual(operations.map((operation) => operation.status).sort(), ["pending", "pending"]);
 });
 
 test("dryRun prevents writes even when failover happens", async () => {

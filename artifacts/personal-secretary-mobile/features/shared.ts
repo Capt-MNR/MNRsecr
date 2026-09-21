@@ -42,6 +42,7 @@ export type LocalMessage = {
   inputId?: string | null;
   inputAttachment?: LocalInputAttachment | null;
   approval?: Approval;
+  approvals?: Approval[];
   recordLink?: MobileRecordRow;
 };
 export type MainSection = 'office' | 'records' | 'people' | 'projects' | 'financial' | 'tasks' | 'reminders' | 'activity';

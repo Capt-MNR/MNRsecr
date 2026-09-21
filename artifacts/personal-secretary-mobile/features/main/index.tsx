@@ -56,6 +56,7 @@ export type LocalMessage = {
   inputId?: string | null;
   inputAttachment?: LocalInputAttachment | null;
   approval?: Approval;
+  approvals?: Approval[];
   recordLink?: MobileRecordRow;
 };
 
@@ -389,6 +390,17 @@ export function approvalFromAction(action: TurnResponse['action']): Approval | u
   };
 }
 
+export function approvalsFromAction(action: TurnResponse['action']): Approval[] {
+  const value = action && typeof action === 'object' ? action as Record<string, unknown> : null;
+  if (!value || !['approval_required', 'pending_confirmation'].includes(String(value.type))) return [];
+  const rawApprovals = Array.isArray(value.approvals) ? value.approvals : [value];
+  return rawApprovals.flatMap((raw) => {
+    const item = raw && typeof raw === 'object' ? raw as Record<string, unknown> : value;
+    const merged = { ...value, ...item };
+    return approvalFromAction(merged as TurnResponse['action']) ?? [];
+  });
+}
+
 export function recordLinkFromAction(action: TurnResponse['action']): MobileRecordRow | undefined {
   const value = objectValue(action);
   const type = stringValue(value.type, '');
@@ -492,7 +504,12 @@ export function messagesFromConversation(detail: unknown, conversationId: string
         role: 'assistant',
         text: turn.assistantMessage,
         createdAt,
-        approval: action ? approvalFromAction(action) : undefined,
+        ...(action ? (() => {
+          const approvals = approvalsFromAction(action as TurnResponse['action']);
+          return approvals.length > 0
+            ? { approval: approvals[0], ...(approvals.length > 1 ? { approvals } : {}) }
+            : {};
+        })() : {}),
         ...(linkedRecord ? { recordLink: linkedRecord } : {}),
       });
     }

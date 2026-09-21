@@ -39,6 +39,7 @@ export type SecretaryChatTurnInput = {
   context?: SecretaryChatContext | null;
   peer?: SecretaryChatPeer | null;
   inputId?: string | null;
+  idempotencyKey?: string | null;
 };
 
 export type SecretaryApprovalArgs = Record<string, unknown>;
@@ -67,6 +68,7 @@ const apiTransport: SecretaryChatTransport = {
     context: input.context ?? null,
     peer: input.peer ?? null,
     inputId: input.inputId ?? null,
+    idempotencyKey: input.idempotencyKey ?? null,
   }),
   listConversations: (params) => listConversations(params),
   loadConversation: (conversationId) => getConversation(conversationId),

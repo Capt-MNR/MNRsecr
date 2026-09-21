@@ -46,3 +46,4 @@
 - [Brain evaluation baseline](brain-evaluation-baseline.md) — separate deterministic envelope comparisons from blocked provider, operation, verification, and proactive scenarios.
 - [Brain evaluation provider routing](brain-evaluation-provider-routing.md) — provider fixtures must bypass deterministic and Second Brain short-circuits before measuring failover or planning.
 - [Provider planning baselines](provider-planning-baseline.md) — paired real-provider runs must label rate-limited branches NOT_MEASURED and separate them from planning quality.
+- [HTTP integration provider fixture](api-integration-provider-fixture.md) — API integration tests need an explicit scripted/configured provider; development mode currently maps HTTP turns to provider-unavailable.

@@ -231,8 +231,12 @@ export function parseArabicAmount(value: string): ParsedAmount | null {
       "عشره الاف": 10000,
       "عشرة الاف": 10000,
     };
-    const matched = Object.entries(wordAmounts).find(([key]) =>
-      new RegExp(`(?:^|\\s)${key.replace(/\s+/g, "\\\\s+")}(?=\\s|$)`, "u").test(normalized));
+    const normalizedWords = normalized.split(/\s+/u);
+    const matched = Object.entries(wordAmounts).find(([key]) => {
+      const keyWords = key.split(/\s+/u);
+      return normalizedWords.some((_, index) =>
+        keyWords.every((word, offset) => normalizedWords[index + offset] === word));
+    });
     if (matched) {
       raw = matched[0];
       amount = matched[1];
@@ -240,7 +244,7 @@ export function parseArabicAmount(value: string): ParsedAmount | null {
   }
 
   if (amount === null || !Number.isFinite(amount) || amount <= 0) return null;
-  const thousand = /(?:الف|آلاف|الاف)\b/u.test(normalized) && numeric
+  const thousand = /(?:^|\s)(?:الف|آلاف|الاف)(?=\s|$)/u.test(normalized) && numeric
     ? amount * 1000
     : amount;
   const amountMinor = Math.round(thousand * 100);
@@ -355,7 +359,12 @@ function extractEntityMentions(message: string): EntityMention[] {
 }
 
 function hasNegativeWriteLanguage(value: string): boolean {
-  return /(?:^|\s)(?:ما|مش|مو|لا|من\s+غير)\s+(?:\S+\s+){0,3}(?:سجل\p{L}*|تسجل\p{L}*|دفعت\p{L}*|دفع\p{L}*|صرف\p{L}*|اديت\p{L}*|اعطيت\p{L}*|عطيت\p{L}*|حولت\p{L}*|سددت\p{L}*)/iu.test(value);
+  return /(?:^|\s)(?:مدفعتش|مش\s+عايز(?:\s+\S+){0,3}\s+(?:ا?سجل\p{L}*|ا?دفع\p{L}*|ا?صرف\p{L}*)|(?:ما|لا|مش|مو|من\s+غير)(?:\s+\S+){0,3}\s+(?:سجل\p{L}*|تسجل\p{L}*|دفعتش|دفعت\p{L}*|دفع\p{L}*|تدفع\p{L}*|صرف\p{L}*|تصرف\p{L}*|اديت\p{L}*|اعطيت\p{L}*|عطيت\p{L}*|حولت\p{L}*|سددت\p{L}*))/iu.test(value);
+}
+
+export function isExplicitCancellationRequest(value: string): boolean {
+  const normalized = canonicalizeArabicText(value);
+  return /(?:^|\s)(?:غيرت\s+رايي|خلاص\s+الغي\s+(?:ال)?عمليه|مش\s+عايز\s+(?:ال)?عمليه(?:\s+دي)?|لا\s+خلاص)(?:\s|$)/u.test(normalized);
 }
 
 export function parseSemanticRequest(message: string): SemanticParse {

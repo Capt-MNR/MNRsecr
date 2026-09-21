@@ -8,10 +8,11 @@ import {
   parseArabicAmount,
   parseArabicDateTime,
   parseSemanticRequest,
+  isExplicitCancellationRequest,
   validateDeterministicPayload,
 } from "../src/lib/deterministic-intelligence.ts";
 import { buildPatternInsights } from "../src/lib/experimental-pattern-insights.ts";
-import { Phase2AgentRuntime, type ModelGateway } from "../src/lib/phase2.ts";
+import { FailoverModelGateway, Phase2AgentRuntime, type ModelGateway } from "../src/lib/phase2.ts";
 import type { Identity } from "../src/lib/secretary.ts";
 
 test("Arabic normalization handles spelling, punctuation, and Arabic digits", () => {
@@ -27,6 +28,66 @@ test("amount parsing preserves grouped thousands and minor units", () => {
     confidence: 0.99,
   });
   assert.equal(parseArabicAmount("دفعت 7.5 دولار")?.amountMinor, 750);
+  for (const text of [
+    "دفعت 5 الاف جنيه",
+    "دفعت 5 آلاف جنيه",
+    "دفعت ٥ آلاف جنيه",
+    "دفعت ٥٠٠٠ جنيه",
+    "دفعت خمسة آلاف جنيه",
+  ]) {
+    assert.equal(parseArabicAmount(text)?.amountMinor, 500_000, text);
+  }
+});
+
+test("expense negation is non-mutating while positive expense language remains writable", () => {
+  for (const text of [
+    "مدفعتش ٣٠٠",
+    "مش عايز اسجل ٥٠٠",
+    "ما تسجلش ٥٠٠",
+    "لا تسجل ٥٠٠",
+    "مش عايز أسجل ٥٠٠",
+  ]) {
+    const parsed = parseSemanticRequest(text);
+    assert.notEqual(parsed.intent, "record_expense", text);
+    assert.notEqual(decideDeterministically(parsed).kind, "deterministic", text);
+  }
+  assert.equal(parseSemanticRequest("دفعت ٥٠٠ جنيه").intent, "record_expense");
+});
+
+test("cancellation matching requires an explicit operation cancellation phrase", () => {
+  for (const text of ["خلاص الغي العملية", "غيرت رأيي", "مش عايز العملية دي"]) {
+    assert.equal(isExplicitCancellationRequest(text), true, text);
+  }
+  for (const text of ["مش عايز أنسى أدفع الإيجار", "مش عايز أنسى أدفع لمحمد بكرة"]) {
+    assert.equal(isExplicitCancellationRequest(text), false, text);
+  }
+});
+
+test("provider failover refuses an already-expired total request deadline", async () => {
+  let calls = 0;
+  const gateway: ModelGateway = {
+    provider: "gemini",
+    modelName: "deadline-fixture",
+    async generate() {
+      calls += 1;
+      throw new Error("should not be called");
+    },
+  };
+  const failover = new FailoverModelGateway({ gemini: gateway }, ["gemini"]);
+  await assert.rejects(
+    failover.generate([], {
+      requestId: "deadline-fixture",
+      callNumber: 1,
+      toolCallsExecuted: 0,
+      deadlineAt: Date.now() - 1,
+    }),
+    (error: unknown) => (
+      error instanceof Error
+      && "code" in error
+      && error.code === "MODEL_REQUEST_DEADLINE_EXCEEDED"
+    ),
+  );
+  assert.equal(calls, 0);
 });
 
 test("semantic layer recognizes expense, totals, schedules, and reminders", () => {

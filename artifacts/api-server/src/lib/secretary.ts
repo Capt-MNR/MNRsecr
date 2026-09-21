@@ -53,7 +53,10 @@ import {
   secondBrainRecallMessage,
 } from "./second-brain";
 import { isBroadExpenseReportRequest } from "./expense-report";
-import { normalizeArabicClockHour } from "./deterministic-intelligence";
+import {
+  isExplicitCancellationRequest,
+  normalizeArabicClockHour,
+} from "./deterministic-intelligence";
 import type { SecretaryChatContext, SecretaryChatPeer, TurnInputChannel } from "@workspace/api-zod";
 
 export type Identity = {
@@ -1103,7 +1106,7 @@ export class DeterministicAgentRuntime {
     const turnId = input.requestId ?? randomUUID();
     const conversationMemory = await loadConversationMemory(identity, conversationId);
     const message = input.message.trim();
-    if (/(?:غيرت\s+رأيي|غيرت\s+رايي|مش\s+عايز|لا\s+خلاص|تراجعت)/u.test(message)) {
+    if (isExplicitCancellationRequest(message)) {
       const rejected = await rejectPendingOperationForConversation(identity, conversationId);
       if (rejected) {
         const result: TurnResult = {

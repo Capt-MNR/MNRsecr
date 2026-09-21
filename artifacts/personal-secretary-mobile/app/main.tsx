@@ -31,6 +31,7 @@ import {
   RecordsView,
   addOrigin,
   approvalFromAction,
+  approvalsFromAction,
   messagesFromConversation,
   objectValue,
   recordLinkFromAction,
@@ -221,7 +222,12 @@ export default function MainRoute() {
         text: result.assistantMessage || result.response?.message || 'تم استلام طلبك.',
         createdAt: new Date().toISOString(),
         ...(result.turnId ? { turnId: result.turnId } : {}),
-        approval: approvalFromAction(result.action),
+        ...(() => {
+          const approvals = approvalsFromAction(result.action);
+          return approvals.length > 0
+            ? { approval: approvals[0], ...(approvals.length > 1 ? { approvals } : {}) }
+            : {};
+        })(),
         ...(linked ? { recordLink: addOrigin(linked, result.conversationId, typeof objectValue(result.action).operationId === 'string' ? objectValue(result.action).operationId as string : null, result.turnId) } : {}),
       });
     } catch {
@@ -236,9 +242,19 @@ export default function MainRoute() {
         ? await secretaryChat.approveOperation(approval.operationId, args)
         : await secretaryChat.rejectOperation(approval.operationId);
       const linked = recordLinkFromAction(response.action);
-      setMessages((current) => current.map((message) => message.approval?.operationId === approval.operationId
-        ? { ...message, approval: { ...approval, status: response.status as ApprovalStatus }, ...(linked ? { recordLink: addOrigin(linked, response.conversationId, response.operationId, response.turnId) } : {}) }
-        : message));
+      setMessages((current) => current.map((message) => {
+        const approvals = message.approvals ?? (message.approval ? [message.approval] : []);
+        if (!approvals.some((item) => item.operationId === approval.operationId)) return message;
+        const updatedApprovals = approvals.map((item) => item.operationId === approval.operationId
+          ? { ...item, status: response.status as ApprovalStatus }
+          : item);
+        return {
+          ...message,
+          approval: updatedApprovals[0],
+          ...(updatedApprovals.length > 1 ? { approvals: updatedApprovals } : {}),
+          ...(linked ? { recordLink: addOrigin(linked, response.conversationId, response.operationId, response.turnId) } : {}),
+        };
+      }));
       setConversationId(response.conversationId);
       if (response.assistantMessage) appendMessage({ id: `approval-${Date.now()}`, role: 'assistant', text: response.assistantMessage, createdAt: new Date().toISOString(), ...(linked ? { recordLink: addOrigin(linked, response.conversationId, response.operationId, response.turnId) } : {}) });
       if (status === 'completed') await queryClient.invalidateQueries({ queryKey: ['records'] });
@@ -336,7 +352,7 @@ export default function MainRoute() {
         <MainWorkspace>
           {selectedRecord ? <RecordDetailView record={selectedRecord} colors={colors} onBack={() => setSelectedRecord(null)} onAskSecretary={askSecretaryAboutRecord} onOpenConversation={openConversation} onOpenRelatedRecord={openRecord} chatMessages={messages} chatDraft={draft} onChangeChatDraft={setDraft} onSendChat={() => void sendMessage()} chatBusy={secretaryChat.isSending || conversationQuery.isFetching} onApprove={(approval, args) => void updateApproval(approval, 'completed', args)} onReject={(approval) => void updateApproval(approval, 'rejected')} busyOperationId={busyOperationId} chatContext={chatContext} /> : (
             <>
-                {mainSection === 'office' && <MainOffice colors={colors} language={language} assistantPreferences={assistantPreferences} onOpenRecord={openRecord} onRetryInput={(attachment) => { if (attachment) void inputCapture.retryAttachment(attachment); }} retryingInput={inputCapture.state === 'processing'} onOpenRecords={() => openMainSection('records')} onOpenFinancial={() => openMainSection('financial')} onOpenConversation={openConversationById} onFocusChat={focusMainChat} onAskSecretary={(value) => { setDraft(value); setInputReview(null); setTimeout(() => inputRef.current?.focus(), 0); }} messages={messages} draft={draft} onChangeDraft={setDraft} onSend={() => void sendMessage()} inputRef={inputRef} isSending={secretaryChat.isSending || conversationQuery.isFetching || inputCapture.state === 'processing'} onApprove={(approval, args) => void updateApproval(approval, 'completed', args)} onReject={(approval) => void updateApproval(approval, 'rejected')} busyOperationId={busyOperationId} recordOrigins={recordOrigins} chatContext={chatContext} recentConversations={recentConversations} conversationSearch={conversationSearch} onChangeConversationSearch={setConversationSearch} conversationsLoading={secretaryChat.conversationsQuery.isFetching} pendingApprovals={messages.flatMap((message) => message.approval?.status === 'pending' ? [message.approval] : [])} inputState={inputCapture.state} onToggleVoice={() => void inputCapture.toggleVoice()} onCaptureReceipt={() => void inputCapture.pickReceipt('camera')} onPickReceipt={() => void inputCapture.pickReceipt('library')} inputReview={inputReview} onChangeInputReview={updateInputReview} onClearInputReview={() => setInputReview(null)} />}
+                {mainSection === 'office' && <MainOffice colors={colors} language={language} assistantPreferences={assistantPreferences} onOpenRecord={openRecord} onRetryInput={(attachment) => { if (attachment) void inputCapture.retryAttachment(attachment); }} retryingInput={inputCapture.state === 'processing'} onOpenRecords={() => openMainSection('records')} onOpenFinancial={() => openMainSection('financial')} onOpenConversation={openConversationById} onFocusChat={focusMainChat} onAskSecretary={(value) => { setDraft(value); setInputReview(null); setTimeout(() => inputRef.current?.focus(), 0); }} messages={messages} draft={draft} onChangeDraft={setDraft} onSend={() => void sendMessage()} inputRef={inputRef} isSending={secretaryChat.isSending || conversationQuery.isFetching || inputCapture.state === 'processing'} onApprove={(approval, args) => void updateApproval(approval, 'completed', args)} onReject={(approval) => void updateApproval(approval, 'rejected')} busyOperationId={busyOperationId} recordOrigins={recordOrigins} chatContext={chatContext} recentConversations={recentConversations} conversationSearch={conversationSearch} onChangeConversationSearch={setConversationSearch} conversationsLoading={secretaryChat.conversationsQuery.isFetching} pendingApprovals={messages.flatMap((message) => (message.approvals ?? (message.approval ? [message.approval] : [])).filter((item) => item.status === 'pending'))} inputState={inputCapture.state} onToggleVoice={() => void inputCapture.toggleVoice()} onCaptureReceipt={() => void inputCapture.pickReceipt('camera')} onPickReceipt={() => void inputCapture.pickReceipt('library')} inputReview={inputReview} onChangeInputReview={updateInputReview} onClearInputReview={() => setInputReview(null)} />}
                 {mainSection === 'chat' && <ConversationHistoryView colors={colors} language={language} conversations={recentConversations} loading={secretaryChat.conversationsQuery.isFetching} onOpenConversation={openConversationById} onBack={() => openMainSection('office')} />}
               {mainSection === 'records' && <RecordsView colors={colors} onOpenSection={openRecordSection} onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}
               {mainSection === 'people' && <RecordsView colors={colors} onOpenSection={openRecordSection} title="الأشخاص" subtitle="الأشخاص وعلاقاتهم بالسجلات والمشاريع" sectionKeys={['people']} onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}

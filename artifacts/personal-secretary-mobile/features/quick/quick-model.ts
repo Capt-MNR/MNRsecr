@@ -37,6 +37,7 @@ export type LocalMessage = {
   inputId?: string | null;
   inputAttachment?: LocalInputAttachment | null;
   approval?: Approval;
+  approvals?: Approval[];
   recordLink?: MobileRecordRow;
 };
 
@@ -92,6 +93,16 @@ export function approvalFromAction(action: unknown): Approval | undefined {
   };
 }
 
+export function approvalsFromAction(action: unknown): Approval[] {
+  const value = objectValue(action);
+  if (!['approval_required', 'pending_confirmation'].includes(String(value.type))) return [];
+  const rawApprovals = Array.isArray(value.approvals) ? value.approvals : [value];
+  return rawApprovals.flatMap((raw) => {
+    const item = objectValue(raw);
+    return approvalFromAction({ ...value, ...item }) ?? [];
+  });
+}
+
 export function recordLinkFromAction(action: unknown): MobileRecordRow | undefined {
   const value = objectValue(action);
   const type = stringValue(value.type, '');
@@ -135,7 +146,17 @@ export function messagesFromConversation(detail: unknown, conversationId: string
     const link = action && recordLinkFromAction(action);
     const inputId = typeof turn.inputId === 'string' ? turn.inputId : undefined;
     if (typeof turn.userMessage === 'string') result.push({ id: `${conversationId}-${turnId}-user`, role: 'user', text: turn.userMessage, createdAt, ...(inputId ? { inputId } : {}) });
-    if (typeof turn.assistantMessage === 'string') result.push({ id: `${conversationId}-${turnId}-assistant`, role: 'assistant', text: turn.assistantMessage, createdAt, approval: action ? approvalFromAction(action) : undefined, ...(link ? { recordLink: addOrigin(link, conversationId, typeof action?.operationId === 'string' ? action.operationId : null) } : {}) });
+    if (typeof turn.assistantMessage === 'string') {
+      const approvals = action ? approvalsFromAction(action) : [];
+      result.push({
+        id: `${conversationId}-${turnId}-assistant`,
+        role: 'assistant',
+        text: turn.assistantMessage,
+        createdAt,
+        ...(approvals.length > 0 ? { approval: approvals[0], ...(approvals.length > 1 ? { approvals } : {}) } : {}),
+        ...(link ? { recordLink: addOrigin(link, conversationId, typeof action?.operationId === 'string' ? action.operationId : null) } : {}),
+      });
+    }
   });
   return result.length ? result : [starterMessage];
 }
