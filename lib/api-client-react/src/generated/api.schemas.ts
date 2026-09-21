@@ -1064,7 +1064,7 @@ export interface RecordCreateInput {
 
 export interface RecordUpdateInput {
   /** @minimum 1 */
-  expectedRowVersion?: number;
+  expectedRowVersion: number;
   amountMinor?: number;
   currency?: string;
   description?: string;

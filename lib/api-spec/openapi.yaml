@@ -2361,6 +2361,7 @@ components:
           type: string
         status:
           type: string
+      required: [expectedRowVersion]
     RecordMutationResponse:
       type: object
       properties:

@@ -1667,7 +1667,7 @@ export const UpdateRecordParams = zod.object({
 
 
 export const UpdateRecordBody = zod.object({
-  "expectedRowVersion": zod.number().int().min(1).optional(),
+  "expectedRowVersion": zod.number().int().min(1),
   "amountMinor": zod.number().int().optional(),
   "currency": zod.string().optional(),
   "description": zod.string().optional(),

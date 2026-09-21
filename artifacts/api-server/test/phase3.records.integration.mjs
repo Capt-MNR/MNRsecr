@@ -68,6 +68,10 @@ function scalar(table, id, column = "id") {
   );
 }
 
+function recordVersion(table, id) {
+  return Number(scalar(table, id, "row_version"));
+}
+
 function rowCount(table, id) {
   return Number(queryDb(`SELECT count(*) FROM ${table} WHERE id = '${id}'`));
 }
@@ -108,8 +112,15 @@ async function stopServer() {
   if (!server) return;
   const current = server;
   server = null;
+  if (current.exitCode !== null || current.signalCode !== null) return;
   current.kill("SIGTERM");
-  await once(current, "exit");
+  await Promise.race([
+    once(current, "exit"),
+    new Promise((resolve) => setTimeout(resolve, 5000)),
+  ]);
+  if (current.exitCode === null && current.signalCode === null) {
+    current.kill("SIGKILL");
+  }
 }
 
 async function request(path, options = {}) {
@@ -290,6 +301,62 @@ test("isolates conversations and records by tenant and user", async () => {
   }
 });
 
+test("requires the record version for direct edits", async () => {
+  const before = scalar("people", ids.freePerson, "name");
+  const response = await jsonRequest(
+    `/records/person/${ids.freePerson}`,
+    "PATCH",
+    { name: "Edit without a version" },
+  );
+  assert.equal(response.status, 400);
+  const payload = await response.json();
+  assert.equal(payload.code, "INVALID_RECORD_UPDATE");
+  assert.equal(scalar("people", ids.freePerson, "name"), before);
+});
+
+test("rejects stale edits from a second window for every record type", async () => {
+  for (const record of recordKinds) {
+    const expectedRowVersion = recordVersion(record.table, record.ownerId);
+    const firstUpdate = await jsonRequest(
+      `/records/${record.kind}/${record.ownerId}`,
+      "PATCH",
+      { ...record.update, expectedRowVersion },
+    );
+    const secondUpdate = await jsonRequest(
+      `/records/${record.kind}/${record.ownerId}`,
+      "PATCH",
+      {
+        ...record.update,
+        [record.changedColumn]: `Stale ${record.kind} edit`,
+        expectedRowVersion,
+      },
+    );
+
+    const firstApproval = await approvePending(firstUpdate);
+    assert.equal(firstApproval.response.status, 200, `${record.kind} first edit`);
+    assert.equal(firstApproval.payload.status, "completed");
+    assert.equal(
+      scalar(record.table, record.ownerId, record.changedColumn),
+      record.changedValue,
+      `${record.kind} first edit was saved`,
+    );
+
+    const staleApproval = await approvePending(secondUpdate);
+    assert.equal(staleApproval.response.status, 500, `${record.kind} stale edit`);
+    assert.equal(staleApproval.payload.code, "APPROVED_OPERATION_FAILED");
+    assert.equal(
+      scalar(record.table, record.ownerId, record.changedColumn),
+      record.changedValue,
+      `${record.kind} stale edit overwrote the latest value`,
+    );
+    assert.equal(
+      recordVersion(record.table, record.ownerId),
+      expectedRowVersion + 1,
+      `${record.kind} stale edit advanced the row version`,
+    );
+  }
+});
+
 const recordKinds = [
   {
     kind: "expense",
@@ -356,7 +423,7 @@ test("updates and deletes every owned record type without crossing tenant or use
       const updateResponse = await jsonRequest(
         `/records/${record.kind}/${foreignId}`,
         "PATCH",
-        record.update,
+        { ...record.update, expectedRowVersion: recordVersion(record.table, foreignId) },
       );
       const updateApproval = await approvePending(updateResponse);
       assert.equal(updateApproval.response.status, 500, `${record.kind} foreign update`);
@@ -375,7 +442,7 @@ test("updates and deletes every owned record type without crossing tenant or use
     const updateResponse = await jsonRequest(
       `/records/${record.kind}/${record.ownerId}`,
       "PATCH",
-      record.update,
+      { ...record.update, expectedRowVersion: recordVersion(record.table, record.ownerId) },
     );
     const updateApproval = await approvePending(updateResponse);
     assert.equal(updateApproval.response.status, 200, `${record.kind} owned update`);
