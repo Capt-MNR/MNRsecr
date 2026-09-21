@@ -178,6 +178,7 @@ async function persistSecondBrainCommand(
         queryDomain: "memory_recall",
         requestId,
         conversationId,
+        includeArchived: true,
       })
     : null;
   const governedRetrieval = retrieval

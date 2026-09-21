@@ -59,7 +59,8 @@ export type SecondBrainRetrievalTrace = {
       | "conflict_structured_record"
       | "missing_entity_association"
       | "type_not_allowed"
-      | "budget";
+      | "budget"
+      | "archived_not_requested";
   }>;
   structuredPrecedence: {
     applied: boolean;
@@ -68,6 +69,8 @@ export type SecondBrainRetrievalTrace = {
   };
   llmContextIncluded: boolean;
   llmContextReason: string;
+  archivedRequested: boolean;
+  archivedIncluded: boolean;
 };
 
 export type SecondBrainRetrievalResult = {
@@ -317,6 +320,8 @@ export function emptyRetrievalTrace(
     },
     llmContextIncluded: false,
     llmContextReason: triggered ? "no_matches" : "not_triggered",
+    archivedRequested: false,
+    archivedIncluded: false,
   };
 }
 
@@ -664,6 +669,7 @@ export async function searchSecondBrain(
     limit,
     mode: "explicit_recall",
     queryDomain: "memory_recall",
+    includeArchived: false,
   });
   return result.memories;
 }
@@ -677,21 +683,41 @@ export async function retrieveSecondBrain(
     queryDomain?: SecondBrainQueryDomain;
     requestId?: string | null;
     conversationId?: string | null;
+    includeArchived?: boolean;
   } = {},
 ): Promise<SecondBrainRetrievalResult> {
   const limit = Math.max(1, Math.min(options.limit ?? 8, 8));
   const mode = options.mode ?? "lexical_v1";
   const queryDomain = options.queryDomain ?? classifySecondBrainQuery(query);
-  const rows = await db
-    .select()
-    .from(secondBrainMemoriesTable)
-    .where(and(
-      eq(secondBrainMemoriesTable.tenantId, identity.tenantId),
-      eq(secondBrainMemoriesTable.ownerUserId, identity.userId),
-      eq(secondBrainMemoriesTable.status, "active"),
-    ))
-    .orderBy(desc(secondBrainMemoriesTable.updatedAt))
-    .limit(80);
+  const archivedRequested = options.includeArchived === true;
+  const archivedIncluded = archivedRequested && mode === "explicit_recall";
+  const [activeRows, archivedRows] = await Promise.all([
+    db
+      .select()
+      .from(secondBrainMemoriesTable)
+      .where(and(
+        eq(secondBrainMemoriesTable.tenantId, identity.tenantId),
+        eq(secondBrainMemoriesTable.ownerUserId, identity.userId),
+        eq(secondBrainMemoriesTable.status, "active"),
+      ))
+      .orderBy(desc(secondBrainMemoriesTable.updatedAt))
+      .limit(80),
+    db
+      .select()
+      .from(secondBrainMemoriesTable)
+      .where(and(
+        eq(secondBrainMemoriesTable.tenantId, identity.tenantId),
+        eq(secondBrainMemoriesTable.ownerUserId, identity.userId),
+        eq(secondBrainMemoriesTable.status, "archived"),
+      ))
+      .orderBy(desc(secondBrainMemoriesTable.updatedAt))
+      .limit(80),
+  ]);
+  const rows = archivedIncluded
+    ? [...activeRows, ...archivedRows]
+      .sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime())
+      .slice(0, 80)
+    : activeRows;
 
   const normalizedQuery = normalize(query);
   const broadRecall = /^(?:فاكر|تفتكر)\s+(?:ايه|إيه|ماذا|ما)\s+(?:اللي\s+)?(?:حفظته|فاكره|عندك)/iu.test(normalizedQuery)
@@ -733,7 +759,17 @@ export async function retrieveSecondBrain(
     conversationId: options.conversationId,
   });
   trace.strategy = mode;
+  trace.archivedRequested = archivedRequested;
+  trace.archivedIncluded = archivedIncluded;
   trace.consideredCount = rows.length;
+  if (!archivedIncluded) {
+    trace.excluded.push(
+      ...archivedRows.map((memory) => ({
+        memoryId: memory.id,
+        reason: "archived_not_requested" as const,
+      })),
+    );
+  }
   trace.excluded.push(
     ...ranked
       .filter((item) => !matching.includes(item))

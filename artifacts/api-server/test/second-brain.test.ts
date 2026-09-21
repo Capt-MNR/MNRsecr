@@ -14,6 +14,7 @@ import {
   parseSecondBrainCommand,
   createSecondBrainCandidate,
   rememberSecondBrain,
+  retrieveSecondBrain,
   searchSecondBrain,
   associateSecondBrainCandidate,
   reviewSecondBrainCandidate,
@@ -128,6 +129,66 @@ test("stores explicit memories with replacement and tenant isolation", async () 
   assert.equal(own[0]?.value, "أفضل الردود المختصرة جدًا");
   assert.equal(other.length, 1);
   assert.equal(other[0]?.value, "أفضل الردود الطويلة");
+  await cleanup();
+});
+
+test("explicit recall can include archived memory without crossing tenants", async () => {
+  await cleanup();
+  const ownArchived = await rememberSecondBrain(identity, {
+    memoryKind: "preference",
+    key: "preference:archived_reply_style",
+    value: "أفضل الردود المؤرشفة المختصرة",
+  });
+  const otherArchived = await rememberSecondBrain(otherIdentity, {
+    memoryKind: "preference",
+    key: "preference:other_archived_reply_style",
+    value: "أفضل الردود المؤرشفة الطويلة",
+  });
+  await db.update(secondBrainMemoriesTable)
+    .set({ status: "archived", updatedAt: new Date() })
+    .where(eq(secondBrainMemoriesTable.id, ownArchived.id));
+  await db.update(secondBrainMemoriesTable)
+    .set({ status: "archived", updatedAt: new Date() })
+    .where(eq(secondBrainMemoriesTable.id, otherArchived.id));
+
+  const activeOnly = await retrieveSecondBrain(identity, "الردود", {
+    mode: "lexical_v1",
+    queryDomain: "preference",
+  });
+  assert.equal(activeOnly.memories.length, 0);
+  assert.equal(activeOnly.trace.archivedRequested, false);
+  assert.equal(activeOnly.trace.archivedIncluded, false);
+  assert.ok(activeOnly.trace.excluded.some(
+    (item) => item.memoryId === ownArchived.id && item.reason === "archived_not_requested",
+  ));
+
+  const explicit = await retrieveSecondBrain(identity, "الردود", {
+    mode: "explicit_recall",
+    queryDomain: "memory_recall",
+    includeArchived: true,
+  });
+  assert.deepEqual(explicit.memories.map((memory) => memory.id), [ownArchived.id]);
+  assert.equal(explicit.trace.archivedRequested, true);
+  assert.equal(explicit.trace.archivedIncluded, true);
+  assert.equal(explicit.memories.some((memory) => memory.id === otherArchived.id), false);
+
+  const gateway: ModelGateway = {
+    provider: "groq",
+    modelName: "test-archived-recall-gateway",
+    async generate() {
+      throw new Error("The model gateway must not be called for explicit memory recall.");
+    },
+  };
+  const recalled = await new Phase2AgentRuntime(gateway).run(identity, {
+    message: "فاكر إيه اللي حفظته؟",
+    conversationId: "archived-recall-conversation",
+    requestId: "archived-recall-request",
+  });
+  assert.match(recalled.assistantMessage, /الردود المؤرشفة المختصرة/);
+  const recallTrace = (recalled.action as {
+    secondBrainRetrievalTrace?: { archivedIncluded?: boolean };
+  } | undefined)?.secondBrainRetrievalTrace;
+  assert.equal(recallTrace?.archivedIncluded, true);
   await cleanup();
 });
 
