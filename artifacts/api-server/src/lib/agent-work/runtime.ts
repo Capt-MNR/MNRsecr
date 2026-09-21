@@ -37,6 +37,11 @@ export class AgentWorkRuntime {
     return this.adapters.storage.listWorks(input);
   }
 
+  async listDueWorks(input: { now: Date; limit?: number }) {
+    assertEnabled();
+    return this.adapters.storage.listDueWorks(input);
+  }
+
   async getDetails(identity: CreateAgentWorkInput["identity"], workId: string): Promise<AgentWorkDetails | null> {
     assertEnabled();
     const work = await this.adapters.storage.getWork(identity, workId);
@@ -88,6 +93,8 @@ export class AgentWorkRuntime {
     status: AgentWorkRunRecord["status"];
     verification?: Record<string, unknown> | null;
     error?: string | null;
+    nextRunAt?: Date | null;
+    workStatus?: AgentWorkRecord["status"];
   }): Promise<AgentWorkRunRecord> {
     assertEnabled();
     if (!input.run.leaseToken) throw new Error("AGENT_WORK_RUN_LEASE_MISSING");
@@ -99,6 +106,10 @@ export class AgentWorkRuntime {
       verification: input.verification,
       error: input.error,
       completedAt: new Date(),
+      ...(Object.prototype.hasOwnProperty.call(input, "nextRunAt")
+        ? { nextRunAt: input.nextRunAt ?? null }
+        : {}),
+      ...(input.workStatus ? { workStatus: input.workStatus } : {}),
     });
   }
 }

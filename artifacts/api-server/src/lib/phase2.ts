@@ -108,6 +108,8 @@ import {
   type BrainVerificationState,
 } from "./brain-contract";
 import { runWithIdempotencyLock } from "./idempotency-lock";
+import { agentWorkRuntime } from "./agent-work/runtime";
+import type { AgentWorkKind } from "./agent-work/types";
 
 const db = database;
 
@@ -653,6 +655,7 @@ const WRITE_TOOLS = new Set([
   "record_expense",
   "update_expense",
   "create_task",
+  "create_agent_work",
   "create_commitment",
   "create_reminder",
   "update_task",
@@ -999,6 +1002,22 @@ export const phase2Tools: ToolDefinition[] = [
     title: { type: "STRING" },
     dueAt: { type: "STRING" },
   }, ["title"]),
+  tool("create_agent_work", "Create an ongoing Agent Work only after the user clearly asks the agent to keep watching, remind, research, or repeat something. Keep the source allowlisted; do not invent external access or actions.", {
+    kind: {
+      type: "STRING",
+      enum: ["monitor", "reminder", "recurring_task", "external_action", "research", "workflow"],
+    },
+    title: { type: "STRING" },
+    description: { type: "STRING" },
+    sourceType: {
+      type: "STRING",
+      enum: ["clock", "heartbeat", "user_defined"],
+      description: "Use clock/heartbeat only for safe built-in checks; use user_defined when an external source is not connected yet.",
+    },
+    condition: { type: "OBJECT" },
+    schedule: { type: "OBJECT" },
+    nextRunAt: { type: "STRING", description: "Optional ISO timestamp for the first run." },
+  }, ["kind", "title"]),
   tool("create_commitment", "Create a personal commitment with optional person and due date.", {
     title: { type: "STRING" },
     personId: { type: "STRING" },
@@ -2643,6 +2662,50 @@ async function executeTool(
       result = { ok: true, task };
       break;
     }
+    case "create_agent_work": {
+      const kindValue = stringArg("kind");
+      const allowedKinds = new Set<AgentWorkKind>([
+        "monitor",
+        "reminder",
+        "recurring_task",
+        "external_action",
+        "research",
+        "workflow",
+      ]);
+      if (!kindValue || !allowedKinds.has(kindValue as AgentWorkKind)) {
+        return { ok: false, error: "Agent Work kind is required and must be supported." };
+      }
+      const title = stringArg("title");
+      if (!title) return { ok: false, error: "Agent Work title is required." };
+      const nextRunAtValue = stringArg("nextRunAt");
+      const nextRunAt = nextRunAtValue ? new Date(nextRunAtValue) : null;
+      if (nextRunAt && Number.isNaN(nextRunAt.getTime())) {
+        return { ok: false, error: "nextRunAt must be a valid ISO timestamp." };
+      }
+      const objectArg = (key: string): Record<string, unknown> => {
+        const value = args[key];
+        return value && typeof value === "object" && !Array.isArray(value)
+          ? value as Record<string, unknown>
+          : {};
+      };
+      const sourceType = stringArg("sourceType") ?? "user_defined";
+      const work = await agentWorkRuntime.createWork({
+        identity,
+        kind: kindValue as AgentWorkKind,
+        title,
+        description: stringArg("description") ?? null,
+        source: {
+          type: sourceType,
+          conversationId: options.conversationId ?? null,
+          sourceTurnId: options.sourceTurnId ?? options.requestId,
+        },
+        condition: objectArg("condition"),
+        schedule: objectArg("schedule"),
+        nextRunAt,
+      });
+      result = { ok: true, agentWork: work, created: true };
+      break;
+    }
     case "create_commitment": {
       const title = stringArg("title");
       if (!title) return { ok: false, error: "Commitment title is required." };
@@ -2773,6 +2836,7 @@ const systemInstruction = `أنت سكرتير شخصي عربي يعمل داخ
 17. لا تذكر رقمًا ماليًا أو عددًا ماليًا من الذاكرة أو التخمين. بعد الأدوات استخدم final_response، وضع كل رقم مالي مؤكد في groundedFacts كما أعادته الأداة. الرسالة نفسها يجب أن تكون طبيعية وليست قالبًا.
 18. لا تستخدم final_response قبل إكمال الأدوات اللازمة. إذا كانت البيانات ناقصة أو الأسماء متكررة، اجعل kind = clarification بدل التخمين.
 19. عند تسجيل مصروف، اسم الشخص المستلم اختياري. إذا لم يذكره المستخدم لا توقف التسجيل بسببه؛ اسأل مرة واحدة إن كان يريد إضافته، واقبل "بدون اسم" ثم أكمل.
+20. إذا طلب المستخدم منك أن تتابع أو تذكّر أو تكرر عملًا لاحقًا، استخدم create_agent_work. لا تدّعي اتصالًا بمصدر خارجي؛ استخدم user_defined عندما لا يوجد مصدر آمن موصول، ووضّح أن المتابعة تحتاج مراجعة أو ربطًا لاحقًا.
 20. قبل اعتماد المصروف اسأل عن اسم المشروع أو الغرض إذا لم يذكره المستخدم. إذا ذكر غرضًا وليس مشروعًا، خزّنه في description ولا تنشئ مشروعًا جديدًا من تلقاء نفسك. لا تعتبر الغرض مشروعًا إلا بعد التحقق من وجوده أو تأكيد المستخدم.
 21. عند طلب تذكير أو موعد بيوم نسبي مثل "بكرة" دون ساعة دقيقة، اسأل عن الوقت بشكل اختياري. اقبل ساعة مثل "5 مساءً"، أو "أي وقت" واستخدم 09:00 بتوقيت Africa/Cairo. لا تنفذ التذكير قبل اكتمال dueAt.
 22. إذا فشل مزود، لا تعرض رسالة تقنية ولا تقل إن الكتابة تمت. استخدم final_response برسالة عربية قصيرة توضّح أن الطلب لم يكتمل وأن البيانات لم تتغير.`;

@@ -206,6 +206,8 @@ export type CompleteAgentWorkRunInput = {
   verification?: Record<string, unknown> | null;
   error?: string | null;
   completedAt: Date;
+  nextRunAt?: Date | null;
+  workStatus?: AgentWorkStatus;
 };
 
 export type CreateAgentWorkEventInput = {
@@ -226,11 +228,18 @@ export type ListAgentWorksInput = {
   limit?: number;
 };
 
+export type DueAgentWorkRecord = {
+  identity: AgentWorkIdentity;
+  workId: string;
+  nextRunAt: Date | null;
+};
+
 export interface StorageAdapter {
   readonly driver: AgentWorkDriver;
   createWork(input: CreateAgentWorkInput): Promise<AgentWorkRecord>;
   getWork(identity: AgentWorkIdentity, workId: string): Promise<AgentWorkRecord | null>;
   listWorks(input: ListAgentWorksInput): Promise<AgentWorkRecord[]>;
+  listDueWorks(input: { now: Date; limit?: number }): Promise<DueAgentWorkRecord[]>;
   changeWorkStatus(input: AgentWorkStatusChange): Promise<AgentWorkRecord>;
   claimRun(input: ClaimAgentWorkRunInput): Promise<AgentWorkRunRecord | null>;
   getRun(identity: AgentWorkIdentity, runId: string): Promise<AgentWorkRunRecord | null>;

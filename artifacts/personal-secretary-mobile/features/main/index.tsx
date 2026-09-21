@@ -27,6 +27,7 @@ import { receiptNeedsReview, type SecretaryInputResult, type SecretaryInputState
 import { MessageBubble } from '../message-bubble';
 import { ReceiptReviewCard } from '../receipt-review';
 export { default as MainWorkspace } from './MainWorkspace';
+export { default as WorksView } from './WorksView';
 export { SecondBrainMemorySheet } from './SecondBrainMemorySheet';
 export { MessageBubble };
 
@@ -101,7 +102,7 @@ type MobileRecordSection = {
   data: MobileRecordRow[];
 };
 
-export type MainSection = 'office' | 'chat' | 'records' | 'people' | 'projects' | 'financial' | 'tasks' | 'reminders' | 'activity';
+export type MainSection = 'office' | 'chat' | 'records' | 'people' | 'projects' | 'financial' | 'tasks' | 'reminders' | 'activity' | 'works';
 export type AssistantPreferences = {
   activity: 'focused' | 'balanced' | 'quiet';
   proactive: 'low' | 'balanced' | 'high';
@@ -2791,6 +2792,7 @@ const mainNavigation: Array<{ key: MainSection; labelAr: string; labelEn: string
   { key: 'tasks', labelAr: 'المهام', labelEn: 'Tasks', icon: 'check-square' },
   { key: 'reminders', labelAr: 'التذكيرات', labelEn: 'Reminders', icon: 'bell' },
   { key: 'activity', labelAr: 'النشاط', labelEn: 'Activity', icon: 'activity' },
+  { key: 'works', labelAr: 'أعمال الوكيل', labelEn: 'Agent work', icon: 'compass' },
 ];
 
 export function ConversationHistoryView({

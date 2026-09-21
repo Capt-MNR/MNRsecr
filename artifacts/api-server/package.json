@@ -4,11 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "export NODE_ENV=development AGENT_WORK_ENABLED=${AGENT_WORK_ENABLED:-true} AGENT_WORK_ALLOW_DEVELOPMENT_IDENTITY=${AGENT_WORK_ALLOW_DEVELOPMENT_IDENTITY:-true} && pnpm run build && pnpm run start",
+    "dev": "export NODE_ENV=development AGENT_WORK_ENABLED=${AGENT_WORK_ENABLED:-true} AGENT_WORK_ALLOW_DEVELOPMENT_IDENTITY=${AGENT_WORK_ALLOW_DEVELOPMENT_IDENTITY:-true} AGENT_WORK_RUNNER_ENABLED=${AGENT_WORK_RUNNER_ENABLED:-true} && pnpm run build && pnpm run start",
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:phase2": "node --test test/phase2.integration.mjs",
+    "test:agent-work": "../../scripts/node_modules/.bin/tsx --test test/agent-work-contract.test.ts test/agent-work-runner.test.ts",
     "test:intent-eval-dataset": "node --test test/intent-evaluation/dataset.test.mjs",
     "test:brain-eval": "../../scripts/node_modules/.bin/tsx --test test/brain-evaluation/evaluation.test.ts",
     "test:brain-reasoning-safety": "../../scripts/node_modules/.bin/tsx --test test/brain-evaluation/reasoning-safety.test.ts",

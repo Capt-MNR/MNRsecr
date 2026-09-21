@@ -1,11 +1,13 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
   and,
+  asc,
   desc,
   eq,
   gt,
   inArray,
   isNull,
+  lte,
   or,
   sql,
 } from "drizzle-orm";
@@ -31,6 +33,7 @@ import type {
   CompleteAgentWorkRunInput,
   CreateAgentWorkEventInput,
   CreateAgentWorkInput,
+  DueAgentWorkRecord,
   EvidenceSnapshotInput,
   EvidenceSnapshotReference,
   ListAgentWorksInput,
@@ -180,6 +183,26 @@ export class PostgresAgentWorkStorageAdapter implements StorageAdapter {
     return rows.map(mapWork);
   }
 
+  async listDueWorks(input: { now: Date; limit?: number }): Promise<DueAgentWorkRecord[]> {
+    const rows = await db.select({
+      workId: agentWorksTable.id,
+      tenantId: agentWorksTable.tenantId,
+      ownerUserId: agentWorksTable.ownerUserId,
+      nextRunAt: agentWorksTable.nextRunAt,
+    }).from(agentWorksTable).where(and(
+      eq(agentWorksTable.status, "active"),
+      or(isNull(agentWorksTable.nextRunAt), lte(agentWorksTable.nextRunAt, input.now)),
+    )).orderBy(
+      sql`${agentWorksTable.nextRunAt} asc nulls first`,
+      asc(agentWorksTable.updatedAt),
+    ).limit(boundedLimit(input.limit));
+    return rows.map((row) => ({
+      identity: { tenantId: row.tenantId, userId: row.ownerUserId },
+      workId: row.workId,
+      nextRunAt: row.nextRunAt,
+    }));
+  }
+
   async changeWorkStatus(input: {
     identity: AgentWorkIdentity;
     workId: string;
@@ -324,7 +347,12 @@ export class PostgresAgentWorkStorageAdapter implements StorageAdapter {
       await tx.update(agentWorksTable).set({
         lastRunAt: input.completedAt,
         lastRunStatus: input.status,
+        ...(Object.prototype.hasOwnProperty.call(input, "nextRunAt")
+          ? { nextRunAt: input.nextRunAt ?? null }
+          : {}),
+        ...(input.workStatus ? { status: input.workStatus } : {}),
         updatedAt: input.completedAt,
+        rowVersion: sql`${agentWorksTable.rowVersion} + 1`,
       }).where(and(
         eq(agentWorksTable.tenantId, input.identity.tenantId),
         eq(agentWorksTable.ownerUserId, input.identity.userId),

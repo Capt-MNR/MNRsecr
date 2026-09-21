@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { agentWorkRunner } from "./lib/agent-work/runner";
 
 const rawPort = process.env["PORT"];
 
@@ -22,4 +23,8 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+  agentWorkRunner.start();
 });
+
+process.once("SIGTERM", () => agentWorkRunner.stop());
+process.once("SIGINT", () => agentWorkRunner.stop());

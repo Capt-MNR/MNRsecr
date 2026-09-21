@@ -139,6 +139,10 @@ export class StubStorageAdapter implements StorageAdapter {
     return Promise.reject(new Error("AGENT_WORK_STORAGE_NOT_CONFIGURED"));
   }
 
+  listDueWorks(): Promise<never> {
+    return Promise.reject(new Error("AGENT_WORK_STORAGE_NOT_CONFIGURED"));
+  }
+
   changeWorkStatus(): Promise<never> {
     return Promise.reject(new Error("AGENT_WORK_STORAGE_NOT_CONFIGURED"));
   }
