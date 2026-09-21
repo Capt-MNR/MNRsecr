@@ -4,6 +4,7 @@ import { parseArabicDateTime, parseSemanticRequest } from "../src/lib/determinis
 import {
   createBrainDecisionEnvelope,
 } from "../src/lib/brain-contract";
+import { parseRelationshipRequest } from "../src/lib/relationship-context";
 import {
   applySecondBrainPolicy,
   classifySecondBrainQuery,
@@ -82,6 +83,17 @@ test("financial memory comparison keeps the fact contextual and structured prece
   assert.equal(governed.trace.structuredPrecedence.domain, "financial_record");
   assert.equal(governed.trace.llmContextIncluded, true);
   assert.equal(governed.trace.llmContextReason, "structured_record_comparison");
+});
+
+test("routes people-project-financial synthesis to project context without correction semantics", () => {
+  const message = "عايز الصورة الكاملة عن مشروع التوسعة مع محمد: الأشخاص المرتبطين والمصروفات والالتزامات المفتوحة";
+  const relationship = parseRelationshipRequest(message);
+  assert.deepEqual(relationship, {
+    intent: "entity_context",
+    targetType: "project",
+    targetQuery: "التوسعة",
+    usesConversationReference: false,
+  });
 });
 
 test("holds ambiguous financial writes at contextual reasoning", () => {

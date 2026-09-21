@@ -1,7 +1,7 @@
 {
   "report": "Provider-backed planning baseline with direct-LLM control group",
   "contractBoundary": "Evaluation Contract v1 and #69 results are unchanged and excluded from this report.",
-  "generatedAt": "2026-09-19T04:50:02.622Z",
+  "generatedAt": "2026-09-21T00:10:38.438Z",
   "providerOrder": [
     "groq",
     "gemini",
@@ -29,49 +29,49 @@
     "seededObligations": [
       {
         "title": "تسليم عرض السعر للمورد",
-        "dueAt": "2026-09-22T08:00:00.000Z",
+        "dueAt": "2026-09-29T08:00:00.000Z",
         "kind": "commitment"
       },
       {
         "title": "مراجعة عقد المشروع",
-        "dueAt": "2026-09-24T08:00:00.000Z",
+        "dueAt": "2026-10-01T08:00:00.000Z",
         "kind": "task"
       },
       {
         "title": "الاتصال بمحمد لتأكيد الموعد",
-        "dueAt": "2026-09-26T08:00:00.000Z",
+        "dueAt": "2026-10-03T08:00:00.000Z",
         "kind": "reminder"
       }
     ],
     "seededPeople": [
       {
-        "id": "c2169a7d-3ed1-4ffc-a085-b7f1ff33f9de",
+        "id": "fccabb0b-6562-41c1-88f2-1adb96ef71c8",
         "name": "محمد مدير المشروع"
       },
       {
-        "id": "b049611e-ee02-4364-9bba-ae5bd9d179aa",
+        "id": "707bf4d2-e3ac-418a-a59f-d370186ca4e2",
         "name": "محمد أحمد"
       },
       {
-        "id": "89a3ba46-f93f-43ec-8c62-4be030801384",
+        "id": "220ba3ac-b90a-4e3c-ad47-df89a2512f2c",
         "name": "محمد علي"
       }
     ],
     "seededProject": {
-      "id": "eba17c30-57a2-403a-ad16-a8475330d5cf",
+      "id": "419e922e-89dc-4fef-aa7b-8d064aa68096",
       "name": "مشروع التوسعة"
     },
     "seededExpenses": [
       {
-        "id": "0dda675d-0a26-4c23-ba35-3a4e7b0d36b6",
+        "id": "29fe3925-7401-4927-aa64-b691eaec7bcf",
         "amountMinor": 120000,
         "currency": "EGP",
         "description": "دفعة المورد لمشروع التوسعة",
-        "personId": "c2169a7d-3ed1-4ffc-a085-b7f1ff33f9de",
-        "projectId": "eba17c30-57a2-403a-ad16-a8475330d5cf"
+        "personId": "fccabb0b-6562-41c1-88f2-1adb96ef71c8",
+        "projectId": "419e922e-89dc-4fef-aa7b-8d064aa68096"
       },
       {
-        "id": "e3024e6c-0be4-470d-a113-293622df19bf",
+        "id": "67820867-d483-423a-a913-f377b8a21a60",
         "amountMinor": 10000,
         "currency": "EGP",
         "description": "مصروف أوبر",
@@ -79,7 +79,7 @@
         "projectId": null
       }
     ],
-    "conflictingMemoryId": "84fc816c-4ad2-425a-ac1d-3ac62d52761a"
+    "conflictingMemoryId": "025048e1-3a19-42c0-bf47-c0bc8b4ceeea"
   },
   "capabilitySummary": [
     {
@@ -141,7 +141,7 @@
   ],
   "summary": {
     "brainMeasured": 7,
-    "controlMeasured": 8,
+    "controlMeasured": 7,
     "brainProviderLimit": 0,
     "controlProviderLimit": 0,
     "comparableScenarios": 7,
@@ -223,7 +223,8 @@
             },
             "llmContextIncluded": false,
             "llmContextReason": "structured_record_precedence"
-          }
+          },
+          "structuredComparisonContextIncluded": false
         },
         "contextEvidence": {
           "selected": [],
@@ -238,9 +239,9 @@
           "fallback": null,
           "fallbackReason": null,
           "inputTokens": 2297,
-          "outputTokens": 33,
-          "totalTokens": 2330,
-          "cachedTokens": 2048,
+          "outputTokens": 81,
+          "totalTokens": 2378,
+          "cachedTokens": null,
           "context": {
             "systemPromptChars": 6500,
             "requestGuidanceChars": 3384,
@@ -261,14 +262,14 @@
               "logicalCallNumber": 1,
               "attemptNumber": 1,
               "inputTokens": 2297,
-              "outputTokens": 33,
-              "totalTokens": 2330,
-              "cachedTokens": 2048,
+              "outputTokens": 81,
+              "totalTokens": 2378,
+              "cachedTokens": null,
               "fallback": false,
               "retry": false,
               "success": true,
               "failureReason": null,
-              "latencyMs": 379,
+              "latencyMs": 534,
               "context": {
                 "systemPromptChars": 3250,
                 "requestGuidanceChars": 1692,
@@ -300,7 +301,7 @@
               "retry": false,
               "success": false,
               "failureReason": "PROVIDER_API_ERROR",
-              "latencyMs": 251,
+              "latencyMs": 365,
               "context": {
                 "systemPromptChars": 3250,
                 "requestGuidanceChars": 1692,
@@ -352,8 +353,8 @@
           }
         },
         "provenance": {
-          "requestId": "provider-planning-brain-01-a4456c25-bf1d-4ff2-b27c-c8989cd76094",
-          "conversationId": "provider-planning-01-bdd5cc5a-971a-4fcd-902d-80417e0efff8",
+          "requestId": "provider-planning-brain-01-1a0b7f31-98df-4f8d-a28d-ee6aac22ade6",
+          "conversationId": "provider-planning-01-758d3ae5-2035-4153-be19-310c1cacac9e",
           "source": "evaluation_fixture",
           "scenarioId": "01"
         },
@@ -366,11 +367,11 @@
       },
       "control": {
         "route": "control",
-        "status": "MEASURED",
-        "responseKind": "answer",
-        "finalAnswer": "الالتزامات التي عليك الأسبوع القادم هي:\n1. تسليم عرض السعر للمورد – موعد الاستحقاق 22 سبتمبر 2026.\n2. مراجعة عقد المشروع – موعد الاستحقاق 24 سبتمبر 2026.\n3. الاتصال بمحمد لتأكيد الموعد – موعد الاستحقاق 26 سبتمبر 2026.\nيمكنك ترتيبها حسب التاريخ كما هو موضح أعلاه.",
-        "provider": "groq",
-        "model": "openai/gpt-oss-20b",
+        "status": "NOT_MEASURED",
+        "responseKind": null,
+        "finalAnswer": null,
+        "provider": null,
+        "model": null,
         "brain": null,
         "action": null,
         "retrievalTrace": null,
@@ -385,14 +386,14 @@
           "source": "limited_control_context"
         },
         "usage": {
-          "logicalLlmCalls": 1,
+          "logicalLlmCalls": null,
           "httpAttempts": 1,
           "fallback": false,
           "fallbackReason": null,
-          "inputTokens": 1957,
-          "outputTokens": 180,
-          "totalTokens": 2137,
-          "cachedTokens": 1536,
+          "inputTokens": null,
+          "outputTokens": null,
+          "totalTokens": null,
+          "cachedTokens": null,
           "context": {
             "systemPromptChars": 4943,
             "toolDefinitionsChars": 662,
@@ -413,15 +414,15 @@
               "model": "openai/gpt-oss-20b",
               "logicalCallNumber": 1,
               "attemptNumber": 1,
-              "inputTokens": 1957,
-              "outputTokens": 180,
-              "totalTokens": 2137,
-              "cachedTokens": 1536,
+              "inputTokens": null,
+              "outputTokens": null,
+              "totalTokens": null,
+              "cachedTokens": null,
               "fallback": false,
               "retry": false,
-              "success": true,
-              "failureReason": null,
-              "latencyMs": 384,
+              "success": false,
+              "failureReason": "PROVIDER_API_ERROR",
+              "latencyMs": 570,
               "context": {
                 "systemPromptChars": 3250,
                 "requestGuidanceChars": 1692,
@@ -473,10 +474,16 @@
           }
         },
         "provenance": {
-          "requestId": "provider-planning-control-01-2c1ae73b-8e49-4050-be96-b5482120e4c3",
-          "conversationId": "provider-planning-control-01-bc6d2372-eace-48b2-8cb7-1fdf52bcf3a1",
+          "requestId": "provider-planning-control-01-0744f573-9a28-4b55-9a09-43f5aac541b5",
+          "conversationId": "provider-planning-control-01-0ca09b3b-e5b7-41db-9ce6-037c3fcd8149",
           "source": "evaluation_fixture",
           "scenarioId": "01"
+        },
+        "error": {
+          "category": "provider_error",
+          "code": "PROVIDER_API_ERROR",
+          "provider": "groq",
+          "retryable": false
         }
       },
       "evaluation": {
@@ -488,14 +495,11 @@
           ]
         },
         "control": {
-          "status": "PASS",
-          "criteria": {
-            "answered": true,
-            "grounded": true,
-            "ordered": true,
-            "no_automatic_action": true
-          },
-          "notes": []
+          "status": "NOT_MEASURED",
+          "criteria": {},
+          "notes": [
+            "provider or orchestration failure; answer quality was not scored"
+          ]
         }
       },
       "comparison": {
@@ -517,9 +521,9 @@
           }
         },
         "control": {
-          "status": "MEASURED",
-          "answer": "الالتزامات التي عليك الأسبوع القادم هي:\n1. تسليم عرض السعر للمورد – موعد الاستحقاق 22 سبتمبر 2026.\n2. مراجعة عقد المشروع – موعد الاستحقاق 24 سبتمبر 2026.\n3. الاتصال بمحمد لتأكيد الموعد – موعد الاستحقاق 26 سبتمبر 2026.\nيمكنك ترتيبها حسب التاريخ كما هو موضح أعلاه.",
-          "responseKind": "answer",
+          "status": "NOT_MEASURED",
+          "answer": null,
+          "responseKind": null,
           "selectedSources": [
             "structured_records.obligations"
           ],
@@ -528,14 +532,11 @@
             "unrelated_financial_history"
           ],
           "evaluation": {
-            "status": "PASS",
-            "criteria": {
-              "answered": true,
-              "grounded": true,
-              "ordered": true,
-              "no_automatic_action": true
-            },
-            "notes": []
+            "status": "NOT_MEASURED",
+            "criteria": {},
+            "notes": [
+              "provider or orchestration failure; answer quality was not scored"
+            ]
           }
         },
         "dimensions": {
@@ -554,7 +555,7 @@
               "noSecondRecord": null
             },
             "control": {
-              "noAutomaticAction": true,
+              "noAutomaticAction": null,
               "noInventedTravelDates": null,
               "doesNotTreatMemoryAsFact": null,
               "noGuess": null,
@@ -624,8 +625,8 @@
         "provider": "groq",
         "model": "openai/gpt-oss-20b",
         "brain": {
-          "requestId": "provider-planning-brain-02-f590f424-1059-44af-b0d9-aadc96bd3f2b",
-          "conversationId": "provider-planning-02-3db87dba-42e5-4fc9-9ba9-57411be5de1f",
+          "requestId": "provider-planning-brain-02-e12f4725-0db7-4dc7-b1cc-6e222c945bdd",
+          "conversationId": "provider-planning-02-693a02a1-edd4-409b-ab48-f8b0ff97fbcf",
           "brainVersion": 1,
           "brainState": "clarification",
           "brainStrategy": "L0",
@@ -694,9 +695,9 @@
             "falsePositiveGuard": "blocked"
           },
           "secondBrainRetrievalTrace": {
-            "traceId": "172de054-5b72-426f-a7ce-6d29fead1935",
-            "requestId": "provider-planning-brain-02-f590f424-1059-44af-b0d9-aadc96bd3f2b",
-            "conversationId": "provider-planning-02-3db87dba-42e5-4fc9-9ba9-57411be5de1f",
+            "traceId": "a123e052-48d2-42a0-a5a8-d0323d22a7eb",
+            "requestId": "provider-planning-brain-02-e12f4725-0db7-4dc7-b1cc-6e222c945bdd",
+            "conversationId": "provider-planning-02-693a02a1-edd4-409b-ab48-f8b0ff97fbcf",
             "strategy": "none",
             "triggered": false,
             "queryDomain": "structured_record_read",
@@ -721,9 +722,9 @@
           }
         },
         "retrievalTrace": {
-          "traceId": "172de054-5b72-426f-a7ce-6d29fead1935",
-          "requestId": "provider-planning-brain-02-f590f424-1059-44af-b0d9-aadc96bd3f2b",
-          "conversationId": "provider-planning-02-3db87dba-42e5-4fc9-9ba9-57411be5de1f",
+          "traceId": "a123e052-48d2-42a0-a5a8-d0323d22a7eb",
+          "requestId": "provider-planning-brain-02-e12f4725-0db7-4dc7-b1cc-6e222c945bdd",
+          "conversationId": "provider-planning-02-693a02a1-edd4-409b-ab48-f8b0ff97fbcf",
           "strategy": "none",
           "triggered": false,
           "queryDomain": "structured_record_read",
@@ -777,7 +778,8 @@
             },
             "llmContextIncluded": false,
             "llmContextReason": "structured_record_precedence"
-          }
+          },
+          "structuredComparisonContextIncluded": false
         },
         "contextEvidence": {
           "selected": [
@@ -845,8 +847,8 @@
           }
         },
         "provenance": {
-          "requestId": "provider-planning-brain-02-f590f424-1059-44af-b0d9-aadc96bd3f2b",
-          "conversationId": "provider-planning-02-3db87dba-42e5-4fc9-9ba9-57411be5de1f",
+          "requestId": "provider-planning-brain-02-e12f4725-0db7-4dc7-b1cc-6e222c945bdd",
+          "conversationId": "provider-planning-02-693a02a1-edd4-409b-ab48-f8b0ff97fbcf",
           "source": "evaluation_fixture",
           "scenarioId": "02"
         }
@@ -855,9 +857,9 @@
         "route": "control",
         "status": "MEASURED",
         "responseKind": "answer",
-        "finalAnswer": "يبدو أن هناك التزامين قد يتعارضان مع سفرك:\n- تسليم عرض السعر للمورد في 22 سبتمبر\n- مراجعة عقد المشروع في 24 سبتمبر\nالالتزام الآخر، الاتصال بمحمد لتأكيد الموعد، مقرر في 26 سبتمبر وهو بعد أسبوع سفرك. إذا احتجت تعديل مواعيد أو أي مساعدة أخرى، أخبرني.",
-        "provider": "groq",
-        "model": "openai/gpt-oss-20b",
+        "finalAnswer": "بناءً على التزاماتك المسجلة، لديك المهام التالية خلال الأسبوع القادم:\n- تسليم عرض السعر للمورد في 29 سبتمبر 2026.\n- مراجعة عقد المشروع في 1 أكتوبر 2026.\n- الاتصال بمحمد لتأكيد الموعد في 3 أكتوبر 2026.\n\nيرجى التحقق مما إذا كانت هذه المواعيد تتعارض مع توقيت سفرك.",
+        "provider": "gemini",
+        "model": "gemini-3.1-flash-lite",
         "brain": null,
         "action": null,
         "retrievalTrace": null,
@@ -873,19 +875,19 @@
         },
         "usage": {
           "logicalLlmCalls": 1,
-          "httpAttempts": 1,
-          "fallback": false,
-          "fallbackReason": null,
-          "inputTokens": 1956,
-          "outputTokens": 202,
-          "totalTokens": 2158,
-          "cachedTokens": 1536,
+          "httpAttempts": 2,
+          "fallback": true,
+          "fallbackReason": "PROVIDER_RATE_LIMIT",
+          "inputTokens": 2105,
+          "outputTokens": 124,
+          "totalTokens": 2229,
+          "cachedTokens": null,
           "context": {
             "systemPromptChars": 4943,
             "toolDefinitionsChars": 662,
             "toolDefinitionsCount": 1,
-            "maxConversationChars": 878,
-            "maxRequestBytes": 10567,
+            "maxConversationChars": 921,
+            "maxRequestBytes": 10617,
             "selectedSources": [
               "structured_records.obligations"
             ],
@@ -900,15 +902,15 @@
               "model": "openai/gpt-oss-20b",
               "logicalCallNumber": 1,
               "attemptNumber": 1,
-              "inputTokens": 1956,
-              "outputTokens": 202,
-              "totalTokens": 2158,
-              "cachedTokens": 1536,
+              "inputTokens": null,
+              "outputTokens": null,
+              "totalTokens": null,
+              "cachedTokens": null,
               "fallback": false,
               "retry": false,
-              "success": true,
-              "failureReason": null,
-              "latencyMs": 471,
+              "success": false,
+              "failureReason": "PROVIDER_RATE_LIMIT",
+              "latencyMs": 90,
               "context": {
                 "systemPromptChars": 3250,
                 "requestGuidanceChars": 1692,
@@ -921,6 +923,38 @@
                 "conversationChars": 768,
                 "toolDefinitionsChars": 662,
                 "requestBytes": 10567,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null
+              }
+            },
+            {
+              "provider": "gemini",
+              "model": "gemini-3.1-flash-lite",
+              "logicalCallNumber": 1,
+              "attemptNumber": 2,
+              "inputTokens": 2105,
+              "outputTokens": 124,
+              "totalTokens": 2229,
+              "cachedTokens": null,
+              "fallback": true,
+              "retry": false,
+              "success": true,
+              "failureReason": null,
+              "latencyMs": 8719,
+              "context": {
+                "systemPromptChars": 3250,
+                "requestGuidanceChars": 1692,
+                "userMessageChars": 65,
+                "recentConversationChars": 0,
+                "summaryChars": 0,
+                "structuredStateChars": 0,
+                "toolResultChars": 0,
+                "otherConversationChars": 703,
+                "conversationChars": 768,
+                "toolDefinitionsChars": 631,
+                "requestBytes": 10617,
                 "systemPromptTokens": null,
                 "conversationTokens": null,
                 "toolDefinitionsTokens": null,
@@ -960,8 +994,8 @@
           }
         },
         "provenance": {
-          "requestId": "provider-planning-control-02-7dccd925-057b-4be8-9fb1-cf1a502ab12d",
-          "conversationId": "provider-planning-control-02-95676555-de00-4ea5-87c0-99c2a423e3c6",
+          "requestId": "provider-planning-control-02-2b601975-e626-435d-bab3-536fbc501f55",
+          "conversationId": "provider-planning-control-02-875e37e5-bb0e-4361-bc5a-176a139dad55",
           "source": "evaluation_fixture",
           "scenarioId": "02"
         }
@@ -1015,7 +1049,7 @@
         },
         "control": {
           "status": "MEASURED",
-          "answer": "يبدو أن هناك التزامين قد يتعارضان مع سفرك:\n- تسليم عرض السعر للمورد في 22 سبتمبر\n- مراجعة عقد المشروع في 24 سبتمبر\nالالتزام الآخر، الاتصال بمحمد لتأكيد الموعد، مقرر في 26 سبتمبر وهو بعد أسبوع سفرك. إذا احتجت تعديل مواعيد أو أي مساعدة أخرى، أخبرني.",
+          "answer": "بناءً على التزاماتك المسجلة، لديك المهام التالية خلال الأسبوع القادم:\n- تسليم عرض السعر للمورد في 29 سبتمبر 2026.\n- مراجعة عقد المشروع في 1 أكتوبر 2026.\n- الاتصال بمحمد لتأكيد الموعد في 3 أكتوبر 2026.\n\nيرجى التحقق مما إذا كانت هذه المواعيد تتعارض مع توقيت سفرك.",
           "responseKind": "answer",
           "selectedSources": [
             "structured_records.obligations"
@@ -1117,21 +1151,21 @@
       "brain": {
         "route": "brain",
         "status": "MEASURED",
-        "responseKind": "answer",
-        "finalAnswer": "لم أستطع إكمال الطلب بشكل آمن. اكتب التفاصيل المطلوبة وسأحاول مرة أخرى.",
-        "provider": "groq",
-        "model": "openai/gpt-oss-20b",
+        "responseKind": "error",
+        "finalAnswer": "راجعت البيانات المحفوظة، لكن لم أستطع تأكيد الرقم المالي من نتيجة قاعدة البيانات. لن أخمّن.",
+        "provider": "gemini",
+        "model": "gemini-3-flash-preview",
         "brain": {
-          "requestId": "provider-planning-brain-03-c48a170b-9373-4035-a0d0-19007d0103e6",
-          "conversationId": "provider-planning-03-4f62f35a-b55e-4375-98d0-3cf1deeb86c9",
+          "requestId": "provider-planning-brain-03-0ade6931-201d-432f-a82c-5b333349c8ac",
+          "conversationId": "provider-planning-03-1f8cbb31-16dd-4b3c-8b3d-f2efea472aba",
           "brainVersion": 1,
-          "brainState": "completed",
+          "brainState": "failed",
           "brainStrategy": "L1",
           "brainIntent": "entity_context",
           "brainIntentConfidence": 0.94,
           "brainOverallConfidence": 0.8730000000000001,
           "brainRisk": "low",
-          "brainVerification": "not_required",
+          "brainVerification": "failed",
           "brainSources": [
             "user_input",
             "relationship_graph",
@@ -1142,51 +1176,13 @@
         },
         "action": {
           "type": "tool_orchestration",
-          "lastTool": "find_person",
-          "toolCalls": 1,
-          "llmCalls": 2,
+          "lastTool": "query_reminders",
+          "toolCalls": 2,
+          "llmCalls": 3,
           "conversationState": {
-            "people": [
-              {
-                "id": "b049611e-ee02-4364-9bba-ae5bd9d179aa",
-                "name": "محمد أحمد",
-                "type": "person",
-                "ordinal": 1
-              },
-              {
-                "id": "89a3ba46-f93f-43ec-8c62-4be030801384",
-                "name": "محمد علي",
-                "type": "person",
-                "ordinal": 2
-              },
-              {
-                "id": "c2169a7d-3ed1-4ffc-a085-b7f1ff33f9de",
-                "name": "محمد مدير المشروع",
-                "type": "person",
-                "ordinal": 3
-              }
-            ],
+            "people": [],
             "projects": [],
-            "candidatePeople": [
-              {
-                "id": "b049611e-ee02-4364-9bba-ae5bd9d179aa",
-                "name": "محمد أحمد",
-                "type": "person",
-                "ordinal": 1
-              },
-              {
-                "id": "89a3ba46-f93f-43ec-8c62-4be030801384",
-                "name": "محمد علي",
-                "type": "person",
-                "ordinal": 2
-              },
-              {
-                "id": "c2169a7d-3ed1-4ffc-a085-b7f1ff33f9de",
-                "name": "محمد مدير المشروع",
-                "type": "person",
-                "ordinal": 3
-              }
-            ],
+            "candidatePeople": [],
             "candidateProjects": [],
             "financialParties": [],
             "facts": [],
@@ -1194,25 +1190,7 @@
             "relationships": []
           },
           "toolResult": {
-            "ok": true,
-            "needsClarification": true,
-            "matches": [
-              {
-                "id": "b049611e-ee02-4364-9bba-ae5bd9d179aa",
-                "name": "محمد أحمد",
-                "ordinal": 1
-              },
-              {
-                "id": "89a3ba46-f93f-43ec-8c62-4be030801384",
-                "name": "محمد علي",
-                "ordinal": 2
-              },
-              {
-                "id": "c2169a7d-3ed1-4ffc-a085-b7f1ff33f9de",
-                "name": "محمد مدير المشروع",
-                "ordinal": 3
-              }
-            ]
+            "ok": true
           },
           "deterministicIntelligence": {
             "layerVersion": 1,
@@ -1229,9 +1207,9 @@
             "falsePositiveGuard": "not_applicable"
           },
           "secondBrainRetrievalTrace": {
-            "traceId": "9734dc7a-9bc1-4718-8aeb-5145e4cbd05e",
-            "requestId": "provider-planning-brain-03-c48a170b-9373-4035-a0d0-19007d0103e6",
-            "conversationId": "provider-planning-03-4f62f35a-b55e-4375-98d0-3cf1deeb86c9",
+            "traceId": "3d27b7de-8217-4cbf-8ebb-245795ea8873",
+            "requestId": "provider-planning-brain-03-0ade6931-201d-432f-a82c-5b333349c8ac",
+            "conversationId": "provider-planning-03-1f8cbb31-16dd-4b3c-8b3d-f2efea472aba",
             "strategy": "none",
             "triggered": false,
             "queryDomain": "entity_resolution",
@@ -1251,35 +1229,41 @@
             "fallbackProvider": "gemini",
             "providersAttempted": [
               "groq",
-              "groq"
+              "gemini",
+              "gemini",
+              "gemini"
             ],
-            "fallbackOccurred": false,
-            "selectedProvider": "groq",
-            "logicalLlmCalls": 2,
-            "httpAttempts": 2,
+            "fallbackOccurred": true,
+            "fallbackReason": "PROVIDER_RATE_LIMIT",
+            "toolCallsExecutedBeforeFailure": 0,
+            "selectedProvider": "gemini",
+            "logicalLlmCalls": 3,
+            "httpAttempts": 5,
             "httpAttemptsByProvider": {
-              "groq": 2
+              "groq": 1,
+              "gemini": 4
             },
             "retryCount": 0,
-            "providerFallbackAttempts": 0,
-            "modelFallbackAttempts": 0,
+            "providerFallbackAttempts": 1,
+            "modelFallbackAttempts": 1,
             "requestBytesByProvider": {
-              "groq": 28612
+              "groq": 14996,
+              "gemini": 61812
             },
-            "maxRequestBytes": 14631,
+            "maxRequestBytes": 15762,
             "systemPromptChars": 4943,
             "toolDefinitionsChars": 3707,
             "toolDefinitionsCount": 9,
-            "maxConversationChars": 2043,
+            "maxConversationChars": 3326,
             "cacheHit": false,
-            "cacheMiss": false,
+            "cacheMiss": true,
             "cachedTokens": 0
           }
         },
         "retrievalTrace": {
-          "traceId": "9734dc7a-9bc1-4718-8aeb-5145e4cbd05e",
-          "requestId": "provider-planning-brain-03-c48a170b-9373-4035-a0d0-19007d0103e6",
-          "conversationId": "provider-planning-03-4f62f35a-b55e-4375-98d0-3cf1deeb86c9",
+          "traceId": "3d27b7de-8217-4cbf-8ebb-245795ea8873",
+          "requestId": "provider-planning-brain-03-0ade6931-201d-432f-a82c-5b333349c8ac",
+          "conversationId": "provider-planning-03-1f8cbb31-16dd-4b3c-8b3d-f2efea472aba",
           "strategy": "none",
           "triggered": false,
           "queryDomain": "entity_resolution",
@@ -1316,6 +1300,12 @@
                 "name": "مشروع التوسعة",
                 "matchType": "exact",
                 "confidence": 1
+              },
+              {
+                "type": "person",
+                "name": "محمد مدير المشروع",
+                "matchType": "exact",
+                "confidence": 1
               }
             ],
             "uncertainties": [],
@@ -1333,7 +1323,8 @@
             },
             "llmContextIncluded": false,
             "llmContextReason": "policy_excluded_all"
-          }
+          },
+          "structuredComparisonContextIncluded": false
         },
         "contextEvidence": {
           "selected": [
@@ -1347,26 +1338,26 @@
           "source": "brain_log_and_retrieval_trace"
         },
         "usage": {
-          "logicalLlmCalls": 2,
-          "httpAttempts": 2,
-          "fallback": false,
-          "fallbackReason": null,
-          "inputTokens": 5054,
-          "outputTokens": 112,
-          "totalTokens": 5166,
-          "cachedTokens": 3328,
+          "logicalLlmCalls": 3,
+          "httpAttempts": 5,
+          "fallback": true,
+          "fallbackReason": "PROVIDER_RATE_LIMIT",
+          "inputTokens": 9999,
+          "outputTokens": 224,
+          "totalTokens": 10223,
+          "cachedTokens": null,
           "context": {
-            "systemPromptChars": 6500,
-            "requestGuidanceChars": 3384,
-            "userMessageChars": 190,
+            "systemPromptChars": 16250,
+            "requestGuidanceChars": 8460,
+            "userMessageChars": 475,
             "recentConversationChars": 0,
             "summaryChars": 0,
             "structuredStateChars": 0,
-            "toolResultChars": 287,
-            "otherConversationChars": 2190,
-            "conversationChars": 2667,
-            "toolDefinitionsChars": 7414,
-            "requestBytes": 28612
+            "toolResultChars": 229,
+            "otherConversationChars": 9605,
+            "conversationChars": 10309,
+            "toolDefinitionsChars": 17419,
+            "requestBytes": 76808
           },
           "attempts": [
             {
@@ -1374,15 +1365,15 @@
               "model": "openai/gpt-oss-20b",
               "logicalCallNumber": 1,
               "attemptNumber": 1,
-              "inputTokens": 2456,
-              "outputTokens": 74,
-              "totalTokens": 2530,
-              "cachedTokens": 1792,
+              "inputTokens": null,
+              "outputTokens": null,
+              "totalTokens": null,
+              "cachedTokens": null,
               "fallback": false,
               "retry": false,
-              "success": true,
-              "failureReason": null,
-              "latencyMs": 220,
+              "success": false,
+              "failureReason": "PROVIDER_RATE_LIMIT",
+              "latencyMs": 209,
               "context": {
                 "systemPromptChars": 3250,
                 "requestGuidanceChars": 1692,
@@ -1391,10 +1382,10 @@
                 "summaryChars": 0,
                 "structuredStateChars": 0,
                 "toolResultChars": 0,
-                "otherConversationChars": 1095,
-                "conversationChars": 1190,
+                "otherConversationChars": 1921,
+                "conversationChars": 2016,
                 "toolDefinitionsChars": 3707,
-                "requestBytes": 13981,
+                "requestBytes": 14996,
                 "systemPromptTokens": null,
                 "conversationTokens": null,
                 "toolDefinitionsTokens": null,
@@ -1402,19 +1393,19 @@
               }
             },
             {
-              "provider": "groq",
-              "model": "openai/gpt-oss-20b",
-              "logicalCallNumber": 2,
+              "provider": "gemini",
+              "model": "gemini-3.1-flash-lite",
+              "logicalCallNumber": 1,
               "attemptNumber": 2,
-              "inputTokens": 2598,
-              "outputTokens": 38,
-              "totalTokens": 2636,
-              "cachedTokens": 1536,
-              "fallback": false,
+              "inputTokens": 3263,
+              "outputTokens": 51,
+              "totalTokens": 3314,
+              "cachedTokens": null,
+              "fallback": true,
               "retry": false,
               "success": true,
               "failureReason": null,
-              "latencyMs": 466,
+              "latencyMs": 1135,
               "context": {
                 "systemPromptChars": 3250,
                 "requestGuidanceChars": 1692,
@@ -1422,11 +1413,107 @@
                 "recentConversationChars": 0,
                 "summaryChars": 0,
                 "structuredStateChars": 0,
-                "toolResultChars": 287,
-                "otherConversationChars": 1095,
-                "conversationChars": 1477,
-                "toolDefinitionsChars": 3707,
-                "requestBytes": 14631,
+                "toolResultChars": 0,
+                "otherConversationChars": 1921,
+                "conversationChars": 2016,
+                "toolDefinitionsChars": 3428,
+                "requestBytes": 14902,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null
+              }
+            },
+            {
+              "provider": "gemini",
+              "model": "gemini-3.1-flash-lite",
+              "logicalCallNumber": 2,
+              "attemptNumber": 3,
+              "inputTokens": 3353,
+              "outputTokens": 17,
+              "totalTokens": 3370,
+              "cachedTokens": null,
+              "fallback": true,
+              "retry": false,
+              "success": true,
+              "failureReason": null,
+              "latencyMs": 3517,
+              "context": {
+                "systemPromptChars": 3250,
+                "requestGuidanceChars": 1692,
+                "userMessageChars": 95,
+                "recentConversationChars": 0,
+                "summaryChars": 0,
+                "structuredStateChars": 0,
+                "toolResultChars": 69,
+                "otherConversationChars": 1921,
+                "conversationChars": 2085,
+                "toolDefinitionsChars": 3428,
+                "requestBytes": 15386,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null
+              }
+            },
+            {
+              "provider": "gemini",
+              "model": "gemini-3.1-flash-lite",
+              "logicalCallNumber": 3,
+              "attemptNumber": 4,
+              "inputTokens": null,
+              "outputTokens": null,
+              "totalTokens": null,
+              "cachedTokens": null,
+              "fallback": true,
+              "retry": false,
+              "success": false,
+              "failureReason": "PROVIDER_REQUEST_FAILED",
+              "latencyMs": 25003,
+              "context": {
+                "systemPromptChars": 3250,
+                "requestGuidanceChars": 1692,
+                "userMessageChars": 95,
+                "recentConversationChars": 0,
+                "summaryChars": 0,
+                "structuredStateChars": 0,
+                "toolResultChars": 80,
+                "otherConversationChars": 1921,
+                "conversationChars": 2096,
+                "toolDefinitionsChars": 3428,
+                "requestBytes": 15762,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null
+              }
+            },
+            {
+              "provider": "gemini",
+              "model": "gemini-3-flash-preview",
+              "logicalCallNumber": 3,
+              "attemptNumber": 5,
+              "inputTokens": 3383,
+              "outputTokens": 156,
+              "totalTokens": 3539,
+              "cachedTokens": null,
+              "fallback": true,
+              "retry": false,
+              "success": true,
+              "failureReason": null,
+              "latencyMs": 1577,
+              "context": {
+                "systemPromptChars": 3250,
+                "requestGuidanceChars": 1692,
+                "userMessageChars": 95,
+                "recentConversationChars": 0,
+                "summaryChars": 0,
+                "structuredStateChars": 0,
+                "toolResultChars": 80,
+                "otherConversationChars": 1921,
+                "conversationChars": 2096,
+                "toolDefinitionsChars": 3428,
+                "requestBytes": 15762,
                 "systemPromptTokens": null,
                 "conversationTokens": null,
                 "toolDefinitionsTokens": null,
@@ -1466,8 +1553,8 @@
           }
         },
         "provenance": {
-          "requestId": "provider-planning-brain-03-c48a170b-9373-4035-a0d0-19007d0103e6",
-          "conversationId": "provider-planning-03-4f62f35a-b55e-4375-98d0-3cf1deeb86c9",
+          "requestId": "provider-planning-brain-03-0ade6931-201d-432f-a82c-5b333349c8ac",
+          "conversationId": "provider-planning-03-1f8cbb31-16dd-4b3c-8b3d-f2efea472aba",
           "source": "evaluation_fixture",
           "scenarioId": "03"
         }
@@ -1476,9 +1563,9 @@
         "route": "control",
         "status": "MEASURED",
         "responseKind": "answer",
-        "finalAnswer": "بناءً على البيانات المتاحة، إليك الصورة الكاملة لمشروع التوسعة المرتبط بمحمد مدير المشروع:\n\n1. **الأشخاص المرتبطون:** محمد مدير المشروع هو الشخص المسجل حالياً في سياق هذا المشروع.\n2. **المصروفات:** تم تسجيل مصروف واحد بقيمة 1,200 جنيه مصري (دفعة المورد لمشروع التوسعة).\n3. **الالتزامات المفتوحة:** يوجد التزام قائم بعنوان \"تسليم عرض السعر للمورد\"، وموعده النهائي في 22 سبتمبر 2026.",
-        "provider": "gemini",
-        "model": "gemini-3-flash-preview",
+        "finalAnswer": "المشروع \"مشروع التوسعة\" مرتبط بالشخص محمد مدير المشروع. المصروف الوحيد المسجَّل له هو دفعة المورد بمبلغ 1200 جنيه مصروفاً على المشروع. الالتزام المفتوح هو تسليم عرض السعر للمورد، المنتهي في 29 سبتمبر 2026 الساعة 08:00 بتوقيت القاهرة.",
+        "provider": "groq",
+        "model": "openai/gpt-oss-20b",
         "brain": null,
         "action": null,
         "retrievalTrace": null,
@@ -1496,19 +1583,19 @@
         },
         "usage": {
           "logicalLlmCalls": 1,
-          "httpAttempts": 3,
-          "fallback": true,
-          "fallbackReason": "PROVIDER_RATE_LIMIT",
-          "inputTokens": 2269,
-          "outputTokens": 193,
-          "totalTokens": 3288,
+          "httpAttempts": 1,
+          "fallback": false,
+          "fallbackReason": null,
+          "inputTokens": 2077,
+          "outputTokens": 156,
+          "totalTokens": 2233,
           "cachedTokens": null,
           "context": {
             "systemPromptChars": 4943,
             "toolDefinitionsChars": 662,
             "toolDefinitionsCount": 1,
-            "maxConversationChars": 1271,
-            "maxRequestBytes": 11005,
+            "maxConversationChars": 1228,
+            "maxRequestBytes": 10955,
             "selectedSources": [
               "structured_records.people",
               "structured_records.projects",
@@ -1525,15 +1612,15 @@
               "model": "openai/gpt-oss-20b",
               "logicalCallNumber": 1,
               "attemptNumber": 1,
-              "inputTokens": null,
-              "outputTokens": null,
-              "totalTokens": null,
+              "inputTokens": 2077,
+              "outputTokens": 156,
+              "totalTokens": 2233,
               "cachedTokens": null,
               "fallback": false,
               "retry": false,
-              "success": false,
-              "failureReason": "PROVIDER_RATE_LIMIT",
-              "latencyMs": 82,
+              "success": true,
+              "failureReason": null,
+              "latencyMs": 524,
               "context": {
                 "systemPromptChars": 3250,
                 "requestGuidanceChars": 1692,
@@ -1546,70 +1633,6 @@
                 "conversationChars": 1094,
                 "toolDefinitionsChars": 662,
                 "requestBytes": 10955,
-                "systemPromptTokens": null,
-                "conversationTokens": null,
-                "toolDefinitionsTokens": null,
-                "toolResultTokens": null
-              }
-            },
-            {
-              "provider": "gemini",
-              "model": "gemini-3.1-flash-lite",
-              "logicalCallNumber": 1,
-              "attemptNumber": 2,
-              "inputTokens": null,
-              "outputTokens": null,
-              "totalTokens": null,
-              "cachedTokens": null,
-              "fallback": true,
-              "retry": false,
-              "success": false,
-              "failureReason": "PROVIDER_REQUEST_FAILED",
-              "latencyMs": 24351,
-              "context": {
-                "systemPromptChars": 3250,
-                "requestGuidanceChars": 1692,
-                "userMessageChars": 95,
-                "recentConversationChars": 0,
-                "summaryChars": 0,
-                "structuredStateChars": 0,
-                "toolResultChars": 0,
-                "otherConversationChars": 999,
-                "conversationChars": 1094,
-                "toolDefinitionsChars": 631,
-                "requestBytes": 11005,
-                "systemPromptTokens": null,
-                "conversationTokens": null,
-                "toolDefinitionsTokens": null,
-                "toolResultTokens": null
-              }
-            },
-            {
-              "provider": "gemini",
-              "model": "gemini-3-flash-preview",
-              "logicalCallNumber": 1,
-              "attemptNumber": 3,
-              "inputTokens": 2269,
-              "outputTokens": 193,
-              "totalTokens": 3288,
-              "cachedTokens": null,
-              "fallback": true,
-              "retry": false,
-              "success": true,
-              "failureReason": null,
-              "latencyMs": 5057,
-              "context": {
-                "systemPromptChars": 3250,
-                "requestGuidanceChars": 1692,
-                "userMessageChars": 95,
-                "recentConversationChars": 0,
-                "summaryChars": 0,
-                "structuredStateChars": 0,
-                "toolResultChars": 0,
-                "otherConversationChars": 999,
-                "conversationChars": 1094,
-                "toolDefinitionsChars": 631,
-                "requestBytes": 11005,
                 "systemPromptTokens": null,
                 "conversationTokens": null,
                 "toolDefinitionsTokens": null,
@@ -1649,22 +1672,23 @@
           }
         },
         "provenance": {
-          "requestId": "provider-planning-control-03-b5684610-4ba3-41cc-99b2-2e305c83104d",
-          "conversationId": "provider-planning-control-03-4842b65f-c86a-401b-8011-4e8e8ff34460",
+          "requestId": "provider-planning-control-03-fecdb42a-d074-464d-ab2a-b66da38a64ac",
+          "conversationId": "provider-planning-control-03-d8bfebd1-4f06-4667-a4a4-4bb04456faf0",
           "source": "evaluation_fixture",
           "scenarioId": "03"
         }
       },
       "evaluation": {
         "brain": {
-          "status": "PARTIAL",
+          "status": "FAIL",
           "criteria": {
-            "answered": true,
+            "answered": false,
             "mentions_project_or_person": false,
             "uses_official_financial_context": false,
             "no_automatic_action": true
           },
           "notes": [
+            "failed:answered",
             "failed:mentions_project_or_person",
             "failed:uses_official_financial_context"
           ]
@@ -1684,8 +1708,8 @@
         "status": "COMPARABLE",
         "brain": {
           "status": "MEASURED",
-          "answer": "لم أستطع إكمال الطلب بشكل آمن. اكتب التفاصيل المطلوبة وسأحاول مرة أخرى.",
-          "responseKind": "answer",
+          "answer": "راجعت البيانات المحفوظة، لكن لم أستطع تأكيد الرقم المالي من نتيجة قاعدة البيانات. لن أخمّن.",
+          "responseKind": "error",
           "selectedSources": [
             "user_input",
             "relationship_graph",
@@ -1695,14 +1719,15 @@
             "unverified_model_claims"
           ],
           "evaluation": {
-            "status": "PARTIAL",
+            "status": "FAIL",
             "criteria": {
-              "answered": true,
+              "answered": false,
               "mentions_project_or_person": false,
               "uses_official_financial_context": false,
               "no_automatic_action": true
             },
             "notes": [
+              "failed:answered",
               "failed:mentions_project_or_person",
               "failed:uses_official_financial_context"
             ]
@@ -1710,7 +1735,7 @@
         },
         "control": {
           "status": "MEASURED",
-          "answer": "بناءً على البيانات المتاحة، إليك الصورة الكاملة لمشروع التوسعة المرتبط بمحمد مدير المشروع:\n\n1. **الأشخاص المرتبطون:** محمد مدير المشروع هو الشخص المسجل حالياً في سياق هذا المشروع.\n2. **المصروفات:** تم تسجيل مصروف واحد بقيمة 1,200 جنيه مصري (دفعة المورد لمشروع التوسعة).\n3. **الالتزامات المفتوحة:** يوجد التزام قائم بعنوان \"تسليم عرض السعر للمورد\"، وموعده النهائي في 22 سبتمبر 2026.",
+          "answer": "المشروع \"مشروع التوسعة\" مرتبط بالشخص محمد مدير المشروع. المصروف الوحيد المسجَّل له هو دفعة المورد بمبلغ 1200 جنيه مصروفاً على المشروع. الالتزام المفتوح هو تسليم عرض السعر للمورد، المنتهي في 29 سبتمبر 2026 الساعة 08:00 بتوقيت القاهرة.",
           "responseKind": "answer",
           "selectedSources": [
             "structured_records.people",
@@ -1837,21 +1862,21 @@
       "brain": {
         "route": "brain",
         "status": "MEASURED",
-        "responseKind": "clarification",
-        "finalAnswer": "هل تقصد مشروع \"التوسعة\"؟ لا يوجد مشروع بهذا الاسم في سجلاتنا. هل تريد إنشاء مشروع جديد أو البحث عن اسم آخر؟",
-        "provider": "groq",
-        "model": "openai/gpt-oss-20b",
+        "responseKind": "error",
+        "finalAnswer": "راجعت البيانات المحفوظة، لكن لم أستطع تأكيد الرقم المالي من نتيجة قاعدة البيانات. لن أخمّن.",
+        "provider": "gemini",
+        "model": "gemini-3.1-flash-lite",
         "brain": {
-          "requestId": "provider-planning-brain-04-ba35c58a-a2ee-4ac6-b6c7-e7a2ab74005d",
-          "conversationId": "provider-planning-04-e0529062-f0a5-47e7-9314-1356c572a462",
+          "requestId": "provider-planning-brain-04-ea270cfb-5d13-48a9-ad74-bb23a33c9b17",
+          "conversationId": "provider-planning-04-3d2b97c9-98d4-48e9-9c9c-07a800a0eb36",
           "brainVersion": 1,
-          "brainState": "clarification",
+          "brainState": "failed",
           "brainStrategy": "L1",
           "brainIntent": "expense_report",
           "brainIntentConfidence": 0.91,
           "brainOverallConfidence": 0.7845000000000001,
           "brainRisk": "low",
-          "brainVerification": "not_required",
+          "brainVerification": "failed",
           "brainSources": [
             "user_input",
             "second_brain"
@@ -1861,7 +1886,7 @@
         },
         "action": {
           "type": "tool_orchestration",
-          "lastTool": "find_project",
+          "lastTool": "query_expenses",
           "toolCalls": 1,
           "llmCalls": 2,
           "conversationState": {
@@ -1875,9 +1900,7 @@
             "relationships": []
           },
           "toolResult": {
-            "ok": true,
-            "needsClarification": false,
-            "matches": []
+            "ok": true
           },
           "deterministicIntelligence": {
             "layerVersion": 1,
@@ -1894,16 +1917,16 @@
             "falsePositiveGuard": "not_applicable"
           },
           "secondBrainRetrievalTrace": {
-            "traceId": "6f4111b8-c752-4d1f-854c-b941e27fb755",
-            "requestId": "provider-planning-brain-04-ba35c58a-a2ee-4ac6-b6c7-e7a2ab74005d",
-            "conversationId": "provider-planning-04-e0529062-f0a5-47e7-9314-1356c572a462",
+            "traceId": "3bc8f9b8-8071-44f6-8223-fa872fa07b56",
+            "requestId": "provider-planning-brain-04-ea270cfb-5d13-48a9-ad74-bb23a33c9b17",
+            "conversationId": "provider-planning-04-3d2b97c9-98d4-48e9-9c9c-07a800a0eb36",
             "strategy": "lexical_v1",
             "triggered": true,
             "queryDomain": "structured_record_comparison",
             "consideredCount": 1,
             "selected": [
               {
-                "memoryId": "84fc816c-4ad2-425a-ac1d-3ac62d52761a",
+                "memoryId": "025048e1-3a19-42c0-bf47-c0bc8b4ceeea",
                 "kind": "fact",
                 "relevanceScore": 1,
                 "confidence": 1,
@@ -1922,7 +1945,7 @@
               "applied": true,
               "domain": "financial_record",
               "conflicts": [
-                "84fc816c-4ad2-425a-ac1d-3ac62d52761a"
+                "025048e1-3a19-42c0-bf47-c0bc8b4ceeea"
               ]
             },
             "llmContextIncluded": true,
@@ -1933,42 +1956,47 @@
             "fallbackProvider": "gemini",
             "providersAttempted": [
               "groq",
-              "groq"
+              "groq",
+              "gemini"
             ],
-            "fallbackOccurred": false,
-            "selectedProvider": "groq",
+            "fallbackOccurred": true,
+            "selectedProvider": "gemini",
+            "fallbackReason": "PROVIDER_RATE_LIMIT",
+            "toolCallsExecutedBeforeFailure": 1,
             "logicalLlmCalls": 2,
-            "httpAttempts": 2,
+            "httpAttempts": 3,
             "httpAttemptsByProvider": {
-              "groq": 2
+              "groq": 2,
+              "gemini": 1
             },
             "retryCount": 0,
-            "providerFallbackAttempts": 0,
+            "providerFallbackAttempts": 1,
             "modelFallbackAttempts": 0,
             "requestBytesByProvider": {
-              "groq": 28340
+              "groq": 30814,
+              "gemini": 15578
             },
-            "maxRequestBytes": 14351,
+            "maxRequestBytes": 15664,
             "systemPromptChars": 4943,
             "toolDefinitionsChars": 3707,
             "toolDefinitionsCount": 9,
-            "maxConversationChars": 1732,
+            "maxConversationChars": 2969,
             "cacheHit": false,
-            "cacheMiss": false,
+            "cacheMiss": true,
             "cachedTokens": 0
           }
         },
         "retrievalTrace": {
-          "traceId": "6f4111b8-c752-4d1f-854c-b941e27fb755",
-          "requestId": "provider-planning-brain-04-ba35c58a-a2ee-4ac6-b6c7-e7a2ab74005d",
-          "conversationId": "provider-planning-04-e0529062-f0a5-47e7-9314-1356c572a462",
+          "traceId": "3bc8f9b8-8071-44f6-8223-fa872fa07b56",
+          "requestId": "provider-planning-brain-04-ea270cfb-5d13-48a9-ad74-bb23a33c9b17",
+          "conversationId": "provider-planning-04-3d2b97c9-98d4-48e9-9c9c-07a800a0eb36",
           "strategy": "lexical_v1",
           "triggered": true,
           "queryDomain": "structured_record_comparison",
           "consideredCount": 1,
           "selected": [
             {
-              "memoryId": "84fc816c-4ad2-425a-ac1d-3ac62d52761a",
+              "memoryId": "025048e1-3a19-42c0-bf47-c0bc8b4ceeea",
               "kind": "fact",
               "relevanceScore": 1,
               "confidence": 1,
@@ -1987,7 +2015,7 @@
             "applied": true,
             "domain": "financial_record",
             "conflicts": [
-              "84fc816c-4ad2-425a-ac1d-3ac62d52761a"
+              "025048e1-3a19-42c0-bf47-c0bc8b4ceeea"
             ]
           },
           "llmContextIncluded": true,
@@ -2023,12 +2051,13 @@
               "applied": true,
               "domain": "financial_record",
               "conflicts": [
-                "84fc816c-4ad2-425a-ac1d-3ac62d52761a"
+                "025048e1-3a19-42c0-bf47-c0bc8b4ceeea"
               ]
             },
             "llmContextIncluded": true,
             "llmContextReason": "structured_record_comparison"
-          }
+          },
+          "structuredComparisonContextIncluded": true
         },
         "contextEvidence": {
           "selected": [
@@ -2043,25 +2072,25 @@
         },
         "usage": {
           "logicalLlmCalls": 2,
-          "httpAttempts": 2,
-          "fallback": false,
-          "fallbackReason": null,
-          "inputTokens": 4988,
-          "outputTokens": 116,
-          "totalTokens": 5104,
-          "cachedTokens": 3584,
+          "httpAttempts": 3,
+          "fallback": true,
+          "fallbackReason": "PROVIDER_RATE_LIMIT",
+          "inputTokens": 6293,
+          "outputTokens": 200,
+          "totalTokens": 6493,
+          "cachedTokens": null,
           "context": {
-            "systemPromptChars": 6500,
-            "requestGuidanceChars": 3384,
-            "userMessageChars": 260,
+            "systemPromptChars": 9750,
+            "requestGuidanceChars": 5076,
+            "userMessageChars": 390,
             "recentConversationChars": 0,
             "summaryChars": 0,
             "structuredStateChars": 0,
-            "toolResultChars": 51,
-            "otherConversationChars": 2048,
-            "conversationChars": 2359,
-            "toolDefinitionsChars": 7414,
-            "requestBytes": 28340
+            "toolResultChars": 320,
+            "otherConversationChars": 5901,
+            "conversationChars": 6611,
+            "toolDefinitionsChars": 10842,
+            "requestBytes": 46392
           },
           "attempts": [
             {
@@ -2069,15 +2098,15 @@
               "model": "openai/gpt-oss-20b",
               "logicalCallNumber": 1,
               "attemptNumber": 1,
-              "inputTokens": 2474,
-              "outputTokens": 53,
-              "totalTokens": 2527,
-              "cachedTokens": 1536,
+              "inputTokens": 2831,
+              "outputTokens": 69,
+              "totalTokens": 2900,
+              "cachedTokens": null,
               "fallback": false,
               "retry": false,
               "success": true,
               "failureReason": null,
-              "latencyMs": 409,
+              "latencyMs": 403,
               "context": {
                 "systemPromptChars": 3250,
                 "requestGuidanceChars": 1692,
@@ -2086,10 +2115,10 @@
                 "summaryChars": 0,
                 "structuredStateChars": 0,
                 "toolResultChars": 0,
-                "otherConversationChars": 1024,
-                "conversationChars": 1154,
+                "otherConversationChars": 1967,
+                "conversationChars": 2097,
                 "toolDefinitionsChars": 3707,
-                "requestBytes": 13989,
+                "requestBytes": 15150,
                 "systemPromptTokens": null,
                 "conversationTokens": null,
                 "toolDefinitionsTokens": null,
@@ -2101,15 +2130,15 @@
               "model": "openai/gpt-oss-20b",
               "logicalCallNumber": 2,
               "attemptNumber": 2,
-              "inputTokens": 2514,
-              "outputTokens": 63,
-              "totalTokens": 2577,
-              "cachedTokens": 2048,
+              "inputTokens": null,
+              "outputTokens": null,
+              "totalTokens": null,
+              "cachedTokens": null,
               "fallback": false,
               "retry": false,
-              "success": true,
-              "failureReason": null,
-              "latencyMs": 566,
+              "success": false,
+              "failureReason": "PROVIDER_RATE_LIMIT",
+              "latencyMs": 95,
               "context": {
                 "systemPromptChars": 3250,
                 "requestGuidanceChars": 1692,
@@ -2117,11 +2146,43 @@
                 "recentConversationChars": 0,
                 "summaryChars": 0,
                 "structuredStateChars": 0,
-                "toolResultChars": 51,
-                "otherConversationChars": 1024,
-                "conversationChars": 1205,
+                "toolResultChars": 160,
+                "otherConversationChars": 1967,
+                "conversationChars": 2257,
                 "toolDefinitionsChars": 3707,
-                "requestBytes": 14351,
+                "requestBytes": 15664,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null
+              }
+            },
+            {
+              "provider": "gemini",
+              "model": "gemini-3.1-flash-lite",
+              "logicalCallNumber": 2,
+              "attemptNumber": 3,
+              "inputTokens": 3462,
+              "outputTokens": 131,
+              "totalTokens": 3593,
+              "cachedTokens": null,
+              "fallback": true,
+              "retry": false,
+              "success": true,
+              "failureReason": null,
+              "latencyMs": 5218,
+              "context": {
+                "systemPromptChars": 3250,
+                "requestGuidanceChars": 1692,
+                "userMessageChars": 130,
+                "recentConversationChars": 0,
+                "summaryChars": 0,
+                "structuredStateChars": 0,
+                "toolResultChars": 160,
+                "otherConversationChars": 1967,
+                "conversationChars": 2257,
+                "toolDefinitionsChars": 3428,
+                "requestBytes": 15578,
                 "systemPromptTokens": null,
                 "conversationTokens": null,
                 "toolDefinitionsTokens": null,
@@ -2161,8 +2222,8 @@
           }
         },
         "provenance": {
-          "requestId": "provider-planning-brain-04-ba35c58a-a2ee-4ac6-b6c7-e7a2ab74005d",
-          "conversationId": "provider-planning-04-e0529062-f0a5-47e7-9314-1356c572a462",
+          "requestId": "provider-planning-brain-04-ea270cfb-5d13-48a9-ad74-bb23a33c9b17",
+          "conversationId": "provider-planning-04-3d2b97c9-98d4-48e9-9c9c-07a800a0eb36",
           "source": "evaluation_fixture",
           "scenarioId": "04"
         }
@@ -2171,9 +2232,9 @@
         "route": "control",
         "status": "MEASURED",
         "responseKind": "answer",
-        "finalAnswer": "المصروف المسجل في السجلات هو 1200 جنيه، بينما الملاحظة القديمة تقول 700 جنيه. الفرق هو 500 جنيه أكثر في السجلات.",
-        "provider": "groq",
-        "model": "openai/gpt-oss-20b",
+        "finalAnswer": "القيمة المسجلة في الحسابات الرسمية لمشروع التوسعة هي 1200 جنيه مصري، وهي تختلف عن الملاحظة القديمة التي كانت تشير إلى 700 جنيه.",
+        "provider": "gemini",
+        "model": "gemini-3.1-flash-lite",
         "brain": null,
         "action": null,
         "retrievalTrace": null,
@@ -2189,19 +2250,19 @@
         },
         "usage": {
           "logicalLlmCalls": 1,
-          "httpAttempts": 1,
-          "fallback": false,
-          "fallbackReason": null,
-          "inputTokens": 2002,
-          "outputTokens": 133,
-          "totalTokens": 2135,
-          "cachedTokens": 1536,
+          "httpAttempts": 2,
+          "fallback": true,
+          "fallbackReason": "PROVIDER_RATE_LIMIT",
+          "inputTokens": 2155,
+          "outputTokens": 108,
+          "totalTokens": 2263,
+          "cachedTokens": null,
           "context": {
             "systemPromptChars": 4943,
             "toolDefinitionsChars": 662,
             "toolDefinitionsCount": 1,
-            "maxConversationChars": 1003,
-            "maxRequestBytes": 10739,
+            "maxConversationChars": 1046,
+            "maxRequestBytes": 10789,
             "selectedSources": [
               "structured_records.expenses",
               "second_brain"
@@ -2216,15 +2277,15 @@
               "model": "openai/gpt-oss-20b",
               "logicalCallNumber": 1,
               "attemptNumber": 1,
-              "inputTokens": 2002,
-              "outputTokens": 133,
-              "totalTokens": 2135,
-              "cachedTokens": 1536,
+              "inputTokens": null,
+              "outputTokens": null,
+              "totalTokens": null,
+              "cachedTokens": null,
               "fallback": false,
               "retry": false,
-              "success": true,
-              "failureReason": null,
-              "latencyMs": 352,
+              "success": false,
+              "failureReason": "PROVIDER_RATE_LIMIT",
+              "latencyMs": 100,
               "context": {
                 "systemPromptChars": 3250,
                 "requestGuidanceChars": 1692,
@@ -2242,6 +2303,38 @@
                 "toolDefinitionsTokens": null,
                 "toolResultTokens": null
               }
+            },
+            {
+              "provider": "gemini",
+              "model": "gemini-3.1-flash-lite",
+              "logicalCallNumber": 1,
+              "attemptNumber": 2,
+              "inputTokens": 2155,
+              "outputTokens": 108,
+              "totalTokens": 2263,
+              "cachedTokens": null,
+              "fallback": true,
+              "retry": false,
+              "success": true,
+              "failureReason": null,
+              "latencyMs": 6361,
+              "context": {
+                "systemPromptChars": 3250,
+                "requestGuidanceChars": 1692,
+                "userMessageChars": 130,
+                "recentConversationChars": 0,
+                "summaryChars": 0,
+                "structuredStateChars": 0,
+                "toolResultChars": 0,
+                "otherConversationChars": 769,
+                "conversationChars": 899,
+                "toolDefinitionsChars": 631,
+                "requestBytes": 10789,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null
+              }
             }
           ]
         },
@@ -2276,8 +2369,8 @@
           }
         },
         "provenance": {
-          "requestId": "provider-planning-control-04-e19b0908-9688-431a-b107-8c51b537a570",
-          "conversationId": "provider-planning-control-04-00b0a9c8-bea8-45f0-9a41-f272ce14d947",
+          "requestId": "provider-planning-control-04-23e6ea1d-ed4b-40d3-b2e4-e01daaa50b57",
+          "conversationId": "provider-planning-control-04-d509f041-3db9-4691-833e-0622fc87979f",
           "source": "evaluation_fixture",
           "scenarioId": "04"
         }
@@ -2286,12 +2379,13 @@
         "brain": {
           "status": "PARTIAL",
           "criteria": {
-            "answered": true,
+            "answered": false,
             "official_record_wins": false,
             "does_not_treat_memory_as_fact": true,
             "no_automatic_action": true
           },
           "notes": [
+            "failed:answered",
             "failed:official_record_wins"
           ]
         },
@@ -2312,8 +2406,8 @@
         "status": "COMPARABLE",
         "brain": {
           "status": "MEASURED",
-          "answer": "هل تقصد مشروع \"التوسعة\"؟ لا يوجد مشروع بهذا الاسم في سجلاتنا. هل تريد إنشاء مشروع جديد أو البحث عن اسم آخر؟",
-          "responseKind": "clarification",
+          "answer": "راجعت البيانات المحفوظة، لكن لم أستطع تأكيد الرقم المالي من نتيجة قاعدة البيانات. لن أخمّن.",
+          "responseKind": "error",
           "selectedSources": [
             "user_input",
             "second_brain",
@@ -2325,19 +2419,20 @@
           "evaluation": {
             "status": "PARTIAL",
             "criteria": {
-              "answered": true,
+              "answered": false,
               "official_record_wins": false,
               "does_not_treat_memory_as_fact": true,
               "no_automatic_action": true
             },
             "notes": [
+              "failed:answered",
               "failed:official_record_wins"
             ]
           }
         },
         "control": {
           "status": "MEASURED",
-          "answer": "المصروف المسجل في السجلات هو 1200 جنيه، بينما الملاحظة القديمة تقول 700 جنيه. الفرق هو 500 جنيه أكثر في السجلات.",
+          "answer": "القيمة المسجلة في الحسابات الرسمية لمشروع التوسعة هي 1200 جنيه مصري، وهي تختلف عن الملاحظة القديمة التي كانت تشير إلى 700 جنيه.",
           "responseKind": "answer",
           "selectedSources": [
             "structured_records.expenses",
@@ -2392,7 +2487,7 @@
             "control": true
           },
           "clarification": {
-            "brain": true,
+            "brain": false,
             "control": false
           }
         }
@@ -2440,8 +2535,8 @@
         "provider": "groq",
         "model": "openai/gpt-oss-20b",
         "brain": {
-          "requestId": "provider-planning-brain-05-c65747b5-a2a4-4961-8784-3e14e911d480",
-          "conversationId": "provider-planning-05-18db643e-09aa-496e-91ad-0e8cdef17c57",
+          "requestId": "provider-planning-brain-05-7f838640-d761-4bae-8737-05a26884e861",
+          "conversationId": "provider-planning-05-7d46cfb8-818f-4e1b-b321-e4eaef32c073",
           "brainVersion": 1,
           "brainState": "clarification",
           "brainStrategy": "L1",
@@ -2475,9 +2570,9 @@
             "falsePositiveGuard": "blocked"
           },
           "secondBrainRetrievalTrace": {
-            "traceId": "16a6fa49-0cbe-41e7-8ddd-9d5fb02c8cce",
-            "requestId": "provider-planning-brain-05-c65747b5-a2a4-4961-8784-3e14e911d480",
-            "conversationId": "provider-planning-05-18db643e-09aa-496e-91ad-0e8cdef17c57",
+            "traceId": "8df50b47-431a-43d0-a903-e38a8e877abf",
+            "requestId": "provider-planning-brain-05-7f838640-d761-4bae-8737-05a26884e861",
+            "conversationId": "provider-planning-05-7d46cfb8-818f-4e1b-b321-e4eaef32c073",
             "strategy": "none",
             "triggered": false,
             "queryDomain": "structured_record_mutation",
@@ -2502,9 +2597,9 @@
           }
         },
         "retrievalTrace": {
-          "traceId": "16a6fa49-0cbe-41e7-8ddd-9d5fb02c8cce",
-          "requestId": "provider-planning-brain-05-c65747b5-a2a4-4961-8784-3e14e911d480",
-          "conversationId": "provider-planning-05-18db643e-09aa-496e-91ad-0e8cdef17c57",
+          "traceId": "8df50b47-431a-43d0-a903-e38a8e877abf",
+          "requestId": "provider-planning-brain-05-7f838640-d761-4bae-8737-05a26884e861",
+          "conversationId": "provider-planning-05-7d46cfb8-818f-4e1b-b321-e4eaef32c073",
           "strategy": "none",
           "triggered": false,
           "queryDomain": "structured_record_mutation",
@@ -2577,8 +2672,8 @@
           }
         },
         "provenance": {
-          "requestId": "provider-planning-brain-05-c65747b5-a2a4-4961-8784-3e14e911d480",
-          "conversationId": "provider-planning-05-18db643e-09aa-496e-91ad-0e8cdef17c57",
+          "requestId": "provider-planning-brain-05-7f838640-d761-4bae-8737-05a26884e861",
+          "conversationId": "provider-planning-05-7d46cfb8-818f-4e1b-b321-e4eaef32c073",
           "source": "evaluation_fixture",
           "scenarioId": "05"
         }
@@ -2587,7 +2682,7 @@
         "route": "control",
         "status": "MEASURED",
         "responseKind": "clarification",
-        "finalAnswer": "ما هو المبلغ؟",
+        "finalAnswer": "كم المبلغ الذي دفعته لمحمد؟",
         "provider": "groq",
         "model": "openai/gpt-oss-20b",
         "brain": null,
@@ -2607,9 +2702,9 @@
           "httpAttempts": 1,
           "fallback": false,
           "fallbackReason": null,
-          "inputTokens": 1864,
-          "outputTokens": 47,
-          "totalTokens": 1911,
+          "inputTokens": 1863,
+          "outputTokens": 52,
+          "totalTokens": 1915,
           "cachedTokens": null,
           "context": {
             "systemPromptChars": 4943,
@@ -2630,15 +2725,15 @@
               "model": "openai/gpt-oss-20b",
               "logicalCallNumber": 1,
               "attemptNumber": 1,
-              "inputTokens": 1864,
-              "outputTokens": 47,
-              "totalTokens": 1911,
+              "inputTokens": 1863,
+              "outputTokens": 52,
+              "totalTokens": 1915,
               "cachedTokens": null,
               "fallback": false,
               "retry": false,
               "success": true,
               "failureReason": null,
-              "latencyMs": 477,
+              "latencyMs": 378,
               "context": {
                 "systemPromptChars": 3250,
                 "requestGuidanceChars": 1692,
@@ -2690,8 +2785,8 @@
           }
         },
         "provenance": {
-          "requestId": "provider-planning-control-05-1a12c17a-ffa8-4825-8716-b5ed92817fbd",
-          "conversationId": "provider-planning-control-05-e86f820a-8c70-4b67-acfc-0e0e92dd4e00",
+          "requestId": "provider-planning-control-05-2396d491-8d61-4cd7-b160-f59bae641187",
+          "conversationId": "provider-planning-control-05-0546a404-df4e-4367-b722-8b6122bdcddf",
           "source": "evaluation_fixture",
           "scenarioId": "05"
         }
@@ -2740,7 +2835,7 @@
         },
         "control": {
           "status": "MEASURED",
-          "answer": "ما هو المبلغ؟",
+          "answer": "كم المبلغ الذي دفعته لمحمد؟",
           "responseKind": "clarification",
           "selectedSources": [
             "structured_records.people"
@@ -2839,8 +2934,8 @@
         "provider": "groq",
         "model": "openai/gpt-oss-20b",
         "brain": {
-          "requestId": "provider-planning-brain-06-583bebd4-a715-4746-9546-bb97586e46ef",
-          "conversationId": "provider-planning-06-6b52635e-5927-4d6b-b38a-f9a0078058a2",
+          "requestId": "provider-planning-brain-06-acf2e761-278a-45e2-bb8f-837a5b1f1528",
+          "conversationId": "provider-planning-06-ea37f25d-e6e6-4120-8955-ab5374d1f78f",
           "brainVersion": 1,
           "brainState": "completed",
           "brainStrategy": "L0",
@@ -2874,9 +2969,9 @@
             "falsePositiveGuard": "passed"
           },
           "secondBrainRetrievalTrace": {
-            "traceId": "9bd4db09-7dfe-4c52-beec-d0576c08a8b5",
-            "requestId": "provider-planning-brain-06-583bebd4-a715-4746-9546-bb97586e46ef",
-            "conversationId": "provider-planning-06-6b52635e-5927-4d6b-b38a-f9a0078058a2",
+            "traceId": "e6ecc198-b869-4120-8f39-b9bc792b373b",
+            "requestId": "provider-planning-brain-06-acf2e761-278a-45e2-bb8f-837a5b1f1528",
+            "conversationId": "provider-planning-06-ea37f25d-e6e6-4120-8955-ab5374d1f78f",
             "strategy": "none",
             "triggered": false,
             "queryDomain": "structured_record_mutation",
@@ -2901,9 +2996,9 @@
           }
         },
         "retrievalTrace": {
-          "traceId": "9bd4db09-7dfe-4c52-beec-d0576c08a8b5",
-          "requestId": "provider-planning-brain-06-583bebd4-a715-4746-9546-bb97586e46ef",
-          "conversationId": "provider-planning-06-6b52635e-5927-4d6b-b38a-f9a0078058a2",
+          "traceId": "e6ecc198-b869-4120-8f39-b9bc792b373b",
+          "requestId": "provider-planning-brain-06-acf2e761-278a-45e2-bb8f-837a5b1f1528",
+          "conversationId": "provider-planning-06-ea37f25d-e6e6-4120-8955-ab5374d1f78f",
           "strategy": "none",
           "triggered": false,
           "queryDomain": "structured_record_mutation",
@@ -2978,8 +3073,8 @@
           }
         },
         "provenance": {
-          "requestId": "provider-planning-brain-06-583bebd4-a715-4746-9546-bb97586e46ef",
-          "conversationId": "provider-planning-06-6b52635e-5927-4d6b-b38a-f9a0078058a2",
+          "requestId": "provider-planning-brain-06-acf2e761-278a-45e2-bb8f-837a5b1f1528",
+          "conversationId": "provider-planning-06-ea37f25d-e6e6-4120-8955-ab5374d1f78f",
           "source": "evaluation_fixture",
           "scenarioId": "06"
         }
@@ -2988,9 +3083,9 @@
         "route": "control",
         "status": "MEASURED",
         "responseKind": "clarification",
-        "finalAnswer": "من هو الشخص أو المشروع الذي تريد تسجيل المصروف له؟",
-        "provider": "groq",
-        "model": "openai/gpt-oss-20b",
+        "finalAnswer": "تم تسجيل دفع 120 جنيه لأوبر، ولكن هل تود ربط هذا المصروف بمشروع معين؟ إذا لم يكن هناك مشروع، يرجى تأكيد ذلك لأتمكن من إتمام العملية.",
+        "provider": "gemini",
+        "model": "gemini-3.1-flash-lite",
         "brain": null,
         "action": null,
         "retrievalTrace": null,
@@ -3003,19 +3098,19 @@
         },
         "usage": {
           "logicalLlmCalls": 1,
-          "httpAttempts": 1,
-          "fallback": false,
-          "fallbackReason": null,
-          "inputTokens": 1826,
-          "outputTokens": 84,
-          "totalTokens": 1910,
+          "httpAttempts": 2,
+          "fallback": true,
+          "fallbackReason": "PROVIDER_RATE_LIMIT",
+          "inputTokens": 1949,
+          "outputTokens": 67,
+          "totalTokens": 2016,
           "cachedTokens": null,
           "context": {
             "systemPromptChars": 4943,
             "toolDefinitionsChars": 662,
             "toolDefinitionsCount": 1,
-            "maxConversationChars": 457,
-            "maxRequestBytes": 10048,
+            "maxConversationChars": 500,
+            "maxRequestBytes": 10098,
             "selectedSources": [],
             "excludedSources": [
               "all_database_context"
@@ -3027,15 +3122,15 @@
               "model": "openai/gpt-oss-20b",
               "logicalCallNumber": 1,
               "attemptNumber": 1,
-              "inputTokens": 1826,
-              "outputTokens": 84,
-              "totalTokens": 1910,
+              "inputTokens": null,
+              "outputTokens": null,
+              "totalTokens": null,
               "cachedTokens": null,
               "fallback": false,
               "retry": false,
-              "success": true,
-              "failureReason": null,
-              "latencyMs": 355,
+              "success": false,
+              "failureReason": "PROVIDER_RATE_LIMIT",
+              "latencyMs": 61,
               "context": {
                 "systemPromptChars": 3250,
                 "requestGuidanceChars": 1692,
@@ -3048,6 +3143,38 @@
                 "conversationChars": 389,
                 "toolDefinitionsChars": 662,
                 "requestBytes": 10048,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null
+              }
+            },
+            {
+              "provider": "gemini",
+              "model": "gemini-3.1-flash-lite",
+              "logicalCallNumber": 1,
+              "attemptNumber": 2,
+              "inputTokens": 1949,
+              "outputTokens": 67,
+              "totalTokens": 2016,
+              "cachedTokens": null,
+              "fallback": true,
+              "retry": false,
+              "success": true,
+              "failureReason": null,
+              "latencyMs": 2884,
+              "context": {
+                "systemPromptChars": 3250,
+                "requestGuidanceChars": 1692,
+                "userMessageChars": 18,
+                "recentConversationChars": 0,
+                "summaryChars": 0,
+                "structuredStateChars": 0,
+                "toolResultChars": 0,
+                "otherConversationChars": 371,
+                "conversationChars": 389,
+                "toolDefinitionsChars": 631,
+                "requestBytes": 10098,
                 "systemPromptTokens": null,
                 "conversationTokens": null,
                 "toolDefinitionsTokens": null,
@@ -3087,8 +3214,8 @@
           }
         },
         "provenance": {
-          "requestId": "provider-planning-control-06-fac75bf8-44ec-4ac2-8c52-fe9be46fe7a8",
-          "conversationId": "provider-planning-control-06-8d65fb28-7bf1-4884-9702-b632a7c9d3b7",
+          "requestId": "provider-planning-control-06-9da9f634-79db-469e-87b7-72836449d6a4",
+          "conversationId": "provider-planning-control-06-2bfd2e83-e27a-4db3-8b09-7adb88554dfa",
           "source": "evaluation_fixture",
           "scenarioId": "06"
         }
@@ -3143,7 +3270,7 @@
         },
         "control": {
           "status": "MEASURED",
-          "answer": "من هو الشخص أو المشروع الذي تريد تسجيل المصروف له؟",
+          "answer": "تم تسجيل دفع 120 جنيه لأوبر، ولكن هل تود ربط هذا المصروف بمشروع معين؟ إذا لم يكن هناك مشروع، يرجى تأكيد ذلك لأتمكن من إتمام العملية.",
           "responseKind": "clarification",
           "selectedSources": [],
           "excludedSources": [
@@ -3240,11 +3367,11 @@
         "route": "brain",
         "status": "MEASURED",
         "responseKind": "answer",
-        "finalAnswer": "تم تعديل المبلغ ليصبح 130 جنيه.",
+        "finalAnswer": "تمام، عدلت المبلغ وخليته 130 جنيه لمصروف أوبر.",
         "provider": "gemini",
-        "model": "gemini-3.1-flash-lite",
+        "model": "gemini-3-flash-preview",
         "brain": {
-          "requestId": "provider-planning-brain-07-b8f6c267-42be-4b4e-9224-9adc2c552cae",
+          "requestId": "provider-planning-brain-07-bfc14b8c-0c28-4033-9c22-27321c5b8bac",
           "conversationId": "provider-planning-correction",
           "brainVersion": 1,
           "brainState": "completed",
@@ -3294,8 +3421,8 @@
             "falsePositiveGuard": "not_applicable"
           },
           "secondBrainRetrievalTrace": {
-            "traceId": "d7ba6049-4ecc-433a-8cb6-2a8f2ea74651",
-            "requestId": "provider-planning-brain-07-b8f6c267-42be-4b4e-9224-9adc2c552cae",
+            "traceId": "81a7ee60-dbd3-41f8-8c9e-67c88ba29629",
+            "requestId": "provider-planning-brain-07-bfc14b8c-0c28-4033-9c22-27321c5b8bac",
             "conversationId": "provider-planning-correction",
             "strategy": "none",
             "triggered": false,
@@ -3324,17 +3451,17 @@
             "toolCallsExecutedBeforeFailure": 0,
             "selectedProvider": "gemini",
             "logicalLlmCalls": 2,
-            "httpAttempts": 3,
+            "httpAttempts": 4,
             "httpAttemptsByProvider": {
               "groq": 1,
-              "gemini": 2
+              "gemini": 3
             },
             "retryCount": 0,
             "providerFallbackAttempts": 1,
-            "modelFallbackAttempts": 0,
+            "modelFallbackAttempts": 1,
             "requestBytesByProvider": {
               "groq": 16119,
-              "gemini": 32248
+              "gemini": 48602
             },
             "maxRequestBytes": 16354,
             "systemPromptChars": 4943,
@@ -3347,8 +3474,8 @@
           }
         },
         "retrievalTrace": {
-          "traceId": "d7ba6049-4ecc-433a-8cb6-2a8f2ea74651",
-          "requestId": "provider-planning-brain-07-b8f6c267-42be-4b4e-9224-9adc2c552cae",
+          "traceId": "81a7ee60-dbd3-41f8-8c9e-67c88ba29629",
+          "requestId": "provider-planning-brain-07-bfc14b8c-0c28-4033-9c22-27321c5b8bac",
           "conversationId": "provider-planning-correction",
           "strategy": "none",
           "triggered": false,
@@ -3390,7 +3517,8 @@
             },
             "llmContextIncluded": false,
             "llmContextReason": "structured_record_precedence"
-          }
+          },
+          "structuredComparisonContextIncluded": false
         },
         "contextEvidence": {
           "selected": [
@@ -3404,25 +3532,25 @@
         },
         "usage": {
           "logicalLlmCalls": 2,
-          "httpAttempts": 3,
+          "httpAttempts": 4,
           "fallback": true,
           "fallbackReason": "PROVIDER_RATE_LIMIT",
-          "inputTokens": 6855,
-          "outputTokens": 135,
-          "totalTokens": 6990,
+          "inputTokens": 6866,
+          "outputTokens": 149,
+          "totalTokens": 7015,
           "cachedTokens": null,
           "context": {
-            "systemPromptChars": 9750,
-            "requestGuidanceChars": 5076,
-            "userMessageChars": 66,
-            "recentConversationChars": 495,
-            "summaryChars": 1275,
+            "systemPromptChars": 13000,
+            "requestGuidanceChars": 6768,
+            "userMessageChars": 88,
+            "recentConversationChars": 660,
+            "summaryChars": 1700,
             "structuredStateChars": 0,
-            "toolResultChars": 11,
-            "otherConversationChars": 1662,
-            "conversationChars": 3509,
-            "toolDefinitionsChars": 16521,
-            "requestBytes": 48367
+            "toolResultChars": 22,
+            "otherConversationChars": 2216,
+            "conversationChars": 4686,
+            "toolDefinitionsChars": 21892,
+            "requestBytes": 64721
           },
           "attempts": [
             {
@@ -3462,15 +3590,15 @@
               "model": "gemini-3.1-flash-lite",
               "logicalCallNumber": 1,
               "attemptNumber": 2,
-              "inputTokens": 3388,
-              "outputTokens": 67,
-              "totalTokens": 3455,
+              "inputTokens": 3392,
+              "outputTokens": 70,
+              "totalTokens": 3462,
               "cachedTokens": null,
               "fallback": true,
               "retry": false,
               "success": true,
               "failureReason": null,
-              "latencyMs": 1026,
+              "latencyMs": 936,
               "context": {
                 "systemPromptChars": 3250,
                 "requestGuidanceChars": 1692,
@@ -3494,15 +3622,47 @@
               "model": "gemini-3.1-flash-lite",
               "logicalCallNumber": 2,
               "attemptNumber": 3,
-              "inputTokens": 3467,
-              "outputTokens": 68,
-              "totalTokens": 3535,
+              "inputTokens": null,
+              "outputTokens": null,
+              "totalTokens": null,
+              "cachedTokens": null,
+              "fallback": true,
+              "retry": false,
+              "success": false,
+              "failureReason": "PROVIDER_REQUEST_FAILED",
+              "latencyMs": 25005,
+              "context": {
+                "systemPromptChars": 3250,
+                "requestGuidanceChars": 1692,
+                "userMessageChars": 22,
+                "recentConversationChars": 165,
+                "summaryChars": 425,
+                "structuredStateChars": 0,
+                "toolResultChars": 11,
+                "otherConversationChars": 554,
+                "conversationChars": 1177,
+                "toolDefinitionsChars": 5371,
+                "requestBytes": 16354,
+                "systemPromptTokens": null,
+                "conversationTokens": null,
+                "toolDefinitionsTokens": null,
+                "toolResultTokens": null
+              }
+            },
+            {
+              "provider": "gemini",
+              "model": "gemini-3-flash-preview",
+              "logicalCallNumber": 2,
+              "attemptNumber": 4,
+              "inputTokens": 3474,
+              "outputTokens": 79,
+              "totalTokens": 3553,
               "cachedTokens": null,
               "fallback": true,
               "retry": false,
               "success": true,
               "failureReason": null,
-              "latencyMs": 673,
+              "latencyMs": 2747,
               "context": {
                 "systemPromptChars": 3250,
                 "requestGuidanceChars": 1692,
@@ -3554,7 +3714,7 @@
           }
         },
         "provenance": {
-          "requestId": "provider-planning-brain-07-b8f6c267-42be-4b4e-9224-9adc2c552cae",
+          "requestId": "provider-planning-brain-07-bfc14b8c-0c28-4033-9c22-27321c5b8bac",
           "conversationId": "provider-planning-correction",
           "source": "evaluation_fixture",
           "scenarioId": "07"
@@ -3564,9 +3724,9 @@
         "route": "control",
         "status": "MEASURED",
         "responseKind": "answer",
-        "finalAnswer": null,
-        "provider": "gemini",
-        "model": "gemini-3.1-flash-lite",
+        "finalAnswer": "تم تعديل المصروف ليصبح 130 جنيه.",
+        "provider": "groq",
+        "model": "openai/gpt-oss-20b",
         "brain": null,
         "action": null,
         "retrievalTrace": null,
@@ -3582,19 +3742,19 @@
         },
         "usage": {
           "logicalLlmCalls": 1,
-          "httpAttempts": 2,
-          "fallback": true,
-          "fallbackReason": "PROVIDER_RATE_LIMIT",
-          "inputTokens": 2080,
-          "outputTokens": 58,
-          "totalTokens": 2138,
+          "httpAttempts": 1,
+          "fallback": false,
+          "fallbackReason": null,
+          "inputTokens": 1926,
+          "outputTokens": 112,
+          "totalTokens": 2038,
           "cachedTokens": null,
           "context": {
             "systemPromptChars": 4943,
             "toolDefinitionsChars": 662,
             "toolDefinitionsCount": 1,
-            "maxConversationChars": 847,
-            "maxRequestBytes": 10472,
+            "maxConversationChars": 804,
+            "maxRequestBytes": 10422,
             "selectedSources": [
               "conversation.previous_turn",
               "structured_records.expenses"
@@ -3609,15 +3769,15 @@
               "model": "openai/gpt-oss-20b",
               "logicalCallNumber": 1,
               "attemptNumber": 1,
-              "inputTokens": null,
-              "outputTokens": null,
-              "totalTokens": null,
+              "inputTokens": 1926,
+              "outputTokens": 112,
+              "totalTokens": 2038,
               "cachedTokens": null,
               "fallback": false,
               "retry": false,
-              "success": false,
-              "failureReason": "PROVIDER_RATE_LIMIT",
-              "latencyMs": 140,
+              "success": true,
+              "failureReason": null,
+              "latencyMs": 404,
               "context": {
                 "systemPromptChars": 3250,
                 "requestGuidanceChars": 1692,
@@ -3630,38 +3790,6 @@
                 "conversationChars": 702,
                 "toolDefinitionsChars": 662,
                 "requestBytes": 10422,
-                "systemPromptTokens": null,
-                "conversationTokens": null,
-                "toolDefinitionsTokens": null,
-                "toolResultTokens": null
-              }
-            },
-            {
-              "provider": "gemini",
-              "model": "gemini-3.1-flash-lite",
-              "logicalCallNumber": 1,
-              "attemptNumber": 2,
-              "inputTokens": 2080,
-              "outputTokens": 58,
-              "totalTokens": 2138,
-              "cachedTokens": null,
-              "fallback": true,
-              "retry": false,
-              "success": true,
-              "failureReason": null,
-              "latencyMs": 775,
-              "context": {
-                "systemPromptChars": 3250,
-                "requestGuidanceChars": 1692,
-                "userMessageChars": 22,
-                "recentConversationChars": 0,
-                "summaryChars": 0,
-                "structuredStateChars": 0,
-                "toolResultChars": 0,
-                "otherConversationChars": 680,
-                "conversationChars": 702,
-                "toolDefinitionsChars": 631,
-                "requestBytes": 10472,
                 "systemPromptTokens": null,
                 "conversationTokens": null,
                 "toolDefinitionsTokens": null,
@@ -3701,8 +3829,8 @@
           }
         },
         "provenance": {
-          "requestId": "provider-planning-control-07-c60edcdb-3fcd-4988-8304-29169c8f4132",
-          "conversationId": "provider-planning-control-07-0facfc0e-e7bb-4d76-ab54-38289fb7b8ec",
+          "requestId": "provider-planning-control-07-b6d56ae9-43c7-416f-9c83-70c7ab939095",
+          "conversationId": "provider-planning-control-07-cc3f0135-78c3-4868-93c5-7308a10a7468",
           "source": "evaluation_fixture",
           "scenarioId": "07"
         }
@@ -3719,18 +3847,21 @@
           "notes": []
         },
         "control": {
-          "status": "NOT_MEASURED",
-          "criteria": {},
-          "notes": [
-            "provider or orchestration failure; answer quality was not scored"
-          ]
+          "status": "PASS",
+          "criteria": {
+            "response_exists": true,
+            "prior_expense_referent": true,
+            "no_second_record": true,
+            "approval_before_mutation": true
+          },
+          "notes": []
         }
       },
       "comparison": {
         "status": "COMPARABLE",
         "brain": {
           "status": "MEASURED",
-          "answer": "تم تعديل المبلغ ليصبح 130 جنيه.",
+          "answer": "تمام، عدلت المبلغ وخليته 130 جنيه لمصروف أوبر.",
           "responseKind": "answer",
           "selectedSources": [
             "user_input",
@@ -3752,7 +3883,7 @@
         },
         "control": {
           "status": "MEASURED",
-          "answer": null,
+          "answer": "تم تعديل المصروف ليصبح 130 جنيه.",
           "responseKind": "answer",
           "selectedSources": [
             "conversation.previous_turn",
@@ -3762,11 +3893,14 @@
             "new_expense_creation"
           ],
           "evaluation": {
-            "status": "NOT_MEASURED",
-            "criteria": {},
-            "notes": [
-              "provider or orchestration failure; answer quality was not scored"
-            ]
+            "status": "PASS",
+            "criteria": {
+              "response_exists": true,
+              "prior_expense_referent": true,
+              "no_second_record": true,
+              "approval_before_mutation": true
+            },
+            "notes": []
           }
         },
         "dimensions": {
@@ -3793,7 +3927,7 @@
               "noInventedTravelDates": null,
               "doesNotTreatMemoryAsFact": null,
               "noGuess": null,
-              "noSecondRecord": null
+              "noSecondRecord": true
             }
           },
           "structuredRecordAuthority": {
@@ -3852,21 +3986,21 @@
       "brain": {
         "route": "brain",
         "status": "MEASURED",
-        "responseKind": "error",
-        "finalAnswer": "راجعت البيانات المحفوظة، لكن لم أستطع تأكيد الرقم المالي من نتيجة قاعدة البيانات. لن أخمّن.",
+        "responseKind": "clarification",
+        "finalAnswer": "وجدت أكثر من شخص باسم \"محمد\". هل تقصد محمد أحمد، أم محمد علي، أم محمد مدير المشروع؟",
         "provider": "gemini",
         "model": "gemini-3.1-flash-lite",
         "brain": {
-          "requestId": "provider-planning-brain-08-69ecd5ec-c8df-4dee-8244-8e827bbdfee5",
-          "conversationId": "provider-planning-08-c5ff22d1-8305-43e7-aaa8-c1a76f2c18d6",
+          "requestId": "provider-planning-brain-08-3a24c11c-6db2-4c33-aa4f-3812316346e7",
+          "conversationId": "provider-planning-08-79f3f1f1-d001-4d69-9c39-d75053e188ff",
           "brainVersion": 1,
-          "brainState": "failed",
+          "brainState": "clarification",
           "brainStrategy": "L0",
           "brainIntent": "record_expense",
           "brainIntentConfidence": 0.93,
           "brainOverallConfidence": 0.7935000000000001,
           "brainRisk": "medium",
-          "brainVerification": "failed",
+          "brainVerification": "pending",
           "brainSources": [
             "user_input"
           ],
@@ -3881,19 +4015,19 @@
           "conversationState": {
             "people": [
               {
-                "id": "b049611e-ee02-4364-9bba-ae5bd9d179aa",
+                "id": "707bf4d2-e3ac-418a-a59f-d370186ca4e2",
                 "name": "محمد أحمد",
                 "type": "person",
                 "ordinal": 1
               },
               {
-                "id": "89a3ba46-f93f-43ec-8c62-4be030801384",
+                "id": "220ba3ac-b90a-4e3c-ad47-df89a2512f2c",
                 "name": "محمد علي",
                 "type": "person",
                 "ordinal": 2
               },
               {
-                "id": "c2169a7d-3ed1-4ffc-a085-b7f1ff33f9de",
+                "id": "fccabb0b-6562-41c1-88f2-1adb96ef71c8",
                 "name": "محمد مدير المشروع",
                 "type": "person",
                 "ordinal": 3
@@ -3902,19 +4036,19 @@
             "projects": [],
             "candidatePeople": [
               {
-                "id": "b049611e-ee02-4364-9bba-ae5bd9d179aa",
+                "id": "707bf4d2-e3ac-418a-a59f-d370186ca4e2",
                 "name": "محمد أحمد",
                 "type": "person",
                 "ordinal": 1
               },
               {
-                "id": "89a3ba46-f93f-43ec-8c62-4be030801384",
+                "id": "220ba3ac-b90a-4e3c-ad47-df89a2512f2c",
                 "name": "محمد علي",
                 "type": "person",
                 "ordinal": 2
               },
               {
-                "id": "c2169a7d-3ed1-4ffc-a085-b7f1ff33f9de",
+                "id": "fccabb0b-6562-41c1-88f2-1adb96ef71c8",
                 "name": "محمد مدير المشروع",
                 "type": "person",
                 "ordinal": 3
@@ -3931,17 +4065,17 @@
             "needsClarification": true,
             "matches": [
               {
-                "id": "b049611e-ee02-4364-9bba-ae5bd9d179aa",
+                "id": "707bf4d2-e3ac-418a-a59f-d370186ca4e2",
                 "name": "محمد أحمد",
                 "ordinal": 1
               },
               {
-                "id": "89a3ba46-f93f-43ec-8c62-4be030801384",
+                "id": "220ba3ac-b90a-4e3c-ad47-df89a2512f2c",
                 "name": "محمد علي",
                 "ordinal": 2
               },
               {
-                "id": "c2169a7d-3ed1-4ffc-a085-b7f1ff33f9de",
+                "id": "fccabb0b-6562-41c1-88f2-1adb96ef71c8",
                 "name": "محمد مدير المشروع",
                 "ordinal": 3
               }
@@ -3962,9 +4096,9 @@
             "falsePositiveGuard": "not_applicable"
           },
           "secondBrainRetrievalTrace": {
-            "traceId": "756d7d61-d3e5-48ee-8c50-ec8864dd6c79",
-            "requestId": "provider-planning-brain-08-69ecd5ec-c8df-4dee-8244-8e827bbdfee5",
-            "conversationId": "provider-planning-08-c5ff22d1-8305-43e7-aaa8-c1a76f2c18d6",
+            "traceId": "7b1e52f2-a280-49b7-9e68-17e6b168a5dc",
+            "requestId": "provider-planning-brain-08-3a24c11c-6db2-4c33-aa4f-3812316346e7",
+            "conversationId": "provider-planning-08-79f3f1f1-d001-4d69-9c39-d75053e188ff",
             "strategy": "none",
             "triggered": false,
             "queryDomain": "structured_record_mutation",
@@ -4015,9 +4149,9 @@
           }
         },
         "retrievalTrace": {
-          "traceId": "756d7d61-d3e5-48ee-8c50-ec8864dd6c79",
-          "requestId": "provider-planning-brain-08-69ecd5ec-c8df-4dee-8244-8e827bbdfee5",
-          "conversationId": "provider-planning-08-c5ff22d1-8305-43e7-aaa8-c1a76f2c18d6",
+          "traceId": "7b1e52f2-a280-49b7-9e68-17e6b168a5dc",
+          "requestId": "provider-planning-brain-08-3a24c11c-6db2-4c33-aa4f-3812316346e7",
+          "conversationId": "provider-planning-08-79f3f1f1-d001-4d69-9c39-d75053e188ff",
           "strategy": "none",
           "triggered": false,
           "queryDomain": "structured_record_mutation",
@@ -4064,7 +4198,8 @@
             },
             "llmContextIncluded": false,
             "llmContextReason": "structured_record_precedence"
-          }
+          },
+          "structuredComparisonContextIncluded": false
         },
         "contextEvidence": {
           "selected": [
@@ -4080,9 +4215,9 @@
           "httpAttempts": 3,
           "fallback": true,
           "fallbackReason": "PROVIDER_RATE_LIMIT",
-          "inputTokens": 6464,
-          "outputTokens": 78,
-          "totalTokens": 6542,
+          "inputTokens": 6463,
+          "outputTokens": 62,
+          "totalTokens": 6525,
           "cachedTokens": null,
           "context": {
             "systemPromptChars": 9750,
@@ -4111,7 +4246,7 @@
               "retry": false,
               "success": false,
               "failureReason": "PROVIDER_RATE_LIMIT",
-              "latencyMs": 97,
+              "latencyMs": 106,
               "context": {
                 "systemPromptChars": 3250,
                 "requestGuidanceChars": 1692,
@@ -4143,7 +4278,7 @@
               "retry": false,
               "success": true,
               "failureReason": null,
-              "latencyMs": 1465,
+              "latencyMs": 20936,
               "context": {
                 "systemPromptChars": 3250,
                 "requestGuidanceChars": 1692,
@@ -4167,15 +4302,15 @@
               "model": "gemini-3.1-flash-lite",
               "logicalCallNumber": 2,
               "attemptNumber": 3,
-              "inputTokens": 3323,
-              "outputTokens": 62,
-              "totalTokens": 3385,
+              "inputTokens": 3322,
+              "outputTokens": 46,
+              "totalTokens": 3368,
               "cachedTokens": null,
               "fallback": true,
               "retry": false,
               "success": true,
               "failureReason": null,
-              "latencyMs": 977,
+              "latencyMs": 506,
               "context": {
                 "systemPromptChars": 3250,
                 "requestGuidanceChars": 1692,
@@ -4227,8 +4362,8 @@
           }
         },
         "provenance": {
-          "requestId": "provider-planning-brain-08-69ecd5ec-c8df-4dee-8244-8e827bbdfee5",
-          "conversationId": "provider-planning-08-c5ff22d1-8305-43e7-aaa8-c1a76f2c18d6",
+          "requestId": "provider-planning-brain-08-3a24c11c-6db2-4c33-aa4f-3812316346e7",
+          "conversationId": "provider-planning-08-79f3f1f1-d001-4d69-9c39-d75053e188ff",
           "source": "evaluation_fixture",
           "scenarioId": "08"
         }
@@ -4237,9 +4372,9 @@
         "route": "control",
         "status": "MEASURED",
         "responseKind": "clarification",
-        "finalAnswer": "هناك أكثر من شخص باسم \"محمد\" في النظام: محمد مدير المشروع، ومحمد أحمد، ومحمد علي. أي واحد منهم تقصد؟",
-        "provider": "gemini",
-        "model": "gemini-3.1-flash-lite",
+        "finalAnswer": "من أي محمد تريد تسجيل المصروف؟",
+        "provider": "groq",
+        "model": "openai/gpt-oss-20b",
         "brain": null,
         "action": null,
         "retrievalTrace": null,
@@ -4255,19 +4390,19 @@
         },
         "usage": {
           "logicalLlmCalls": 1,
-          "httpAttempts": 2,
-          "fallback": true,
-          "fallbackReason": "PROVIDER_RATE_LIMIT",
-          "inputTokens": 2083,
-          "outputTokens": 52,
-          "totalTokens": 2135,
+          "httpAttempts": 1,
+          "fallback": false,
+          "fallbackReason": null,
+          "inputTokens": 1932,
+          "outputTokens": 59,
+          "totalTokens": 1991,
           "cachedTokens": null,
           "context": {
             "systemPromptChars": 4943,
             "toolDefinitionsChars": 662,
             "toolDefinitionsCount": 1,
-            "maxConversationChars": 791,
-            "maxRequestBytes": 10420,
+            "maxConversationChars": 748,
+            "maxRequestBytes": 10370,
             "selectedSources": [
               "structured_records.people"
             ],
@@ -4282,15 +4417,15 @@
               "model": "openai/gpt-oss-20b",
               "logicalCallNumber": 1,
               "attemptNumber": 1,
-              "inputTokens": null,
-              "outputTokens": null,
-              "totalTokens": null,
+              "inputTokens": 1932,
+              "outputTokens": 59,
+              "totalTokens": 1991,
               "cachedTokens": null,
               "fallback": false,
               "retry": false,
-              "success": false,
-              "failureReason": "PROVIDER_RATE_LIMIT",
-              "latencyMs": 64,
+              "success": true,
+              "failureReason": null,
+              "latencyMs": 434,
               "context": {
                 "systemPromptChars": 3250,
                 "requestGuidanceChars": 1692,
@@ -4303,38 +4438,6 @@
                 "conversationChars": 650,
                 "toolDefinitionsChars": 662,
                 "requestBytes": 10370,
-                "systemPromptTokens": null,
-                "conversationTokens": null,
-                "toolDefinitionsTokens": null,
-                "toolResultTokens": null
-              }
-            },
-            {
-              "provider": "gemini",
-              "model": "gemini-3.1-flash-lite",
-              "logicalCallNumber": 1,
-              "attemptNumber": 2,
-              "inputTokens": 2083,
-              "outputTokens": 52,
-              "totalTokens": 2135,
-              "cachedTokens": null,
-              "fallback": true,
-              "retry": false,
-              "success": true,
-              "failureReason": null,
-              "latencyMs": 1209,
-              "context": {
-                "systemPromptChars": 3250,
-                "requestGuidanceChars": 1692,
-                "userMessageChars": 19,
-                "recentConversationChars": 0,
-                "summaryChars": 0,
-                "structuredStateChars": 0,
-                "toolResultChars": 0,
-                "otherConversationChars": 631,
-                "conversationChars": 650,
-                "toolDefinitionsChars": 631,
-                "requestBytes": 10420,
                 "systemPromptTokens": null,
                 "conversationTokens": null,
                 "toolDefinitionsTokens": null,
@@ -4374,23 +4477,21 @@
           }
         },
         "provenance": {
-          "requestId": "provider-planning-control-08-982045db-e70e-47e1-9ca3-b542dc55c09a",
-          "conversationId": "provider-planning-control-08-3c5a8612-f219-425b-8177-084a01eab8b6",
+          "requestId": "provider-planning-control-08-ac5b750b-2bc1-4f68-aa27-716198c6d431",
+          "conversationId": "provider-planning-control-08-abf02b63-3dbd-4a95-ae5f-781832e67adb",
           "source": "evaluation_fixture",
           "scenarioId": "08"
         }
       },
       "evaluation": {
         "brain": {
-          "status": "PARTIAL",
+          "status": "PASS",
           "criteria": {
-            "asks_which_person": false,
+            "asks_which_person": true,
             "no_write_tool": true,
             "no_guess": true
           },
-          "notes": [
-            "failed:asks_which_person"
-          ]
+          "notes": []
         },
         "control": {
           "status": "PASS",
@@ -4406,8 +4507,8 @@
         "status": "COMPARABLE",
         "brain": {
           "status": "MEASURED",
-          "answer": "راجعت البيانات المحفوظة، لكن لم أستطع تأكيد الرقم المالي من نتيجة قاعدة البيانات. لن أخمّن.",
-          "responseKind": "error",
+          "answer": "وجدت أكثر من شخص باسم \"محمد\". هل تقصد محمد أحمد، أم محمد علي، أم محمد مدير المشروع؟",
+          "responseKind": "clarification",
           "selectedSources": [
             "user_input"
           ],
@@ -4415,20 +4516,18 @@
             "unverified_model_claims"
           ],
           "evaluation": {
-            "status": "PARTIAL",
+            "status": "PASS",
             "criteria": {
-              "asks_which_person": false,
+              "asks_which_person": true,
               "no_write_tool": true,
               "no_guess": true
             },
-            "notes": [
-              "failed:asks_which_person"
-            ]
+            "notes": []
           }
         },
         "control": {
           "status": "MEASURED",
-          "answer": "هناك أكثر من شخص باسم \"محمد\" في النظام: محمد مدير المشروع، ومحمد أحمد، ومحمد علي. أي واحد منهم تقصد؟",
+          "answer": "من أي محمد تريد تسجيل المصروف؟",
           "responseKind": "clarification",
           "selectedSources": [
             "structured_records.people"
@@ -4477,7 +4576,7 @@
             "control": null
           },
           "clarification": {
-            "brain": false,
+            "brain": true,
             "control": true
           }
         }

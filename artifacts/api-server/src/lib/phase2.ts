@@ -4918,15 +4918,16 @@ export class Phase2AgentRuntime {
           return null;
         })
       : null;
+    const secondBrainQueryDomain = classifySecondBrainQuery(input.message);
     const secondBrainRetrieval = shouldSearchSecondBrain(input.message)
       ? await retrieveSecondBrain(identity, input.message, {
-          queryDomain: classifySecondBrainQuery(input.message),
+          queryDomain: secondBrainQueryDomain,
           requestId,
           conversationId,
         })
       : {
           memories: [],
-          trace: emptyRetrievalTrace(input.message, false, classifySecondBrainQuery(input.message), {
+          trace: emptyRetrievalTrace(input.message, false, secondBrainQueryDomain, {
             requestId,
             conversationId,
           }),
@@ -4944,6 +4945,47 @@ export class Phase2AgentRuntime {
       secondBrainMemories,
       governedSecondBrain.trace.queryDomain,
     );
+    let structuredComparisonContext: string | null = null;
+    let structuredComparisonContextIncluded = false;
+    if (secondBrainQueryDomain === "structured_record_comparison") {
+      const projectMention = semanticParse?.entityMentions.find((mention) => mention.entityType === "project");
+      const projectQuery = projectMention?.query
+        .replace(/\s+(?:كان|كانت|هو|هي)\s*$/u, "")
+        .trim();
+      let projectResult = projectQuery
+        ? await resolveEntity(identity, "project", projectQuery)
+        : null;
+      if (
+        projectResult
+        && projectResult.matchType === "none"
+        && projectQuery
+        && !/^مشروع\s+/u.test(projectQuery)
+      ) {
+        projectResult = await resolveEntity(identity, "project", `مشروع ${projectQuery}`);
+      }
+      if (projectResult?.selected) {
+        const officialRecords = await executeStructuredTool(identity, "query_expenses", {
+          projectId: projectResult.selected.id,
+          limit: 50,
+        }, {
+          requestId,
+          conversationId,
+          dryRun: options.dryRun,
+        });
+        if (officialRecords.ok) {
+          structuredComparisonContext = `[سجل مالي رسمي للمقارنة — هو المصدر الموثوق]\n${JSON.stringify({
+            project: {
+              id: projectResult.selected.id,
+              name: projectResult.selected.name,
+            },
+            expenses: officialRecords.expenses,
+            summary: officialRecords.summary,
+            authority: "structured_financial_record",
+          })}`;
+          structuredComparisonContextIncluded = true;
+        }
+      }
+    }
     const initialBrainEnvelope = createBrainDecisionEnvelope({
       requestId,
       conversationId,
@@ -4985,6 +5027,9 @@ export class Phase2AgentRuntime {
             role: "system" as const,
             text: `[سياق علاقات منظم من البيانات القانونية، محدود بالسؤال]\n${serializeRelationshipContext(relationshipContext.context)}`,
           }]
+        : []),
+      ...(structuredComparisonContext
+        ? [{ role: "system" as const, text: structuredComparisonContext }]
         : []),
       ...(secondBrainContext
         ? [{ role: "system" as const, text: secondBrainContext }]
@@ -5220,6 +5265,7 @@ export class Phase2AgentRuntime {
           llmContextIncluded: governedSecondBrain.trace.llmContextIncluded,
           llmContextReason: governedSecondBrain.trace.llmContextReason,
         },
+        structuredComparisonContextIncluded,
       };
       logger.info({
         requestId,

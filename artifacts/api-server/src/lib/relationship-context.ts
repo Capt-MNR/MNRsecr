@@ -1,4 +1,4 @@
-import { and, desc, eq, lt, or } from "drizzle-orm";
+import { and, desc, eq, inArray, lt, or } from "drizzle-orm";
 import {
   activityEventEntitiesTable,
   activityEventsTable,
@@ -9,6 +9,7 @@ import {
   financialPartyPeopleTable,
   financialPartyProjectsTable,
   financialPaymentsTable,
+  peopleTable,
   pool,
   type FinancialParty,
 } from "@workspace/db";
@@ -617,6 +618,7 @@ async function projectExpenseContext(
       amountMinor: row.amountMinor,
       currency: row.currency,
       occurredAt: row.occurredAt.toISOString(),
+      personId: row.personId,
     })),
   };
 }
@@ -975,16 +977,78 @@ export async function retrieveRelationshipContext(
   if (parsed.intent === "entity_context") {
     if (!entity) return noTargetResult(context, {});
     context.recentActivity = await recentEntityActivity(identity, entity);
+    if (entity.type === "project") {
+      const expenseContext = await projectExpenseContext(identity, entity);
+      const personIds = [...new Set(
+        expenseContext.records
+          .map((record) => record.personId)
+          .filter((value): value is string => typeof value === "string"),
+      )].slice(0, RELATIONSHIP_CONTEXT_LIMITS.maxEntities);
+      const [people, commitments] = await Promise.all([
+        personIds.length > 0
+          ? db.select({
+              id: peopleTable.id,
+              name: peopleTable.name,
+            }).from(peopleTable).where(and(
+              eq(peopleTable.tenantId, identity.tenantId),
+              eq(peopleTable.ownerUserId, identity.userId),
+              inArray(peopleTable.id, personIds),
+            )).limit(RELATIONSHIP_CONTEXT_LIMITS.maxEntities)
+          : Promise.resolve([]),
+        personIds.length > 0
+          ? db.select().from(commitmentsTable).where(and(
+              eq(commitmentsTable.tenantId, identity.tenantId),
+              eq(commitmentsTable.ownerUserId, identity.userId),
+              eq(commitmentsTable.status, "open"),
+              inArray(commitmentsTable.personId, personIds),
+            )).orderBy(desc(commitmentsTable.dueAt), desc(commitmentsTable.id))
+              .limit(RELATIONSHIP_CONTEXT_LIMITS.maxRecords)
+          : Promise.resolve([]),
+      ]);
+      const peopleById = new Map(people.map((person) => [person.id, person.name]));
+      context.resolvedEntities.push(...people.map((person) => ({
+        id: person.id,
+        name: person.name,
+        type: "person" as const,
+        matchType: "exact" as const,
+        confidence: 1,
+      })));
+      context.relevantRelationships.push(...people.map((person) => ({
+        fromType: "project",
+        fromId: entity.id,
+        toType: "person",
+        toId: person.id,
+      })));
+      context.financialSummary = { projectExpenses: expenseContext.totals };
+      context.relevantRecords = [
+        ...expenseContext.records.map((record) => ({
+          ...record,
+          type: "expense",
+          personName: typeof record.personId === "string" ? peopleById.get(record.personId) ?? null : null,
+        })),
+        ...commitments.map((commitment) => ({
+          type: "commitment",
+          id: commitment.id,
+          title: commitment.title,
+          dueAt: commitment.dueAt?.toISOString() ?? null,
+          status: commitment.status,
+          personId: commitment.personId,
+          personName: commitment.personId ? peopleById.get(commitment.personId) ?? null : null,
+        })),
+      ].slice(0, RELATIONSHIP_CONTEXT_LIMITS.maxRecords);
+      context.truncated = expenseContext.records.length >= RELATIONSHIP_CONTEXT_LIMITS.maxRecords
+        || commitments.length >= RELATIONSHIP_CONTEXT_LIMITS.maxRecords;
+    }
     if (entity.type !== "financial_party") {
       const parties = await linkedParties(identity, entity);
-      context.relevantRelationships = parties.slice(0, RELATIONSHIP_CONTEXT_LIMITS.maxRelationships).map((party) => ({
+      context.relevantRelationships.push(...parties.slice(0, RELATIONSHIP_CONTEXT_LIMITS.maxRelationships).map((party) => ({
         entityType: entity.type,
         entityId: entity.id,
         relatedType: "financial_party",
         relatedId: party.id,
         relatedName: party.name,
-      }));
-      context.truncated = parties.length > RELATIONSHIP_CONTEXT_LIMITS.maxRelationships;
+      })));
+      context.truncated = context.truncated || parties.length > RELATIONSHIP_CONTEXT_LIMITS.maxRelationships;
     }
     return { context };
   }
