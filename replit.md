@@ -28,6 +28,7 @@ A private Arabic-first secretary that turns natural-language requests into autho
 - `lib/db/src/schema/personal-secretary.ts` — PostgreSQL schema
 - `artifacts/api-server/src/lib/secretary.ts` — persistence boundary and deterministic provider
 - `artifacts/api-server/src/lib/phase2.ts` — Gemini gateway, approved tools, and bounded orchestration
+- `artifacts/api-server/src/lib/provider-registry.ts` — provider IDs, protocols, models, endpoints, and server-side key names
 - `artifacts/api-server/src/lib/conversation-memory.ts` — bounded Conversation State and separate conversation summaries
 - `artifacts/api-server/src/routes/secretary.ts` — authenticated secretary routes
 - `artifacts/personal-secretary/src/pages/home.tsx` — Arabic responsive product UI
@@ -35,7 +36,7 @@ A private Arabic-first secretary that turns natural-language requests into autho
 ## Architecture decisions
 
 - The browser only calls the API; it never receives database credentials or the Gemini key.
-- `AI_PRIMARY_PROVIDER=gemini|groq` and `AI_FALLBACK_PROVIDER=gemini|groq` configure provider order behind the same runtime boundary. `AI_PROVIDER` remains a backwards-compatible primary-provider alias; the LLM can only invoke registered application tools.
+- `AI_PRIMARY_PROVIDER` and `AI_FALLBACK_PROVIDER` select providers from the shared registry (`gemini`, `groq`, `mistral`, `cohere`, `deepseek`, or `qwen`) behind the same runtime boundary. `AI_PROVIDER` remains a backwards-compatible primary-provider alias; the LLM can only invoke registered application tools.
 - The deterministic provider is explicit test/development mode only; provider failures do not switch to it automatically.
 - Every tool derives tenant and user identity from the authenticated request, not model arguments.
 - Conversation memory has three levels: bounded recent Conversation State for follow-ups, canonical Structured Memory in the existing domain tables, and a separate compact summary for long conversations.

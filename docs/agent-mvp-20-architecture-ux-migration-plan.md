@@ -612,9 +612,13 @@ Quick لا يصبح لوحة تشغيل مصغرة. دوره:
 | `AI_PRIMARY_PROVIDER` | provider name | provider الأساسي الصريح |
 | `AI_FALLBACK_PROVIDER` | provider name | fallback الأول |
 | `AI_SECONDARY_FALLBACK_PROVIDER` | provider name | fallback الثاني |
+| `PROVIDER_ROUTING_ORDER` | قائمة providers من الـregistry | ترتيب المزودين عند تفعيل التوجيه |
 | `DEEPSEEK_API_KEY` | secret | تفعيل DeepSeek داخل ModelGateway |
 | `DEEPSEEK_MODEL` | `deepseek-chat` افتراضيًا | اسم موديل DeepSeek |
 | `DEEPSEEK_API_URL` | DeepSeek chat completions URL | endpoint القابل للتبديل في الاختبارات |
+| `QWEN_API_KEY` | secret | تفعيل Qwen عبر عقد OpenAI-compatible |
+| `QWEN_MODEL` | `qwen-plus` افتراضيًا | اسم موديل Qwen |
+| `QWEN_API_URL` | DashScope compatible chat completions URL | endpoint القابل للتبديل في الاختبارات |
 
 لا تُقرأ مفاتيح المزود أو متغيرات Replit داخل Agent Work business logic، ولا يُسمح
 بتفعيل driver إنتاجي غير موصول بعقد identity وlease وnotification delivery.
