@@ -726,6 +726,46 @@ test("a write tool creates approval without executing or falling back", async ()
   assert.equal(expenses.length, 0);
 });
 
+test("expense totals use one exact numeric representation instead of model-written number words", async () => {
+  const testIdentity = identity("exact-expense-total");
+  await db.insert(expensesTable).values({
+    tenantId: testIdentity.tenantId,
+    ownerUserId: testIdentity.userId,
+    description: "تشطيب الشقة",
+    amountMinor: 517_960_000,
+    currency: "EGP",
+  });
+
+  const provider = new ScriptedProvider("gemini", (_call, callNumber) =>
+    callNumber === 1
+      ? toolCall("query_expenses", { description: "تشطيب الشقة", limit: 50 })
+      : {
+          text: "",
+          toolCalls: [{
+            id: "final-response",
+            name: "final_response",
+            args: {
+              kind: "answer",
+              message: "الإجمالي خمسة ملايين وتسعة وسبعون ألفًا وستمائة جنيه مصري.",
+              groundedFacts: [{ type: "money", value: 517_960_000, currency: "EGP" }],
+            },
+          }],
+        },
+  );
+  const result = await new Phase2AgentRuntime(
+    new FailoverModelGateway({ gemini: provider }, ["gemini"]),
+  ).run(testIdentity, {
+    message: "إجمالي المصروفات في بند تشطيب الشقة",
+    requestId: "exact-expense-total-request",
+  });
+
+  assert.equal(
+    result.response?.message,
+    "الإجمالي الدقيق المسجل في السجلات هو 5,179,600 جنيه مصري عبر 1 مصروف.",
+  );
+  assert.doesNotMatch(result.response?.message ?? "", /خمسة|مائة|سبعة/);
+});
+
 test("multiple write tools remain separate pending approvals", async () => {
   const testIdentity = identity("multiple-writes");
   const primary = new ScriptedProvider("gemini", () => ({

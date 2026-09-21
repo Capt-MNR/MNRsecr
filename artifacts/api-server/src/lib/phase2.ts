@@ -4498,6 +4498,66 @@ function isFinancialMessage(message: string): boolean {
   return /جنيه|دولار|ريال|مصروف|مصروفات|مصاريف|اجمالي|إجمالي|مبلغ|دفع|دفعت|صرف|فلوس|فلوس/i.test(message);
 }
 
+function isExpenseTotalRequest(message: string): boolean {
+  return /إجمالي|اجمالي|مجموع|كام|كم|قد\s*إيه|قد\s*ايه|how much|total|sum/i.test(message);
+}
+
+function exactMoneyLabel(amountMinor: number, currency: string): string {
+  const unit = currency === "EGP"
+    ? "جنيه مصري"
+    : currency === "USD"
+      ? "دولار أمريكي"
+      : currency === "SAR"
+        ? "ريال سعودي"
+        : currency;
+  const amount = new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: amountMinor % 100 === 0 ? 0 : 2,
+    maximumFractionDigits: 2,
+  }).format(amountMinor / 100);
+  return `${amount} ${unit}`;
+}
+
+function canonicalExpenseTotal(
+  history: ToolHistoryEntry[],
+  requestMessage: string,
+): { message: string; facts: GroundedFact[] } | null {
+  if (!isExpenseTotalRequest(requestMessage)) return null;
+  const entry = [...history].reverse().find((candidate) =>
+    candidate.name === "query_expenses"
+    || candidate.name === "get_person_expense_total"
+    || candidate.name === "get_project_expense_total"
+  );
+  if (!entry || !entry.result.ok) return null;
+
+  const summary = entry.name === "query_expenses"
+    && entry.result.summary
+    && typeof entry.result.summary === "object"
+    ? entry.result.summary as Record<string, unknown>
+    : entry.result.total
+      && typeof entry.result.total === "object"
+        ? entry.result.total as Record<string, unknown>
+        : null;
+  if (!summary) return null;
+
+  const totalMinor = Number(summary.totalMinor ?? summary.amountMinor);
+  const count = Number(summary.count);
+  const currency = typeof summary.currency === "string" ? summary.currency : "EGP";
+  if (!Number.isSafeInteger(totalMinor) || totalMinor < 0 || !Number.isSafeInteger(count) || count < 0) {
+    return null;
+  }
+
+  const amount = exactMoneyLabel(totalMinor, currency);
+  return {
+    message: count === 0
+      ? "لا توجد مصروفات مطابقة في السجلات."
+      : `الإجمالي الدقيق المسجل في السجلات هو ${amount} عبر ${count} مصروف.`,
+    facts: [
+      { type: "money", value: totalMinor, currency, label: "إجمالي المصروفات" },
+      { type: "count", value: count, label: "عدد المصروفات" },
+    ],
+  };
+}
+
 export function looksLikeInternalStructuredResponse(message: string): boolean {
   const trimmed = message.trim();
   if (!trimmed) return false;
@@ -4548,7 +4608,11 @@ function safeFinalResponse(
   };
 }
 
-function finalResponseFromArgs(args: Record<string, unknown>, history: ToolHistoryEntry[]): FinalResponse {
+function finalResponseFromArgs(
+  args: Record<string, unknown>,
+  history: ToolHistoryEntry[],
+  requestMessage = "",
+): FinalResponse {
   const kind = args.kind === "clarification" || args.kind === "not_found" || args.kind === "error"
     ? args.kind
     : "answer";
@@ -4572,11 +4636,23 @@ function finalResponseFromArgs(args: Record<string, unknown>, history: ToolHisto
         } satisfies GroundedFact];
       })
     : undefined;
+  const canonical = canonicalExpenseTotal(history, requestMessage);
+  if (canonical) {
+    return safeFinalResponse("answer", canonical.message, history, canonical.facts);
+  }
   return safeFinalResponse(kind, message, history, groundedFacts);
 }
 
-function finalResponseFromText(text: string, history: ToolHistoryEntry[]): FinalResponse {
+function finalResponseFromText(
+  text: string,
+  history: ToolHistoryEntry[],
+  requestMessage = "",
+): FinalResponse {
   const message = text.trim() || "لم أستطع إكمال الطلب بشكل آمن. اكتب التفاصيل المطلوبة وسأحاول مرة أخرى.";
+  const canonical = canonicalExpenseTotal(history, requestMessage);
+  if (canonical) {
+    return safeFinalResponse("answer", canonical.message, history, canonical.facts);
+  }
   return safeFinalResponse("answer", message, history);
 }
 
@@ -5851,7 +5927,7 @@ export class Phase2AgentRuntime {
                     nextCallKind: null,
                     nextScope: activeToolScope.name,
                   });
-                return persistResult(finalResponseFromArgs(finalCall.args, toolHistory));
+                return persistResult(finalResponseFromArgs(finalCall.args, toolHistory, input.message));
               }
               if (finalization.text.trim()) {
                   setDiagnosticDecision(diagnosticCall, {
@@ -5861,7 +5937,7 @@ export class Phase2AgentRuntime {
                     nextCallKind: null,
                     nextScope: activeToolScope.name,
                   });
-                return persistResult(finalResponseFromText(finalization.text, toolHistory));
+                return persistResult(finalResponseFromText(finalization.text, toolHistory, input.message));
               }
                 setDiagnosticDecision(diagnosticCall, {
                   kind: "finalization_failed",
@@ -5937,7 +6013,7 @@ export class Phase2AgentRuntime {
             nextCallKind: null,
             nextScope: activeToolScope.name,
           });
-          return persistResult(finalResponseFromText(response.text, toolHistory));
+          return persistResult(finalResponseFromText(response.text, toolHistory, input.message));
         }
 
         let scopeWasWidened = false;
@@ -5972,7 +6048,7 @@ export class Phase2AgentRuntime {
             nextCallKind: null,
             nextScope: activeToolScope.name,
           });
-          return persistResult(finalResponseFromArgs(finalCall.args, toolHistory));
+          return persistResult(finalResponseFromArgs(finalCall.args, toolHistory, input.message));
         }
 
         const writeCallCount = response.toolCalls.filter((call) => WRITE_TOOLS.has(call.name)).length;
