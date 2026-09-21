@@ -33,6 +33,25 @@ const { default: app } = await import("../src/app.ts");
 let server: ReturnType<typeof app.listen>;
 let baseUrl = "";
 
+async function startServer() {
+  await new Promise<void>((resolve, reject) => {
+    server = app.listen(0, () => resolve());
+    server.once("error", reject);
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("Test server did not expose a port.");
+  baseUrl = `http://127.0.0.1:${address.port}`;
+}
+
+async function stopServer() {
+  await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+}
+
+async function restartServer() {
+  await stopServer();
+  await startServer();
+}
+
 async function deleteOwned(table: any) {
   await db.delete(table).where(and(
     eq(table.tenantId, tenantId),
@@ -65,17 +84,11 @@ async function cleanup() {
 
 before(async () => {
   await cleanup();
-  await new Promise<void>((resolve, reject) => {
-    server = app.listen(0, () => resolve());
-    server.once("error", reject);
-  });
-  const address = server.address();
-  if (!address || typeof address === "string") throw new Error("Test server did not expose a port.");
-  baseUrl = `http://127.0.0.1:${address.port}`;
+  await startServer();
 });
 
 after(async () => {
-  await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  await stopServer();
   await cleanup();
 });
 
@@ -265,6 +278,7 @@ test("HTTP approval is server-side on the first request and idempotent", async (
   });
   assert.equal(approvedRequest.status, 202);
   const approvedId = approvedRequest.body?.approval?.operationId as string;
+  await restartServer();
   const approved = await approve(approvedId, {
     toolName: "different_tool",
     arguments: { amountMinor: 1 },
@@ -287,6 +301,7 @@ test("HTTP approval is server-side on the first request and idempotent", async (
   ));
   assert.equal(events.filter((event) => event.sourceId === saved[0]?.id).length, 1);
 
+  await restartServer();
   const duplicateApprove = await approve(approvedId);
   assert.equal(duplicateApprove.status, 200);
   assert.equal(duplicateApprove.body?.status, "completed");

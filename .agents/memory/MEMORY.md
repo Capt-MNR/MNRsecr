@@ -5,6 +5,7 @@
 - [Groq GPT-OSS limits](groq-gpt-oss-limits.md) — low hidden reasoning keeps tool calls usable under the provider's token-per-minute budget.
 - [Workspace test runner](workspace-test-runner.md) — direct Node 24 TypeScript tests can fail on workspace directory imports even when builds and workflows are healthy.
 - [Approval lifecycle memory](approval-lifecycle.md) — persist the post-approval result as a separate conversation event so later corrections use committed state.
+- [Approval draft persistence](approval-draft-persistence.md) — keep edited approval fields local and temporary; the server operation stays authoritative until approval.
 - [Record approval executor](record-approval-executor.md) — record-page approvals reuse the deterministic executor, so every editable field must be forwarded into its stored operation.
 - [Gemini context caching](gemini-context-cache.md) — the current Gemini model key reports zero free-tier CachedContent storage, so live cached-token verification needs another permitted environment.
 - [Intent evaluation baselines](intent-evaluation-baselines.md) — exclude provider-rate-limited cases from accuracy and validate dry-run writes with scoped row-count snapshots.

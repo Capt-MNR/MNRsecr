@@ -1,10 +1,22 @@
 import { Feather } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useColors } from '@/hooks/useColors';
 import type { Approval, ApprovalArgs, ApprovalCandidate, LocalMessage, MobileRecordRow } from './shared';
 import { LocalInputAttachmentView } from './local-input-attachment';
 import { styles, starterMessage } from './shared';
+
+const APPROVAL_DRAFT_PREFIX = '@personal-secretary-mobile/approval-draft/';
+const APPROVAL_DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
+
+function approvalDraftKey(operationId: string) {
+  return `${APPROVAL_DRAFT_PREFIX}${operationId}`;
+}
+
+function clearApprovalDraft(operationId: string) {
+  void AsyncStorage.removeItem(approvalDraftKey(operationId)).catch(() => undefined);
+}
 
 function messageTime(value: string) {
   if (value === starterMessage.createdAt) return 'الآن';
@@ -73,6 +85,83 @@ function ApprovalEditor({
     () => asString(initialArgs.projectId) ? 'existing' : asString(initialArgs.projectName) ? 'new' : 'none',
   );
   const [dueAtInput, setDueAtInput] = useState(() => localDateTimeValue(asString(initialArgs.dueAt)));
+  const [draftReady, setDraftReady] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void AsyncStorage.getItem(approvalDraftKey(approval.operationId))
+      .then((raw) => {
+        if (!active || !raw) return;
+        try {
+          const parsed = JSON.parse(raw) as { savedAt?: unknown; args?: unknown };
+          const savedAt = typeof parsed.savedAt === 'number' ? parsed.savedAt : 0;
+          const draft = parsed.args && typeof parsed.args === 'object' && !Array.isArray(parsed.args)
+            ? parsed.args as ApprovalArgs
+            : null;
+          if (!draft || Date.now() - savedAt >= APPROVAL_DRAFT_TTL_MS) {
+            if (savedAt > 0 && Date.now() - savedAt >= APPROVAL_DRAFT_TTL_MS) {
+              clearApprovalDraft(approval.operationId);
+            }
+            return;
+          }
+          setArgs(draft);
+          setAmount(amountInputFromArgs(draft));
+          setPersonName(asString(draft.personName));
+          setProjectName(asString(draft.projectName));
+          setPersonId(asString(draft.personId));
+          setProjectId(asString(draft.projectId));
+          setPersonMode(asString(draft.personId) ? 'existing' : asString(draft.personName) ? 'new' : 'none');
+          setProjectMode(asString(draft.projectId) ? 'existing' : asString(draft.projectName) ? 'new' : 'none');
+          setDueAtInput(localDateTimeValue(asString(draft.dueAt)));
+        } catch {
+          // Invalid local drafts are ignored; the server operation remains authoritative.
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setDraftReady(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [approval.operationId]);
+
+  useEffect(() => {
+    if (!draftReady || approval.status !== 'pending') return;
+    const draft: ApprovalArgs = toolName === 'record_expense'
+      ? {
+        ...args,
+        amountMinor: parseAmountMinor(amount) ?? asNumber(args.amountMinor),
+        personId: personId || null,
+        projectId: projectId || null,
+        ...(personName ? { personName } : {}),
+        ...(projectName ? { projectName } : {}),
+      }
+      : toolName === 'create_reminder'
+        ? {
+          ...args,
+          text: asString(args.text),
+          dueAt: isoFromLocalDateTime(dueAtInput),
+          timezone: asString(args.timezone, 'Africa/Cairo'),
+        }
+        : args;
+    void AsyncStorage.setItem(approvalDraftKey(approval.operationId), JSON.stringify({
+      savedAt: Date.now(),
+      args: draft,
+    })).catch(() => undefined);
+  }, [
+    approval.operationId,
+    approval.status,
+    args,
+    amount,
+    draftReady,
+    dueAtInput,
+    personId,
+    personName,
+    projectId,
+    projectName,
+    toolName,
+  ]);
 
   function updateArg(key: string, value: unknown) {
     setArgs((current) => ({ ...current, [key]: value }));
@@ -265,7 +354,10 @@ function ApprovalEditor({
           accessibilityRole="button"
           accessibilityLabel="اعتماد التعديلات"
           onPress={() => {
-            if (amountMinor && description.trim() && validPerson && validProject) onApprove(approval, nextArgs);
+            if (amountMinor && description.trim() && validPerson && validProject) {
+              clearApprovalDraft(approval.operationId);
+              onApprove(approval, nextArgs);
+            }
           }}
           style={({ pressed }) => [styles.approveButton, { backgroundColor: colors.primary, opacity: pressed || !amountMinor || !description.trim() || !validPerson || !validProject ? 0.55 : 1 }]}
         >
@@ -318,7 +410,10 @@ function ApprovalEditor({
           accessibilityRole="button"
           accessibilityLabel="اعتماد التعديلات"
           onPress={() => {
-            if (text.trim() && validDueAt) onApprove(approval, nextArgs);
+            if (text.trim() && validDueAt) {
+              clearApprovalDraft(approval.operationId);
+              onApprove(approval, nextArgs);
+            }
           }}
           style={({ pressed }) => [styles.approveButton, { backgroundColor: colors.primary, opacity: pressed || !text.trim() || !validDueAt ? 0.55 : 1 }]}
         >
@@ -421,7 +516,10 @@ export function MessageBubble({
                 <ApprovalEditor
                   approval={approval}
                   colors={colors}
-                  onApprove={onApprove}
+                  onApprove={(nextApproval, args) => {
+                    clearApprovalDraft(nextApproval.operationId);
+                    onApprove(nextApproval, args);
+                  }}
                 />
               )}
               <View style={[styles.approvalActions, pearlStyle && styles.pearlApprovalActions]}>
@@ -430,7 +528,10 @@ export function MessageBubble({
                      testID={`quick-approve-${approval.operationId}`}
                     accessibilityRole="button"
                     accessibilityLabel="اعتماد العملية سريعًا"
-                     onPress={() => onApprove(approval)}
+                     onPress={() => {
+                       clearApprovalDraft(approval.operationId);
+                       onApprove(approval);
+                     }}
                     disabled={Boolean(approvalBusy)}
                    style={({ pressed }) => [styles.approveButton, pearlStyle && styles.pearlApproveButton, { backgroundColor: colors.primary, opacity: pressed || approvalBusy ? 0.65 : 1 }]}
                   >
@@ -441,7 +542,10 @@ export function MessageBubble({
                    testID={`approve-${approval.operationId}`}
                   accessibilityRole="button"
                   accessibilityLabel="اعتماد العملية"
-                    onPress={() => onApprove(approval)}
+                     onPress={() => {
+                       clearApprovalDraft(approval.operationId);
+                       onApprove(approval);
+                     }}
                   disabled={Boolean(approvalBusy)}
                    style={({ pressed }) => [styles.approveButton, pearlStyle && styles.pearlApproveButton, { backgroundColor: colors.primary, opacity: pressed || approvalBusy ? 0.65 : 1 }]}
                 >
@@ -465,7 +569,10 @@ export function MessageBubble({
                    testID={`reject-${approval.operationId}`}
                   accessibilityRole="button"
                   accessibilityLabel="رفض العملية"
-                   onPress={() => onReject(approval)}
+                    onPress={() => {
+                      clearApprovalDraft(approval.operationId);
+                      onReject(approval);
+                    }}
                   disabled={Boolean(approvalBusy)}
                    style={({ pressed }) => [styles.rejectButton, pearlStyle && styles.pearlRejectButton, { borderColor: colors.border, opacity: pressed || approvalBusy ? 0.65 : 1 }]}
                 >
