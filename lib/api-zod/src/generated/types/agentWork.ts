@@ -5,6 +5,7 @@
  * Personal Secretary API
  * OpenAPI spec version: 0.1.0
  */
+import type { AgentWorkAction } from './agentWorkAction';
 import type { AgentWorkCondition } from './agentWorkCondition';
 import type { AgentWorkKind } from './agentWorkKind';
 import type { AgentWorkSchedule } from './agentWorkSchedule';
@@ -12,22 +13,24 @@ import type { AgentWorkSource } from './agentWorkSource';
 import type { AgentWorkStatus } from './agentWorkStatus';
 
 export interface AgentWork {
-  id: string;
-  kind: AgentWorkKind;
-  title: string;
+  id?: string;
+  kind?: AgentWorkKind;
+  title?: string;
   /** @nullable */
-  description: string | null;
-  status: AgentWorkStatus;
-  source: AgentWorkSource;
-  condition: AgentWorkCondition;
-  schedule: AgentWorkSchedule;
+  description?: string | null;
+  status?: AgentWorkStatus;
+  source?: AgentWorkSource;
+  condition?: AgentWorkCondition;
+  action?: AgentWorkAction;
+  schedule?: AgentWorkSchedule;
   /** @nullable */
-  nextRunAt: Date | null;
+  nextRunAt?: Date | null;
   /** @nullable */
-  lastRunAt: Date | null;
+  lastRunAt?: Date | null;
   /** @nullable */
-  lastRunStatus: string | null;
-  rowVersion: number;
-  createdAt: Date;
-  updatedAt: Date;
+  lastRunStatus?: string | null;
+  rowVersion?: number;
+  createdAt?: Date;
+  updatedAt?: Date;
+  required?: unknown;
 }

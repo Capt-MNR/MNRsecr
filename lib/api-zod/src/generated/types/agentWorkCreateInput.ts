@@ -5,6 +5,7 @@
  * Personal Secretary API
  * OpenAPI spec version: 0.1.0
  */
+import type { AgentWorkCreateInputAction } from './agentWorkCreateInputAction';
 import type { AgentWorkCreateInputCondition } from './agentWorkCreateInputCondition';
 import type { AgentWorkCreateInputKind } from './agentWorkCreateInputKind';
 import type { AgentWorkCreateInputSchedule } from './agentWorkCreateInputSchedule';
@@ -24,6 +25,7 @@ export interface AgentWorkCreateInput {
   description?: string | null;
   source?: AgentWorkCreateInputSource;
   condition?: AgentWorkCreateInputCondition;
+  action?: AgentWorkCreateInputAction;
   schedule?: AgentWorkCreateInputSchedule;
   /** @nullable */
   nextRunAt?: Date | null;

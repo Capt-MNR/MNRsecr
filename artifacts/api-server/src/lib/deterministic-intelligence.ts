@@ -2,6 +2,7 @@ export type SemanticDomain =
   | "expense"
   | "reminder"
   | "schedule"
+  | "work"
   | "person"
   | "project"
   | "memory"
@@ -13,6 +14,7 @@ export type SemanticIntent =
   | "person_expense_total"
   | "project_people"
   | "create_reminder"
+  | "create_agent_work"
   | "schedule_read"
   | "create_person"
   | "create_project"
@@ -105,6 +107,7 @@ export type DeterministicRequestMetrics = {
 const ARABIC_DIGITS = "٠١٢٣٤٥٦٧٨٩";
 const MONEY_WORDS = /جنيه|جنية|دولار|ريال|ريالات|مصروف|مصروفات|مصاريف|صرفيه|فلوس|دراهم|دفعت|دفع|صرف|سجل|اديت|أديت|اعطيت|عطيت|انفقت|أنفقت|حولت|تحويل|سددت|سدد|خد|اخد|أخد|استلم/i;
 const REMINDER_WORDS = /فكرني|ذكرني|تذكير|تذكرني|remind|reminder/i;
+const AGENT_WORK_WORDS = /تابع(?:لي|ي)?|راقب(?:لي|ي)?|خليك\s+متابع|لو\s+حصل|بلغني|كل\s+يوم.*راجع|every\s+day|monitor|watch/i;
 const READ_WORDS = /إيه|ايه|ما|ماذا|كم|كام|قد\s*إيه|قديش|شكد|شگد|اجمالي|إجمالي|مجموع|تقرير|اعرض|أعرض|وريني|هات|عندي|مين|هل|مواعيد|شو|ايش|وش|وين|show|total|list/i;
 const WRITE_WORDS = /سجل|سجّل|دفعت|دفع|صرف|اديت|أديت|اعطيت|عطيت|حولت|تحويل|سددت|سدد|خد|اخد|أخد|استلم|أضف|اضف|ضيف|أنشئ|انشئ|اعمل|عدّل|عدل|غيّر|غير|احذف|امسح|فكرني|ذكرني|create|add|record|update|delete|remind/i;
 const TRAVEL_CONFLICT_WORDS = /مسافر|مسافرة|سفر|السفر|رحلة|رحله|travel|trip/i;
@@ -339,6 +342,26 @@ export function parseArabicDateTime(value: string, now = new Date()): ParsedDate
   };
 }
 
+export type ParsedTimeOfDay = {
+  hour: number;
+  minute: number;
+  confidence: number;
+};
+
+export function parseArabicTimeOfDay(value: string): ParsedTimeOfDay | null {
+  const normalized = canonicalizeArabicText(value);
+  const time = normalized.match(
+    /(?:الساعه\s*)?([0-9٠-٩]{1,2})(?:\s*[:٫]\s*([0-9٠-٩]{1,2}))?\s*(صباحا|مساء|بالليل|ليل|ظهر)?/u,
+  );
+  if (!time) return null;
+  let hour = Number(arabicDigitsToAscii(time[1]));
+  const minute = time[2] ? Number(arabicDigitsToAscii(time[2])) : 0;
+  const period = time[3] ?? "";
+  if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour > 23 || minute > 59) return null;
+  hour = normalizeArabicClockHour(hour, period);
+  return { hour, minute, confidence: period ? 0.99 : 0.94 };
+}
+
 function extractEntityMentions(message: string): EntityMention[] {
   const mentions: EntityMention[] = [];
   const person = message.match(
@@ -406,6 +429,7 @@ export function parseSemanticRequest(message: string): SemanticParse {
   if (MONEY_WORDS.test(normalizedText) || amount || personTotal) domains.add("expense");
   if (REMINDER_WORDS.test(normalizedText)) domains.add("reminder");
   if (/موعد|مواعيد|ميعاد|مهمه|مهام|schedule|task/i.test(normalizedText)) domains.add("schedule");
+  if (AGENT_WORK_WORDS.test(normalizedText)) domains.add("work");
   if (travelConflictRequest) domains.add("schedule");
   if (/شخص|جهة|contact|person|مين/i.test(normalizedText)) domains.add("person");
   if (/مشروع|project/i.test(normalizedText)) domains.add("project");
@@ -425,6 +449,9 @@ export function parseSemanticRequest(message: string): SemanticParse {
   } else if (REMINDER_WORDS.test(normalizedText)) {
     intent = "create_reminder";
     confidence = 0.9;
+  } else if (AGENT_WORK_WORDS.test(normalizedText)) {
+    intent = "create_agent_work";
+    confidence = 0.88;
   } else if (domains.has("expense") && hasReadLanguage && !explicitExpenseWrite) {
     intent = entityMentions.some((item) => item.entityType === "person")
       ? "person_expense_total"
@@ -457,6 +484,11 @@ export function parseSemanticRequest(message: string): SemanticParse {
       && domainList.every((domain) => domain === "expense" || domain === "person" || domain === "project"))
     || (intent === "create_person" && domainList.every((domain) => domain === "expense" || domain === "person"))
     || (intent === "create_project" && domainList.every((domain) => domain === "expense" || domain === "project"))
+    || (intent === "create_agent_work" && domainList.every((domain) =>
+      domain === "work"
+      || domain === "schedule"
+      || domain === "expense"
+      || domain === "unknown"))
   );
   const ambiguous = domainList.length > 1 && !intentHasCompatibleDomains;
   return {
@@ -511,6 +543,15 @@ export function decideDeterministically(parsed: SemanticParse): DeterministicDec
           reason: "reminder_date_or_time_missing",
         };
   }
+  if (parsed.intent === "create_agent_work") {
+    return {
+      kind: "deterministic",
+      intent: parsed.intent,
+      confidence: parsed.confidence,
+      requiresApproval: true,
+      reason: "natural_agent_work_request",
+    };
+  }
   if ([
     "expense_report",
     "person_expense_total",
@@ -546,6 +587,7 @@ export function isProductionDeterministicIntent(intent: SemanticIntent): boolean
   return [
     "record_expense",
     "create_reminder",
+    "create_agent_work",
     "create_person",
     "create_project",
   ].includes(intent);

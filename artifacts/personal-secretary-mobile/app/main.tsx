@@ -105,6 +105,7 @@ export default function MainRoute() {
     recordTitle?: string;
     recordSubtitle?: string;
     recordTrailing?: string;
+    workId?: string;
   }>();
   const inputRef = useRef<TextInput>(null);
   const [mainSection, setMainSection] = useState<MainSection>('office');
@@ -154,6 +155,10 @@ export default function MainRoute() {
   }, [params.recordId, params.recordSubtitle, params.recordTrailing, params.recordTitle, params.recordType]);
 
   useEffect(() => {
+    if (typeof params.workId === 'string' && params.workId) setMainSection('works');
+  }, [params.workId]);
+
+  useEffect(() => {
     let active = true;
     void AsyncStorage.getItem('secretary:assistant-preferences').then((storedPreferences) => {
       if (!active) return;
@@ -169,7 +174,14 @@ export default function MainRoute() {
     }).catch(() => setHydrated(true));
     void initializeSecretaryPush();
     const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      if (isQuickNotificationResponse(response)) router.replace('/');
+      if (isQuickNotificationResponse(response)) {
+        router.replace('/');
+        return;
+      }
+      const workId = response.notification.request.content.data?.workId;
+      if (typeof workId === 'string' && workId) {
+        router.replace({ pathname: '/main', params: { workId } });
+      }
     });
     return () => {
       active = false;
@@ -362,7 +374,7 @@ export default function MainRoute() {
               {mainSection === 'tasks' && <RecordsView colors={colors} onOpenSection={openRecordSection} title="المهام" subtitle="المهام المفتوحة والمكتملة المرتبطة بسياقك" sectionKeys={['tasks']} onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}
               {mainSection === 'reminders' && <RecordsView colors={colors} onOpenSection={openRecordSection} title="التذكيرات" subtitle="كل المواعيد والتنبيهات التي يتابعها السكرتير" sectionKeys={['reminders']} onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}
                {mainSection === 'activity' && <RecordsView colors={colors} onOpenSection={openRecordSection} title="النشاط / Timeline" subtitle="آخر السجلات والحركة التي تستحق المراجعة" onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}
-               {mainSection === 'works' && <WorksView colors={colors} language={language} onBack={() => openMainSection('office')} />}
+      {mainSection === 'works' && <WorksView colors={colors} language={language} initialWorkId={typeof params.workId === 'string' ? params.workId : undefined} onBack={() => openMainSection('office')} />}
             </>
           )}
         </MainWorkspace>

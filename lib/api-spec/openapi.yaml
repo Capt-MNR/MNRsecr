@@ -1332,6 +1332,7 @@ components:
         status: { type: string, enum: [draft, active, paused, waiting, needs_review, completed, failed, cancelled] }
         source: { type: object, additionalProperties: true }
         condition: { type: object, additionalProperties: true }
+        action: { type: object, additionalProperties: true }
         schedule: { type: object, additionalProperties: true }
         nextRunAt: { type: ["string", "null"], format: date-time }
         lastRunAt: { type: ["string", "null"], format: date-time }
@@ -1339,7 +1340,7 @@ components:
         rowVersion: { type: integer }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
-      required: [id, kind, title, description, status, source, condition, schedule, nextRunAt, lastRunAt, lastRunStatus, rowVersion, createdAt, updatedAt]
+        required: [id, kind, title, description, status, source, condition, action, schedule, nextRunAt, lastRunAt, lastRunStatus, rowVersion, createdAt, updatedAt]
     AgentWorkRun:
       type: object
       properties:
@@ -1391,6 +1392,7 @@ components:
         description: { type: ["string", "null"], maxLength: 2000 }
         source: { type: object, additionalProperties: true }
         condition: { type: object, additionalProperties: true }
+        action: { type: object, additionalProperties: true }
         schedule: { type: object, additionalProperties: true }
         nextRunAt: { type: ["string", "null"], format: date-time }
       required: [kind, title]

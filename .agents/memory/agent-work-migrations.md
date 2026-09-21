@@ -7,4 +7,4 @@ The legacy Drizzle migration journal may be invalid or out of sync enough that `
 
 **Why:** The existing journal contained invalid trailing-comma JSON and schema-name conflicts caused Drizzle to require an interactive prompt; treating that as a schema failure or forcing a migration would risk unrelated tables.
 
-**How to apply:** Before adding another Agent Work table or migration, inspect the journal and database state first. Do not use a destructive reset or silently alter production; use a reviewed additive SQL migration for development until the migration history is repaired.
+**How to apply:** Before adding another Agent Work table or migration, inspect the journal and database state first. Do not use a destructive reset or silently alter production; use a reviewed additive SQL migration for development until the migration history is repaired. After codegen, apply the reviewed additive SQL to development before testing approval-backed writes; the API can compile while the live table is still missing the new column.

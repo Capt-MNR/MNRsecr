@@ -918,6 +918,7 @@ export const agentWorksTable = pgTable(
     status: text("status").notNull().default("draft"),
     source: jsonb("source").$type<Record<string, unknown>>().notNull().default({}),
     condition: jsonb("condition").$type<Record<string, unknown>>().notNull().default({}),
+    action: jsonb("action").$type<Record<string, unknown>>().notNull().default({}),
     schedule: jsonb("schedule").$type<Record<string, unknown>>().notNull().default({}),
     nextRunAt: timestamp("next_run_at", { withTimezone: true }),
     lastRunAt: timestamp("last_run_at", { withTimezone: true }),

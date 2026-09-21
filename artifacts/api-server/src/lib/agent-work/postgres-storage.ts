@@ -58,6 +58,7 @@ function mapWork(row: typeof agentWorksTable.$inferSelect): AgentWorkRecord {
     status: row.status as AgentWorkStatus,
     source: row.source,
     condition: row.condition,
+    action: row.action,
     schedule: row.schedule,
     nextRunAt: row.nextRunAt,
     lastRunAt: row.lastRunAt,
@@ -149,6 +150,7 @@ export class PostgresAgentWorkStorageAdapter implements StorageAdapter {
         description: input.description ?? null,
         source: input.source ?? {},
         condition: input.condition ?? {},
+        action: input.action ?? {},
         schedule: input.schedule ?? {},
         nextRunAt: input.nextRunAt ?? null,
       }).returning();

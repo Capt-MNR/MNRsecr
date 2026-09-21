@@ -118,6 +118,7 @@ export type AgentWorkRecord = {
   status: AgentWorkStatus;
   source: Record<string, unknown>;
   condition: Record<string, unknown>;
+  action: Record<string, unknown>;
   schedule: Record<string, unknown>;
   nextRunAt: Date | null;
   lastRunAt: Date | null;
@@ -176,6 +177,7 @@ export type CreateAgentWorkInput = {
   description?: string | null;
   source?: Record<string, unknown>;
   condition?: Record<string, unknown>;
+  action?: Record<string, unknown>;
   schedule?: Record<string, unknown>;
   nextRunAt?: Date | null;
 };

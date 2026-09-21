@@ -10,7 +10,7 @@ import {
   type AgentWorkDetails,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -72,6 +72,29 @@ function kindLabel(kind: string, language: AppLanguage): string {
   return labels ? localized(language, labels[0], labels[1]) : kind;
 }
 
+function workConditionLabel(condition: Record<string, unknown>, language: AppLanguage): string {
+  if (
+    condition.entity === 'tasks'
+    && condition.metric === 'open_task_count'
+    && typeof condition.threshold === 'number'
+  ) {
+    const operator = condition.operator === 'gte' ? localized(language, 'أكبر من أو يساوي', 'at least')
+      : condition.operator === 'eq' ? localized(language, 'يساوي', 'equals')
+        : localized(language, 'أكبر من', 'more than');
+    return localized(language, `عدد المهام المفتوحة ${operator} ${condition.threshold}`, `Open tasks ${operator} ${condition.threshold}`);
+  }
+  if (typeof condition.request === 'string') return condition.request;
+  return localized(language, 'يتابع هذا العمل شرطًا يحتاج مراجعتك.', 'This work follows a condition that needs review.');
+}
+
+function evidenceValueLabel(snapshot: Record<string, unknown> | null | undefined, language: AppLanguage): string {
+  if (!snapshot) return localized(language, 'لا توجد نتيجة بعد', 'No result yet');
+  if (typeof snapshot.value === 'number') {
+    return localized(language, `القيمة الحالية: ${snapshot.value}`, `Current value: ${snapshot.value}`);
+  }
+  return localized(language, 'تم الفحص بدون قيمة قابلة للعرض.', 'Checked without a displayable value.');
+}
+
 function statusColor(status: string, colors: WorksColors): string {
   if (status === 'active') return colors.accent;
   if (status === 'failed' || status === 'needs_review') return colors.destructive;
@@ -122,11 +145,12 @@ function WorkStatusPill({
   colors: WorksColors;
   language: AppLanguage;
 }) {
-  const color = statusColor(work.status, colors);
+  const status = work.status ?? 'draft';
+  const color = statusColor(status, colors);
   return (
     <View style={[styles.statusPill, { backgroundColor: `${color}1A` }]}>
       <View style={[styles.statusDot, { backgroundColor: color }]} />
-      <Text style={[styles.statusText, { color }]}>{statusLabel(work.status, language)}</Text>
+      <Text style={[styles.statusText, { color }]}>{statusLabel(status, language)}</Text>
     </View>
   );
 }
@@ -144,11 +168,14 @@ function WorkCard({
   selected: boolean;
   onPress: () => void;
 }) {
+  const workId = work.id ?? '';
+  const title = work.title ?? 'عمل الوكيل';
+  const kind = work.kind ?? 'monitor';
   return (
     <Pressable
-      testID={`agent-work-${work.id}`}
+      testID={`agent-work-${workId}`}
       accessibilityRole="button"
-      accessibilityLabel={localized(language, `فتح ${work.title}`, `Open ${work.title}`)}
+      accessibilityLabel={localized(language, `فتح ${title}`, `Open ${title}`)}
       onPress={onPress}
       style={({ pressed }) => [
         styles.workCard,
@@ -161,9 +188,9 @@ function WorkCard({
     >
       <View style={styles.workCardTop}>
         <View style={styles.workCardCopy}>
-          <Text style={[styles.workTitle, { color: colors.foreground }]} numberOfLines={2}>{work.title}</Text>
+          <Text style={[styles.workTitle, { color: colors.foreground }]} numberOfLines={2}>{title}</Text>
           <Text style={[styles.workMeta, { color: colors.mutedForeground }]} numberOfLines={1}>
-            {kindLabel(work.kind, language)}
+            {kindLabel(kind, language)}
           </Text>
         </View>
         <WorkStatusPill work={work} colors={colors} language={language} />
@@ -211,7 +238,24 @@ function WorkDetail({
   onTransition: (to: AgentWorkStatus) => void;
   transitionPending: boolean;
 }) {
-  const actions = transitionActions(details.work.status);
+  const work = details.work ?? ({
+    id: '',
+    kind: 'monitor',
+    title: 'عمل الوكيل',
+    description: null,
+    status: 'draft',
+    source: {},
+    condition: {},
+    action: {},
+    schedule: {},
+    nextRunAt: null,
+    lastRunAt: null,
+    lastRunStatus: null,
+    rowVersion: 1,
+    createdAt: '',
+    updatedAt: '',
+  } as AgentWork);
+  const actions = transitionActions(work.status ?? 'draft');
   return (
     <ScrollView
       testID="agent-work-detail"
@@ -231,13 +275,13 @@ function WorkDetail({
           <Feather name="arrow-right" size={17} color={colors.foreground} />
         </Pressable>
         <View style={styles.detailHeaderCopy}>
-          <Text style={[styles.detailEyebrow, { color: colors.mutedForeground }]}>{kindLabel(details.work.kind, language)}</Text>
-          <Text style={[styles.detailTitle, { color: colors.foreground }]}>{details.work.title}</Text>
-          {details.work.description && (
-            <Text style={[styles.detailDescription, { color: colors.mutedForeground }]}>{details.work.description}</Text>
+          <Text style={[styles.detailEyebrow, { color: colors.mutedForeground }]}>{kindLabel(work.kind ?? 'monitor', language)}</Text>
+          <Text style={[styles.detailTitle, { color: colors.foreground }]}>{work.title ?? 'عمل الوكيل'}</Text>
+          {work.description && (
+            <Text style={[styles.detailDescription, { color: colors.mutedForeground }]}>{work.description}</Text>
           )}
         </View>
-        <WorkStatusPill work={details.work} colors={colors} language={language} />
+        <WorkStatusPill work={work} colors={colors} language={language} />
       </View>
 
       {actions.length > 0 && (
@@ -278,14 +322,25 @@ function WorkDetail({
       <View style={styles.summaryGrid}>
         <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.summaryLabel, { color: colors.mutedForeground }]}>{localized(language, 'المتابعة القادمة', 'Next check')}</Text>
-          <Text style={[styles.summaryValue, { color: colors.foreground }]}>{dateLabel(details.work.nextRunAt, language)}</Text>
+          <Text style={[styles.summaryValue, { color: colors.foreground }]}>{dateLabel(work.nextRunAt, language)}</Text>
         </View>
         <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.summaryLabel, { color: colors.mutedForeground }]}>{localized(language, 'آخر نتيجة', 'Last result')}</Text>
           <Text style={[styles.summaryValue, { color: colors.foreground }]}>
-            {details.work.lastRunStatus ? statusLabel(details.work.lastRunStatus, language) : localized(language, 'لا توجد', 'None')}
+            {work.lastRunStatus ? statusLabel(work.lastRunStatus, language) : localized(language, 'لا توجد', 'None')}
           </Text>
         </View>
+      </View>
+
+      <View style={[styles.explanationCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Text style={[styles.summaryLabel, { color: colors.mutedForeground }]}>{localized(language, 'ماذا يتابع الوكيل؟', 'What the agent follows')}</Text>
+        <Text style={[styles.explanationText, { color: colors.foreground }]}>{workConditionLabel(work.condition ?? {}, language)}</Text>
+        <Text style={[styles.explanationText, { color: colors.mutedForeground }]}>{evidenceValueLabel(details.evidence[0]?.snapshot, language)}</Text>
+        {typeof details.evidence[0]?.snapshot.checkedAt === 'string' && (
+          <Text style={[styles.timelineDate, { color: colors.mutedForeground }]}>
+            {localized(language, `تم التحقق ${dateLabel(details.evidence[0].snapshot.checkedAt, language)}`, `Verified ${dateLabel(details.evidence[0].snapshot.checkedAt, language)}`)}
+          </Text>
+        )}
       </View>
 
       <SectionTitle icon="activity" title={localized(language, 'ما الذي حدث', 'What happened')} colors={colors} />
@@ -336,13 +391,18 @@ export default function WorksView({
   colors,
   language,
   onBack,
+  initialWorkId,
 }: {
   colors: WorksColors;
   language: AppLanguage;
   onBack: () => void;
+  initialWorkId?: string;
 }) {
   const queryClient = useQueryClient();
-  const [selectedWorkId, setSelectedWorkId] = useState<string | null>(null);
+  const [selectedWorkId, setSelectedWorkId] = useState<string | null>(initialWorkId ?? null);
+  useEffect(() => {
+    if (initialWorkId) setSelectedWorkId(initialWorkId);
+  }, [initialWorkId]);
   const worksQuery = useListAgentWorks(undefined, {
     query: {
       queryKey: getListAgentWorksQueryKey(),
@@ -377,7 +437,7 @@ export default function WorksView({
         onTransition={(to) => statusMutation.mutate({
           workId: selectedWorkId,
           data: {
-            from: detailQuery.data.work.status,
+            from: detailQuery.data.work.status ?? 'draft',
             to,
             reason: localized(language, 'تغيير الحالة من تطبيق الهاتف.', 'Status changed from the mobile app.'),
           },
@@ -392,14 +452,14 @@ export default function WorksView({
       testID="agent-works-view"
       style={styles.list}
       data={works}
-      keyExtractor={(item) => item.id}
+      keyExtractor={(item) => item.id ?? item.title ?? 'agent-work'}
       renderItem={({ item }) => (
         <WorkCard
           work={item}
           colors={colors}
           language={language}
           selected={item.id === selectedWorkId}
-          onPress={() => setSelectedWorkId(item.id)}
+          onPress={() => { if (item.id) setSelectedWorkId(item.id); }}
         />
       )}
       contentContainerStyle={styles.listContent}
@@ -497,6 +557,8 @@ const styles = StyleSheet.create({
   actionButtonText: { fontSize: 12, fontWeight: '700' },
   summaryGrid: { flexDirection: 'row-reverse', gap: 8, marginBottom: 12 },
   summaryCard: { flex: 1, borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, padding: 11, gap: 5 },
+  explanationCard: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, padding: 13, gap: 6, marginBottom: 4 },
+  explanationText: { fontSize: 13, lineHeight: 20, textAlign: 'right' },
   summaryLabel: { fontSize: 11, textAlign: 'right' },
   summaryValue: { fontSize: 12, fontWeight: '700', textAlign: 'right' },
   sectionTitle: { flexDirection: 'row-reverse', alignItems: 'center', gap: 7, marginTop: 9, marginBottom: 1 },

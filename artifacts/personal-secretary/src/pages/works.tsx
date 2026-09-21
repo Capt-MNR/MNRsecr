@@ -44,6 +44,22 @@ function formatDate(value: string | null | undefined) {
   }).format(date);
 }
 
+function conditionLabel(condition: Record<string, unknown>) {
+  if (condition.entity === 'tasks' && condition.metric === 'open_task_count' && typeof condition.threshold === 'number') {
+    const operator = condition.operator === 'gte' ? 'أكبر من أو يساوي'
+      : condition.operator === 'eq' ? 'يساوي' : 'أكبر من';
+    return `عدد المهام المفتوحة ${operator} ${condition.threshold}`;
+  }
+  if (typeof condition.request === 'string') return condition.request;
+  return 'شرط متابعة يحتاج مراجعة.';
+}
+
+function evidenceLabel(snapshot: Record<string, unknown>) {
+  const value = typeof snapshot.value === 'number' ? `القيمة الحالية: ${snapshot.value}` : 'تم الفحص بدون قيمة قابلة للعرض.';
+  const checkedAt = typeof snapshot.checkedAt === 'string' ? `تم التحقق ${formatDate(snapshot.checkedAt)}` : '';
+  return [value, checkedAt].filter(Boolean).join(' — ');
+}
+
 function statusStyle(status: string) {
   if (status === 'active') return 'bg-chart-3/10 text-chart-3';
   if (status === 'paused' || status === 'waiting') return 'bg-accent/15 text-accent-foreground';
@@ -101,11 +117,14 @@ function WorkDetail({ workId }: { workId: string }) {
     );
   }
 
-  const nextStatus = work.status === 'draft' ? 'active'
-    : work.status === 'active' ? 'paused'
-      : work.status === 'paused' ? 'active'
+  const workStatus = work.status ?? 'draft';
+  const workKind = work.kind ?? 'monitor';
+  const workTitle = work.title ?? 'عمل الوكيل';
+  const nextStatus = workStatus === 'draft' ? 'active'
+    : workStatus === 'active' ? 'paused'
+      : workStatus === 'paused' ? 'active'
         : null;
-  const currentStatus = work.status;
+  const currentStatus = workStatus;
 
   function changeStatus(to: 'active' | 'paused' | 'cancelled') {
     statusMutation.mutate({
@@ -121,12 +140,12 @@ function WorkDetail({ workId }: { workId: string }) {
           <button type="button" onClick={() => setLocation('/works')} className="mb-4 inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-primary">
             <ArrowLeft className="size-3.5" /> كل الأعمال
           </button>
-          <p className="text-xs text-muted-foreground">{kindLabels[work.kind as AgentWorkKind]}</p>
-          <h2 className="mt-1 font-serif text-2xl tracking-tight">{work.title}</h2>
+          <p className="text-xs text-muted-foreground">{kindLabels[workKind as AgentWorkKind]}</p>
+          <h2 className="mt-1 font-serif text-2xl tracking-tight">{workTitle}</h2>
           {work.description && <p className="mt-2 max-w-xl text-sm leading-7 text-muted-foreground">{work.description}</p>}
         </div>
-        <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${statusStyle(work.status)}`}>
-          {statusLabels[work.status] ?? work.status}
+        <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${statusStyle(workStatus)}`}>
+          {statusLabels[workStatus] ?? workStatus}
         </span>
       </div>
 
@@ -142,7 +161,7 @@ function WorkDetail({ workId }: { workId: string }) {
             {nextStatus === 'paused' ? 'إيقاف مؤقت' : 'تشغيل العمل'}
           </button>
         )}
-        {!['cancelled', 'completed'].includes(work.status) && (
+        {!['cancelled', 'completed'].includes(workStatus) && (
           <button type="button" onClick={() => changeStatus('cancelled')} disabled={statusMutation.isPending} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-border px-4 py-2 text-sm font-semibold text-muted-foreground hover:border-destructive/40 hover:text-destructive disabled:opacity-50">
             <XCircle className="size-4" /> إلغاء العمل
           </button>
@@ -165,6 +184,14 @@ function WorkDetail({ workId }: { workId: string }) {
           <p className="text-xs text-muted-foreground">آخر تحديث</p>
           <p className="mt-2 text-sm font-semibold">{formatDate(work.updatedAt)}</p>
         </div>
+      </div>
+
+      <div className="mt-6 rounded-2xl border border-border/60 bg-background/50 p-4">
+        <p className="text-xs text-muted-foreground">ماذا يتابع الوكيل؟</p>
+        <p className="mt-2 text-sm font-semibold">{conditionLabel(work.condition ?? {})}</p>
+        {detailQuery.data?.evidence[0] && (
+          <p className="mt-2 text-xs text-muted-foreground">{evidenceLabel(detailQuery.data.evidence[0].snapshot)}</p>
+        )}
       </div>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
@@ -198,6 +225,21 @@ function WorkDetail({ workId }: { workId: string }) {
               </div>
             )) : <p className="rounded-2xl bg-background/50 p-4 text-sm text-muted-foreground">لم تبدأ محاولة بعد.</p>}
           </div>
+        </div>
+      </div>
+
+      <div className="mt-8">
+        <div className="flex items-center gap-2">
+          <CheckCircle2 className="size-4 text-primary" />
+          <h3 className="text-sm font-semibold">الدليل المرتبط بالنتيجة</h3>
+        </div>
+        <div className="mt-3 space-y-2">
+          {detailQuery.data?.evidence.length ? detailQuery.data.evidence.map((evidence) => (
+            <div key={evidence.id} className="rounded-2xl border border-border/60 bg-background/50 p-3">
+              <p className="text-sm">{evidenceLabel(evidence.snapshot)}</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">{formatDate(evidence.createdAt)}</p>
+            </div>
+          )) : <p className="rounded-2xl bg-background/50 p-4 text-sm text-muted-foreground">لا يوجد دليل محفوظ بعد.</p>}
         </div>
       </div>
     </section>

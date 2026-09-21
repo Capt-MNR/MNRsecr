@@ -80,6 +80,8 @@ import {
   validateDeterministicPayload,
   isProductionDeterministicIntent,
   isExplicitCancellationRequest,
+  arabicDigitsToAscii,
+  parseArabicTimeOfDay,
   type DeterministicRequestMetrics,
   type DeterministicDecision,
   type SemanticParse,
@@ -1015,6 +1017,7 @@ export const phase2Tools: ToolDefinition[] = [
       description: "Use internal_records only with an allowlisted tenant-scoped record condition; use user_defined when an external source is not connected yet.",
     },
     condition: { type: "OBJECT" },
+    action: { type: "OBJECT", description: "The extensible next step, such as notify, ask, or an approved action." },
     schedule: { type: "OBJECT" },
     nextRunAt: { type: "STRING", description: "Optional ISO timestamp for the first run." },
   }, ["kind", "title"]),
@@ -2700,6 +2703,7 @@ async function executeTool(
           sourceTurnId: options.sourceTurnId ?? options.requestId,
         },
         condition: objectArg("condition"),
+        action: objectArg("action"),
         schedule: objectArg("schedule"),
         nextRunAt,
       });
@@ -4692,6 +4696,53 @@ function reminderText(message: string): string {
     .trim() || "تذكير";
 }
 
+function naturalAgentWorkArgs(message: string): Record<string, unknown> {
+  const compact = message.replace(/\s+/g, " ").trim();
+  const recurring = /(?:كل\s+يوم|يوميا|يوميًا|every\s+day)/iu.test(compact);
+  const time = parseArabicTimeOfDay(compact);
+  const taskThresholdMatch = compact.match(
+    /(?:المهام|مهامي|المهام\s+المفتوحة|open\s+tasks?).*?(?:عن|فوق|اكتر\s+من|اكثر\s+من|أكثر\s+من|تزيد\s+عن|تعدي)\s*([0-9٠-٩]+)/iu,
+  );
+  const threshold = taskThresholdMatch
+    ? Number(arabicDigitsToAscii(taskThresholdMatch[1]))
+    : null;
+  const internalTaskMonitor = threshold !== null
+    && Number.isSafeInteger(threshold)
+    && threshold >= 0;
+  const schedule: Record<string, unknown> = recurring
+    ? {
+        frequency: "daily",
+        timezone: "Africa/Cairo",
+        ...(time ? { localTime: `${String(time.hour).padStart(2, "0")}:${String(time.minute).padStart(2, "0")}` } : {}),
+      }
+    : { frequency: "interval", minutes: 60 };
+  return {
+    kind: internalTaskMonitor ? "monitor" : recurring ? "recurring_task" : "monitor",
+    title: compact.slice(0, 200),
+    description: compact.slice(0, 2000),
+    sourceType: internalTaskMonitor ? "internal_records" : "user_defined",
+    condition: internalTaskMonitor
+      ? {
+          entity: "tasks",
+          metric: "open_task_count",
+          operator: "gt",
+          threshold,
+        }
+      : {
+          type: "user_defined",
+          request: compact.slice(0, 500),
+        },
+    action: {
+      type: "notify",
+      destination: "main_and_mobile",
+      include: ["what_changed", "current_value", "condition", "checked_at"],
+      deepLink: "work_detail",
+    },
+    schedule,
+    nextRunAt: new Date().toISOString(),
+  };
+}
+
 function expenseDescription(message: string): string {
   const compact = message.replace(/\s+/g, " ").trim();
   const purpose = compact
@@ -4756,6 +4807,39 @@ async function deterministicPreflight(
         type: "clarification_needed",
         source: "deterministic_intelligence",
         reason: decision.reason,
+      },
+    };
+  }
+
+  if (parsed.intent === "create_agent_work") {
+    const args = naturalAgentWorkArgs(parsed.originalText);
+    const result = await executeStructuredTool(identity, "create_agent_work", args, {
+      requestId: options.requestId,
+      dryRun: options.dryRun,
+      conversationId: options.conversationId,
+      sourceTurnId: options.requestId,
+      idempotencyKey: options.idempotencyKey,
+      channel: options.channel,
+    });
+    const approval = deterministicApprovalResponse("create_agent_work", result);
+    if (approval) return approval;
+    if (!result.ok) return null;
+    const work = result.agentWork && typeof result.agentWork === "object"
+      ? result.agentWork as { title?: unknown }
+      : {};
+    return {
+      response: {
+        kind: "answer",
+        message: typeof work.title === "string"
+          ? `أنشأت متابعة «${work.title}».`
+          : "أنشأت متابعة جديدة للوكيل.",
+      },
+      action: {
+        type: "agent_work_created",
+        source: "deterministic_intelligence",
+        workId: typeof (result.agentWork as { id?: unknown } | undefined)?.id === "string"
+          ? (result.agentWork as { id: string }).id
+          : null,
       },
     };
   }

@@ -41,10 +41,62 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? value as Record<string, unknown> : {};
 }
 
+function zonedParts(value: Date, timezone: string): { year: number; month: number; day: number; hour: number; minute: number } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(value);
+  const get = (type: string) => Number(parts.find((part) => part.type === type)?.value ?? 0);
+  return { year: get("year"), month: get("month"), day: get("day"), hour: get("hour"), minute: get("minute") };
+}
+
+function zonedDateTimeToUtc(
+  parts: { year: number; month: number; day: number; hour: number; minute: number },
+  timezone: string,
+): Date {
+  const targetUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute);
+  let guess = targetUtc;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const observed = zonedParts(new Date(guess), timezone);
+    const observedUtc = Date.UTC(observed.year, observed.month - 1, observed.day, observed.hour, observed.minute);
+    guess = targetUtc + (guess - observedUtc);
+  }
+  return new Date(guess);
+}
+
 function nextScheduledAt(now: Date, schedule: Record<string, unknown>): Date | null {
   const frequency = typeof schedule.frequency === "string" ? schedule.frequency : null;
   if (frequency === "hourly") return new Date(now.getTime() + 60 * 60_000);
-  if (frequency === "daily") return new Date(now.getTime() + 24 * 60 * 60_000);
+  if (frequency === "daily") {
+    const localTime = typeof schedule.localTime === "string" ? schedule.localTime.match(/^([01]\d|2[0-3]):([0-5]\d)$/u) : null;
+    if (localTime) {
+      const timezone = typeof schedule.timezone === "string" ? schedule.timezone : "Africa/Cairo";
+      const current = zonedParts(now, timezone);
+      const today = zonedDateTimeToUtc({
+        year: current.year,
+        month: current.month,
+        day: current.day,
+        hour: Number(localTime[1]),
+        minute: Number(localTime[2]),
+      }, timezone);
+      if (today.getTime() > now.getTime()) return today;
+      const tomorrow = new Date(Date.UTC(current.year, current.month - 1, current.day + 1));
+      const next = zonedParts(tomorrow, timezone);
+      return zonedDateTimeToUtc({
+        year: next.year,
+        month: next.month,
+        day: next.day,
+        hour: Number(localTime[1]),
+        minute: Number(localTime[2]),
+      }, timezone);
+    }
+    return new Date(now.getTime() + 24 * 60 * 60_000);
+  }
   if (frequency === "weekly") return new Date(now.getTime() + 7 * 24 * 60 * 60_000);
   if (frequency === "interval") {
     const minutes = Number(schedule.minutes);
@@ -63,6 +115,7 @@ type ExecutionPlan = {
   error?: string;
   notificationTitle: string;
   notificationBody: string;
+  notificationData?: Record<string, unknown>;
   notify: boolean;
 };
 
@@ -142,13 +195,29 @@ async function planExecution(
     });
     const firstBaseline = previousHash === null && current.comparisonKnown && !current.conditionMet;
     const status = firstBaseline ? "unchanged" : comparison.state;
+    const operatorLabel = current.operator === "gt"
+      ? "أكبر من"
+      : current.operator === "gte"
+        ? "أكبر من أو يساوي"
+        : current.operator === "eq"
+          ? "يساوي"
+          : current.operator === "lt"
+            ? "أقل من"
+            : "أقل من أو يساوي";
+    const checkedAt = new Intl.DateTimeFormat("ar-EG", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "Africa/Cairo",
+    }).format(now);
+    const conditionText = `عدد المهام المفتوحة ${operatorLabel} ${current.threshold}`;
+    const currentValueText = `القيمة الحالية ${current.value}`;
     const notificationBody = status === "verified"
-      ? `تحقق شرط المتابعة في «${title}».`
+      ? `تغيرت متابعة «${title}»: ${currentValueText}، والشرط تحقق (${conditionText}). تم التحقق ${checkedAt}.`
       : status === "needs_review"
-        ? `تغيرت بيانات «${title}» لكن النتيجة تحتاج مراجعتك.`
+        ? `تغيرت متابعة «${title}»: ${currentValueText}، لكن النتيجة تحتاج مراجعتك. تم التحقق ${checkedAt}.`
         : status === "uncertain"
-          ? `تعذر التحقق من «${title}» بشكل موثوق.`
-          : `لم يتغير شرط المتابعة في «${title}».`;
+          ? `تعذر التحقق من «${title}» بشكل موثوق. آخر قيمة معروفة ${current.value}. تم التحقق ${checkedAt}.`
+          : `لم تتغير متابعة «${title}»: ${currentValueText}، والشرط هو ${conditionText}. آخر فحص ${checkedAt}.`;
     return {
       plan: {
         status,
@@ -164,6 +233,14 @@ async function planExecution(
         },
         notificationTitle: title,
         notificationBody,
+        notificationData: {
+          source: current.sourceType,
+          value: current.value,
+          threshold: current.threshold,
+          operator: current.operator,
+          checkedAt: now.toISOString(),
+          deepLink: `/main?workId=${encodeURIComponent(work.id)}`,
+        },
         notify: status !== "unchanged",
       },
       evidence: {
@@ -300,7 +377,13 @@ export class AgentWorkRunner {
           eventId: notificationEvent.id,
           title: plan.notificationTitle,
           body: plan.notificationBody,
-          data: { workId: work.id, runId: run.id, status: plan.status },
+          data: {
+            workId: work.id,
+            runId: run.id,
+            status: plan.status,
+            deepLink: `/main?workId=${encodeURIComponent(work.id)}`,
+            ...(plan.notificationData ?? {}),
+          },
           dedupeKey: `agent-work-notification:${run.id}`,
         });
         await this.adapters.storage.addEvent({

@@ -40,27 +40,31 @@ export type AgentWorkSource = { [key: string]: unknown };
 
 export type AgentWorkCondition = { [key: string]: unknown };
 
+export type AgentWorkAction = { [key: string]: unknown };
+
 export type AgentWorkSchedule = { [key: string]: unknown };
 
 export interface AgentWork {
-  id: string;
-  kind: AgentWorkKind;
-  title: string;
+  id?: string;
+  kind?: AgentWorkKind;
+  title?: string;
   /** @nullable */
-  description: string | null;
-  status: AgentWorkStatus;
-  source: AgentWorkSource;
-  condition: AgentWorkCondition;
-  schedule: AgentWorkSchedule;
+  description?: string | null;
+  status?: AgentWorkStatus;
+  source?: AgentWorkSource;
+  condition?: AgentWorkCondition;
+  action?: AgentWorkAction;
+  schedule?: AgentWorkSchedule;
   /** @nullable */
-  nextRunAt: string | null;
+  nextRunAt?: string | null;
   /** @nullable */
-  lastRunAt: string | null;
+  lastRunAt?: string | null;
   /** @nullable */
-  lastRunStatus: string | null;
-  rowVersion: number;
-  createdAt: string;
-  updatedAt: string;
+  lastRunStatus?: string | null;
+  rowVersion?: number;
+  createdAt?: string;
+  updatedAt?: string;
+  required?: unknown;
 }
 
 export type AgentWorkRunStatus = typeof AgentWorkRunStatus[keyof typeof AgentWorkRunStatus];
@@ -159,6 +163,8 @@ export type AgentWorkCreateInputSource = { [key: string]: unknown };
 
 export type AgentWorkCreateInputCondition = { [key: string]: unknown };
 
+export type AgentWorkCreateInputAction = { [key: string]: unknown };
+
 export type AgentWorkCreateInputSchedule = { [key: string]: unknown };
 
 export interface AgentWorkCreateInput {
@@ -175,6 +181,7 @@ export interface AgentWorkCreateInput {
   description?: string | null;
   source?: AgentWorkCreateInputSource;
   condition?: AgentWorkCreateInputCondition;
+  action?: AgentWorkCreateInputAction;
   schedule?: AgentWorkCreateInputSchedule;
   /** @nullable */
   nextRunAt?: string | null;

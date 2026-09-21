@@ -7,6 +7,7 @@ import {
   normalizeArabicText,
   parseArabicAmount,
   parseArabicDateTime,
+  parseArabicTimeOfDay,
   parseSemanticRequest,
   isExplicitCancellationRequest,
   validateDeterministicPayload,
@@ -116,6 +117,21 @@ test("semantic layer recognizes expense, totals, schedules, and reminders", () =
   const projectExpenseRead = parseSemanticRequest("كام صرفت على مشروع المحجر؟");
   assert.equal(projectExpenseRead.intent, "expense_report");
   assert.equal(projectExpenseRead.ambiguous, false);
+});
+
+test("semantic layer recognizes natural delegation requests without opening Works", () => {
+  const monitor = parseSemanticRequest("تابعلي المهام المفتوحة ولو زادت عن ٥ بلغني");
+  assert.equal(monitor.intent, "create_agent_work");
+  assert.equal(decideDeterministically(monitor).kind, "deterministic");
+
+  const recurring = parseSemanticRequest("كل يوم الساعة 9 راجع المهام المفتوحة وقولي النتيجة");
+  assert.equal(recurring.intent, "create_agent_work");
+  assert.equal(decideDeterministically(recurring).kind, "deterministic");
+  assert.deepEqual(parseArabicTimeOfDay("كل يوم الساعة 9"), {
+    hour: 9,
+    minute: 0,
+    confidence: 0.94,
+  });
 });
 
 test("travel and obligation conflict is a read-only planning context without invented dates", () => {
@@ -307,6 +323,48 @@ test("Phase2 resolves high-signal reminder and clarification before any provider
   assert.equal(gateway.calls, 0);
   assert.equal(missing.response?.kind, "clarification");
   assert.equal(missing.action?.type, "clarification_needed");
+});
+
+test("Phase2 turns a natural task monitor into an approval-backed Work", async () => {
+  class UnreachableGateway implements ModelGateway {
+    readonly provider = "gemini" as const;
+    readonly modelName = "unreachable";
+    calls = 0;
+
+    async generate(): Promise<never> {
+      this.calls += 1;
+      throw new Error("provider should not be called");
+    }
+  }
+
+  const gateway = new UnreachableGateway();
+  const runtime = new Phase2AgentRuntime(gateway);
+  const result = await runtime.run({
+    tenantId: `natural-work-${process.pid}-${Date.now()}`,
+    userId: "natural-work-user",
+  }, {
+    message: "تابعلي المهام المفتوحة ولو زادت عن ٥ بلغني",
+    conversationId: `natural-work-conversation-${Date.now()}`,
+  });
+
+  assert.equal(gateway.calls, 0);
+  assert.equal(result.response?.kind, "clarification");
+  assert.equal(result.action?.type, "approval_required");
+  assert.equal(result.action?.toolName, "create_agent_work");
+  const args = result.action?.args as {
+    sourceType?: string;
+    condition?: { entity?: string; metric?: string; threshold?: number };
+    action?: { type?: string; deepLink?: string };
+  } | undefined;
+  assert.equal(args?.sourceType, "internal_records");
+  assert.deepEqual(args?.condition, {
+    entity: "tasks",
+    metric: "open_task_count",
+    operator: "gt",
+    threshold: 5,
+  });
+  assert.equal(args?.action?.type, "notify");
+  assert.equal(args?.action?.deepLink, "work_detail");
 });
 
 test("Phase2 prepares an unlinked expense when the user gives an amount and purpose", async () => {
