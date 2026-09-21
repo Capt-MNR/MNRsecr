@@ -619,6 +619,7 @@ Quick لا يصبح لوحة تشغيل مصغرة. دوره:
 | `QWEN_API_KEY` | secret | تفعيل Qwen عبر عقد OpenAI-compatible |
 | `QWEN_MODEL` | `qwen-plus` افتراضيًا | اسم موديل Qwen |
 | `QWEN_API_URL` | DashScope compatible chat completions URL | endpoint القابل للتبديل في الاختبارات |
+| `AI_PROVIDER_CATALOG` | JSON array/object | يستبدل قائمة المزودين؛ الإضافة والحذف يتمان من الإعداد فقط |
 
 لا تُقرأ مفاتيح المزود أو متغيرات Replit داخل Agent Work business logic، ولا يُسمح
 بتفعيل driver إنتاجي غير موصول بعقد identity وlease وnotification delivery.
