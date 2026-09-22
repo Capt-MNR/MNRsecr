@@ -268,7 +268,7 @@ test("date parser preserves Cairo day boundaries across midnight and month chang
 
   const yesterday = parseArabicDateTime("امبارح الساعة 11 مساء", cairoJustAfterMidnight);
   assert.ok(yesterday);
-  assert.equal(new Date(yesterday!.iso).toISOString(), "2026-01-30T21:00:00.000Z");
+  assert.equal(new Date(yesterday!.iso).toISOString(), "2026-01-31T21:00:00.000Z");
   assert.equal(yesterday!.dayOffset, -1);
 
   const dayAfterTomorrow = parseArabicDateTime("بعد بكره الساعة 12 صباحا", cairoJustAfterMidnight);
@@ -279,6 +279,7 @@ test("date parser preserves Cairo day boundaries across midnight and month chang
 
 test("date parser rejects invalid clock values instead of inventing a reminder time", () => {
   const now = new Date("2026-09-15T10:00:00.000Z");
+  assert.equal(parseArabicDateTime("اليوم الساعة 9:30", now)?.minute, 30);
   assert.equal(parseArabicDateTime("اليوم الساعة 24", now), null);
   assert.equal(parseArabicDateTime("اليوم الساعة 9:60", now), null);
 });

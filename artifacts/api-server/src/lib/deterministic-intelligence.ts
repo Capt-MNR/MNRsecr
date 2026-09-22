@@ -178,6 +178,12 @@ export function canonicalizeArabicText(value: string): string {
   return normalized.replace(/\s+/g, " ").trim();
 }
 
+function canonicalizeArabicTimeText(value: string): string {
+  const timeSeparator = "\uE000";
+  return canonicalizeArabicText(value.replace(/[:٫]/gu, timeSeparator))
+    .replaceAll(timeSeparator, ":");
+}
+
 function cleanMention(value: string): string {
   return value
     .replace(/^(?:ال|يا)\s+/u, "")
@@ -308,7 +314,7 @@ function cairoLocalDate(
 }
 
 export function parseArabicDateTime(value: string, now = new Date()): ParsedDateTime | null {
-  const normalized = canonicalizeArabicText(value);
+  const normalized = canonicalizeArabicTimeText(value);
   const dayOffset = normalized.includes("امبارح")
     ? -1
     : normalized.includes("بعد بكره")
@@ -319,7 +325,7 @@ export function parseArabicDateTime(value: string, now = new Date()): ParsedDate
         ? 0
         : null;
   const time = normalized.match(
-    /(?:الساعه\s*)?([0-9٠-٩]{1,2})(?:\s*[:٫]\s*([0-9٠-٩]{1,2}))?\s*(صباحا|مساء|بالليل|ليل|ظهر)?/u,
+    /(?:الساعه\s*)?([0-9٠-٩]{1,2})(?:\s*[:٫]\s*([0-9٠-٩]{1,2}))?\s*(صباحا|مساء|بالليل|ليل|ظهر)?(?=\s|$)/u,
   );
   if (dayOffset === null || !time) return null;
   let hour = Number(arabicDigitsToAscii(time[1]));
@@ -350,9 +356,9 @@ export type ParsedTimeOfDay = {
 };
 
 export function parseArabicTimeOfDay(value: string): ParsedTimeOfDay | null {
-  const normalized = canonicalizeArabicText(value);
+  const normalized = canonicalizeArabicTimeText(value);
   const time = normalized.match(
-    /(?:الساعه\s*)?([0-9٠-٩]{1,2})(?:\s*[:٫]\s*([0-9٠-٩]{1,2}))?\s*(صباحا|مساء|بالليل|ليل|ظهر)?/u,
+    /(?:الساعه\s*)?([0-9٠-٩]{1,2})(?:\s*[:٫]\s*([0-9٠-٩]{1,2}))?\s*(صباحا|مساء|بالليل|ليل|ظهر)?(?=\s|$)/u,
   );
   if (!time) return null;
   let hour = Number(arabicDigitsToAscii(time[1]));

@@ -7,4 +7,4 @@ Arabic punctuation such as `؟` must be separated from words before matching dat
 
 **Why:** Arabic punctuation can otherwise turn «النهارده؟» into a false search token, and letting the model decide whether saved tasks exist produced user-visible «لا توجد» answers despite real data.
 
-**How to apply:** When adding Arabic schedule intents, normalize Unicode letters/numbers and punctuation, distinguish reminders from tasks, and preserve tenant/user filters on the deterministic read.
+**How to apply:** When adding Arabic schedule intents, normalize Unicode letters/numbers and punctuation, but preserve `:`/Arabic decimal separators inside time parsing and require a token boundary after the complete clock value. Distinguish reminders from tasks and preserve tenant/user filters on deterministic reads.
