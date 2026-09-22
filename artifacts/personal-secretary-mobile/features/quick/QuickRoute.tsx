@@ -35,6 +35,7 @@ import {
   type SecretaryPushStatus,
 } from '../../services/mobile-push';
 import { initializeQuickNotification } from '../../services/quick-notification';
+import { createQuickActionGuard } from '../../services/quick-action-guard';
 import QuickScreen from './QuickScreen';
 import { QuickMessageBubble } from './QuickMessageBubble';
 import { ReceiptReviewCard } from '../receipt-review';
@@ -84,6 +85,7 @@ export default function QuickRoute() {
   const [pushStatus, setPushStatus] = useState<SecretaryPushStatus | null>(null);
   const [conversationToLoad, setConversationToLoad] = useState<string | null>(null);
   const [loadedConversationId, setLoadedConversationId] = useState<string | null>(null);
+  const actionGuardRef = useRef(createQuickActionGuard());
   const queryClient = useQueryClient();
   const secretaryChat = useSecretaryChatService(conversationToLoad, '', false);
   const conversationQuery = secretaryChat.conversationQuery;
@@ -166,6 +168,7 @@ export default function QuickRoute() {
       setLocalError('أكمل مبلغ الفاتورة والعملة قبل إرسال المسودة.');
       return;
     }
+    if (!actionGuardRef.current.tryBeginTurn()) return;
     setDraft('');
     const submittedInputId = inputReview?.inputId ?? null;
     const submittedInputAttachment = inputReview?.localAttachment ?? null;
@@ -175,16 +178,16 @@ export default function QuickRoute() {
     retryKeyRef.current = { message, key: idempotencyKey };
     setInputReview(null);
     setLocalError(null);
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    appendMessage({
-      id: `user-${Date.now()}`,
-      role: 'user',
-      text: message,
-      createdAt: new Date().toISOString(),
-      ...(submittedInputId ? { inputId: submittedInputId } : {}),
-      ...(submittedInputAttachment ? { inputAttachment: submittedInputAttachment } : {}),
-    });
     try {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      appendMessage({
+        id: `user-${Date.now()}`,
+        role: 'user',
+        text: message,
+        createdAt: new Date().toISOString(),
+        ...(submittedInputId ? { inputId: submittedInputId } : {}),
+        ...(submittedInputAttachment ? { inputAttachment: submittedInputAttachment } : {}),
+      });
       const result = await secretaryChat.sendTurn({
         message,
         conversationId: conversationId ?? null,
@@ -216,10 +219,13 @@ export default function QuickRoute() {
       setLocalError('لم أتمكن من الوصول للسكرتير. جرّب مرة أخرى.');
       appendMessage({ id: `error-${Date.now()}`, role: 'assistant', text: 'حصلت مشكلة مؤقتة في الاتصال. رسالتك لم تُنفّذ.', createdAt: new Date().toISOString() });
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      actionGuardRef.current.endTurn();
     }
   }
 
   async function updateApproval(approval: Approval, status: ApprovalStatus) {
+    if (!actionGuardRef.current.tryBeginApproval(approval.operationId)) return;
     setBusyOperationId(approval.operationId);
     setLocalError(null);
     try {
@@ -248,6 +254,7 @@ export default function QuickRoute() {
     } catch {
       setLocalError('لم يتم حفظ قرار الموافقة. جرّب مرة أخرى.');
     } finally {
+      actionGuardRef.current.endApproval(approval.operationId);
       setBusyOperationId(null);
     }
   }
