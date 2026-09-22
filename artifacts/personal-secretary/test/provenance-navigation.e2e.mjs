@@ -93,22 +93,6 @@ async function jsonRequest(url, options = {}) {
   return body ? JSON.parse(body) : null;
 }
 
-async function renderWithChromium(url) {
-  const child = spawnProcess(chromiumPath, [
-    "--headless",
-    "--no-sandbox",
-    "--disable-gpu",
-    "--disable-dev-shm-usage",
-    "--virtual-time-budget=6000",
-    "--dump-dom",
-    url,
-  ]);
-  const [exitCode] = await once(child, "close");
-  const { stdout, stderr } = child.output();
-  assert.equal(exitCode, 0, `Chromium failed for ${url}:\n${stderr}`);
-  return stdout;
-}
-
 class DevToolsPage {
   constructor(webSocketUrl) {
     this.socket = new WebSocket(webSocketUrl);
@@ -428,20 +412,51 @@ try {
     fixtureInfo.firstApprovalMessage,
   );
 
-  const linkedConversationDom = await renderWithChromium(
-    `${appBaseUrl}/?conversationId=${encodeURIComponent(fixtureInfo.ids.conversation)}&turnId=1`,
-  );
-  assert.match(linkedConversationDom, /data-highlighted="true"/);
-  assert.match(linkedConversationDom, /السياق المرتبط/);
+  const recordsBrowser = await startInteractiveChromium(`${appBaseUrl}/records?tab=expenses`);
+  try {
+    const originLinkTestId = `link-record-origin-${createdExpense.id}`;
+    await waitForBrowserValue(
+      recordsBrowser.page,
+      `document.querySelector('[data-testid="${originLinkTestId}"]') !== null`,
+      "origin conversation action on the linked record",
+    );
+    const originAction = await recordsBrowser.page.evaluate(`(() => {
+      const action = document.querySelector('[data-testid="${originLinkTestId}"]');
+      const manualCard = [...document.querySelectorAll('article')]
+        .find((card) => card.textContent?.includes(${JSON.stringify("مصروف الاختبار")}));
+      return {
+        actionText: action?.textContent ?? "",
+        manualHasUnlinkedState: Boolean(manualCard?.textContent?.includes("أضيف يدويًا أو قبل تفعيل ربط المحادثات")),
+        manualHasOriginAction: Boolean(manualCard?.querySelector('[data-testid^="link-record-origin-"]')),
+      };
+    })()`);
+    assert.match(originAction.actionText, /فتح المحادثة الأصلية/);
+    assert.equal(originAction.manualHasUnlinkedState, true);
+    assert.equal(originAction.manualHasOriginAction, false);
 
-  const recordsDom = await renderWithChromium(`${appBaseUrl}/records?tab=expenses`);
-  assert.match(recordsDom, new RegExp(`data-testid="link-record-origin-${createdExpense.id}"`));
-  assert.match(recordsDom, /data-testid="link-record-origin-[^"]+"/);
-  assert.match(recordsDom, /أضيف يدويًا أو قبل تفعيل ربط المحادثات/);
-  assert.doesNotMatch(
-    recordsDom,
-    new RegExp(`data-testid="link-record-origin-${fixtureInfo.ids.expense}"`),
-  );
+    await recordsBrowser.page.evaluate(`document.querySelector('[data-testid="${originLinkTestId}"]').click()`);
+    const expectedConversationQuery = `conversationId=${encodeURIComponent(fixtureInfo.ids.conversation)}&turnId=1`;
+    await waitForBrowserValue(
+      recordsBrowser.page,
+      `window.location.pathname === "/" && window.location.search.includes(${JSON.stringify(expectedConversationQuery)})`,
+      "navigation to the originating conversation and turn",
+    );
+    const highlightedTurn = await waitForBrowserValue(
+      recordsBrowser.page,
+      `(() => {
+        const message = document.querySelector('[data-highlighted="true"]');
+        return message?.getAttribute("data-turn-id") === "1"
+          && message.textContent?.includes("دفعت لمحمد اختبار 500 جنيه في مشروع السكرتير")
+          && message.textContent?.includes("السياق المرتبط");
+      })()`,
+      "highlighted originating conversation turn",
+    );
+    assert.equal(highlightedTurn, true);
+  } finally {
+    recordsBrowser.page.close();
+    await closeProcess(recordsBrowser.child);
+    rmSync(recordsBrowser.profile, { recursive: true, force: true });
+  }
 
   console.log(JSON.stringify({
     ok: true,
