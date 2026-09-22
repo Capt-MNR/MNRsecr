@@ -5,6 +5,10 @@ import {
   activityEventEntitiesTable,
   activityEventsTable,
   conversationMemoryTable,
+  commitmentPeopleTable,
+  commitmentProjectsTable,
+  commitmentPurposesTable,
+  commitmentsTable,
   db,
   expensesTable,
   financialObligationsTable,
@@ -15,10 +19,17 @@ import {
   idempotencyRecordsTable,
   obligationSettlementsTable,
   peopleTable,
+  purposesTable,
   projectPeopleTable,
   projectsTable,
+  reminderPeopleTable,
+  reminderProjectsTable,
+  reminderTasksTable,
+  remindersTable,
   secretaryOperationsTable,
+  taskPeopleTable,
   taskProjectsTable,
+  taskPurposesTable,
   tasksTable,
 } from "@workspace/db";
 import { recordActivityEvent } from "../src/lib/entity-graph.ts";
@@ -68,16 +79,27 @@ async function cleanup() {
     secretaryOperationsTable,
     idempotencyRecordsTable,
     obligationSettlementsTable,
+    commitmentPeopleTable,
+    commitmentProjectsTable,
+    commitmentPurposesTable,
+    reminderPeopleTable,
+    reminderProjectsTable,
+    reminderTasksTable,
+    taskPeopleTable,
     taskProjectsTable,
+    taskPurposesTable,
     financialPartyPeopleTable,
     financialPartyProjectsTable,
     projectPeopleTable,
     financialPaymentsTable,
     financialObligationsTable,
     expensesTable,
+    remindersTable,
+    commitmentsTable,
     tasksTable,
     projectsTable,
     peopleTable,
+    purposesTable,
     financialPartiesTable,
   ]) {
     await deleteOwned(table);
@@ -800,6 +822,94 @@ test("HTTP typed relationships require approval once and reject cross-tenant acc
     eq(projectPeopleTable.id, foreignRelationship.id),
   ));
   assert.equal(foreignRows.length, 1);
+});
+
+test("HTTP relationship approvals cover task, reminder, and commitment families", async () => {
+  const [person] = await db.insert(peopleTable).values({
+    tenantId,
+    ownerUserId: userId,
+    name: "شخص علاقات موسعة",
+    nameKey: "شخص علاقات موسعة",
+  }).returning();
+  const [project] = await db.insert(projectsTable).values({
+    tenantId,
+    ownerUserId: userId,
+    name: "مشروع علاقات موسعة",
+    nameKey: "مشروع علاقات موسعة",
+  }).returning();
+  const [task] = await db.insert(tasksTable).values({
+    tenantId,
+    ownerUserId: userId,
+    title: "مهمة علاقات موسعة",
+  }).returning();
+  const [purpose] = await db.insert(purposesTable).values({
+    tenantId,
+    ownerUserId: userId,
+    name: "غرض علاقات موسعة",
+    nameKey: "غرض علاقات موسعة",
+  }).returning();
+  const [reminder] = await db.insert(remindersTable).values({
+    tenantId,
+    ownerUserId: userId,
+    text: "تذكير علاقات موسعة",
+    dueAt: new Date("2030-01-01T12:00:00.000Z"),
+  }).returning();
+  const [commitment] = await db.insert(commitmentsTable).values({
+    tenantId,
+    ownerUserId: userId,
+    title: "التزام علاقات موسعة",
+  }).returning();
+
+  const cases = [
+    { relation: "task_people", leftId: task.id, rightId: person.id, rightKey: "personId" },
+    { relation: "task_projects", leftId: task.id, rightId: project.id, rightKey: "projectId" },
+    { relation: "task_purposes", leftId: task.id, rightId: purpose.id, rightKey: "purposeId" },
+    { relation: "reminder_people", leftId: reminder.id, rightId: person.id, rightKey: "personId" },
+    { relation: "reminder_projects", leftId: reminder.id, rightId: project.id, rightKey: "projectId" },
+    { relation: "reminder_tasks", leftId: reminder.id, rightId: task.id, rightKey: "taskId" },
+    { relation: "commitment_people", leftId: commitment.id, rightId: person.id, rightKey: "personId" },
+    { relation: "commitment_projects", leftId: commitment.id, rightId: project.id, rightKey: "projectId" },
+    { relation: "commitment_purposes", leftId: commitment.id, rightId: purpose.id, rightKey: "purposeId" },
+  ] as const;
+
+  for (const [index, relationshipCase] of cases.entries()) {
+    const input = {
+      leftId: relationshipCase.leftId,
+      rightId: relationshipCase.rightId,
+      relationship: `regression-${index}`,
+      idempotencyKey: `http-relationship-family-${index}-${Date.now()}`,
+    };
+    const created = await createAndApprove(
+      `/relationships?relation=${relationshipCase.relation}`,
+      input,
+    );
+    assert.equal(created.approved.status, 200, JSON.stringify(created.approved.body));
+    assert.equal(created.approved.body?.status, "completed");
+
+    const listed = await request(
+      `/relationships?relation=${relationshipCase.relation}&side=left&entityId=${relationshipCase.leftId}`,
+    );
+    assert.equal(listed.status, 200, JSON.stringify(listed.body));
+    assert.equal(listed.body?.relationships.length, 1);
+    const relationship = listed.body?.relationships[0];
+    const relationshipId = relationship?.id as string;
+    assert.equal(relationship?.[relationshipCase.rightKey], relationshipCase.rightId);
+
+    const deleted = await request(
+      `/relationships/${relationshipCase.relation}/${relationshipId}`,
+      "DELETE",
+    );
+    assert.equal(deleted.status, 202, JSON.stringify(deleted.body));
+    const deleteApproved = await approve(deleted.body?.approval?.operationId as string);
+    assert.equal(deleteApproved.status, 200, JSON.stringify(deleteApproved.body));
+    assert.equal(deleteApproved.body?.status, "completed");
+
+    const afterDelete = await request(
+      `/relationships?relation=${relationshipCase.relation}&side=left&entityId=${relationshipCase.leftId}`,
+    );
+    assert.equal(afterDelete.status, 200);
+    assert.deepEqual(afterDelete.body?.relationships, []);
+  }
 });
 
 test("HTTP entity detail is authorized, typed, bounded, and paginated", async () => {

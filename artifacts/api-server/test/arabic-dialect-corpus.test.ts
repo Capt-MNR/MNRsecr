@@ -306,6 +306,12 @@ function accuracy(correct: number, total: number): string {
   return `${correct}/${total} (${total === 0 ? "N/A" : `${Math.round((correct / total) * 100)}%`})`;
 }
 
+const expectedDialectCorpusSize: Record<CorpusCase["dialect"], number> = {
+  egyptian: 10,
+  gulf: 10,
+  levantine: 10,
+};
+
 test("broader Arabic dialect corpus covers every core scope", () => {
   for (const sample of corpus) {
     const parsed = parseSemanticRequest(sample.text);
@@ -368,9 +374,21 @@ test("Arabic dialect accuracy report stays separate by parsing field", () => {
     currency: { correct: 0, total: 0 },
     time: { correct: 0, total: 0 },
   };
+  const dialectMetrics: Record<CorpusCase["dialect"], { correct: number; total: number }> = {
+    egyptian: { correct: 0, total: 0 },
+    gulf: { correct: 0, total: 0 },
+    levantine: { correct: 0, total: 0 },
+  };
 
   for (const sample of corpus) {
     const parsed = parseSemanticRequest(sample.text);
+    const dialectMetric = dialectMetrics[sample.dialect];
+    dialectMetric.total += 1;
+    dialectMetric.correct += Number(
+      parsed.normalizedText === sample.normalizedText
+        && parsed.intent === sample.intent
+        && decideDeterministically(parsed).kind === sample.decision,
+    );
     metrics.normalization.total += 1;
     metrics.normalization.correct += Number(parsed.normalizedText === sample.normalizedText);
     metrics.intent.total += 1;
@@ -409,5 +427,11 @@ test("Arabic dialect accuracy report stays separate by parsing field", () => {
 
   for (const [metric, result] of Object.entries(metrics)) {
     assert.equal(result.correct, result.total, `${metric} accuracy: ${accuracy(result.correct, result.total)}`);
+  }
+  for (const [dialect, result] of Object.entries(dialectMetrics) as Array<
+    [CorpusCase["dialect"], { correct: number; total: number }]
+  >) {
+    assert.equal(result.total, expectedDialectCorpusSize[dialect], `${dialect} corpus coverage`);
+    assert.equal(result.correct, result.total, `${dialect} core accuracy: ${accuracy(result.correct, result.total)}`);
   }
 });
