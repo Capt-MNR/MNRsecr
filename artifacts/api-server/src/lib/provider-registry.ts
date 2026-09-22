@@ -60,6 +60,15 @@ const builtInProviderDefinitions: ProviderDefinition[] = [
     apiUrlEnv: "QWEN_API_URL",
     defaultApiUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
   },
+  {
+    name: "openrouter",
+    protocol: "openai-compatible",
+    apiKeyEnv: "OPENROUTER_API_KEY",
+    modelEnv: "OPENROUTER_MODEL",
+    defaultModel: "openai/gpt-oss-20b",
+    apiUrlEnv: "OPENROUTER_API_URL",
+    defaultApiUrl: "https://openrouter.ai/api/v1/chat/completions",
+  },
 ];
 
 export type ProviderName = string;

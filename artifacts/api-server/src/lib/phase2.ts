@@ -4314,6 +4314,19 @@ export class QwenModelGateway extends OpenAiCompatibleModelGateway {
   }
 }
 
+export class OpenRouterModelGateway extends OpenAiCompatibleModelGateway {
+  constructor() {
+    const definition = providerDefinition("openrouter");
+    super(
+      "openrouter",
+      providerApiUrl("openrouter") ?? "",
+      providerModel("openrouter"),
+      process.env[definition.apiKeyEnv],
+      definition.apiKeyEnv,
+    );
+  }
+}
+
 type CircuitState = {
   consecutiveFailures: number;
   openUntil: number;
@@ -6597,6 +6610,7 @@ function createGateway(provider: ProviderName): ModelGateway {
   if (definition.protocol === "gemini") return new GeminiModelGateway();
   if (definition.protocol === "cohere") return new CohereModelGateway();
   if (provider === "groq") return new GroqModelGateway();
+  if (provider === "openrouter") return new OpenRouterModelGateway();
   if (definition.protocol === "openai-compatible") {
     return new OpenAiCompatibleModelGateway(
       provider,
