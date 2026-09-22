@@ -329,9 +329,10 @@ router.post("/turns", async (req, res): Promise<void> => {
       });
       req.log.info(brainLogFields(legacyBrain), "secretary brain decision");
     }
-    const operationId = result.action?.type === "approval_required"
-      && typeof result.action.operationId === "string"
-      ? result.action.operationId
+    const actionOperationId = result.action?.operationId;
+    const operationId = ["approval_required", "pending_confirmation"].includes(String(result.action?.type))
+      && typeof actionOperationId === "string"
+      ? actionOperationId
       : null;
     const operation = operationId ? await getOperation(identity, operationId) : null;
     const response = operation
@@ -352,13 +353,19 @@ router.post("/turns", async (req, res): Promise<void> => {
         };
     if (operation) {
       void dispatchMobilePush(identity, {
-        title: "السكرتير يحتاج موافقتك",
+        title: result.action?.type === "pending_confirmation"
+          ? "تأكيد سريع مطلوب"
+          : "السكرتير يحتاج موافقتك",
         body: operation.display.title,
+        ...(result.action?.type === "pending_confirmation"
+          ? { categoryIdentifier: "secretary-approval" }
+          : {}),
         data: {
           kind: "secretary-event",
           route: "quick",
           operationId: operation.operationId,
           conversationId: operation.conversationId ?? "",
+          quickAction: result.action?.type === "pending_confirmation",
         },
       }).catch((error) => {
         req.log.warn({ error, operationId: operation.operationId }, "Push dispatch failed");
@@ -523,6 +530,20 @@ router.post("/approvals/:operationId/approve", async (req, res): Promise<void> =
         operationId,
         error: error instanceof Error ? error.message : "APPROVAL_RECONCILIATION_FAILED",
       }, "Completed approval turn reconciliation failed");
+    }
+    if (result.action?.type === "reminder_created") {
+      void dispatchMobilePush(identity, {
+        title: "تذكير جديد",
+        body: result.assistantMessage,
+        data: {
+          kind: "secretary-event",
+          route: "quick",
+          conversationId: completed.conversationId ?? "",
+          reminderId: result.action.reminderId,
+        },
+      }).catch((error) => {
+        req.log.warn({ error, operationId }, "Reminder push dispatch failed");
+      });
     }
     res.json(operationResultResponse(completed));
   } catch (error) {

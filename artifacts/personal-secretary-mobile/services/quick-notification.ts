@@ -1,6 +1,5 @@
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
-import { SECRETARY_PUSH_KIND } from './mobile-push';
 
 export const QUICK_NOTIFICATION_CHANNEL_ID = 'quick-entry';
 export const QUICK_NOTIFICATION_KIND = 'quick-entry';
@@ -66,5 +65,5 @@ export function initializeQuickNotification() {
 
 export function isQuickNotificationResponse(response: Notifications.NotificationResponse | null | undefined) {
   const kind = response?.notification.request.content.data?.kind;
-  return kind === QUICK_NOTIFICATION_KIND || kind === SECRETARY_PUSH_KIND;
+  return kind === QUICK_NOTIFICATION_KIND;
 }

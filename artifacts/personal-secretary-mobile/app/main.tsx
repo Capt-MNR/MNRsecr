@@ -2,7 +2,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import * as Notifications from 'expo-notifications';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -20,7 +19,6 @@ import {
 } from '../services/secretary-input';
 import { hydrateLocalInputAttachments } from '../services/local-input-assets';
 import { initializeSecretaryPush } from '../services/mobile-push';
-import { isQuickNotificationResponse } from '../services/quick-notification';
 import {
   MainDrawer,
   MainBottomBar,
@@ -173,19 +171,8 @@ export default function MainRoute() {
       setHydrated(true);
     }).catch(() => setHydrated(true));
     void initializeSecretaryPush();
-    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      if (isQuickNotificationResponse(response)) {
-        router.replace('/');
-        return;
-      }
-      const workId = response.notification.request.content.data?.workId;
-      if (typeof workId === 'string' && workId) {
-        router.replace({ pathname: '/main', params: { workId } });
-      }
-    });
     return () => {
       active = false;
-      subscription.remove();
     };
   }, [router]);
 

@@ -12,6 +12,7 @@ export type MobilePushNotification = {
   title: string;
   body: string;
   data?: Record<string, unknown>;
+  categoryIdentifier?: string;
 };
 
 export async function registerMobilePushToken(
@@ -102,6 +103,9 @@ export async function dispatchMobilePush(
         data: notification.data ?? {},
         sound: "default",
         channelId: "secretary-events",
+        ...(notification.categoryIdentifier
+          ? { categoryId: notification.categoryIdentifier }
+          : {}),
       }),
     });
     if (!response.ok) {

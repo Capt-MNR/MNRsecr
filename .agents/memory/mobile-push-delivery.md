@@ -8,3 +8,9 @@ Use Expo push tokens for the mobile secretary notification path. The server stor
 **Why:** The mobile bundle must not contain FCM or APNs credentials, and the app must remain event-driven rather than running a background polling or LLM process.
 
 **How to apply:** Keep registration authenticated and tenant-scoped, disable tokens reported as unregistered, and dispatch from server events such as pending approvals. Before triggering EAS builds, link the Expo project to the repository and branch containing the app. Native delivery still needs verification in an Expo/EAS-capable build; web preview cannot prove FCM/APNs delivery.
+
+Quick-safe approval notifications may expose native approve/reject actions, while complex approvals should only route to the scoped Quick conversation. Both actions must call the existing approval endpoints so the server remains the sole mutation boundary.
+
+**Why:** Notification actions are another approval entry point, not a parallel financial-write path; keeping the action policy aligned with Quick prevents bypassing review requirements.
+
+**How to apply:** Mark only deferred Quick confirmations as actionable in the push payload. Treat ordinary notification taps and reminder events as conversation navigation, and leave native delivery verification to a real device build.

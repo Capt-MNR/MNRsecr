@@ -12,11 +12,18 @@ import {
   Inter_700Bold,
   useFonts,
 } from '@expo-google-fonts/inter';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import * as Notifications from 'expo-notifications';
 import { setAuthTokenGetter, setBaseUrl } from '@workspace/api-client-react';
 import { ThemeProvider } from '@/hooks/useColors';
 import { LanguageProvider } from '@/hooks/useLanguage';
+import {
+  handleSecretaryPushResponse,
+  isSecretaryPushResponse,
+  secretaryPushConversationId,
+} from '../services/mobile-push';
+import { isQuickNotificationResponse } from '../services/quick-notification';
 
 const apiDomain = process.env.EXPO_PUBLIC_DOMAIN;
 // The Expo web preview proxies /api on its own origin. Keeping web requests
@@ -31,6 +38,38 @@ SplashScreen.preventAutoHideAsync();
 const queryClient = new QueryClient();
 
 function RootLayoutNav() {
+  const router = useRouter();
+
+  useEffect(() => {
+    let active = true;
+    async function routeNotification(response: Notifications.NotificationResponse) {
+      if (isQuickNotificationResponse(response)) {
+        router.replace('/');
+        return;
+      }
+      if (!isSecretaryPushResponse(response)) return;
+      await handleSecretaryPushResponse(response);
+      if (!active) return;
+      const conversationId = secretaryPushConversationId(response);
+      router.replace(conversationId
+        ? { pathname: '/', params: { conversationId } }
+        : '/');
+    }
+
+    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      void routeNotification(response);
+    });
+    void Notifications.getLastNotificationResponseAsync()
+      .then((response) => {
+        if (response) void routeNotification(response);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+      subscription.remove();
+    };
+  }, [router]);
+
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />

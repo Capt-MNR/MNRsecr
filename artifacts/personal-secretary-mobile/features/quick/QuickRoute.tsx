@@ -1,10 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import * as Notifications from 'expo-notifications';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -29,11 +28,13 @@ import {
   type SecretaryInputResult,
 } from '../../services/secretary-input';
 import { hydrateLocalInputAttachments } from '../../services/local-input-assets';
-import { initializeSecretaryPush } from '../../services/mobile-push';
 import {
-  initializeQuickNotification,
-  isQuickNotificationResponse,
-} from '../../services/quick-notification';
+  initializeSecretaryPush,
+  openSecretaryNotificationSettings,
+  retrySecretaryPush,
+  type SecretaryPushStatus,
+} from '../../services/mobile-push';
+import { initializeQuickNotification } from '../../services/quick-notification';
 import QuickScreen from './QuickScreen';
 import { QuickMessageBubble } from './QuickMessageBubble';
 import { ReceiptReviewCard } from '../receipt-review';
@@ -70,6 +71,7 @@ export default function QuickRoute() {
   const { language } = useLanguage();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const params = useLocalSearchParams<{ conversationId?: string }>();
   const inputRef = useRef<TextInput>(null);
   const retryKeyRef = useRef<{ message: string; key: string } | null>(null);
   const [messages, setMessages] = useState<LocalMessage[]>([starterMessage]);
@@ -79,6 +81,7 @@ export default function QuickRoute() {
   const [busyOperationId, setBusyOperationId] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [inputReview, setInputReview] = useState<SecretaryInputResult | null>(null);
+  const [pushStatus, setPushStatus] = useState<SecretaryPushStatus | null>(null);
   const [conversationToLoad, setConversationToLoad] = useState<string | null>(null);
   const [loadedConversationId, setLoadedConversationId] = useState<string | null>(null);
   const queryClient = useQueryClient();
@@ -122,11 +125,19 @@ export default function QuickRoute() {
       if (active) setHydrated(true);
     });
     void initializeQuickNotification();
-    void initializeSecretaryPush();
+    void initializeSecretaryPush().then((status) => {
+      if (active) setPushStatus(status);
+    });
     return () => {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (params.conversationId && params.conversationId !== conversationToLoad) {
+      setConversationToLoad(params.conversationId);
+    }
+  }, [conversationToLoad, params.conversationId]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -143,13 +154,6 @@ export default function QuickRoute() {
     setLoadedConversationId(conversationToLoad);
     setLocalError(null);
   }, [conversationQuery.data, conversationToLoad, loadedConversationId]);
-
-  useEffect(() => {
-    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      if (isQuickNotificationResponse(response)) router.replace('/');
-    });
-    return () => subscription.remove();
-  }, [router]);
 
   function appendMessage(message: LocalMessage) {
     setMessages((current) => [...current, message].slice(-40));
@@ -366,6 +370,25 @@ export default function QuickRoute() {
         {inputCapture.canRetry && <Pressable onPress={() => void inputCapture.retry()} style={styles.errorRetryButton}>
           <Text style={[styles.errorRetryText, { color: colors.destructiveForeground }]}>{localized(language, 'إعادة المحاولة', 'Retry')}</Text>
         </Pressable>}
+      </View>}
+      {pushStatus && pushStatus !== 'registered' && <View style={[styles.errorBanner, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+        <Feather name="bell-off" size={15} color={colors.mutedForeground} />
+        <Text style={[styles.errorText, { color: colors.mutedForeground }]}>
+          {pushStatus === 'unsupported'
+            ? localized(language, 'الإشعارات متاحة في تطبيق الهاتف فقط.', 'Notifications are available in the native app only.')
+            : pushStatus === 'permission-denied'
+              ? localized(language, 'إشعارات السكرتير متوقفة. فعّلها من إعدادات الهاتف.', 'Secretary notifications are off. Enable them in device settings.')
+              : localized(language, 'تعذر تفعيل إشعارات السكرتير.', 'Secretary notifications could not be enabled.')}
+        </Text>
+        {pushStatus === 'permission-denied' ? (
+          <Pressable onPress={() => void openSecretaryNotificationSettings()} style={styles.errorRetryButton}>
+            <Text style={[styles.errorRetryText, { color: colors.mutedForeground }]}>{localized(language, 'الإعدادات', 'Settings')}</Text>
+          </Pressable>
+        ) : pushStatus === 'failed' ? (
+          <Pressable onPress={() => void retrySecretaryPush().then(setPushStatus)} style={styles.errorRetryButton}>
+            <Text style={[styles.errorRetryText, { color: colors.mutedForeground }]}>{localized(language, 'إعادة المحاولة', 'Retry')}</Text>
+          </Pressable>
+        ) : null}
       </View>}
       {conversationQuery.isError && <View style={[styles.errorBanner, { backgroundColor: colors.destructive }]}><Text style={[styles.errorText, { color: colors.destructiveForeground }]}>{localized(language, 'تعذر فتح المحادثة الأصلية.', 'Unable to open the original conversation.')}</Text></View>}
       <View style={[styles.composerWrap, { paddingBottom: bottomInset, borderTopColor: colors.border, backgroundColor: colors.background }]}>
