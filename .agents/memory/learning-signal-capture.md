@@ -8,3 +8,5 @@ An explicit correction is detected from the originating conversation turn as a r
 **Why:** A correction may refer to an amount, date, person, project, or intent, and the surrounding conversation is required to interpret it. Applying a single correction automatically could corrupt financial data or teach a false rule; storing review state in conversation memory would also mix operational context with evaluation workflow.
 
 **How to apply:** Keep detection linked to tenant-scoped conversation memory, store review decisions and a bounded snapshot separately, require explicit human review before benchmark promotion, and retain `autoApply: false` permanently for this path.
+
+Legacy review signals created before dialect metadata existed must remain visible with an `unknown` dialect rather than being discarded.

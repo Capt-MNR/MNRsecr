@@ -2098,6 +2098,9 @@ components:
           type: ["string", "null"]
         previousTurnId:
           type: ["string", "null"]
+        dialect:
+          type: string
+          enum: [egyptian, gulf, levantine, unknown]
         category:
           type: string
           enum: [amount, date_time, person, project, intent, general]
@@ -2118,7 +2121,7 @@ components:
           type: ["string", "null"]
         createdAt:
           type: string
-      required: [signalId, conversationId, conversationTitle, turnId, previousTurnId, category, confidence, status, userMessage, assistantMessage, previousUserMessage, previousAssistantMessage, previousActionType, createdAt]
+      required: [signalId, conversationId, conversationTitle, turnId, previousTurnId, dialect, category, confidence, status, userMessage, assistantMessage, previousUserMessage, previousAssistantMessage, previousActionType, createdAt]
     LearningSignalReviewInput:
       type: object
       properties:

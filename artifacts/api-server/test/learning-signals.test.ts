@@ -17,6 +17,7 @@ test("captures an amount correction for review without applying it", () => {
     {
       kind: "explicit_correction",
       category: "amount",
+      dialect: "gulf",
       confidence: 0.95,
       previousTurnId: "turn-1",
       previousActionType: "record_expense",
@@ -34,6 +35,18 @@ test("classifies dialect date and project corrections", () => {
   assert.equal(
     detectLearningSignal("مش ده، قصدي المشروع التاني", previousTurns)?.category,
     "project",
+  );
+  assert.equal(
+    detectLearningSignal("مش ده، قصدي المشروع التاني", previousTurns)?.dialect,
+    "egyptian",
+  );
+  assert.equal(
+    detectLearningSignal("لا، قصدي الموعد باچر الساعة ٨", previousTurns)?.dialect,
+    "gulf",
+  );
+  assert.equal(
+    detectLearningSignal("لا، قصدي الموعد هلق", previousTurns)?.dialect,
+    "levantine",
   );
 });
 

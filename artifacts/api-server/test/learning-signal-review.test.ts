@@ -150,6 +150,32 @@ test("review decisions stay tenant-scoped and never mutate financial records", a
     assert.equal(reviewed.body?.benchmarkReady, status === "approved");
   }
 
+  const approvedReview = await db.select({
+    status: learningSignalReviewsTable.status,
+    benchmarkPayload: learningSignalReviewsTable.benchmarkPayload,
+  }).from(learningSignalReviewsTable).where(and(
+    eq(learningSignalReviewsTable.tenantId, tenantId),
+    eq(learningSignalReviewsTable.ownerUserId, userId),
+    eq(learningSignalReviewsTable.signalId, signals?.find((signal) => signal.turnId === "approve-turn")?.signalId ?? ""),
+  ));
+  assert.equal(approvedReview[0]?.status, "approved");
+  assert.deepEqual(approvedReview[0]?.benchmarkPayload, {
+    signalId: "learning-review-current:approve-turn",
+    conversationId: "learning-review-current",
+    conversationTitle: "لا، قصدي التصحيح approve-turn",
+    turnId: "approve-turn",
+    previousTurnId: "previous-approve-turn",
+    category: "amount",
+    dialect: "unknown",
+    confidence: 0.95,
+    userMessage: "لا، قصدي التصحيح approve-turn",
+    assistantMessage: "تم حفظ الرد السابق.",
+    previousUserMessage: null,
+    previousAssistantMessage: null,
+    previousActionType: "record_expense",
+    createdAt: "2026-09-16T11:30:00.000Z",
+  });
+
   const afterExpense = await db.select({
     id: expensesTable.id,
     amountMinor: expensesTable.amountMinor,

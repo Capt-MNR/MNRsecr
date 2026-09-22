@@ -52,6 +52,12 @@ const signalCategories = new Set([
   "intent",
   "general",
 ]);
+const signalDialects = new Set([
+  "egyptian",
+  "gulf",
+  "levantine",
+  "unknown",
+]);
 const signalStatuses = new Set([
   "pending_review",
   "approved",
@@ -75,6 +81,8 @@ function learningSignalFromTurn(
     || signal.autoApply !== false
     || typeof signal.category !== "string"
     || !signalCategories.has(signal.category)
+    || (signal.dialect !== undefined
+      && (typeof signal.dialect !== "string" || !signalDialects.has(signal.dialect)))
     || typeof signal.confidence !== "number"
   ) return null;
   return {
@@ -86,6 +94,7 @@ function learningSignalFromTurn(
       ? signal.previousTurnId
       : previousTurn?.turnId ?? null,
     category: signal.category as "amount" | "date_time" | "person" | "project" | "intent" | "general",
+    dialect: (signal.dialect ?? "unknown") as "egyptian" | "gulf" | "levantine" | "unknown",
     confidence: Math.min(1, Math.max(0, signal.confidence)),
     status: "pending_review" as const,
     userMessage: turn.userMessage,
@@ -239,6 +248,7 @@ router.post("/learning/signals/:signalId/review", async (req, res): Promise<void
         turnId: signal.turnId,
         previousTurnId: signal.previousTurnId,
         category: signal.category,
+        dialect: signal.dialect,
         confidence: signal.confidence,
         userMessage: signal.userMessage,
         assistantMessage: signal.assistantMessage,
@@ -269,6 +279,7 @@ router.post("/learning/signals/:signalId/review", async (req, res): Promise<void
           turnId: signal.turnId,
           previousTurnId: signal.previousTurnId,
           category: signal.category,
+        dialect: signal.dialect,
           confidence: signal.confidence,
           userMessage: signal.userMessage,
           assistantMessage: signal.assistantMessage,

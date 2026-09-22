@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { LearningSignalCategory } from './learningSignalCategory';
+import type { LearningSignalDialect } from './learningSignalDialect';
 import type { LearningSignalStatus } from './learningSignalStatus';
 
 export interface LearningSignal {
@@ -16,6 +17,7 @@ export interface LearningSignal {
   turnId: string | null;
   /** @nullable */
   previousTurnId: string | null;
+  dialect: LearningSignalDialect;
   category: LearningSignalCategory;
   confidence: number;
   status: LearningSignalStatus;

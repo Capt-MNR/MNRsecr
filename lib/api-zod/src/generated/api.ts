@@ -1310,6 +1310,7 @@ export const ListLearningSignalsResponse = zod.object({
   "conversationTitle": zod.string(),
   "turnId": zod.string().nullable(),
   "previousTurnId": zod.string().nullable(),
+  "dialect": zod.enum(['egyptian', 'gulf', 'levantine', 'unknown']),
   "category": zod.enum(['amount', 'date_time', 'person', 'project', 'intent', 'general']),
   "confidence": zod.number(),
   "status": zod.enum(['pending_review', 'approved', 'rejected', 'needs_context']),

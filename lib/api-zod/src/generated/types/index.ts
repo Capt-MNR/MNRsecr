@@ -91,6 +91,7 @@ export * from './inputAssetProcessResponseProcessing';
 export * from './inputAssetProcessResponseReceipt';
 export * from './learningSignal';
 export * from './learningSignalCategory';
+export * from './learningSignalDialect';
 export * from './learningSignalListResponse';
 export * from './learningSignalReviewInput';
 export * from './learningSignalReviewInputStatus';

@@ -25,6 +25,13 @@ const categoryLabels: Record<LearningSignal['category'], string> = {
   general: 'تصحيح عام',
 };
 
+const dialectLabels: Record<LearningSignal['dialect'], string> = {
+  egyptian: 'مصري',
+  gulf: 'خليجي',
+  levantine: 'شامي',
+  unknown: 'غير محددة',
+};
+
 function formatSignalTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
@@ -64,6 +71,9 @@ function SignalCard({
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
               {categoryLabels[signal.category]}
+            </span>
+            <span className="rounded-full border border-border/70 bg-muted/50 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
+              اللهجة: {dialectLabels[signal.dialect]}
             </span>
             <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${statusClasses[signal.status]}`}>
               {statusLabels[signal.status]}

@@ -805,6 +805,16 @@ export interface ConversationDetail {
   state: ConversationDetailState;
 }
 
+export type LearningSignalDialect = typeof LearningSignalDialect[keyof typeof LearningSignalDialect];
+
+
+export const LearningSignalDialect = {
+  egyptian: 'egyptian',
+  gulf: 'gulf',
+  levantine: 'levantine',
+  unknown: 'unknown',
+} as const;
+
 export type LearningSignalCategory = typeof LearningSignalCategory[keyof typeof LearningSignalCategory];
 
 
@@ -835,6 +845,7 @@ export interface LearningSignal {
   turnId: string | null;
   /** @nullable */
   previousTurnId: string | null;
+  dialect: LearningSignalDialect;
   category: LearningSignalCategory;
   confidence: number;
   status: LearningSignalStatus;

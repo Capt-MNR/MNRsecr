@@ -6,9 +6,16 @@ export type LearningSignalCategory =
   | "intent"
   | "general";
 
+export type LearningSignalDialect =
+  | "egyptian"
+  | "gulf"
+  | "levantine"
+  | "unknown";
+
 export type LearningSignal = {
   kind: "explicit_correction";
   category: LearningSignalCategory;
+  dialect: LearningSignalDialect;
   confidence: number;
   previousTurnId?: string;
   previousActionType?: string;
@@ -44,6 +51,38 @@ function previousActionType(turn: RecentTurn): string | undefined {
   return undefined;
 }
 
+function dialectFor(text: string): LearningSignalDialect {
+  const scores: Record<Exclude<LearningSignalDialect, "unknown">, number> = {
+    egyptian: 0,
+    gulf: 0,
+    levantine: 0,
+  };
+  const markers: Record<Exclude<LearningSignalDialect, "unknown">, string[]> = {
+    egyptian: [
+      "مش", "ده", "دي", "كده", "خليه", "خليها", "فلوس", "جنيه", "عايز",
+      "النهارده", "دلوقتي", "خد", "اديت",
+    ],
+    gulf: [
+      "باچر", "ريال", "ابي", "ابغى", "هذي", "شلون", "الحين", "عطني", "خله",
+    ],
+    levantine: [
+      "بدي", "مصاري", "هيك", "هاد", "هاي", "شو", "هلاء", "هلق", "ليره",
+    ],
+  };
+  const tokens = new Set(text.split(" "));
+  for (const dialect of Object.keys(markers) as Array<Exclude<LearningSignalDialect, "unknown">>) {
+    scores[dialect] = markers[dialect].reduce(
+      (score, marker) => score + (tokens.has(marker) ? 1 : 0),
+      0,
+    );
+  }
+  const ranked = (Object.entries(scores) as Array<[Exclude<LearningSignalDialect, "unknown">, number]>)
+    .sort((left, right) => right[1] - left[1]);
+  if (!ranked[0] || ranked[0][1] === 0) return "unknown";
+  if (ranked[0][1] === ranked[1]?.[1]) return "unknown";
+  return ranked[0][0];
+}
+
 export function detectLearningSignal(
   message: string,
   recentTurns: RecentTurn[],
@@ -68,6 +107,7 @@ export function detectLearningSignal(
   const signal: LearningSignal = {
     kind: "explicit_correction",
     category,
+    dialect: dialectFor(text),
     confidence: /قصدي|غلط/u.test(text) ? 0.95 : 0.82,
     reviewOnly: true,
     autoApply: false,
