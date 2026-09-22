@@ -1,5 +1,9 @@
 import { featureFlags } from "./feature-flags";
-import { canonicalizeArabicText, parseArabicAmount } from "./deterministic-intelligence";
+import {
+  canonicalizeArabicText,
+  parseArabicAmount,
+  parseSemanticRequest,
+} from "./deterministic-intelligence";
 
 export type LocalRouteIntent =
   | "expense"
@@ -44,6 +48,14 @@ export function routeLocally(message: string): LocalRouteDecision | null {
       intent: "clarification",
       confidence: 1,
       reason: "empty_message",
+      safeToExecute: false,
+    };
+  }
+  if (parseSemanticRequest(message).ambiguous) {
+    return {
+      intent: "clarification",
+      confidence: 0.35,
+      reason: "ambiguous_multi_domain_request",
       safeToExecute: false,
     };
   }
