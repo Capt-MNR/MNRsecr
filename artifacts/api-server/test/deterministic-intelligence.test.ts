@@ -258,6 +258,31 @@ test("date parser is deterministic for the supplied Cairo clock", () => {
   assert.equal(new Date(parsed!.iso).toISOString(), "2026-09-16T06:00:00.000Z");
 });
 
+test("date parser preserves Cairo day boundaries across midnight and month changes", () => {
+  const cairoJustAfterMidnight = new Date("2026-01-31T22:30:00.000Z");
+
+  const today = parseArabicDateTime("اليوم الساعة 1 صباحا", cairoJustAfterMidnight);
+  assert.ok(today);
+  assert.equal(new Date(today!.iso).toISOString(), "2026-01-31T23:00:00.000Z");
+  assert.equal(today!.dayOffset, 0);
+
+  const yesterday = parseArabicDateTime("امبارح الساعة 11 مساء", cairoJustAfterMidnight);
+  assert.ok(yesterday);
+  assert.equal(new Date(yesterday!.iso).toISOString(), "2026-01-30T21:00:00.000Z");
+  assert.equal(yesterday!.dayOffset, -1);
+
+  const dayAfterTomorrow = parseArabicDateTime("بعد بكره الساعة 12 صباحا", cairoJustAfterMidnight);
+  assert.ok(dayAfterTomorrow);
+  assert.equal(new Date(dayAfterTomorrow!.iso).toISOString(), "2026-02-02T22:00:00.000Z");
+  assert.equal(dayAfterTomorrow!.dayOffset, 2);
+});
+
+test("date parser rejects invalid clock values instead of inventing a reminder time", () => {
+  const now = new Date("2026-09-15T10:00:00.000Z");
+  assert.equal(parseArabicDateTime("اليوم الساعة 24", now), null);
+  assert.equal(parseArabicDateTime("اليوم الساعة 9:60", now), null);
+});
+
 test("pattern engine labels observations instead of turning them into facts", () => {
   const insights = buildPatternInsights(
     [{ personId: "p1", projectId: "project-1", relationship: "مقاول" }],
