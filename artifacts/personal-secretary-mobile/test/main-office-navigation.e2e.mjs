@@ -133,12 +133,17 @@ class DevToolsPage {
     this.socket = new WebSocket(webSocketUrl);
     this.nextId = 0;
     this.pending = new Map();
+    this.exceptions = [];
     this.ready = new Promise((resolve, reject) => {
       this.socket.addEventListener("open", resolve, { once: true });
       this.socket.addEventListener("error", reject, { once: true });
     });
     this.socket.addEventListener("message", (event) => {
       const message = JSON.parse(event.data);
+      if (message.method === "Runtime.exceptionThrown") {
+        this.exceptions.push(message.params?.exceptionDetails ?? message.params);
+        return;
+      }
       if (!message.id) return;
       const pending = this.pending.get(message.id);
       if (!pending) return;
@@ -270,9 +275,15 @@ try {
   const proxyAddress = proxy.address();
   assert.ok(proxyAddress && typeof proxyAddress !== "string");
   const appBaseUrl = `http://127.0.0.1:${proxyAddress.port}`;
-  browser = await startChromium(`${appBaseUrl}/main`);
+  browser = await startChromium(`${appBaseUrl}/`);
 
   try {
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="quick-message-input"]') !== null`,
+      "Quick Chat",
+    );
+    await browser.page.evaluate(`document.querySelector('[data-testid="quick-open-main"]').click()`);
     await waitForBrowserValue(
       browser.page,
       `document.querySelector('[data-testid="main-office-home"]') !== null`,
@@ -282,6 +293,23 @@ try {
       browser.page,
       `document.querySelector('[data-testid="main-message-input"]') !== null`,
       "Main Office message input",
+    );
+    await browser.page.evaluate(`document.querySelector('[data-testid="main-quick-bubble"]').click()`);
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="quick-message-input"]') !== null`,
+      "Quick Chat after returning from Main",
+    );
+    await browser.page.evaluate(`document.querySelector('[data-testid="quick-open-main"]').click()`);
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="main-office-home"]') !== null`,
+      "Main Office after reopening from Quick",
+    );
+    assert.deepEqual(
+      browser.page.exceptions,
+      [],
+      `opening Main from Quick must not throw a browser exception: ${JSON.stringify(browser.page.exceptions)}`,
     );
 
     const message = fixtureInfo.firstApprovalMessage;
