@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { rmSync } from "node:fs";
 import http from "node:http";
 import net from "node:net";
 import { once } from "node:events";
@@ -108,6 +109,218 @@ async function renderWithChromium(url) {
   return stdout;
 }
 
+class DevToolsPage {
+  constructor(webSocketUrl) {
+    this.socket = new WebSocket(webSocketUrl);
+    this.nextId = 0;
+    this.pending = new Map();
+    this.listeners = new Map();
+    this.ready = new Promise((resolve, reject) => {
+      this.socket.addEventListener("open", resolve, { once: true });
+      this.socket.addEventListener("error", reject, { once: true });
+    });
+    this.socket.addEventListener("message", (event) => {
+      const message = JSON.parse(event.data);
+      if (message.id) {
+        const pending = this.pending.get(message.id);
+        if (!pending) return;
+        this.pending.delete(message.id);
+        if (message.error) pending.reject(new Error(JSON.stringify(message.error)));
+        else pending.resolve(message.result);
+        return;
+      }
+      for (const listener of this.listeners.get(message.method) ?? []) listener(message.params);
+    });
+  }
+
+  on(method, listener) {
+    const listeners = this.listeners.get(method) ?? [];
+    listeners.push(listener);
+    this.listeners.set(method, listeners);
+  }
+
+  async send(method, params = {}) {
+    await this.ready;
+    const id = ++this.nextId;
+    return new Promise((resolve, reject) => {
+      this.pending.set(id, { resolve, reject });
+      this.socket.send(JSON.stringify({ id, method, params }));
+    });
+  }
+
+  async evaluate(expression) {
+    const result = await this.send("Runtime.evaluate", {
+      expression,
+      awaitPromise: true,
+      returnByValue: true,
+    });
+    if (result.exceptionDetails) {
+      throw new Error(result.exceptionDetails.text ?? "Browser evaluation failed");
+    }
+    return result.result?.value;
+  }
+
+  close() {
+    this.socket.close();
+  }
+}
+
+async function startInteractiveChromium(url) {
+  const debugPort = await freePort();
+  const profile = `/tmp/personal-secretary-browser-${process.pid}-${debugPort}`;
+  const child = spawnProcess(chromiumPath, [
+    "--headless",
+    "--no-sandbox",
+    "--disable-gpu",
+    "--disable-dev-shm-usage",
+    `--remote-debugging-port=${debugPort}`,
+    `--user-data-dir=${profile}`,
+    url,
+  ]);
+  try {
+    await waitForHttp(`http://127.0.0.1:${debugPort}/json/version`);
+    const deadline = Date.now() + 30_000;
+    let target;
+    while (Date.now() < deadline && !target) {
+      const targets = await fetch(`http://127.0.0.1:${debugPort}/json/list`).then((response) => response.json());
+      target = targets.find((candidate) => candidate.type === "page" && candidate.webSocketDebuggerUrl);
+      if (!target) await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    if (!target) throw new Error("Chromium did not expose a page target.");
+    const page = new DevToolsPage(target.webSocketDebuggerUrl);
+    await page.send("Runtime.enable");
+    await page.send("Network.enable");
+    return { child, page, profile };
+  } catch (error) {
+    await closeProcess(child);
+    rmSync(profile, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+async function waitForBrowserValue(page, expression, description, timeoutMs = 30_000) {
+  const deadline = Date.now() + timeoutMs;
+  let lastValue;
+  while (Date.now() < deadline) {
+    lastValue = await page.evaluate(expression);
+    if (lastValue) return lastValue;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Timed out waiting for ${description}. Last value: ${JSON.stringify(lastValue)}`);
+}
+
+async function exerciseFirstApprovalInBrowser(appBaseUrl, apiBaseUrl, message) {
+  const browser = await startInteractiveChromium(`${appBaseUrl}/`);
+  let turnPosts = 0;
+  const approvalSnapshotExpression = `(() => {
+    const form = document.querySelector('[data-testid^="approval-form-"]');
+    if (!form) return null;
+    const formId = form.getAttribute("data-testid") ?? "";
+    const operationId = formId.slice("approval-form-".length);
+    const card = form.closest('[data-testid^="approval-"]');
+    return {
+      operationId,
+      cardText: card?.textContent ?? "",
+      userMessages: document.querySelectorAll('[data-testid^="message-user-"]').length,
+    };
+  })()`;
+  browser.page.on("Network.requestWillBeSent", (event) => {
+    if (event.request.method === "POST" && new URL(event.request.url).pathname.endsWith("/api/turns")) {
+      turnPosts += 1;
+    }
+  });
+
+  try {
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="input-message"]') !== null`,
+      "Home conversation composer",
+    );
+    const send = async () => {
+      await browser.page.evaluate(`(() => {
+        const input = document.querySelector('[data-testid="input-message"]');
+        const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set;
+        setter.call(input, ${JSON.stringify(message)});
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        document.querySelector('[data-testid="button-send-message"]').click();
+        return true;
+      })()`);
+    };
+    await send();
+    const firstApproval = await waitForBrowserValue(
+      browser.page,
+      approvalSnapshotExpression,
+      "pending approval after the first request",
+    );
+    assert.equal(turnPosts, 1, "the first approval must be rendered without repeating /turns");
+    assert.equal(firstApproval.userMessages, 1, "the first request should create one user message");
+
+    const canonical = await jsonRequest(`${apiBaseUrl}/approvals/${firstApproval.operationId}`, {
+      headers: { Authorization: "Bearer dev-user" },
+    });
+    assert.equal(canonical.status, "pending");
+    assert.deepEqual(canonical.display.details, [
+      "القيمة: ٥٠٠ EGP",
+      "الوصف: دفعة إلى محمد اختبار على السكرتير",
+      "الشخص: محمد اختبار",
+      "المشروع: السكرتير",
+    ]);
+    for (const detail of canonical.display.details) assert.match(firstApproval.cardText, new RegExp(detail));
+    assert.match(firstApproval.cardText, /التفاصيل المعتمدة من الخادم/);
+
+    await waitForBrowserValue(
+      browser.page,
+      `(() => {
+        const button = document.querySelector('[data-testid="button-confirm-approval-${firstApproval.operationId}"]');
+        return Boolean(button && !button.disabled);
+      })()`,
+      "authoritative approval details",
+    );
+    await browser.page.evaluate(`document.querySelector('[data-testid="button-confirm-approval-${firstApproval.operationId}"]').click()`);
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="approval-status-${firstApproval.operationId}-completed"]') !== null`,
+      "completed approval status",
+    );
+    assert.equal(turnPosts, 1, "confirming an approval must not resend the conversational request");
+    assert.match(
+      await browser.page.evaluate(`document.querySelector('[data-testid="approval-status-${firstApproval.operationId}-completed"]')?.textContent ?? ""`),
+      /اكتملت العملية/,
+    );
+
+    await browser.page.evaluate(`document.querySelector('[data-testid="button-new-conversation"]').click()`);
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="input-message"]')?.value === ""`,
+      "new conversation composer",
+    );
+    await send();
+    const secondApproval = await waitForBrowserValue(
+      browser.page,
+      approvalSnapshotExpression,
+      "pending approval in the second conversation",
+    );
+    assert.notEqual(secondApproval.operationId, firstApproval.operationId);
+    assert.equal(turnPosts, 2, "the second approval should require exactly one additional request");
+
+    await browser.page.evaluate(`document.querySelector('[data-testid="button-reject-approval-${secondApproval.operationId}"]').click()`);
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="approval-status-${secondApproval.operationId}-rejected"]') !== null`,
+      "rejected approval status",
+    );
+    assert.equal(turnPosts, 2, "rejecting an approval must not resend the conversational request");
+    assert.match(
+      await browser.page.evaluate(`document.querySelector('[data-testid="approval-status-${secondApproval.operationId}-rejected"]')?.textContent ?? ""`),
+      /تم رفض العملية/,
+    );
+  } finally {
+    browser.page.close();
+    await closeProcess(browser.child);
+    rmSync(browser.profile, { recursive: true, force: true });
+  }
+}
+
 function startApiProxy(apiBaseUrl, viteBaseUrl) {
   const server = http.createServer(async (request, response) => {
     try {
@@ -134,7 +347,7 @@ function startApiProxy(apiBaseUrl, viteBaseUrl) {
 }
 
 async function closeProcess(child) {
-  if (child.exitCode !== null) return;
+  if (!child || child.exitCode !== null) return;
   child.kill("SIGTERM");
   await Promise.race([
     once(child, "close"),
@@ -168,6 +381,7 @@ try {
       message: fixtureInfo.firstApprovalMessage,
       conversationId: fixtureInfo.ids.conversation,
       idempotencyKey: fixtureInfo.firstApprovalRequest.body.idempotencyKey,
+      channel: "main",
     }),
   });
   const operationId = firstTurn.action?.operationId;
@@ -207,6 +421,12 @@ try {
   const proxyAddress = proxy.address();
   assert.ok(proxyAddress && typeof proxyAddress !== "string");
   const appBaseUrl = `http://127.0.0.1:${proxyAddress.port}`;
+
+  await exerciseFirstApprovalInBrowser(
+    appBaseUrl,
+    apiBaseUrl,
+    fixtureInfo.firstApprovalMessage,
+  );
 
   const linkedConversationDom = await renderWithChromium(
     `${appBaseUrl}/?conversationId=${encodeURIComponent(fixtureInfo.ids.conversation)}&turnId=1`,

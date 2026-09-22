@@ -244,7 +244,27 @@ function Home() {
         ...(turn.action ? { approval: approvalFromAction(turn.action as Record<string, unknown>) } : {}),
       });
     });
-    setMessages(loadedMessages.length > 0 ? loadedMessages : [starterMessage]);
+    setMessages((current) => {
+      const localApprovalByOperationId = new Map(
+        current
+          .filter((message) => message.approval)
+          .map((message) => [message.approval!.operationId, message]),
+      );
+      const mergedMessages = loadedMessages.map((message) => {
+        if (!message.approval) return message;
+        const localMessage = localApprovalByOperationId.get(message.approval.operationId);
+        if (!localMessage?.approval || localMessage.approval.status === 'pending') return message;
+        return {
+          ...message,
+          text: localMessage.text,
+          approval: {
+            ...message.approval,
+            status: localMessage.approval.status,
+          },
+        };
+      });
+      return mergedMessages.length > 0 ? mergedMessages : [starterMessage];
+    });
   }, []);
 
   function startNewConversation() {
@@ -357,6 +377,7 @@ function Home() {
           }
         : message
     )));
+    queryClient.invalidateQueries({ queryKey: getGetSecretaryOperationQueryKey(response.operationId) });
     queryClient.invalidateQueries({ queryKey: getGetTodayContextQueryKey() });
     queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
   }
