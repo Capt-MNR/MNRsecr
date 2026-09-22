@@ -1619,6 +1619,84 @@ components:
             maxLength: 100
       required: [agentId]
       additionalProperties: false
+    SecretaryA2ATurnMetadata:
+      type: object
+      description: Metadata carried by an A2A peer so a remote secretary can preserve the local turn boundary.
+      properties:
+        conversationId:
+          type: ["string", "null"]
+        channel:
+          type: string
+          enum: [main, quick, record]
+        context:
+          anyOf:
+            - $ref: "#/components/schemas/SecretaryChatContext"
+            - type: "null"
+        peer:
+          anyOf:
+            - $ref: "#/components/schemas/SecretaryChatPeer"
+            - type: "null"
+        inputId:
+          type: ["string", "null"]
+          maxLength: 100
+        idempotencyKey:
+          type: ["string", "null"]
+      required: [conversationId, channel, context, peer, inputId, idempotencyKey]
+      additionalProperties: false
+    SecretaryA2AMessage:
+      type: object
+      description: User message envelope used by the mobile A2A secretary transport.
+      properties:
+        messageId:
+          type: string
+        role:
+          type: string
+          enum: [user]
+        parts:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            properties:
+              kind:
+                type: string
+                enum: [text]
+              text:
+                type: string
+                minLength: 1
+            required: [kind, text]
+            additionalProperties: false
+        metadata:
+          type: object
+          properties:
+            secretary:
+              $ref: "#/components/schemas/SecretaryA2ATurnMetadata"
+          required: [secretary]
+          additionalProperties: false
+      required: [messageId, role, parts, metadata]
+      additionalProperties: false
+    SecretaryA2ARequest:
+      type: object
+      description: JSON-RPC request methods supported by the external secretary transport.
+      properties:
+        jsonrpc:
+          type: string
+          enum: ["2.0"]
+        id:
+          type: string
+        method:
+          type: string
+          enum:
+            - message/send
+            - secretary/conversations/list
+            - secretary/conversations/get
+            - secretary/approvals/approve
+            - secretary/approvals/reject
+        params:
+          type: object
+          additionalProperties: true
+      required: [jsonrpc, id, method, params]
+      additionalProperties: false
     ActionResult:
       type: object
       additionalProperties: true

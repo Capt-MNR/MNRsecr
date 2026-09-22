@@ -4,7 +4,8 @@ export {
   ApiError,
   FetchTimeoutError,
   ResponseParseError,
+  customFetch,
   setBaseUrl,
   setAuthTokenGetter,
 } from "./custom-fetch";
-export type { AuthTokenGetter } from "./custom-fetch";
+export type { AuthTokenGetter, CustomFetchOptions } from "./custom-fetch";

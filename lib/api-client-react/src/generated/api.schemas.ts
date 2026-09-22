@@ -392,6 +392,98 @@ export interface InputAssetProcessResponse {
   processing: InputAssetProcessResponseProcessing;
 }
 
+export type SecretaryA2ATurnMetadataChannel = typeof SecretaryA2ATurnMetadataChannel[keyof typeof SecretaryA2ATurnMetadataChannel];
+
+
+export const SecretaryA2ATurnMetadataChannel = {
+  main: 'main',
+  quick: 'quick',
+  record: 'record',
+} as const;
+
+/**
+ * Metadata carried by an A2A peer so a remote secretary can preserve the local turn boundary.
+ */
+export interface SecretaryA2ATurnMetadata {
+  /** @nullable */
+  conversationId: string | null;
+  channel: SecretaryA2ATurnMetadataChannel;
+  context: SecretaryChatContext | null;
+  peer: SecretaryChatPeer | null;
+  /**
+     * @maxLength 100
+     * @nullable
+     */
+  inputId: string | null;
+  /** @nullable */
+  idempotencyKey: string | null;
+}
+
+export type SecretaryA2AMessageRole = typeof SecretaryA2AMessageRole[keyof typeof SecretaryA2AMessageRole];
+
+
+export const SecretaryA2AMessageRole = {
+  user: 'user',
+} as const;
+
+export type SecretaryA2AMessagePartsItemKind = typeof SecretaryA2AMessagePartsItemKind[keyof typeof SecretaryA2AMessagePartsItemKind];
+
+
+export const SecretaryA2AMessagePartsItemKind = {
+  text: 'text',
+} as const;
+
+export type SecretaryA2AMessagePartsItem = {
+  kind: SecretaryA2AMessagePartsItemKind;
+  /** @minLength 1 */
+  text: string;
+};
+
+export type SecretaryA2AMessageMetadata = {
+  secretary: SecretaryA2ATurnMetadata;
+};
+
+/**
+ * User message envelope used by the mobile A2A secretary transport.
+ */
+export interface SecretaryA2AMessage {
+  messageId: string;
+  role: SecretaryA2AMessageRole;
+  /** @minItems 1 */
+  parts: SecretaryA2AMessagePartsItem[];
+  metadata: SecretaryA2AMessageMetadata;
+}
+
+export type SecretaryA2ARequestJsonrpc = typeof SecretaryA2ARequestJsonrpc[keyof typeof SecretaryA2ARequestJsonrpc];
+
+
+export const SecretaryA2ARequestJsonrpc = {
+  '20': '2.0',
+} as const;
+
+export type SecretaryA2ARequestMethod = typeof SecretaryA2ARequestMethod[keyof typeof SecretaryA2ARequestMethod];
+
+
+export const SecretaryA2ARequestMethod = {
+  'message/send': 'message/send',
+  'secretary/conversations/list': 'secretary/conversations/list',
+  'secretary/conversations/get': 'secretary/conversations/get',
+  'secretary/approvals/approve': 'secretary/approvals/approve',
+  'secretary/approvals/reject': 'secretary/approvals/reject',
+} as const;
+
+export type SecretaryA2ARequestParams = { [key: string]: unknown };
+
+/**
+ * JSON-RPC request methods supported by the external secretary transport.
+ */
+export interface SecretaryA2ARequest {
+  jsonrpc: SecretaryA2ARequestJsonrpc;
+  id: string;
+  method: SecretaryA2ARequestMethod;
+  params: SecretaryA2ARequestParams;
+}
+
 export interface ActionResult { [key: string]: unknown }
 
 export type FinalResponseKind = typeof FinalResponseKind[keyof typeof FinalResponseKind];
