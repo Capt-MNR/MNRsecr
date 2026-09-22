@@ -1,6 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import { and, eq, gt, lt } from "drizzle-orm";
-import { db, inputAssetResultsTable } from "@workspace/db";
+import {
+  db,
+  inputAssetProvenanceTable,
+  inputAssetResultsTable,
+} from "@workspace/db";
 import {
   providerExceptionError,
   providerResponseError,
@@ -19,6 +23,12 @@ export type InputAssetProcessInput = {
 export type InputAssetScope = {
   tenantId: string;
   userId: string;
+};
+
+export type InputAssetProvenance = {
+  conversationId: string;
+  turnId: string;
+  operationId?: string | null;
 };
 
 export type InputAssetProcessResult = {
@@ -53,16 +63,18 @@ const processedInputCache = new Map<string, {
 }>();
 const inputProcessingFlights = new Map<string, Promise<InputAssetProcessResult>>();
 
-function inputCacheKey(input: InputAssetProcessInput, scope: InputAssetScope): string {
+function contentHash(input: InputAssetProcessInput): string {
   return createHash("sha256")
     .update(JSON.stringify({
-      tenantId: scope.tenantId,
-      userId: scope.userId,
       kind: input.kind,
       mimeType: input.mimeType,
-      base64: input.base64,
+      content: Buffer.from(input.base64, "base64"),
     }))
     .digest("hex");
+}
+
+function scopedCacheKey(contentHashValue: string, scope: InputAssetScope): string {
+  return `${scope.tenantId}:${scope.userId}:${contentHashValue}`;
 }
 
 function pruneInputCache(now = Date.now()): void {
@@ -116,7 +128,7 @@ async function loadDurableCachedResult(
 }
 
 async function persistDurableResult(
-  cacheKey: string,
+  contentHashValue: string,
   scope: InputAssetScope,
   input: InputAssetProcessInput,
   result: InputAssetProcessResult,
@@ -126,7 +138,7 @@ async function persistDurableResult(
       tenantId: scope.tenantId,
       ownerUserId: scope.userId,
       inputId: result.inputId,
-      contentHash: cacheKey,
+      contentHash: contentHashValue,
       kind: result.kind,
       mimeType: input.mimeType,
       text: result.text,
@@ -159,6 +171,34 @@ async function persistDurableResult(
     });
   } catch (error) {
     console.warn("Durable input-asset cache write failed; the in-memory result remains available.", error);
+  }
+}
+
+function validateInputAsset(input: InputAssetProcessInput): void {
+  const base64Bytes = Buffer.byteLength(input.base64, "base64");
+  if (base64Bytes <= 0 || base64Bytes > MAX_INPUT_BYTES) {
+    throw new SecretaryError("حجم الملف أكبر من الحد المسموح.", {
+      status: 400,
+      category: "validation_error",
+      code: "INPUT_ASSET_TOO_LARGE",
+      retryable: false,
+    });
+  }
+  if (input.kind === "receipt" && !input.mimeType.startsWith("image/")) {
+    throw new SecretaryError("صورة الفاتورة غير صالحة.", {
+      status: 400,
+      category: "validation_error",
+      code: "RECEIPT_IMAGE_MIME_INVALID",
+      retryable: false,
+    });
+  }
+  if (input.kind === "voice" && !input.mimeType.startsWith("audio/")) {
+    throw new SecretaryError("التسجيل الصوتي غير صالح.", {
+      status: 400,
+      category: "validation_error",
+      code: "VOICE_AUDIO_MIME_INVALID",
+      retryable: false,
+    });
   }
 }
 
@@ -233,6 +273,7 @@ async function processInputAssetUncached(
   input: InputAssetProcessInput,
   scope: InputAssetScope,
   cacheKey: string,
+  contentHashValue: string,
 ): Promise<InputAssetProcessResult> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -244,32 +285,6 @@ async function processInputAssetUncached(
       provider: INPUT_PROVIDER,
     });
   }
-  const base64Bytes = Buffer.byteLength(input.base64, "base64");
-  if (base64Bytes <= 0 || base64Bytes > MAX_INPUT_BYTES) {
-    throw new SecretaryError("حجم الملف أكبر من الحد المسموح.", {
-      status: 400,
-      category: "validation_error",
-      code: "INPUT_ASSET_TOO_LARGE",
-      retryable: false,
-    });
-  }
-  if (input.kind === "receipt" && !input.mimeType.startsWith("image/")) {
-    throw new SecretaryError("صورة الفاتورة غير صالحة.", {
-      status: 400,
-      category: "validation_error",
-      code: "RECEIPT_IMAGE_MIME_INVALID",
-      retryable: false,
-    });
-  }
-  if (input.kind === "voice" && !input.mimeType.startsWith("audio/")) {
-    throw new SecretaryError("التسجيل الصوتي غير صالح.", {
-      status: 400,
-      category: "validation_error",
-      code: "VOICE_AUDIO_MIME_INVALID",
-      retryable: false,
-    });
-  }
-
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 45_000);
   try {
@@ -339,7 +354,7 @@ async function processInputAssetUncached(
       result,
       expiresAt: Date.now() + INPUT_CACHE_TTL_MS,
     });
-    await persistDurableResult(cacheKey, scope, input, result);
+    await persistDurableResult(contentHashValue, scope, input, result);
     return result;
   } catch (error) {
     if (error instanceof SecretaryError) throw error;
@@ -356,7 +371,9 @@ export async function processInputAsset(
   input: InputAssetProcessInput,
   scope: InputAssetScope,
 ): Promise<InputAssetProcessResult> {
-  const cacheKey = inputCacheKey(input, scope);
+  validateInputAsset(input);
+  const contentHashValue = contentHash(input);
+  const cacheKey = scopedCacheKey(contentHashValue, scope);
   pruneInputCache();
   const cached = processedInputCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
@@ -370,7 +387,7 @@ export async function processInputAsset(
   }
   if (cached) processedInputCache.delete(cacheKey);
 
-  const durableCached = await loadDurableCachedResult(cacheKey, scope);
+  const durableCached = await loadDurableCachedResult(contentHashValue, scope);
   if (durableCached) {
     processedInputCache.set(cacheKey, {
       result: durableCached,
@@ -391,7 +408,7 @@ export async function processInputAsset(
     };
   }
 
-  const flight = processInputAssetUncached(input, scope, cacheKey);
+  const flight = processInputAssetUncached(input, scope, cacheKey, contentHashValue);
   inputProcessingFlights.set(cacheKey, flight);
   try {
     return await flight;
@@ -400,4 +417,45 @@ export async function processInputAsset(
       inputProcessingFlights.delete(cacheKey);
     }
   }
+}
+
+export async function linkInputAssetProvenance(
+  scope: InputAssetScope,
+  inputId: string | null | undefined,
+  provenance: InputAssetProvenance,
+): Promise<boolean> {
+  if (!inputId) return false;
+  const [updated] = await db.update(inputAssetResultsTable)
+    .set({
+      updatedAt: new Date(),
+    })
+    .where(and(
+      eq(inputAssetResultsTable.tenantId, scope.tenantId),
+      eq(inputAssetResultsTable.ownerUserId, scope.userId),
+      eq(inputAssetResultsTable.inputId, inputId),
+    ))
+    .returning({ inputId: inputAssetResultsTable.inputId });
+  if (!updated) return false;
+  await db.insert(inputAssetProvenanceTable).values({
+    tenantId: scope.tenantId,
+    ownerUserId: scope.userId,
+    inputId,
+    conversationId: provenance.conversationId,
+    turnId: provenance.turnId,
+    operationId: provenance.operationId ?? null,
+    updatedAt: new Date(),
+  }).onConflictDoUpdate({
+    target: [
+      inputAssetProvenanceTable.tenantId,
+      inputAssetProvenanceTable.ownerUserId,
+      inputAssetProvenanceTable.inputId,
+      inputAssetProvenanceTable.turnId,
+    ],
+    set: {
+      conversationId: provenance.conversationId,
+      operationId: provenance.operationId ?? null,
+      updatedAt: new Date(),
+    },
+  });
+  return true;
 }

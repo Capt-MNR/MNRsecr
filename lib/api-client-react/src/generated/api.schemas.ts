@@ -385,6 +385,7 @@ export type InputAssetProcessResponseProcessing = {
 };
 
 export interface InputAssetProcessResponse {
+  /** Stable reference for retrying the bounded result and linking it to its secretary turn. */
   inputId: string;
   kind: InputAssetProcessResponseKind;
   text: string;

@@ -791,6 +791,7 @@ paths:
       operationId: processSecretaryInputAsset
       tags: [secretary]
       summary: Process one voice recording or receipt image into a compact reviewable input
+      description: Raw media is accepted only by this processing boundary. The bounded response is safe to use in a secretary turn; raw media is never added to conversation history. Repeating the same tenant-scoped content reuses the processed result.
       requestBody:
         required: true
         content:
@@ -1536,6 +1537,7 @@ components:
       properties:
         inputId:
           type: string
+          description: Stable reference for retrying the bounded result and linking it to its secretary turn.
         kind:
           type: string
           enum: [voice, receipt]

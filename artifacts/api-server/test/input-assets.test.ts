@@ -43,12 +43,18 @@ test("processed input cache is tenant-scoped and avoids duplicate provider work"
   try {
     const first = await processInputAsset(input, { tenantId: "tenant-a", userId: "user-a" });
     const sameScope = await processInputAsset(input, { tenantId: "tenant-a", userId: "user-a" });
+    const sameBytesDifferentEncoding = await processInputAsset({
+      ...input,
+      base64: `${input.base64}\n`,
+    }, { tenantId: "tenant-a", userId: "user-a" });
     const otherScope = await processInputAsset(input, { tenantId: "tenant-a", userId: "user-b" });
 
     assert.equal(fetchCount, 2);
     assert.equal(first.processing.cacheHit, false);
     assert.equal(sameScope.processing.cacheHit, true);
     assert.equal(sameScope.inputId, first.inputId);
+    assert.equal(sameBytesDifferentEncoding.processing.cacheHit, true);
+    assert.equal(sameBytesDifferentEncoding.inputId, first.inputId);
     assert.equal(otherScope.processing.cacheHit, false);
     assert.notEqual(otherScope.inputId, first.inputId);
   } finally {

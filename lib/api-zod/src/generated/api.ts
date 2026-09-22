@@ -1163,6 +1163,7 @@ export const CreateTurnResponse = zod.object({
 
 
 /**
+ * Raw media is accepted only by this processing boundary. The bounded response is safe to use in a secretary turn; raw media is never added to conversation history. Repeating the same tenant-scoped content reuses the processed result.
  * @summary Process one voice recording or receipt image into a compact reviewable input
  */
 export const processSecretaryInputAssetBodyMimeTypeMax = 100;
@@ -1178,7 +1179,7 @@ export const ProcessSecretaryInputAssetBody = zod.object({
 })
 
 export const ProcessSecretaryInputAssetResponse = zod.object({
-  "inputId": zod.string(),
+  "inputId": zod.string().describe('Stable reference for retrying the bounded result and linking it to its secretary turn.'),
   "kind": zod.enum(['voice', 'receipt']),
   "text": zod.string(),
   "receipt": zod.object({

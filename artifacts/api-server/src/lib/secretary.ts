@@ -1095,6 +1095,7 @@ export class DeterministicAgentRuntime {
       message: string;
       conversationId?: string | null;
       idempotencyKey?: string | null;
+    inputId?: string | null;
       channel?: TurnInputChannel;
       context?: SecretaryChatContext | null;
       peer?: SecretaryChatPeer | null;
@@ -1111,6 +1112,7 @@ export class DeterministicAgentRuntime {
       message: string;
       conversationId?: string | null;
       idempotencyKey?: string | null;
+    inputId?: string | null;
       channel?: TurnInputChannel;
       context?: SecretaryChatContext | null;
       peer?: SecretaryChatPeer | null;
@@ -1147,6 +1149,7 @@ export class DeterministicAgentRuntime {
         };
         await saveConversationTurn(identity, conversationMemory, {
           turnId,
+          ...(input.inputId ? { inputId: input.inputId } : {}),
           userMessage: message,
           assistantMessage: result.assistantMessage,
           action: result.action,
@@ -1189,6 +1192,7 @@ export class DeterministicAgentRuntime {
       }
       await saveConversationTurn(identity, conversationMemory, {
         turnId,
+        ...(input.inputId ? { inputId: input.inputId } : {}),
         userMessage: message,
         assistantMessage: result.assistantMessage,
         action: result.action,
@@ -1232,6 +1236,7 @@ export class DeterministicAgentRuntime {
           }
           await saveConversationTurn(identity, conversationMemory, {
             turnId,
+            ...(input.inputId ? { inputId: input.inputId } : {}),
             userMessage: message,
             assistantMessage: result.assistantMessage,
             action: result.action,
@@ -1287,6 +1292,7 @@ export class DeterministicAgentRuntime {
       }
       await saveConversationTurn(identity, conversationMemory, {
         turnId,
+        ...(input.inputId ? { inputId: input.inputId } : {}),
         userMessage: message,
         assistantMessage: result.assistantMessage,
         action: result.action,
@@ -1315,6 +1321,7 @@ export class DeterministicAgentRuntime {
       }
       await saveConversationTurn(identity, conversationMemory, {
         turnId,
+        ...(input.inputId ? { inputId: input.inputId } : {}),
         userMessage: message,
         assistantMessage: result.assistantMessage,
         action: result.action,
@@ -1635,6 +1642,7 @@ export class DeterministicAgentRuntime {
     }
     await saveConversationTurn(identity, conversationMemory, {
       turnId,
+      ...(input.inputId ? { inputId: input.inputId } : {}),
       userMessage: message,
       assistantMessage: result.assistantMessage,
       action: result.action,

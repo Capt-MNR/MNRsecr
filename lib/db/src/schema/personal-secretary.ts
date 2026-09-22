@@ -815,6 +815,33 @@ export const inputAssetResultsTable = pgTable(
   ],
 );
 
+export const inputAssetProvenanceTable = pgTable(
+  "input_asset_provenance",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    inputId: text("input_id").notNull(),
+    conversationId: text("conversation_id").notNull(),
+    turnId: text("turn_id").notNull(),
+    operationId: text("operation_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("input_asset_provenance_owner_input_turn_unique").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.inputId,
+      table.turnId,
+    ),
+    index("input_asset_provenance_owner_conversation_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.conversationId,
+    ),
+  ],
+);
+
 export const learningSignalReviewsTable = pgTable(
   "learning_signal_reviews",
   {

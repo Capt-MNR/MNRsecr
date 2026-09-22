@@ -41,7 +41,7 @@ import {
   SecretaryError,
 } from "../lib/error-contract";
 import { dispatchMobilePush } from "../lib/mobile-push";
-import { processInputAsset } from "../lib/input-assets";
+import { linkInputAssetProvenance, processInputAsset } from "../lib/input-assets";
 import {
   brainLogFields,
   createBrainDecisionEnvelope,
@@ -351,6 +351,29 @@ router.post("/turns", async (req, res): Promise<void> => {
           ...result,
           turnId: result.turnId ?? currentRequestId,
         };
+    if (parsed.data.inputId) {
+      try {
+        const linked = await linkInputAssetProvenance(identity, parsed.data.inputId, {
+          conversationId: response.conversationId,
+          turnId: response.turnId,
+          operationId: operation?.operationId ?? null,
+        });
+        req.log.info({
+          requestId: currentRequestId,
+          inputId: parsed.data.inputId,
+          linked,
+          conversationId: response.conversationId,
+          turnId: response.turnId,
+          operationId: operation?.operationId,
+        }, "secretary input asset provenance linked");
+      } catch (error) {
+        req.log.warn({
+          requestId: currentRequestId,
+          inputId: parsed.data.inputId,
+          error: error instanceof Error ? error.message : "INPUT_ASSET_PROVENANCE_LINK_FAILED",
+        }, "Secretary input asset provenance link failed");
+      }
+    }
     if (operation) {
       void dispatchMobilePush(identity, {
         title: result.action?.type === "pending_confirmation"
@@ -412,6 +435,7 @@ router.post("/input-assets/process", async (req, res): Promise<void> => {
       inputTokens: result.processing.inputTokens,
       outputTokens: result.processing.outputTokens,
       cacheHit: result.processing.cacheHit,
+      providerWork: !result.processing.cacheHit,
     }, "secretary input asset processed");
     res.json(ProcessSecretaryInputAssetResponse.parse(result));
   } catch (error) {

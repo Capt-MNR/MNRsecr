@@ -3376,6 +3376,7 @@ export const getProcessSecretaryInputAssetUrl = () => {
 }
 
 /**
+ * Raw media is accepted only by this processing boundary. The bounded response is safe to use in a secretary turn; raw media is never added to conversation history. Repeating the same tenant-scoped content reuses the processed result.
  * @summary Process one voice recording or receipt image into a compact reviewable input
  */
 export const processSecretaryInputAsset = async (inputAssetProcessInput: InputAssetProcessInput, options?: Parameters<typeof customFetch>[1]): Promise<InputAssetProcessResponse> => {
