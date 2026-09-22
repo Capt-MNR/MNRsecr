@@ -359,10 +359,21 @@ test("record edits return approval and apply only after approval", async () => {
   );
   assert.equal(created.action.type, "expense_recorded");
 
+  const recordsBeforeEdit = await fetch(`${baseUrl}/records`, { headers });
+  const recordsBeforeEditPayload = await recordsBeforeEdit.json();
+  const savedExpense = recordsBeforeEditPayload.expenses.find(
+    (expense) => expense.id === created.action.expenseId,
+  );
+  assert.ok(savedExpense);
+
   const edit = await fetch(`${baseUrl}/records/expense/${created.action.expenseId}`, {
     method: "PATCH",
     headers,
-    body: JSON.stringify({ amountMinor: created.action.amountMinor, description: "وصف بعد الموافقة" }),
+    body: JSON.stringify({
+      expectedRowVersion: savedExpense.rowVersion,
+      amountMinor: created.action.amountMinor,
+      description: "وصف بعد الموافقة",
+    }),
   });
   assert.equal(edit.status, 202);
   const pending = await edit.json();
