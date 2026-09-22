@@ -269,10 +269,24 @@ test("pattern engine labels observations instead of turning them into facts", ()
     new Date("2026-09-15T00:00:00.000Z"),
   );
   assert.equal(insights.some((insight) => insight.kind === "relationship" && insight.confidence === 1), true);
+  assert.equal(insights.find((insight) => insight.kind === "relationship")?.evidence, "fact");
   const recurring = insights.find((insight) => insight.kind === "recurring_expense");
   assert.ok(recurring);
+  assert.equal(recurring?.evidence, "observation");
   assert.equal(recurring?.qualification, "repeated_observation");
   assert.equal(Object.prototype.hasOwnProperty.call(recurring?.value ?? {}, "fact"), false);
+});
+
+test("pattern engine ignores incomplete or unanchored expense rows", () => {
+  const insights = buildPatternInsights([], [
+    { id: "missing-amount", amountMinor: null, currency: "EGP", occurredAt: "2026-08-01T00:00:00.000Z", personId: "p1" },
+    { id: "missing-currency", amountMinor: 1000, currency: null, occurredAt: "2026-08-01T00:00:00.000Z", personId: "p1" },
+    { id: "unanchored-1", amountMinor: 1000, currency: "EGP", occurredAt: "2026-07-01T00:00:00.000Z" },
+    { id: "unanchored-2", amountMinor: 1000, currency: "egp", occurredAt: "2026-08-01T00:00:00.000Z" },
+  ], new Date("2026-09-15T00:00:00.000Z"));
+
+  assert.equal(insights.some((insight) => insight.kind === "recurring_expense"), false);
+  assert.equal(insights.some((insight) => insight.kind === "frequent_entity"), false);
 });
 
 test("request metrics start conservative", () => {

@@ -9,12 +9,13 @@ delete process.env.AI_PRIMARY_PROVIDER;
 delete process.env.AI_FALLBACK_PROVIDER;
 delete process.env.AI_SECONDARY_FALLBACK_PROVIDER;
 
-const port = 8091;
+const port = 8091 + (process.pid % 1000);
 const baseUrl = `http://127.0.0.1:${port}/api`;
 const testTenantId = `phase2-test-${process.pid}-${Date.now()}`;
 const testUserId = "phase2-test-user";
 let server;
 let provider = "development";
+let patternInsightsEnabled = false;
 
 const headers = {
   Authorization: "Bearer dev-user",
@@ -39,6 +40,7 @@ async function startServer() {
     ...process.env,
     PORT: String(port),
     AI_PROVIDER: provider,
+    EXPERIMENTAL_PATTERN_INSIGHTS_ENABLED: patternInsightsEnabled ? "1" : "0",
     SECRETARY_TENANT_ID: testTenantId,
     SECRETARY_USER_ID: testUserId,
   };
@@ -50,6 +52,9 @@ async function startServer() {
     delete env.GROQ_API_KEY;
     delete env.MISTRAL_API_KEY;
     delete env.COHERE_API_KEY;
+    delete env.DEEPSEEK_API_KEY;
+    delete env.QWEN_API_KEY;
+    delete env.OPENROUTER_API_KEY;
   }
   if (provider === "unavailable") {
     delete env.AI_PROVIDER;
@@ -71,8 +76,11 @@ async function stopServer() {
   if (!server) return;
   const current = server;
   server = null;
+  const exit = once(current, "exit");
   current.kill("SIGTERM");
-  await once(current, "exit");
+  const killTimer = setTimeout(() => current.kill("SIGKILL"), 1000);
+  await exit;
+  clearTimeout(killTimer);
 }
 
 async function sendTurn(message, conversationId, idempotencyKey = `${conversationId}-${message}`) {
@@ -576,6 +584,78 @@ test("does not read another owner's conversation state", async () => {
   const response = await sendTurn("محمد هو المقاول", conversationId, `${conversationId}-isolation`);
   assert.equal(response.action.type, "clarification_needed");
   assert.notEqual(response.action.projectName, "foreign");
+});
+
+test("derives experimental patterns from tenant-scoped historical rows", async () => {
+  await stopServer();
+  patternInsightsEnabled = true;
+  await startServer();
+
+  const personId = `00000000-0000-4000-8000-${String(Date.now()).slice(-12).padStart(12, "0")}`;
+  const projectId = `00000000-0000-4000-8001-${String(Date.now() + 1).slice(-12).padStart(12, "0")}`;
+  const foreignPersonId = `00000000-0000-4000-8002-${String(Date.now() + 2).slice(-12).padStart(12, "0")}`;
+  const foreignProjectId = `00000000-0000-4000-8003-${String(Date.now() + 3).slice(-12).padStart(12, "0")}`;
+  const relationshipId = `00000000-0000-4000-8004-${String(Date.now() + 4).slice(-12).padStart(12, "0")}`;
+  const escapedTenant = testTenantId.replaceAll("'", "''");
+  const escapedUser = testUserId.replaceAll("'", "''");
+
+  queryDb(`
+    INSERT INTO people (id, tenant_id, owner_user_id, name, name_key)
+    VALUES
+      ('${personId}', '${escapedTenant}', '${escapedUser}', 'نمط الاختبار', 'نمط الاختبار'),
+      ('${foreignPersonId}', 'foreign-pattern-tenant', 'foreign-pattern-user', 'نمط خارجي', 'نمط خارجي');
+    INSERT INTO projects (id, tenant_id, owner_user_id, name, name_key, status)
+    VALUES
+      ('${projectId}', '${escapedTenant}', '${escapedUser}', 'مشروع النمط', 'مشروع النمط', 'active'),
+      ('${foreignProjectId}', 'foreign-pattern-tenant', 'foreign-pattern-user', 'مشروع خارجي', 'مشروع خارجي', 'active');
+    INSERT INTO project_people (id, tenant_id, owner_user_id, project_id, person_id, relationship)
+    VALUES ('${relationshipId}', '${escapedTenant}', '${escapedUser}', '${projectId}', '${personId}', 'مورد');
+    INSERT INTO expenses (
+      tenant_id, owner_user_id, amount_minor, currency, description, person_id, project_id, occurred_at
+    )
+    SELECT '${escapedTenant}', '${escapedUser}', 250000, 'egp', 'نمط متكرر', '${personId}'::uuid, '${projectId}'::uuid, now() - interval '60 days'
+    UNION ALL
+    SELECT '${escapedTenant}', '${escapedUser}', 250000, 'EGP', 'نمط متكرر', '${personId}'::uuid, '${projectId}'::uuid, now() - interval '30 days'
+    UNION ALL
+    SELECT '${escapedTenant}', '${escapedUser}', 250000, 'EGP', 'نمط متكرر', '${personId}'::uuid, '${projectId}'::uuid, now()
+    UNION ALL
+    SELECT 'foreign-pattern-tenant', 'foreign-pattern-user', 250000, 'EGP', 'لا يجب أن يظهر', '${foreignPersonId}'::uuid, '${foreignProjectId}'::uuid, now() - interval '60 days'
+    UNION ALL
+    SELECT 'foreign-pattern-tenant', 'foreign-pattern-user', 250000, 'EGP', 'لا يجب أن يظهر', '${foreignPersonId}'::uuid, '${foreignProjectId}'::uuid, now() - interval '30 days'
+    UNION ALL
+    SELECT 'foreign-pattern-tenant', 'foreign-pattern-user', 250000, 'EGP', 'لا يجب أن يظهر', '${foreignPersonId}'::uuid, '${foreignProjectId}'::uuid, now();
+  `);
+
+  const response = await sendTurn(
+    "اختبار قراءة الأنماط التاريخية",
+    `pattern-history-${Date.now()}`,
+    `pattern-history-${Date.now()}-request`,
+  );
+  const insights = response.action?.patternInsights ?? [];
+  const recurring = insights.find((insight) => insight.kind === "recurring_expense");
+  const frequent = insights.find((insight) => insight.kind === "frequent_entity");
+  const relationship = insights.find((insight) => insight.kind === "relationship");
+
+  assert.equal(response.action?.patternInsights?.length > 0, true);
+  assert.equal(recurring?.evidence, "observation");
+  assert.equal(recurring?.value.observations, 3);
+  assert.equal(recurring?.value.currency, "EGP");
+  assert.equal(frequent?.value.entity, `person:${personId}`);
+  assert.equal(frequent?.value.observations, 3);
+  assert.equal(relationship?.evidence, "fact");
+  assert.equal(relationship?.value.personId, personId);
+  assert.equal(relationship?.value.projectId, projectId);
+  assert.equal(insights.some((insight) => JSON.stringify(insight).includes("foreign-pattern")), false);
+
+  await stopServer();
+  patternInsightsEnabled = false;
+  await startServer();
+  const disabled = await sendTurn(
+    "اختبار بعد تعطيل الأنماط",
+    `pattern-disabled-${Date.now()}`,
+    `pattern-disabled-${Date.now()}-request`,
+  );
+  assert.equal(Object.prototype.hasOwnProperty.call(disabled.action ?? {}, "patternInsights"), false);
 });
 
 test("runs a real Groq turn and keeps tool output compact", {

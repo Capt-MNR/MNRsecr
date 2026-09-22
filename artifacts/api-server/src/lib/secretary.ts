@@ -60,6 +60,11 @@ import {
 } from "./deterministic-intelligence";
 import type { SecretaryChatContext, SecretaryChatPeer, TurnInputChannel } from "@workspace/api-zod";
 import { runWithIdempotencyLock } from "./idempotency-lock";
+import { envFlag } from "./feature-flags";
+import {
+  buildPatternInsights,
+  loadExperimentalPatternHistory,
+} from "./experimental-pattern-insights";
 
 export type Identity = {
   tenantId: string;
@@ -1604,6 +1609,19 @@ export class DeterministicAgentRuntime {
       turnId,
       action: annotateApprovalAction(result.action, input.channel),
     };
+    if (envFlag("EXPERIMENTAL_PATTERN_INSIGHTS_ENABLED", false)) {
+      const history = await loadExperimentalPatternHistory(identity);
+      const patternInsights = buildPatternInsights(history.relationships, history.expenses);
+      if (patternInsights.length > 0) {
+        result = {
+          ...result,
+          action: {
+            ...(result.action ?? {}),
+            patternInsights,
+          },
+        };
+      }
+    }
     result = {
       ...result,
       assistantMessage: approvalMessage(result.action, result.assistantMessage, input.channel),

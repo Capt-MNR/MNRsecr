@@ -112,6 +112,10 @@ import {
   updateIncomeReceivable,
 } from "./financial-graph";
 import { createTypedRelationship, deleteTypedRelationship } from "./relationship-graph";
+import {
+  buildPatternInsights,
+  loadExperimentalPatternHistory,
+} from "./experimental-pattern-insights";
 import type { SecretaryChatContext, SecretaryChatPeer, TurnInputChannel } from "@workspace/api-zod";
 import {
   brainLogFields,
@@ -5655,30 +5659,11 @@ export class Phase2AgentRuntime {
         model: this.gateway.modelName,
       };
       const providerTrace = this.gateway.getTrace?.(requestId);
-      const patternExpenses = toolHistory.flatMap((entry) => {
-        const expense = entry.result.expense;
-        if (!expense || typeof expense !== "object") return [];
-        const item = expense as Record<string, unknown>;
-        if (
-          typeof item.id !== "string"
-          || typeof item.amountMinor !== "number"
-          || typeof item.currency !== "string"
-          || typeof item.occurredAt !== "string"
-        ) return [];
-        return [{
-          id: item.id,
-          amountMinor: item.amountMinor,
-          currency: item.currency,
-          occurredAt: item.occurredAt,
-          personId: typeof item.personId === "string" ? item.personId : null,
-          projectId: typeof item.projectId === "string" ? item.projectId : null,
-        }];
-      });
-      const patternInsights = featureFlags.experimentalPatternInsights()
-        ? (await import("./experimental-pattern-insights")).buildPatternInsights(
-            conversationState.relationships,
-            patternExpenses,
-          )
+      const patternHistory = featureFlags.experimentalPatternInsights()
+        ? await loadExperimentalPatternHistory(identity)
+        : null;
+      const patternInsights = patternHistory
+        ? buildPatternInsights(patternHistory.relationships, patternHistory.expenses)
         : [];
       const latestVerification = [...toolHistory]
         .reverse()

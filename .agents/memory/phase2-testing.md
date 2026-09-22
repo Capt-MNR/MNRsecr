@@ -20,3 +20,9 @@ For sequential optimization benchmarks, a clean baseline does not establish prov
 **Why:** A Gemini A–E baseline completed without errors, but rate limits appeared when the same dataset was repeated across optimization branches.
 
 **How to apply:** Preserve each raw branch report, stop treating aggregate deltas as comparable after the first provider error, and avoid retrying the whole matrix until capacity is known to persist across the full sequence.
+
+The HTTP integration harness's development provider selects the legacy deterministic runtime rather than `Phase2AgentRuntime`; tests of Phase 2 orchestration need an explicit scripted gateway or a dedicated experimental flag path.
+
+**Why:** A request can return a valid development response while never exercising Phase 2 provider routing or orchestration, making an apparently passing HTTP test prove the wrong layer.
+
+**How to apply:** Keep canonical-data integration assertions on a deterministic, tenant-isolated HTTP path when possible, but do not interpret development-provider responses as Phase 2 coverage without checking the selected runtime.
