@@ -4,8 +4,14 @@ import { and, eq } from "drizzle-orm";
 import {
   conversationMemoryTable,
   db,
+  donationsTable,
   expensesTable,
+  financialObligationsTable,
+  financialPartiesTable,
+  financialPaymentsTable,
+  incomeReceivablesTable,
   learningSignalReviewsTable,
+  remindersTable,
 } from "@workspace/db";
 
 const tenantId = `learning-review-${process.pid}-${Date.now()}`;
@@ -28,10 +34,133 @@ async function deleteOwned(table: any, ownerTenantId: string) {
 }
 
 async function cleanup() {
-  for (const table of [learningSignalReviewsTable, conversationMemoryTable, expensesTable]) {
+  for (const table of [
+    learningSignalReviewsTable,
+    conversationMemoryTable,
+    incomeReceivablesTable,
+    donationsTable,
+    financialObligationsTable,
+    financialPaymentsTable,
+    expensesTable,
+    remindersTable,
+    financialPartiesTable,
+  ]) {
     await deleteOwned(table, tenantId);
     await deleteOwned(table, otherTenantId);
   }
+}
+
+const protectedRecordTables = {
+  expenses: expensesTable,
+  reminders: remindersTable,
+  financialParties: financialPartiesTable,
+  financialObligations: financialObligationsTable,
+  financialPayments: financialPaymentsTable,
+  donations: donationsTable,
+  incomeReceivables: incomeReceivablesTable,
+} as const;
+
+type ProtectedRecordTable = typeof protectedRecordTables[keyof typeof protectedRecordTables];
+
+async function snapshotProtectedTable(
+  table: ProtectedRecordTable,
+  ownerTenantId: string,
+) {
+  const rows = await db.select({
+    id: table.id,
+    rowVersion: table.rowVersion,
+  }).from(table).where(and(
+    eq(table.tenantId, ownerTenantId),
+    eq(table.ownerUserId, userId),
+  ));
+  return {
+    count: rows.length,
+    rowVersions: rows
+      .map((row) => ({ id: row.id, rowVersion: row.rowVersion }))
+      .sort((left, right) => left.id.localeCompare(right.id)),
+  };
+}
+
+async function snapshotProtectedRecords(ownerTenantId: string) {
+  const entries = await Promise.all(
+    Object.entries(protectedRecordTables).map(async ([name, table]) => [
+      name,
+      await snapshotProtectedTable(table, ownerTenantId),
+    ]),
+  );
+  return Object.fromEntries(entries);
+}
+
+async function seedProtectedRecords(ownerTenantId: string) {
+  const [lender, borrower] = await db.insert(financialPartiesTable).values([
+    {
+      tenantId: ownerTenantId,
+      ownerUserId: userId,
+      partyType: "person",
+      name: `${ownerTenantId} lender`,
+      nameKey: `${ownerTenantId} lender`,
+    },
+    {
+      tenantId: ownerTenantId,
+      ownerUserId: userId,
+      partyType: "external",
+      name: `${ownerTenantId} borrower`,
+      nameKey: `${ownerTenantId} borrower`,
+    },
+  ]).returning({ id: financialPartiesTable.id });
+  assert.ok(lender && borrower);
+
+  await db.insert(expensesTable).values({
+    tenantId: ownerTenantId,
+    ownerUserId: userId,
+    amountMinor: 12_500,
+    currency: "EGP",
+    description: `${ownerTenantId} expense`,
+  });
+  await db.insert(remindersTable).values({
+    tenantId: ownerTenantId,
+    ownerUserId: userId,
+    text: `${ownerTenantId} reminder`,
+    dueAt: new Date("2099-09-16T10:00:00.000Z"),
+  });
+  await db.insert(financialObligationsTable).values({
+    tenantId: ownerTenantId,
+    ownerUserId: userId,
+    kind: "debt",
+    title: `${ownerTenantId} obligation`,
+    lenderPartyId: lender.id,
+    borrowerPartyId: borrower.id,
+    principalAmountMinor: 50_000,
+    currency: "EGP",
+  });
+  await db.insert(financialPaymentsTable).values({
+    tenantId: ownerTenantId,
+    ownerUserId: userId,
+    payerPartyId: borrower.id,
+    payeePartyId: lender.id,
+    amountMinor: 5_000,
+    currency: "EGP",
+    description: `${ownerTenantId} payment`,
+  });
+  await db.insert(donationsTable).values({
+    tenantId: ownerTenantId,
+    ownerUserId: userId,
+    donorPartyId: lender.id,
+    recipientPartyId: borrower.id,
+    amountMinor: 1_000,
+    currency: "EGP",
+    description: `${ownerTenantId} donation`,
+  });
+  await db.insert(incomeReceivablesTable).values({
+    tenantId: ownerTenantId,
+    ownerUserId: userId,
+    kind: "receivable",
+    title: `${ownerTenantId} receivable`,
+    creditorPartyId: lender.id,
+    debtorPartyId: borrower.id,
+    amountMinor: 7_500,
+    currency: "EGP",
+  });
 }
 
 async function request(
@@ -107,15 +236,8 @@ after(async () => {
 });
 
 test("review decisions stay tenant-scoped and never mutate financial records", async () => {
-  const expense = await db.insert(expensesTable).values({
-    tenantId,
-    ownerUserId: userId,
-    amountMinor: 12_500,
-    currency: "EGP",
-    description: "fixture لا يجب تغييره",
-  }).returning();
-  const beforeExpense = expense[0];
-  assert.ok(beforeExpense);
+  await seedProtectedRecords(tenantId);
+  await seedProtectedRecords(otherTenantId);
 
   await seedConversation(tenantId, "learning-review-current", [
     signalTurn("approve-turn"),
@@ -126,11 +248,33 @@ test("review decisions stay tenant-scoped and never mutate financial records", a
     signalTurn("foreign-turn"),
   ]);
 
+  const beforeCurrentRecords = await snapshotProtectedRecords(tenantId);
+  const beforeOtherRecords = await snapshotProtectedRecords(otherTenantId);
+
   const listed = await request("/learning/signals");
   assert.equal(listed.status, 200);
   const signals = listed.body?.signals as Array<{ signalId: string; turnId: string; status: string }> | undefined;
   assert.equal(signals?.length, 3);
   assert.equal(signals?.some((signal) => signal.turnId === "foreign-turn"), false);
+
+  const foreignReviewAttempt = await request(
+    `/learning/signals/${encodeURIComponent(`${otherTenantId}:foreign-turn`)}/review`,
+    "POST",
+    { status: "approved" },
+  );
+  assert.equal(foreignReviewAttempt.status, 404);
+  assert.deepEqual(
+    await db.select({ signalId: learningSignalReviewsTable.signalId })
+      .from(learningSignalReviewsTable)
+      .where(and(
+        eq(learningSignalReviewsTable.tenantId, tenantId),
+        eq(learningSignalReviewsTable.ownerUserId, userId),
+        eq(learningSignalReviewsTable.signalId, `${otherTenantId}:foreign-turn`),
+      )),
+    [],
+  );
+  assert.deepEqual(await snapshotProtectedRecords(tenantId), beforeCurrentRecords);
+  assert.deepEqual(await snapshotProtectedRecords(otherTenantId), beforeOtherRecords);
 
   const decisions = [
     ["approve-turn", "approved"],
@@ -148,6 +292,8 @@ test("review decisions stay tenant-scoped and never mutate financial records", a
     assert.equal(reviewed.status, 200);
     assert.equal(reviewed.body?.status, status);
     assert.equal(reviewed.body?.benchmarkReady, status === "approved");
+    assert.deepEqual(await snapshotProtectedRecords(tenantId), beforeCurrentRecords);
+    assert.deepEqual(await snapshotProtectedRecords(otherTenantId), beforeOtherRecords);
   }
 
   const approvedReview = await db.select({
@@ -174,25 +320,6 @@ test("review decisions stay tenant-scoped and never mutate financial records", a
     previousAssistantMessage: null,
     previousActionType: "record_expense",
     createdAt: "2026-09-16T11:30:00.000Z",
-  });
-
-  const afterExpense = await db.select({
-    id: expensesTable.id,
-    amountMinor: expensesTable.amountMinor,
-    currency: expensesTable.currency,
-    description: expensesTable.description,
-    rowVersion: expensesTable.rowVersion,
-  }).from(expensesTable).where(and(
-    eq(expensesTable.tenantId, tenantId),
-    eq(expensesTable.ownerUserId, userId),
-    eq(expensesTable.id, beforeExpense.id),
-  ));
-  assert.deepEqual(afterExpense[0], {
-    id: beforeExpense.id,
-    amountMinor: 12_500,
-    currency: "EGP",
-    description: "fixture لا يجب تغييره",
-    rowVersion: 1,
   });
 
   const reviewedList = await request("/learning/signals");
