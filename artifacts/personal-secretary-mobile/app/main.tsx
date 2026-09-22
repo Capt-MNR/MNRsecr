@@ -108,6 +108,7 @@ export default function MainRoute() {
   const inputRef = useRef<TextInput>(null);
   const [mainSection, setMainSection] = useState<MainSection>('office');
   const [selectedRecord, setSelectedRecord] = useState<MobileRecordRow | null>(null);
+  const [recordReturnSection, setRecordReturnSection] = useState<MainSection>('office');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [memorySheetOpen, setMemorySheetOpen] = useState(false);
   const [chatContext, setChatContext] = useState<MobileRecordRow | null>(null);
@@ -294,6 +295,7 @@ export default function MainRoute() {
     openMainSection(section);
   }
   function openRecord(record: MobileRecordRow) {
+    setRecordReturnSection(mainSection);
     setSelectedRecord(record);
     setMainSection('records');
     setChatContext(null);
@@ -380,7 +382,7 @@ export default function MainRoute() {
             </View>
             {selectedRecord && (
               <View style={[{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }, { backgroundColor: colors.background }]}>
-                <RecordDetailView record={selectedRecord} colors={colors} onBack={() => setSelectedRecord(null)} onAskSecretary={askSecretaryAboutRecord} onOpenConversation={openConversation} onOpenRelatedRecord={openRecord} onPendingApproval={handleRecordPendingApproval} onRecordSaved={() => setSelectedRecord(null)} chatMessages={messages} chatDraft={draft} onChangeChatDraft={setDraft} onSendChat={() => void sendMessage()} chatBusy={secretaryChat.isSending || conversationQuery.isFetching} onApprove={(approval, args) => void updateApproval(approval, 'completed', args)} onReject={(approval) => void updateApproval(approval, 'rejected')} busyOperationId={busyOperationId} chatContext={chatContext} />
+                <RecordDetailView record={selectedRecord} colors={colors} onBack={() => { setSelectedRecord(null); setMainSection(recordReturnSection); }} onAskSecretary={askSecretaryAboutRecord} onOpenConversation={openConversation} onOpenRelatedRecord={openRecord} onPendingApproval={handleRecordPendingApproval} onRecordSaved={() => setSelectedRecord(null)} chatMessages={messages} chatDraft={draft} onChangeChatDraft={setDraft} onSendChat={() => void sendMessage()} chatBusy={secretaryChat.isSending || conversationQuery.isFetching} onApprove={(approval, args) => void updateApproval(approval, 'completed', args)} onReject={(approval) => void updateApproval(approval, 'rejected')} busyOperationId={busyOperationId} chatContext={chatContext} />
               </View>
             )}
           </View>

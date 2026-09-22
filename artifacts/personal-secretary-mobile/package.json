@@ -8,6 +8,7 @@
     "build": "node scripts/build.js",
     "serve": "node server/serve.js",
     "test": "pnpm run test:typecheck && ../../scripts/node_modules/.bin/tsx --test test/quick-conversation.smoke.test.ts test/quick-provenance.smoke.test.ts",
+    "test:main-office": "node test/main-office-navigation.e2e.mjs",
     "test:typecheck": "tsc -p test/tsconfig.json --noEmit",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

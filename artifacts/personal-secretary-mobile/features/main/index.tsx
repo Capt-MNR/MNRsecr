@@ -1881,6 +1881,7 @@ export function MainOffice({
             {(['records', 'context'] as const).map((tab) => (
               <Pressable
                 key={tab}
+                testID={`pearl-sheet-tab-${tab}`}
                 accessibilityRole="button"
                 accessibilityState={{ selected: pearlSheetTab === tab }}
                 onPress={() => setPearlSheetTab(tab)}
@@ -1900,6 +1901,7 @@ export function MainOffice({
               {pearlSheetRecords.length > 0 ? pearlSheetRecords.map((item) => (
                 <Pressable
                   key={item.id}
+                  testID={`pearl-sheet-record-${item.record.recordType}-${item.record.id}`}
                   accessibilityRole="button"
                   onPress={() => {
                     animatePearlSheetTo(80);
@@ -1927,16 +1929,64 @@ export function MainOffice({
               )}
             </View>
           ) : (
-            <View style={[styles.pearlSheetContext, { backgroundColor: colors.muted, borderColor: colors.border }]}>
-              <View style={[styles.pearlSheetContextIcon, { backgroundColor: colors.card }]}>
-                <Feather name="shield" size={15} color={colors.primary} />
+            <View>
+              <View style={[styles.pearlSheetContext, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+                <View style={[styles.pearlSheetContextIcon, { backgroundColor: colors.card }]}>
+                  <Feather name="shield" size={15} color={colors.primary} />
+                </View>
+                <Text style={[styles.pearlSheetContextTitle, { color: colors.foreground }]}>
+                  {localized(language, 'خريطة اليوم كما فهمها السكرتير', 'Today’s context map')}
+                </Text>
+                <Text style={[styles.pearlSheetContextText, { color: colors.mutedForeground }]}>
+                  {localized(language, `${contextualRecordCount} عناصر مرتبطة بالمحادثة الحالية.`, `${contextualRecordCount} items are linked to the current conversation.`)}
+                </Text>
               </View>
-              <Text style={[styles.pearlSheetContextTitle, { color: colors.foreground }]}>
-                {localized(language, 'خريطة اليوم كما فهمها السكرتير', 'Today’s context map')}
-              </Text>
-              <Text style={[styles.pearlSheetContextText, { color: colors.mutedForeground }]}>
-                {localized(language, `${contextualRecordCount} عناصر مرتبطة بالمحادثة الحالية.`, `${contextualRecordCount} items are linked to the current conversation.`)}
-              </Text>
+              {(context.relevantPeople.length > 0 || context.activeProjects.length > 0) && (
+                <View style={styles.pearlSheetRecordList}>
+                  {context.relevantPeople.slice(0, 5).map((person) => (
+                    <Pressable
+                      key={`pearl-person-${person.id}`}
+                      testID={`pearl-sheet-person-${person.id}`}
+                      accessibilityRole="button"
+                      onPress={() => onOpenRecord({ id: person.id, recordType: 'person', title: person.name, subtitle: 'فتح مركز الشخص' })}
+                      style={({ pressed }) => [
+                        styles.pearlSheetRecord,
+                        { backgroundColor: colors.muted, borderColor: colors.border, opacity: pressed ? 0.68 : 1 },
+                      ]}
+                    >
+                      <View style={[styles.pearlSheetRecordIcon, { backgroundColor: colors.card }]}>
+                        <Feather name="user" size={14} color={colors.primary} />
+                      </View>
+                      <View style={styles.pearlSheetRecordCopy}>
+                        <Text style={[styles.pearlSheetRecordTitle, { color: colors.foreground }]} numberOfLines={1}>{person.name}</Text>
+                        <Text style={[styles.pearlSheetRecordMeta, { color: colors.mutedForeground }]} numberOfLines={1}>مركز الشخص</Text>
+                      </View>
+                      <Feather name="chevron-left" size={14} color={colors.mutedForeground} />
+                    </Pressable>
+                  ))}
+                  {context.activeProjects.slice(0, 5).map((project) => (
+                    <Pressable
+                      key={`pearl-project-${project.id}`}
+                      testID={`pearl-sheet-project-${project.id}`}
+                      accessibilityRole="button"
+                      onPress={() => onOpenRecord({ id: project.id, recordType: 'project', title: project.name, subtitle: 'فتح مركز المشروع' })}
+                      style={({ pressed }) => [
+                        styles.pearlSheetRecord,
+                        { backgroundColor: colors.muted, borderColor: colors.border, opacity: pressed ? 0.68 : 1 },
+                      ]}
+                    >
+                      <View style={[styles.pearlSheetRecordIcon, { backgroundColor: colors.card }]}>
+                        <Feather name="briefcase" size={14} color={colors.primary} />
+                      </View>
+                      <View style={styles.pearlSheetRecordCopy}>
+                        <Text style={[styles.pearlSheetRecordTitle, { color: colors.foreground }]} numberOfLines={1}>{project.name}</Text>
+                        <Text style={[styles.pearlSheetRecordMeta, { color: colors.mutedForeground }]} numberOfLines={1}>مركز المشروع</Text>
+                      </View>
+                      <Feather name="chevron-left" size={14} color={colors.mutedForeground} />
+                    </Pressable>
+                  ))}
+                </View>
+              )}
             </View>
           )}
         </ScrollView>
