@@ -14,6 +14,7 @@ import {
 } from "../src/lib/deterministic-intelligence.ts";
 import { buildPatternInsights } from "../src/lib/experimental-pattern-insights.ts";
 import { FailoverModelGateway, Phase2AgentRuntime, type ModelGateway } from "../src/lib/phase2.ts";
+import { parseRelationshipRequest } from "../src/lib/relationship-context.ts";
 import type { Identity } from "../src/lib/secretary.ts";
 
 test("Arabic normalization handles spelling, punctuation, and Arabic digits", () => {
@@ -117,6 +118,16 @@ test("semantic layer recognizes expense, totals, schedules, and reminders", () =
   const projectExpenseRead = parseSemanticRequest("كام صرفت على مشروع المحجر؟");
   assert.equal(projectExpenseRead.intent, "expense_report");
   assert.equal(projectExpenseRead.ambiguous, false);
+});
+
+test("context-recall questions stay distinct from expense reports", () => {
+  const contextQuestion = parseSemanticRequest("آخر حاجة سجلناها عن شركة المحجر؟");
+
+  assert.equal(contextQuestion.intent, "memory_recall");
+  assert.equal(contextQuestion.domains.includes("memory"), true);
+  assert.equal(contextQuestion.intent === "expense_report", false);
+  assert.equal(contextQuestion.ambiguous, true);
+  assert.equal(parseRelationshipRequest("آخر حاجة سجلناها عن شركة المحجر؟")?.intent, "recent_activity");
 });
 
 test("semantic layer recognizes natural delegation requests without opening Works", () => {
