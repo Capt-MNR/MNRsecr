@@ -475,6 +475,82 @@ export function updateInputForRecord(
   return input;
 }
 
+type RecordDetailField = {
+  label: string;
+  value: string;
+};
+
+function detailField(label: string, value: string | null | undefined): RecordDetailField | null {
+  return value === null || value === undefined || value.trim() === ''
+    ? null
+    : { label, value };
+}
+
+export function detailFieldsForRecord(
+  record: EditableRecord | null,
+  recordType: RecordType | null,
+): RecordDetailField[] {
+  if (!record || !recordType) return [];
+  const fields: Array<RecordDetailField | null> = [];
+  if (recordType === 'expense') {
+    const expense = record as ExpenseRecord;
+    fields.push(
+      detailField('الوصف', expense.description),
+      detailField('المبلغ', money(expense.amountMinor, expense.currency)),
+      detailField('العملة', expense.currency),
+      detailField('الشخص المرتبط', expense.personName),
+      detailField('المشروع المرتبط', expense.projectName),
+      detailField('الغرض', expense.purposeName),
+      detailField('وقت المصروف', recordDate(expense.occurredAt)),
+      detailField('تم الحفظ', recordDate(expense.createdAt)),
+    );
+  } else if (recordType === 'person') {
+    const person = record as PersonRecord;
+    fields.push(
+      detailField('الاسم', person.name),
+      detailField('الهاتف', person.phone),
+      detailField('ملاحظات', person.notes),
+      detailField('تمت الإضافة', recordDate(person.createdAt)),
+      detailField('آخر تحديث', recordDate(person.updatedAt)),
+    );
+  } else if (recordType === 'project') {
+    const project = record as ProjectRecord;
+    fields.push(
+      detailField('الاسم', project.name),
+      detailField('الحالة', statusLabel(project.status)),
+      detailField('تمت الإضافة', recordDate(project.createdAt)),
+      detailField('آخر تحديث', recordDate(project.updatedAt)),
+    );
+  } else if (recordType === 'task') {
+    const task = record as TaskRecord;
+    fields.push(
+      detailField('العنوان', task.title),
+      detailField('الحالة', statusLabel(task.status)),
+      detailField('الموعد', task.dueAt ? recordDate(task.dueAt) : null),
+      detailField('تم الحفظ', recordDate(task.createdAt)),
+    );
+  } else if (recordType === 'reminder') {
+    const reminder = record as ReminderRecord;
+    fields.push(
+      detailField('النص', reminder.text),
+      detailField('الحالة', statusLabel(reminder.status)),
+      detailField('الموعد', recordDate(reminder.dueAt)),
+      detailField('المنطقة الزمنية', reminder.timezone),
+      detailField('تم الحفظ', recordDate(reminder.createdAt)),
+    );
+  } else {
+    const commitment = record as CommitmentRecord;
+    fields.push(
+      detailField('العنوان', commitment.title),
+      detailField('الحالة', statusLabel(commitment.status)),
+      detailField('الطرف المرتبط', commitment.personName),
+      detailField('الموعد', commitment.dueAt ? recordDate(commitment.dueAt) : null),
+      detailField('تم الحفظ', recordDate(commitment.createdAt)),
+    );
+  }
+  return fields.filter((field): field is RecordDetailField => Boolean(field));
+}
+
 export function approvalFromAction(action: TurnResponse['action']): Approval | undefined {
   if (
     !action
@@ -2594,6 +2670,33 @@ const detailStyles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'right',
   },
+  fieldsCard: {
+    marginTop: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingTop: 3,
+  },
+  fieldRow: {
+    minHeight: 43,
+    paddingVertical: 9,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  fieldLabel: {
+    flexShrink: 0,
+    fontSize: 11,
+    textAlign: 'right',
+  },
+  fieldValue: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'left',
+  },
   detailState: {
     marginTop: 14,
     borderRadius: 14,
@@ -2892,6 +2995,8 @@ export function RecordDetailView({
   const [latestRecord, setLatestRecord] = useState<MobileRecordRow | null>(null);
   const editableKind = (record.recordType in editableRecordCollections) ? record.recordType as RecordType : null;
   const displayRecord = latestRecord ?? record;
+  const detailRecord = editableKind ? findEditableRecord(recordsQuery.data, displayRecord) : null;
+  const detailFields = detailFieldsForRecord(detailRecord, editableKind);
   const isEntity = record.recordType === 'person'
     || record.recordType === 'project'
     || record.recordType === 'financial_party';
@@ -2971,6 +3076,7 @@ export function RecordDetailView({
             const refreshed = await recordsQuery.refetch();
             const fresh = findEditableRecord(refreshed.data, record);
             if (fresh && editableKind) setLatestRecord(editableRecordRow(fresh, editableKind));
+            if (isEntity) await entityQuery.refetch();
             setEditingError('رُفض التعديل لأن السجل تغيّر من نافذة أخرى. تم عرض النسخة الأحدث دون إعادة المحاولة.');
           },
         },
@@ -3016,6 +3122,16 @@ export function RecordDetailView({
         )}
         {!isEntity && displayRecord.trailing && <Text style={[detailStyles.detailValue, { color: colors.primary }]}>{displayRecord.trailing}</Text>}
       </View>
+      {detailFields.length > 0 && (
+        <View testID="record-detail-fields" style={[detailStyles.fieldsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          {detailFields.map((field) => (
+            <View key={field.label} style={[detailStyles.fieldRow, { borderBottomColor: colors.border }]}>
+              <Text style={[detailStyles.fieldValue, { color: colors.foreground }]}>{field.value}</Text>
+              <Text style={[detailStyles.fieldLabel, { color: colors.mutedForeground }]}>{field.label}</Text>
+            </View>
+          ))}
+        </View>
+      )}
       {editableKind && (
         <Pressable
           testID="record-detail-edit"
@@ -3112,12 +3228,12 @@ export function RecordDetailView({
         </View>
       )}
 
-      {record.origin && onOpenConversation && (
+      {displayRecord.origin && onOpenConversation && (
         <Pressable
           testID="open-original-conversation"
           accessibilityRole="button"
           accessibilityLabel="فتح المحادثة الأصلية"
-          onPress={() => onOpenConversation(record.origin as RecordOrigin)}
+          onPress={() => onOpenConversation(displayRecord.origin as RecordOrigin)}
           style={({ pressed }) => [
             detailStyles.detailSecondaryAction,
             { borderColor: colors.border, opacity: pressed ? 0.65 : 1 },
