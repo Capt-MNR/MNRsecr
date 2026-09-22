@@ -292,7 +292,7 @@ function resolverShadowObservations(
     });
 }
 
-function actualIntent(
+export function actualIntent(
   worker: WorkerRecord | undefined,
   tools: ToolSelection[],
 ): string | null {
@@ -301,6 +301,8 @@ function actualIntent(
   if (names.has("record_expense")) return "expense";
   if (names.has("create_person")) return "create_person";
   if (names.has("update_expense")) return "correction";
+  if (names.has("create_reminder")) return "create_reminder";
+  if (names.has("query_expenses")) return "expense_report";
   if (worker.responseKind === "clarification" || names.has("final_response")) {
     return "clarification";
   }
@@ -854,4 +856,6 @@ async function main(): Promise<void> {
   printComparison(summary, baselineSummary);
 }
 
-await main();
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  await main();
+}

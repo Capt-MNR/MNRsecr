@@ -10,7 +10,7 @@
     "providerErrors": 0,
     "contextNotProvided": 1,
     "runnerErrors": 0,
-    "intentAccuracyPercent": 25,
+    "intentAccuracyPercent": 75,
     "toolSelectionAccuracyPercent": 100,
     "clarificationAccuracyPercent": 100,
     "noWriteViolations": 0,
@@ -47,7 +47,7 @@
       },
       "contextMode": "none",
       "status": "evaluated",
-      "actualIntent": null,
+      "actualIntent": "create_reminder",
       "actualTool": "create_reminder",
       "actualTools": [
         "create_reminder"
@@ -341,7 +341,7 @@
       "wouldSelectWriteTool": true,
       "writeOccurred": false,
       "noWriteViolation": false,
-      "intentMatch": false,
+      "intentMatch": true,
       "toolSelectionMatch": true,
       "clarificationMatch": true
     },
@@ -361,7 +361,7 @@
       },
       "contextMode": "none",
       "status": "evaluated",
-      "actualIntent": null,
+      "actualIntent": "expense_report",
       "actualTool": "query_expenses",
       "actualTools": [
         "query_expenses"
@@ -676,7 +676,7 @@
       "wouldSelectWriteTool": false,
       "writeOccurred": false,
       "noWriteViolation": false,
-      "intentMatch": false,
+      "intentMatch": true,
       "toolSelectionMatch": true,
       "clarificationMatch": true
     },
