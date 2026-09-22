@@ -654,6 +654,154 @@ test("HTTP concurrent person deletion and financial linking preserve referential
   }
 });
 
+test("HTTP typed relationships require approval once and reject cross-tenant access", async () => {
+  const [person] = await db.insert(peopleTable).values({
+    tenantId,
+    ownerUserId: userId,
+    name: "شخص علاقة HTTP",
+    nameKey: "شخص علاقة HTTP",
+  }).returning();
+  const [project] = await db.insert(projectsTable).values({
+    tenantId,
+    ownerUserId: userId,
+    name: "مشروع علاقة HTTP",
+    nameKey: "مشروع علاقة HTTP",
+  }).returning();
+  const foreignTenantId = `${tenantId}-relationship-other`;
+  const [foreignPerson] = await db.insert(peopleTable).values({
+    tenantId: foreignTenantId,
+    ownerUserId: userId,
+    name: "شخص علاقة مستأجر آخر",
+    nameKey: "شخص علاقة مستأجر آخر",
+  }).returning();
+  const [foreignProject] = await db.insert(projectsTable).values({
+    tenantId: foreignTenantId,
+    ownerUserId: userId,
+    name: "مشروع علاقة مستأجر آخر",
+    nameKey: "مشروع علاقة مستأجر آخر",
+  }).returning();
+  const [foreignRelationship] = await db.insert(projectPeopleTable).values({
+    tenantId: foreignTenantId,
+    ownerUserId: userId,
+    projectId: foreignProject.id,
+    personId: foreignPerson.id,
+    relationship: "foreign",
+  }).returning();
+
+  const idempotencyKey = `http-relationship-${Date.now()}`;
+  const relationshipInput = {
+    leftId: project.id,
+    rightId: person.id,
+    relationship: "owner",
+    idempotencyKey,
+  };
+  const pending = await request("/relationships?relation=project_people", "POST", relationshipInput);
+  assert.equal(pending.status, 202, JSON.stringify(pending.body));
+  assert.equal(pending.body?.pendingApproval, true);
+  assert.equal(pending.body?.approval?.toolName, "create_typed_relationship");
+  const operationId = pending.body?.approval?.operationId as string;
+  assert.equal(typeof operationId, "string");
+
+  const retryBeforeApproval = await request(
+    "/relationships?relation=project_people",
+    "POST",
+    relationshipInput,
+  );
+  assert.equal(retryBeforeApproval.status, 202);
+  assert.equal(retryBeforeApproval.body?.approval?.operationId, operationId);
+
+  const beforeApproval = await request(
+    `/relationships?relation=project_people&side=left&entityId=${project.id}`,
+  );
+  assert.equal(beforeApproval.status, 200);
+  assert.deepEqual(beforeApproval.body, {
+    relation: "project_people",
+    side: "left",
+    entityId: project.id,
+    relationships: [],
+  });
+
+  const approved = await approve(operationId);
+  assert.equal(approved.status, 200, JSON.stringify(approved.body));
+  assert.equal(approved.body?.status, "completed");
+  assert.equal(approved.body?.action?.type, "operation_completed");
+  assert.equal(approved.body?.action?.toolResult?.relationship?.projectId, project.id);
+  assert.equal(approved.body?.action?.toolResult?.relationship?.personId, person.id);
+
+  const listed = await request(
+    `/relationships?relation=project_people&side=left&entityId=${project.id}`,
+  );
+  assert.equal(listed.status, 200);
+  assert.equal(listed.body?.relation, "project_people");
+  assert.equal(listed.body?.side, "left");
+  assert.equal(listed.body?.entityId, project.id);
+  assert.equal(listed.body?.relationships.length, 1);
+  assert.equal(listed.body?.relationships[0]?.relationship, "owner");
+  const relationshipId = listed.body?.relationships[0]?.id as string;
+  assert.equal(typeof relationshipId, "string");
+
+  const duplicateApproval = await approve(operationId);
+  assert.equal(duplicateApproval.status, 200);
+  assert.equal(duplicateApproval.body?.status, "completed");
+  const afterDuplicateApproval = await request(
+    `/relationships?relation=project_people&side=left&entityId=${project.id}`,
+  );
+  assert.equal(afterDuplicateApproval.body?.relationships.length, 1);
+  assert.equal(afterDuplicateApproval.body?.relationships[0]?.id, relationshipId);
+
+  const retryAfterApproval = await request(
+    "/relationships?relation=project_people",
+    "POST",
+    relationshipInput,
+  );
+  assert.equal(retryAfterApproval.status, 202);
+  assert.equal(retryAfterApproval.body?.approval?.operationId, operationId);
+  assert.equal(
+    (await request(`/relationships?relation=project_people&entityId=${project.id}`)).body?.relationships.length,
+    1,
+  );
+
+  const deletePending = await request(`/relationships/project_people/${relationshipId}`, "DELETE");
+  assert.equal(deletePending.status, 202);
+  assert.equal(deletePending.body?.pendingApproval, true);
+  assert.equal(deletePending.body?.approval?.toolName, "delete_typed_relationship");
+  const deleteOperationId = deletePending.body?.approval?.operationId as string;
+  const deleteApproved = await approve(deleteOperationId);
+  assert.equal(deleteApproved.status, 200, JSON.stringify(deleteApproved.body));
+  assert.equal(deleteApproved.body?.status, "completed");
+  assert.equal(deleteApproved.body?.action?.toolResult?.relationship?.id, relationshipId);
+
+  const afterDelete = await request(
+    `/relationships?relation=project_people&side=left&entityId=${project.id}`,
+  );
+  assert.equal(afterDelete.status, 200);
+  assert.deepEqual(afterDelete.body?.relationships, []);
+  const duplicateDeleteApproval = await approve(deleteOperationId);
+  assert.equal(duplicateDeleteApproval.status, 200);
+  assert.equal(duplicateDeleteApproval.body?.status, "completed");
+
+  const foreignRead = await request(
+    `/relationships?relation=project_people&side=left&entityId=${foreignProject.id}`,
+  );
+  assert.equal(foreignRead.status, 404);
+  assert.equal(foreignRead.body?.code, "RELATIONSHIP_NOT_FOUND");
+
+  const foreignDeletePending = await request(
+    `/relationships/project_people/${foreignRelationship.id}`,
+    "DELETE",
+  );
+  assert.equal(foreignDeletePending.status, 202);
+  const foreignDeleteApproval = await approve(foreignDeletePending.body?.approval?.operationId as string);
+  assert.equal(foreignDeleteApproval.status, 500);
+  assert.equal(foreignDeleteApproval.body?.code, "APPROVED_OPERATION_FAILED");
+  const foreignRows = await db.select().from(projectPeopleTable).where(and(
+    eq(projectPeopleTable.tenantId, foreignTenantId),
+    eq(projectPeopleTable.ownerUserId, userId),
+    eq(projectPeopleTable.id, foreignRelationship.id),
+  ));
+  assert.equal(foreignRows.length, 1);
+});
+
 test("HTTP entity detail is authorized, typed, bounded, and paginated", async () => {
   const [person] = await db.insert(peopleTable).values({
     tenantId,
@@ -725,25 +873,39 @@ test("HTTP entity detail is authorized, typed, bounded, and paginated", async ()
   const personResponse = await request(`/entities/person/${person.id}`);
   assert.equal(personResponse.status, 200);
   assert.equal(personResponse.body?.entity?.id, person.id);
+  assert.ok(Array.isArray(personResponse.body?.related?.projects));
+  assert.ok(Array.isArray(personResponse.body?.related?.expenses));
+  assert.ok(Array.isArray(personResponse.body?.timeline));
   assert.equal(personResponse.body?.related?.projects.length, 100);
   assert.equal(personResponse.body?.related?.financialParties[0]?.id, party.id);
 
   const projectResponse = await request(`/entities/project/${projects[0].id}`);
   assert.equal(projectResponse.status, 200);
   assert.equal(projectResponse.body?.entity?.id, projects[0].id);
+  assert.ok(Array.isArray(projectResponse.body?.related?.people));
+  assert.ok(Array.isArray(projectResponse.body?.timeline));
   assert.equal(projectResponse.body?.related?.tasks[0]?.id, task.id);
 
   const partyResponse = await request(`/entities/financial_party/${party.id}`);
   assert.equal(partyResponse.status, 200);
   assert.equal(partyResponse.body?.entity?.id, party.id);
+  assert.ok(Array.isArray(partyResponse.body?.related?.people));
+  assert.ok(Array.isArray(partyResponse.body?.relationships?.projects));
+  assert.ok(Array.isArray(partyResponse.body?.timeline));
   assert.equal(partyResponse.body?.related?.people[0]?.id, person.id);
   assert.equal(partyResponse.body?.related?.projects[0]?.id, projects[0].id);
 
   const page = await request(`/entities/person/${person.id}/timeline?limit=1&offset=1`);
   assert.equal(page.status, 200);
+  assert.equal(page.body?.entityType, "person");
+  assert.equal(page.body?.entityId, person.id);
+  assert.ok(Array.isArray(page.body?.events));
   assert.equal(page.body?.events.length, 1);
   const hardMax = await request(`/entities/person/${person.id}/timeline?limit=1000&offset=0`);
   assert.equal(hardMax.status, 200);
+  assert.equal(hardMax.body?.entityType, "person");
+  assert.equal(hardMax.body?.entityId, person.id);
+  assert.ok(Array.isArray(hardMax.body?.events));
   assert.ok(hardMax.body?.events.length <= 100);
 
   const invalidUuid = await request("/entities/person/not-a-uuid");
