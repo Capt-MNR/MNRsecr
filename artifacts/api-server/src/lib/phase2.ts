@@ -709,6 +709,36 @@ function expectedRowVersion(args: Record<string, unknown>): number | undefined {
   return Number.isSafeInteger(value) && value > 0 ? value : undefined;
 }
 
+async function enqueueCommitmentDeadlineTrigger(
+  identity: Identity,
+  commitment: typeof commitmentsTable.$inferSelect,
+  executor: DbExecutor,
+  writer: typeof enqueueTriggerOutbox,
+): Promise<void> {
+  if (!commitment.dueAt) return;
+  await writer({
+    identity,
+    eventType: "commitment.deadline",
+    aggregateType: "commitment",
+    aggregateId: commitment.id,
+    occurredAt: commitment.updatedAt,
+    availableAt: commitment.dueAt,
+    payload: {
+      commitmentId: commitment.id,
+      dueAt: commitment.dueAt.toISOString(),
+      status: commitment.status,
+      rowVersion: commitment.rowVersion,
+    },
+    dedupeKey: [
+      "commitment-deadline:v1",
+      identity.tenantId,
+      identity.userId,
+      commitment.id,
+      `v${commitment.rowVersion}`,
+    ].join(":"),
+  }, executor);
+}
+
 function jsonSafe(value: unknown): unknown {
   return JSON.parse(
     JSON.stringify(value, (_key, current) =>
@@ -2452,6 +2482,14 @@ async function executeTool(
         eq(commitmentsTable.id, commitmentId),
         ...(expectedVersion === undefined ? [] : [eq(commitmentsTable.rowVersion, expectedVersion)]),
       )).returning();
+      if (updated) {
+        await enqueueCommitmentDeadlineTrigger(
+          identity,
+          updated,
+          db,
+          options.triggerOutboxWriter ?? enqueueTriggerOutbox,
+        );
+      }
       result = updated
         ? { ok: true, commitment: updated }
         : { ok: false, error: expectedVersion === undefined ? "Commitment not found." : "Record changed after this edit was opened." };
@@ -3000,6 +3038,7 @@ async function executeTool(
       if (!title) return { ok: false, error: "Commitment title is required." };
       const dueAtValue = stringArg("dueAt");
       const dueAt = dueAtValue ? new Date(dueAtValue) : null;
+      if (dueAt && Number.isNaN(dueAt.getTime())) return { ok: false, error: "dueAt must be a valid ISO timestamp." };
       if (personId) {
         const [person] = await db.select({ id: peopleTable.id }).from(peopleTable).where(and(
           identityWhere(identity, peopleTable),
@@ -3011,6 +3050,13 @@ async function executeTool(
         tenantId: identity.tenantId, ownerUserId: identity.userId, title,
         personId: personId ?? null, dueAt, status: stringArg("status") ?? "open",
       }).returning();
+      if (!commitment) return { ok: false, error: "Could not create commitment." };
+      await enqueueCommitmentDeadlineTrigger(
+        identity,
+        commitment,
+        db,
+        options.triggerOutboxWriter ?? enqueueTriggerOutbox,
+      );
       result = { ok: true, commitment };
       break;
     }

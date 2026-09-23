@@ -171,11 +171,11 @@ test("evaluation is deterministic, dedupe is database-enforced, and tenant owner
   assert.equal(first.created, true);
   assert.equal(duplicate.created, false);
   assert.equal(duplicate.event.eventId, first.event.eventId);
-  assert.equal(evaluateTriggerEvent(first.event).eligible, true);
-  assert.equal(evaluateTriggerEvent({
+   assert.equal((await evaluateTriggerEvent(first.event)).eligible, true);
+   assert.equal((await evaluateTriggerEvent({
     ...first.event,
     payload: { status: "completed" },
-  }).eligible, false);
+   })).eligible, false);
 
   const otherIdentity = {
     tenantId: `${identity.tenantId}-other`,

@@ -18,6 +18,7 @@ import type { DbExecutor, Identity } from "./entity-graph";
 import { logger } from "./logger";
 import { featureFlags } from "./feature-flags";
 import { agentWorkRuntime } from "./agent-work/runtime";
+import { evaluateTriggerEvent } from "./trigger-rules";
 
 export type TriggerOutboxStatus = "pending" | "claimed" | "processed" | "quarantined";
 
@@ -51,6 +52,7 @@ export type EnqueueTriggerOutboxInput = {
   aggregateId: string;
   schemaVersion?: number;
   occurredAt?: Date;
+  availableAt?: Date;
   payload?: Record<string, unknown>;
   dedupeKey: string;
 };
@@ -64,6 +66,18 @@ export type TriggerEvaluation = {
   eligible: boolean;
   triggerKey: string;
   reason: string;
+  workIntentDedupeKey?: string;
+};
+
+export type EnqueueTaskThresholdTriggerInput = {
+  identity: Identity;
+  operator: "gt" | "gte" | "eq" | "lt" | "lte";
+  threshold: number;
+  previousValue: number;
+  currentValue: number;
+  transitionKey: string;
+  mode?: "edge" | "level";
+  occurredAt?: Date;
 };
 
 type TriggerOutboxRow = typeof triggerOutboxTable.$inferSelect;
@@ -105,6 +119,7 @@ export async function enqueueTriggerOutbox(
     aggregateId: input.aggregateId,
     schemaVersion: input.schemaVersion ?? 1,
     occurredAt: input.occurredAt ?? new Date(),
+    availableAt: input.availableAt ?? new Date(),
     payload: input.payload ?? {},
     dedupeKey: input.dedupeKey,
   }).onConflictDoNothing({
@@ -143,16 +158,43 @@ export async function enqueueTriggerOutbox(
   return { event: mapEvent(existing), created: false };
 }
 
-export function evaluateTriggerEvent(event: TriggerOutboxEvent): TriggerEvaluation {
-  const triggerKey = "task-created-to-agent-work-v1";
-  if (event.eventType !== "task.created" || event.aggregateType !== "task") {
-    return { eligible: false, triggerKey, reason: "no_matching_trigger" };
-  }
-  if (event.payload.status !== "pending") {
-    return { eligible: false, triggerKey, reason: "task_not_pending" };
-  }
-  return { eligible: true, triggerKey, reason: "task_created_pending" };
+export async function enqueueTaskThresholdTrigger(
+  input: EnqueueTaskThresholdTriggerInput,
+  executor: DbExecutor = db,
+): Promise<EnqueueTriggerOutboxResult> {
+  const conditionKey = [
+    "tasks",
+    "open_task_count",
+    input.operator,
+    input.threshold,
+  ].join(":");
+  return enqueueTriggerOutbox({
+    identity: input.identity,
+    eventType: "task.open_count_threshold",
+    aggregateType: "task",
+    aggregateId: "open-task-count",
+    occurredAt: input.occurredAt,
+    payload: {
+      entity: "tasks",
+      metric: "open_task_count",
+      operator: input.operator,
+      threshold: input.threshold,
+      previousValue: input.previousValue,
+      currentValue: input.currentValue,
+      transitionKey: input.transitionKey,
+      mode: input.mode ?? "edge",
+    },
+    dedupeKey: [
+      "task-threshold:v1",
+      input.identity.tenantId,
+      input.identity.userId,
+      conditionKey,
+      input.transitionKey,
+    ].join(":"),
+  }, executor);
 }
+
+export { evaluateTriggerEvent };
 
 function workIntentDedupeKey(event: TriggerOutboxEvent, triggerKey: string): string {
   return [
@@ -252,11 +294,15 @@ async function processClaimedEvent(event: TriggerOutboxEvent, now: Date): Promis
     if (!current) throw new Error("TRIGGER_OUTBOX_LEASE_LOST");
 
     const currentEvent = mapEvent(current);
-    const evaluation = evaluateTriggerEvent(currentEvent);
+    const evaluation = await evaluateTriggerEvent(currentEvent, {
+      executor: tx,
+      now,
+    });
     let outcome: "processed" | "coalesced" = "processed";
     if (evaluation.eligible) {
       const identity = { tenantId: currentEvent.tenantId, userId: currentEvent.ownerUserId };
-      const dedupeKey = workIntentDedupeKey(currentEvent, evaluation.triggerKey);
+      const dedupeKey = evaluation.workIntentDedupeKey
+        ?? workIntentDedupeKey(currentEvent, evaluation.triggerKey);
       const [existing] = await tx.select({ id: agentWorksTable.id })
         .from(agentWorksTable)
         .where(and(
