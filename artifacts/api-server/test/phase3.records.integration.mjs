@@ -96,6 +96,7 @@ async function startServer() {
     AI_PROVIDER: "unavailable",
     SECRETARY_TENANT_ID: tenantId,
     SECRETARY_USER_ID: userId,
+    AGENT_WORK_ALLOW_DEVELOPMENT_IDENTITY: "true",
   };
   delete env.GEMINI_API_KEY;
   delete env.GROQ_API_KEY;

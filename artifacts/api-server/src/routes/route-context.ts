@@ -1,16 +1,33 @@
 import type { Request, Response } from "express";
 import type { Identity } from "../lib/secretary";
+import { authenticateAccessToken, ACCESS_COOKIE } from "../lib/auth";
 
 export function requestId(req: Request): string {
   return String(req.id);
 }
 
 export function getIdentity(req: Request): Identity | null {
-  if (req.get("authorization") !== "Bearer dev-user") return null;
-  return {
-    tenantId: process.env.SECRETARY_TENANT_ID ?? "development",
-    userId: process.env.SECRETARY_USER_ID ?? "dev-user",
-  };
+  return req.authIdentity ?? null;
+}
+
+export async function authenticateRequest(req: Request): Promise<void> {
+  const authorization = req.get("authorization");
+  const bearer = authorization?.startsWith("Bearer ")
+    ? authorization.slice("Bearer ".length).trim()
+    : null;
+  const token = bearer ?? req.cookies?.[ACCESS_COOKIE] ?? null;
+  req.authAccessToken = token;
+  req.authIdentity = await authenticateAccessToken(token);
+  if (!req.authIdentity
+    && process.env.NODE_ENV !== "production"
+    && authorization === "Bearer dev-user"
+    && ["1", "true", "yes", "on"].includes(
+      (process.env.AGENT_WORK_ALLOW_DEVELOPMENT_IDENTITY ?? "false").trim().toLowerCase(),
+    )) {
+    const tenantId = process.env.SECRETARY_TENANT_ID ?? "development";
+    const userId = process.env.SECRETARY_USER_ID ?? "dev-user";
+    if (tenantId.trim() && userId.trim()) req.authIdentity = { tenantId, userId };
+  }
 }
 
 export function requireIdentity(req: Request, res: Response): Identity | null {

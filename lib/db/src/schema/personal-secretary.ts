@@ -20,6 +20,65 @@ const ownershipColumns = {
   ownerUserId: text("owner_user_id").notNull(),
 };
 
+export const authUsersTable = pgTable(
+  "auth_users",
+  {
+    id: text("id").primaryKey(),
+    email: text("email").notNull(),
+    passwordHash: text("password_hash").notNull(),
+    disabled: boolean("disabled").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("auth_users_email_unique").on(table.email),
+  ],
+);
+
+export const authTenantsTable = pgTable(
+  "auth_tenants",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+);
+
+export const authMembershipsTable = pgTable(
+  "auth_memberships",
+  {
+    tenantId: text("tenant_id").notNull(),
+    userId: text("user_id").notNull(),
+    role: text("role").notNull().default("owner"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("auth_memberships_tenant_user_unique").on(table.tenantId, table.userId),
+    index("auth_memberships_user_idx").on(table.userId),
+  ],
+);
+
+export const authSessionsTable = pgTable(
+  "auth_sessions",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    tenantId: text("tenant_id").notNull(),
+    accessTokenHash: text("access_token_hash").notNull(),
+    refreshTokenHash: text("refresh_token_hash").notNull(),
+    accessExpiresAt: timestamp("access_expires_at", { withTimezone: true }).notNull(),
+    refreshExpiresAt: timestamp("refresh_expires_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("auth_sessions_access_hash_unique").on(table.accessTokenHash),
+    uniqueIndex("auth_sessions_refresh_hash_unique").on(table.refreshTokenHash),
+    index("auth_sessions_user_idx").on(table.userId, table.revokedAt),
+  ],
+);
+
 export const peopleTable = pgTable(
   "people",
   {
@@ -666,6 +725,7 @@ export const mobilePushTokensTable = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
+    uniqueIndex("mobile_push_tokens_token_unique").on(table.token),
     uniqueIndex("mobile_push_tokens_owner_token_unique").on(
       table.tenantId,
       table.ownerUserId,

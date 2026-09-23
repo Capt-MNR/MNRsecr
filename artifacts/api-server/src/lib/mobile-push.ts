@@ -150,12 +150,13 @@ export async function registerMobilePushToken(
   },
 ): Promise<MobilePushToken> {
   const existing = await db.select().from(mobilePushTokensTable).where(and(
-    eq(mobilePushTokensTable.tenantId, identity.tenantId),
-    eq(mobilePushTokensTable.ownerUserId, identity.userId),
     eq(mobilePushTokensTable.token, input.token),
   )).limit(1);
 
   if (existing[0]) {
+    if (existing[0].tenantId !== identity.tenantId || existing[0].ownerUserId !== identity.userId) {
+      throw new Error("PUSH_TOKEN_OWNERSHIP_CONFLICT");
+    }
     const [updated] = await db.update(mobilePushTokensTable)
       .set({
         provider: input.provider,

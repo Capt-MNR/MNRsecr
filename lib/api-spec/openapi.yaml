@@ -22,7 +22,67 @@ tags:
     description: Financial graph operations
   - name: notifications
     description: Mobile notification registration and delivery operations
+  - name: auth
+    description: Database-backed user sessions
 paths:
+  /auth/signup:
+    post:
+      operationId: signup
+      tags: [auth]
+      summary: Create a user and private tenant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AuthSignupInput" }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/AuthSessionResponse" } } } }
+        "400": { description: Invalid signup, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "409": { description: Email already exists, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Start an authenticated session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AuthCredentials" }
+      responses:
+        "200": { description: Session created, content: { application/json: { schema: { $ref: "#/components/schemas/AuthSessionResponse" } } } }
+        "401": { description: Invalid credentials, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+  /auth/refresh:
+    post:
+      operationId: refreshSession
+      tags: [auth]
+      summary: Rotate an authenticated session
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refreshToken: { type: string }
+      responses:
+        "200": { description: Rotated session, content: { application/json: { schema: { $ref: "#/components/schemas/AuthSessionResponse" } } } }
+        "401": { description: Invalid refresh token, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+  /auth/me:
+    get:
+      operationId: getCurrentUser
+      tags: [auth]
+      summary: Get the authenticated user
+      responses:
+        "200": { description: Current user, content: { application/json: { schema: { type: object, required: [user], properties: { user: { $ref: "#/components/schemas/AuthUser" } } } } } }
+        "401": { description: Authentication required, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Revoke the current session
+      responses:
+        "204": { description: Session revoked }
   /push-tokens:
     post:
       operationId: registerMobilePushToken
@@ -1461,6 +1521,34 @@ components:
           type: array
           items: { $ref: "#/components/schemas/AgentWorkEvidence" }
       required: [work, runs, events, evidence]
+    AuthUser:
+      type: object
+      properties:
+        userId: { type: string }
+        tenantId: { type: string }
+        email: { type: string, format: email }
+      required: [userId, tenantId, email]
+    AuthCredentials:
+      type: object
+      properties:
+        email: { type: string, format: email, maxLength: 320 }
+        password: { type: string, minLength: 12, maxLength: 256 }
+      required: [email, password]
+    AuthSignupInput:
+      allOf:
+        - $ref: "#/components/schemas/AuthCredentials"
+        - type: object
+          properties:
+            name: { type: string, minLength: 1, maxLength: 120 }
+    AuthSessionResponse:
+      type: object
+      properties:
+        user: { $ref: "#/components/schemas/AuthUser" }
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        accessExpiresAt: { type: string, format: date-time }
+        refreshExpiresAt: { type: string, format: date-time }
+      required: [user, accessExpiresAt, refreshExpiresAt]
     ErrorResponse:
       type: object
       properties:

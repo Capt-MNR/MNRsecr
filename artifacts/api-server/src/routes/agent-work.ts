@@ -8,15 +8,21 @@ import {
 import { agentWorkAdapters } from "../lib/agent-work/factory";
 import { agentWorkRuntime } from "../lib/agent-work/runtime";
 import type { AgentWorkIdentity } from "../lib/agent-work/types";
+import { getIdentity } from "./route-context";
 
 const router: IRouter = Router();
 
 function identityFromRequest(req: Request): AgentWorkIdentity | null {
-  return agentWorkAdapters.identity.resolveRequest({
-    authorization: req.get("authorization"),
-    tenantId: req.get("x-tenant-id"),
-    userId: req.get("x-user-id"),
-  });
+  const identity = getIdentity(req);
+  return identity ?? (
+    process.env.NODE_ENV !== "production"
+      ? agentWorkAdapters.identity.resolveRequest({
+        authorization: req.get("authorization"),
+        tenantId: req.get("x-tenant-id"),
+        userId: req.get("x-user-id"),
+      })
+      : null
+  );
 }
 
 function authError(res: Response): void {

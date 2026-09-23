@@ -1,7 +1,9 @@
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
 import router from "./routes";
+import { authenticateRequest } from "./routes/route-context";
 import { logger } from "./lib/logger";
 import {
   classifySecretaryError,
@@ -37,7 +39,16 @@ app.use((req, res, next) => {
 app.use(cors());
 app.use(express.json({ limit: "15mb" }));
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
+app.use("/api", async (req, _res, next) => {
+  try {
+    await authenticateRequest(req);
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
 app.use("/api", router);
 
 app.use((req, res) => {

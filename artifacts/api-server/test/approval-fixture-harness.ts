@@ -16,6 +16,7 @@ const tenantId = `approval-fixture-${process.pid}-${Date.now()}`;
 const userId = `approval-fixture-user-${process.pid}`;
 process.env.SECRETARY_TENANT_ID = tenantId;
 process.env.SECRETARY_USER_ID = userId;
+process.env.AGENT_WORK_ALLOW_DEVELOPMENT_IDENTITY = "true";
 
 const requestedPort = Number.parseInt(process.env.FIXTURE_PORT ?? "0", 10);
 const port = Number.isInteger(requestedPort) && requestedPort >= 0 ? requestedPort : 0;

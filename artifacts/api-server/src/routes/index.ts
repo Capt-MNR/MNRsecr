@@ -10,9 +10,11 @@ import pushTokensRouter from "./push-tokens";
 import memoriesRouter from "./memories";
 import memoryCandidatesRouter from "./memory-candidates";
 import agentWorkRouter from "./agent-work";
+import authRouter from "./auth";
 
 const router: IRouter = Router();
 
+router.use(authRouter);
 router.use(healthRouter);
 router.use(secretaryRouter);
 router.use(conversationsRouter);

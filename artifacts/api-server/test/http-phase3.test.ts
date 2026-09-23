@@ -38,6 +38,7 @@ const tenantId = `http-phase3-${process.pid}-${Date.now()}`;
 const userId = "http-phase3-user";
 process.env.SECRETARY_TENANT_ID = tenantId;
 process.env.SECRETARY_USER_ID = userId;
+process.env.AGENT_WORK_ALLOW_DEVELOPMENT_IDENTITY = "true";
 process.env.AI_PROVIDER = "development";
 
 const { default: app } = await import("../src/app.ts");

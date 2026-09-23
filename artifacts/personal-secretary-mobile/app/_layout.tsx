@@ -15,7 +15,7 @@ import {
 import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
-import { setAuthTokenGetter, setBaseUrl } from '@workspace/api-client-react';
+import { setBaseUrl } from '@workspace/api-client-react';
 import { ThemeProvider } from '@/hooks/useColors';
 import { LanguageProvider } from '@/hooks/useLanguage';
 import {
@@ -24,13 +24,13 @@ import {
   secretaryPushConversationId,
 } from '../services/mobile-push';
 import { isQuickNotificationResponse } from '../services/quick-notification';
+import { AuthProvider, useAuth } from '../services/auth-context';
 
 const apiDomain = process.env.EXPO_PUBLIC_DOMAIN;
 // The Expo web preview proxies /api on its own origin. Keeping web requests
 // relative avoids a browser CORS preflight; native bundles still need the
 // injected absolute API domain.
 setBaseUrl(Platform.OS === 'web' ? null : apiDomain ? `https://${apiDomain}` : null);
-setAuthTokenGetter(() => 'dev-user');
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -39,6 +39,7 @@ const queryClient = new QueryClient();
 
 function RootLayoutNav() {
   const router = useRouter();
+  const { loading, user } = useAuth();
 
   useEffect(() => {
     let active = true;
@@ -70,6 +71,14 @@ function RootLayoutNav() {
     };
   }, [router]);
 
+  if (loading) return null;
+  if (!user) {
+    return (
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="auth" />
+      </Stack>
+    );
+  }
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
@@ -99,11 +108,13 @@ export default function RootLayout() {
         <LanguageProvider>
           <ErrorBoundary>
             <QueryClientProvider client={queryClient}>
-              <GestureHandlerRootView>
-                <KeyboardProvider>
-                  <RootLayoutNav />
-                </KeyboardProvider>
-              </GestureHandlerRootView>
+              <AuthProvider>
+                <GestureHandlerRootView>
+                  <KeyboardProvider>
+                    <RootLayoutNav />
+                  </KeyboardProvider>
+                </GestureHandlerRootView>
+              </AuthProvider>
             </QueryClientProvider>
           </ErrorBoundary>
         </LanguageProvider>

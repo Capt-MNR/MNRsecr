@@ -43,6 +43,7 @@ async function startServer() {
     EXPERIMENTAL_PATTERN_INSIGHTS_ENABLED: patternInsightsEnabled ? "1" : "0",
     SECRETARY_TENANT_ID: testTenantId,
     SECRETARY_USER_ID: testUserId,
+    AGENT_WORK_ALLOW_DEVELOPMENT_IDENTITY: "true",
   };
   delete env.AI_PRIMARY_PROVIDER;
   delete env.AI_FALLBACK_PROVIDER;

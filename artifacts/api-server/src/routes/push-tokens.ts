@@ -29,6 +29,10 @@ router.post("/push-tokens", async (req, res): Promise<void> => {
     await registerMobilePushToken(identity, parsed.data);
     res.json(RegisterMobilePushTokenResponse.parse({ registered: true, enabled: true }));
   } catch (error) {
+    if (error instanceof Error && error.message === "PUSH_TOKEN_OWNERSHIP_CONFLICT") {
+      sendRouteError(req, res, 409, "هذا الجهاز مرتبط بحساب آخر.", "PUSH_TOKEN_OWNERSHIP_CONFLICT");
+      return;
+    }
     req.log.error({ error }, "Push token registration failed");
     sendRouteError(req, res, 500, "تعذر تسجيل الإشعارات.", "PUSH_TOKEN_REGISTRATION_FAILED");
   }
@@ -47,8 +51,11 @@ router.delete("/push-tokens", async (req, res): Promise<void> => {
   }
 
   try {
-    const enabled = !(await disableMobilePushToken(identity, parsed.data.token));
-    res.json(UnregisterMobilePushTokenResponse.parse({ registered: true, enabled }));
+    const disabled = await disableMobilePushToken(identity, parsed.data.token);
+    res.json(UnregisterMobilePushTokenResponse.parse({
+      registered: disabled,
+      enabled: false,
+    }));
   } catch (error) {
     req.log.error({ error }, "Push token disable failed");
     sendRouteError(req, res, 500, "تعذر إيقاف الإشعارات.", "PUSH_TOKEN_DISABLE_FAILED");

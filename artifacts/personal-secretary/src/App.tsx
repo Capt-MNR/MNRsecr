@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
@@ -17,6 +17,8 @@ import {
   useLocation,
   Router as WouterRouter,
 } from 'wouter';
+import AuthScreen from '@/components/auth-screen';
+import { getCurrentUser, logout, type AuthUser } from '@/lib/auth';
 
 const queryClient = new QueryClient();
 
@@ -47,11 +49,31 @@ function RoutedErrorBoundary({ children }: { children: ReactNode }) {
 }
 
 function App() {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    void getCurrentUser()
+      .then(setUser)
+      .catch(() => setUser(null))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return <div className="flex min-h-screen items-center justify-center text-muted-foreground">جارٍ التحقق من الجلسة…</div>;
+  }
+  if (!user) return <AuthScreen onAuthenticated={setUser} />;
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-          <Router />
+          <div className="relative">
+            <button className="fixed left-4 top-4 z-50 rounded-lg border bg-background/90 px-3 py-1.5 text-xs text-muted-foreground shadow-sm" onClick={() => { void logout().finally(() => setUser(null)); }}>
+              تسجيل الخروج
+            </button>
+            <Router />
+          </div>
         </WouterRouter>
         <Toaster />
       </TooltipProvider>

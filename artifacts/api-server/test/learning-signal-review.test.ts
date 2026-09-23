@@ -19,6 +19,7 @@ const otherTenantId = `${tenantId}-other`;
 const userId = "learning-review-user";
 process.env.SECRETARY_TENANT_ID = tenantId;
 process.env.SECRETARY_USER_ID = userId;
+process.env.AGENT_WORK_ALLOW_DEVELOPMENT_IDENTITY = "true";
 process.env.AI_PROVIDER = "development";
 
 const { default: app } = await import("../src/app.ts");

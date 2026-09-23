@@ -48,20 +48,12 @@ import {
   createBrainDecisionEnvelope,
 } from "../lib/brain-contract";
 import { parseSemanticRequest } from "../lib/deterministic-intelligence";
+import { getIdentity, requestId as routeRequestId } from "./route-context";
 
 const router: IRouter = Router();
 
-function getIdentity(req: Request): Identity | null {
-  const authorization = req.get("authorization");
-  if (authorization !== "Bearer dev-user") return null;
-  return {
-    tenantId: process.env.SECRETARY_TENANT_ID ?? "development",
-    userId: process.env.SECRETARY_USER_ID ?? "dev-user",
-  };
-}
-
 function requestId(req: Request): string {
-  return String(req.id);
+  return routeRequestId(req);
 }
 
 function sendError(

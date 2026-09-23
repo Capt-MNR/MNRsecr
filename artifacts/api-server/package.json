@@ -18,6 +18,7 @@
     "run:brain-eval": "../../scripts/node_modules/.bin/tsx test/brain-evaluation/run.ts",
     "test:financial": "../../scripts/node_modules/.bin/tsx --test test/activity-atomicity.test.ts test/financial-graph.test.ts test/relationship-graph.test.ts",
     "test:approval-reconciliation": "../../scripts/node_modules/.bin/tsx --test test/approval-reconciliation.test.ts",
+    "test:auth": "../../scripts/node_modules/.bin/tsx --test test/auth-isolation.test.ts",
     "test:dialect": "../../scripts/node_modules/.bin/tsx --test test/deterministic-intelligence.test.ts test/arabic-dialect-corpus.test.ts test/phase2-optimization-layers.test.ts",
     "test:learning-signals": "../../scripts/node_modules/.bin/tsx --test test/learning-signals.test.ts",
     "test:learning-review": "../../scripts/node_modules/.bin/tsx --test test/learning-signal-review.test.ts",

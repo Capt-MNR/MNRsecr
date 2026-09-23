@@ -60,8 +60,10 @@ export class EnvironmentIdentityAdapter implements IdentityAdapter {
 
   resolveRequest(input: IdentityRequest): AgentWorkIdentity | null {
     if (!developmentIdentityEnabled() || input.authorization !== "Bearer dev-user") return null;
-    const tenantId = input.tenantId ?? process.env.SECRETARY_TENANT_ID ?? "development";
-    const userId = input.userId ?? process.env.SECRETARY_USER_ID ?? "dev-user";
+    // Even in the explicit development adapter, ownership comes from the
+    // server process environment. Client headers are never an identity source.
+    const tenantId = process.env.SECRETARY_TENANT_ID ?? "development";
+    const userId = process.env.SECRETARY_USER_ID ?? "dev-user";
     if (!tenantId.trim() || !userId.trim()) return null;
     return { tenantId, userId };
   }
