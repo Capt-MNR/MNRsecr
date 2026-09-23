@@ -26,11 +26,11 @@ async function resumeWork(
 ): Promise<void> {
   const work = await adapters.storage.getWork(identity, workId);
   if (!work || work.status === to) return;
-  if (work.status === "waiting") {
+  if (work.status === "waiting" || (to === "active" && work.status === "needs_review")) {
     await adapters.storage.changeWorkStatus({
       identity,
       workId,
-      from: "waiting",
+      from: work.status,
       to,
       actorType: "agent",
       actorId: identity.userId,

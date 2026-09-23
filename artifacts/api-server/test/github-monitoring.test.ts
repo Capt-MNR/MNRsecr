@@ -12,7 +12,7 @@ import type {
 
 const baseNow = new Date("2026-09-21T10:00:00.000Z");
 
-function createHarness() {
+function createHarness(schedule: Record<string, unknown> = { frequency: "interval", minutes: 60 }) {
   const identity = { tenantId: "github-tenant-1", userId: "github-owner-1" };
   const work: AgentWorkRecord = {
     id: "github-work-1",
@@ -32,7 +32,7 @@ function createHarness() {
       threshold: 5,
     },
     action: { type: "notify", deepLink: "work_detail" },
-    schedule: { frequency: "interval", minutes: 60 },
+    schedule,
     nextRunAt: new Date(baseNow.getTime() - 1_000),
     lastRunAt: null,
     lastRunStatus: null,
@@ -330,6 +330,26 @@ test("GitHub source rejects invalid configuration and verifies repository identi
       fetchImpl: async () => wrongRepositoryResponse,
     });
     assert.deepEqual(verified, { ok: false, reason: "malformed_response" });
+  } finally {
+    globalThis.fetch = harness.originalFetch;
+  }
+});
+
+test("one-shot GitHub failure becomes terminal instead of retrying every scheduler cycle", async () => {
+  const harness = createHarness({});
+  harness.setMode("timeout");
+  const runner = new AgentWorkRunner({
+    adapters: harness.adapters,
+    now: () => baseNow,
+  });
+  try {
+    const first = await runner.tick(baseNow);
+    assert.equal(first.failed, 1);
+    assert.equal(harness.work.status, "failed");
+    assert.equal(harness.work.nextRunAt, null);
+    const second = await runner.tick(new Date(baseNow.getTime() + 60_000));
+    assert.equal(second.inspected, 0);
+    assert.equal(second.claimed, 0);
   } finally {
     globalThis.fetch = harness.originalFetch;
   }

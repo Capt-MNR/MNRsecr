@@ -166,3 +166,60 @@ test("internal task monitoring establishes a quiet baseline and stays quiet when
   assert.equal(notificationCount, 0);
   assert.deepEqual(state.events, ["run_unchanged", "run_unchanged"]);
 });
+
+test("scheduler isolates a failed candidate and continues with the next due Work", async () => {
+  process.env.NODE_ENV = "development";
+  process.env.AGENT_WORK_ENABLED = "true";
+  process.env.AGENT_WORK_RUNNER_ENABLED = "true";
+  const goodIdentity = { tenantId: "scheduler-good-tenant", userId: "scheduler-good-owner" };
+  const badIdentity = { tenantId: "scheduler-bad-tenant", userId: "scheduler-bad-owner" };
+  const goodWork = work({ id: "good-work", identity: goodIdentity });
+  const badWork = work({ id: "bad-work", identity: badIdentity });
+  const run: AgentWorkRunRecord = {
+    id: "good-run",
+    workId: goodWork.id,
+    identity: goodIdentity,
+    attempt: 1,
+    status: "claimed",
+    idempotencyKey: `agent-work-run:${goodWork.id}:${goodWork.nextRunAt?.toISOString()}`,
+    leaseToken: "good-lease",
+    leaseExpiresAt: new Date(now.getTime() + 60_000),
+    startedAt: now,
+    completedAt: null,
+    verification: null,
+    error: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const adapters = {
+    scheduler: { driver: "stub", schedule: async () => ({ scheduled: false, driver: "stub" as const, reason: "test" }), cancel: async () => undefined },
+    identity: {
+      driver: "development",
+      resolveRequest: () => goodIdentity,
+      resolveBackground: (input: { tenantId: string; userId: string }) => input,
+    },
+    notification: { driver: "stub", notify: async () => ({ status: "accepted" as const, driver: "stub" as const }) },
+    storage: {
+      driver: "stub",
+      listDueWorks: async () => [
+        { identity: badIdentity, workId: badWork.id, nextRunAt: badWork.nextRunAt },
+        { identity: goodIdentity, workId: goodWork.id, nextRunAt: goodWork.nextRunAt },
+      ],
+      listWaitingWorks: async () => [],
+      getWork: async (_identity: typeof goodIdentity, workId: string) => workId === badWork.id ? badWork : goodWork,
+      claimRun: async (input: { identity: typeof goodIdentity }) => {
+        if (input.identity.tenantId === badIdentity.tenantId) throw new Error("simulated claim failure");
+        return run;
+      },
+      storeEvidenceSnapshot: async () => ({ reference: "evidence", stored: true, driver: "stub" as const }),
+      completeRun: async (input: { status: AgentWorkRunRecord["status"] }) => ({ ...run, status: input.status, leaseToken: null }),
+      addEvent: async (input: { eventType: string }) => ({ id: input.eventType }),
+    },
+  } as unknown as AgentWorkAdapters;
+
+  const result = await new AgentWorkRunner({ adapters, now: () => now }).tick(now);
+  assert.equal(result.inspected, 2);
+  assert.equal(result.claimed, 1);
+  assert.equal(result.completed, 1);
+  assert.equal(result.failed, 1);
+});

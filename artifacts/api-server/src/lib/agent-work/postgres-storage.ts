@@ -18,7 +18,7 @@ import {
   agentWorksTable,
   db,
 } from "@workspace/db";
-import { redactEvidenceSnapshot, transitionWork } from "./contract";
+import { isLeaseExpired, redactEvidenceSnapshot, transitionWork } from "./contract";
 import type {
   AgentWorkEventRecord,
   AgentWorkEvidenceRecord,
@@ -267,12 +267,14 @@ export class PostgresAgentWorkStorageAdapter implements StorageAdapter {
 
   async claimRun(input: ClaimAgentWorkRunInput): Promise<AgentWorkRunRecord | null> {
     return db.transaction(async (tx) => {
-      const [existing] = await tx.select().from(agentWorkRunsTable).where(and(
+      const [initialExisting] = await tx.select().from(agentWorkRunsTable).where(and(
         eq(agentWorkRunsTable.tenantId, input.identity.tenantId),
         eq(agentWorkRunsTable.ownerUserId, input.identity.userId),
         eq(agentWorkRunsTable.idempotencyKey, input.idempotencyKey),
       ));
-      if (existing) return mapRun(existing);
+      if (initialExisting && !activeRunStatuses.includes(initialExisting.status as AgentWorkRunStatus)) {
+        return mapRun(initialExisting);
+      }
 
       const [work] = await tx.select().from(agentWorksTable).where(and(
         ownerWhere(input.identity, agentWorksTable),
@@ -281,13 +283,78 @@ export class PostgresAgentWorkStorageAdapter implements StorageAdapter {
       if (!work || work.status !== "active") return null;
       if (work.nextRunAt && work.nextRunAt.getTime() > input.now.getTime()) return null;
 
-      const [activeRun] = await tx.select().from(agentWorkRunsTable).where(and(
+      // Re-read after the Work lock. A concurrent worker may have inserted
+      // the idempotent run while this transaction was waiting.
+      const [existing] = await tx.select().from(agentWorkRunsTable).where(and(
+        eq(agentWorkRunsTable.tenantId, input.identity.tenantId),
+        eq(agentWorkRunsTable.ownerUserId, input.identity.userId),
+        eq(agentWorkRunsTable.idempotencyKey, input.idempotencyKey),
+      )).for("update");
+      if (existing && !activeRunStatuses.includes(existing.status as AgentWorkRunStatus)) {
+        return mapRun(existing);
+      }
+
+      const activeRuns = await tx.select().from(agentWorkRunsTable).where(and(
         eq(agentWorkRunsTable.tenantId, input.identity.tenantId),
         eq(agentWorkRunsTable.ownerUserId, input.identity.userId),
         eq(agentWorkRunsTable.workId, input.workId),
         inArray(agentWorkRunsTable.status, activeRunStatuses),
-        or(isNull(agentWorkRunsTable.leaseExpiresAt), gt(agentWorkRunsTable.leaseExpiresAt, input.now)),
-      )).limit(1);
+      )).for("update");
+
+      const recoveredRuns: typeof activeRuns = [];
+      for (const activeRun of activeRuns) {
+        if (!isLeaseExpired(input.now, activeRun.leaseExpiresAt)) continue;
+        const [recovered] = await tx.update(agentWorkRunsTable).set({
+          status: "uncertain",
+          verification: {
+            kind: "lease_expired_recovery",
+            safe: false,
+            previousStatus: activeRun.status,
+          },
+          error: "AGENT_WORK_RUN_LEASE_EXPIRED_UNCERTAIN",
+          completedAt: input.now,
+          leaseToken: null,
+          leaseExpiresAt: null,
+          updatedAt: input.now,
+        }).where(and(
+          eq(agentWorkRunsTable.tenantId, input.identity.tenantId),
+          eq(agentWorkRunsTable.ownerUserId, input.identity.userId),
+          eq(agentWorkRunsTable.id, activeRun.id),
+          inArray(agentWorkRunsTable.status, activeRunStatuses),
+          or(isNull(agentWorkRunsTable.leaseExpiresAt), lte(agentWorkRunsTable.leaseExpiresAt, input.now)),
+        )).returning();
+        if (!recovered) continue;
+        recoveredRuns.push(recovered);
+        await tx.update(agentWorksTable).set({
+          status: "needs_review",
+          lastRunAt: input.now,
+          lastRunStatus: "uncertain",
+          updatedAt: input.now,
+          rowVersion: sql`${agentWorksTable.rowVersion} + 1`,
+        }).where(and(
+          ownerWhere(input.identity, agentWorksTable),
+          eq(agentWorksTable.id, work.id),
+          eq(agentWorksTable.status, "active"),
+        ));
+        await tx.insert(agentWorkEventsTable).values({
+          tenantId: input.identity.tenantId,
+          ownerUserId: input.identity.userId,
+          workId: work.id,
+          runId: recovered.id,
+          eventType: "run_lease_expired",
+          actorType: "recovery",
+          summary: "انتهت مهلة تنفيذ العمل قبل معرفة نتيجته؛ أوقفته للمراجعة لمنع تكرار الأثر.",
+          metadata: {
+            status: "uncertain",
+            safeToRetry: false,
+            leaseExpiresAt: activeRun.leaseExpiresAt?.toISOString() ?? null,
+          },
+          dedupeKey: `agent-work-lease-expired:${recovered.id}`,
+        }).onConflictDoNothing();
+      }
+      if (recoveredRuns.length > 0) return mapRun(recoveredRuns[0]);
+
+      const activeRun = activeRuns[0];
       if (activeRun) return mapRun(activeRun);
 
       const [latest] = await tx.select({ attempt: agentWorkRunsTable.attempt })
@@ -352,6 +419,39 @@ export class PostgresAgentWorkStorageAdapter implements StorageAdapter {
 
   async completeRun(input: CompleteAgentWorkRunInput): Promise<AgentWorkRunRecord> {
     return db.transaction(async (tx) => {
+      // Recovery and completion use the same lock order (Work, then Run).
+      // This makes an expired lease a real fence: an old worker cannot
+      // complete after a recovery transaction has classified its run.
+      const [identityRun] = await tx.select({ workId: agentWorkRunsTable.workId })
+        .from(agentWorkRunsTable)
+        .where(and(
+          eq(agentWorkRunsTable.tenantId, input.identity.tenantId),
+          eq(agentWorkRunsTable.ownerUserId, input.identity.userId),
+          eq(agentWorkRunsTable.id, input.runId),
+        ))
+        .limit(1);
+      if (!identityRun) throw new Error("AGENT_WORK_RUN_LEASE_CONFLICT");
+
+      const [work] = await tx.select().from(agentWorksTable).where(and(
+        ownerWhere(input.identity, agentWorksTable),
+        eq(agentWorksTable.id, identityRun.workId),
+      )).for("update");
+      if (!work) throw new Error("AGENT_WORK_RUN_LEASE_CONFLICT");
+
+      const [currentRun] = await tx.select().from(agentWorkRunsTable).where(and(
+        eq(agentWorkRunsTable.tenantId, input.identity.tenantId),
+        eq(agentWorkRunsTable.ownerUserId, input.identity.userId),
+        eq(agentWorkRunsTable.id, input.runId),
+      )).for("update");
+      if (
+        !currentRun
+        || !activeRunStatuses.includes(currentRun.status as AgentWorkRunStatus)
+        || currentRun.leaseToken !== input.leaseToken
+        || isLeaseExpired(input.completedAt, currentRun.leaseExpiresAt)
+      ) {
+        throw new Error("AGENT_WORK_RUN_LEASE_CONFLICT");
+      }
+
       const [run] = await tx.update(agentWorkRunsTable).set({
         status: input.status,
         verification: input.verification ?? null,
@@ -366,6 +466,7 @@ export class PostgresAgentWorkStorageAdapter implements StorageAdapter {
         eq(agentWorkRunsTable.id, input.runId),
         eq(agentWorkRunsTable.leaseToken, input.leaseToken),
         inArray(agentWorkRunsTable.status, activeRunStatuses),
+        gt(agentWorkRunsTable.leaseExpiresAt, input.completedAt),
       )).returning();
       if (!run) throw new Error("AGENT_WORK_RUN_LEASE_CONFLICT");
       await tx.update(agentWorksTable).set({

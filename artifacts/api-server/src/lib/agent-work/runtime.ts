@@ -95,6 +95,7 @@ export class AgentWorkRuntime {
     error?: string | null;
     nextRunAt?: Date | null;
     workStatus?: AgentWorkRecord["status"];
+    completedAt?: Date;
   }): Promise<AgentWorkRunRecord> {
     assertEnabled();
     if (!input.run.leaseToken) throw new Error("AGENT_WORK_RUN_LEASE_MISSING");
@@ -105,7 +106,7 @@ export class AgentWorkRuntime {
       status: input.status,
       verification: input.verification,
       error: input.error,
-      completedAt: new Date(),
+      completedAt: input.completedAt ?? new Date(),
       ...(Object.prototype.hasOwnProperty.call(input, "nextRunAt")
         ? { nextRunAt: input.nextRunAt ?? null }
         : {}),

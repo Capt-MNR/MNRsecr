@@ -114,7 +114,15 @@ test("delegated GitHub condition requests one approval, executes create_task, ve
     if (claim.kind !== "claimed") throw new Error("approval was not claimed");
     const result = await executeApprovedOperation(identity, claim.operation);
     const completed = await completeOperation(identity, operationId as string, result);
-    await recordAgentWorkActionApproved(identity, completed, result, adapters);
+    // Simulate a restart after the authoritative operation commit but before
+    // the Agent Work reconciliation callback ran.
+    const freshStorage = new PostgresAgentWorkStorageAdapter();
+    const recoveryAdapters = { ...adapters, storage: freshStorage } satisfies AgentWorkAdapters;
+    const recovered = await new AgentWorkRunner({
+      adapters: recoveryAdapters,
+      now: () => now,
+    }).tick(now);
+    assert.equal(recovered.completed, 1);
 
     const resumed = await storage.getWork(identity, work.id);
     assert.equal(resumed?.status, "active");

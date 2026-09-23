@@ -3,7 +3,10 @@ import { agentWorkAdapters } from "./factory";
 import { AgentWorkRuntime } from "./runtime";
 import { compareReadOnlyEvidence } from "./contract";
 import { readGitHubRepositorySource, readInternalRecordsSource } from "./sources";
-import { recordAgentWorkActionRejected } from "./delegated-actions";
+import {
+  recordAgentWorkActionApproved,
+  recordAgentWorkActionRejected,
+} from "./delegated-actions";
 import {
   createPendingOperation,
   displayForOperation,
@@ -174,7 +177,7 @@ async function findLatestActionEvent(
     : null;
 }
 
-async function reconcileExpiredApproval(
+async function reconcileWaitingApproval(
   adapters: AgentWorkAdapters,
   identity: AgentWorkRecord["identity"],
   work: AgentWorkRecord,
@@ -183,11 +186,23 @@ async function reconcileExpiredApproval(
   const action = asRecord(work.action);
   if (action.type !== "create_task" && action.toolName !== "create_task") return false;
   const latestAction = await findLatestActionEvent(adapters, identity, work.id);
-  if (!latestAction || latestAction.status !== "expired") return false;
+  if (!latestAction) return false;
   const operation = await getOperation(identity, latestAction.operationId);
-  if (!operation || operation.status !== "expired") return false;
-  await recordAgentWorkActionRejected(identity, operation, "expired", adapters);
-  return true;
+  if (!operation) return false;
+  if (operation.status === "completed" && operation.result) {
+    await recordAgentWorkActionApproved(identity, operation, operation.result, adapters);
+    return true;
+  }
+  if (operation.status === "expired" || operation.status === "rejected" || operation.status === "failed") {
+    await recordAgentWorkActionRejected(
+      identity,
+      operation,
+      operation.status === "expired" ? "expired" : operation.status === "rejected" ? "rejected" : "failed",
+      adapters,
+    );
+    return true;
+  }
+  return false;
 }
 
 function runIdForApproval(workId: string, now: Date): string {
@@ -352,7 +367,7 @@ async function planExecution(
       return {
         plan: {
           status: "failed",
-          workStatus: "active",
+          workStatus: recurring ? "active" : "failed",
           nextRunAt,
           verification: {
             kind: "external_read_failed",
@@ -541,31 +556,49 @@ export class AgentWorkRunner {
   async tick(now = this.now()): Promise<AgentWorkRunnerTickResult> {
     const empty = { enabled: false, inspected: 0, claimed: 0, completed: 0, skipped: 0, failed: 0 };
     if (!featureFlags.agentWork() || !runnerEnabled()) return empty;
-    const [due, waiting] = await Promise.all([
-      this.adapters.storage.listDueWorks({ now, limit: MAX_DUE_WORKS }),
-      this.adapters.storage.listWaitingWorks({ limit: MAX_DUE_WORKS }),
-    ]);
+    let due: Awaited<ReturnType<AgentWorkAdapters["storage"]["listDueWorks"]>>;
+    let waiting: Awaited<ReturnType<AgentWorkAdapters["storage"]["listWaitingWorks"]>>;
+    try {
+      [due, waiting] = await Promise.all([
+        this.adapters.storage.listDueWorks({ now, limit: MAX_DUE_WORKS }),
+        this.adapters.storage.listWaitingWorks({ limit: MAX_DUE_WORKS }),
+      ]);
+    } catch {
+      return { ...empty, enabled: true, failed: 1 };
+    }
     const candidates = [...due, ...waiting];
     const result: AgentWorkRunnerTickResult = { ...empty, enabled: true, inspected: candidates.length };
 
     for (const candidate of candidates) {
-      const identity = this.adapters.identity.resolveBackground({
-        tenantId: candidate.identity.tenantId,
-        userId: candidate.identity.userId,
-        actor: "scheduler",
-      });
+      let identity: AgentWorkRecord["identity"] | null;
+      try {
+        identity = this.adapters.identity.resolveBackground({
+          tenantId: candidate.identity.tenantId,
+          userId: candidate.identity.userId,
+          actor: "scheduler",
+        });
+      } catch {
+        result.failed += 1;
+        continue;
+      }
       if (!identity) {
         result.skipped += 1;
         continue;
       }
-      const work = await this.adapters.storage.getWork(identity, candidate.workId);
+      let work: AgentWorkRecord | null;
+      try {
+        work = await this.adapters.storage.getWork(identity, candidate.workId);
+      } catch {
+        result.failed += 1;
+        continue;
+      }
       if (!work) {
         result.skipped += 1;
         continue;
       }
       if (work.status === "waiting") {
         try {
-          if (await reconcileExpiredApproval(this.adapters, identity, work)) result.completed += 1;
+          if (await reconcileWaitingApproval(this.adapters, identity, work)) result.completed += 1;
           else result.skipped += 1;
         } catch {
           result.failed += 1;
@@ -578,18 +611,25 @@ export class AgentWorkRunner {
       }
       const slot = candidate.nextRunAt?.toISOString() ?? "immediate";
       const idempotencyKey = `agent-work-run:${candidate.workId}:${slot}`;
-      const run = await this.adapters.storage.claimRun({
-        identity,
-        workId: candidate.workId,
-        now,
-        leaseMs: this.leaseMs,
-        idempotencyKey,
-      });
+      let run: AgentWorkRunRecord | null;
+      try {
+        run = await this.adapters.storage.claimRun({
+          identity,
+          workId: candidate.workId,
+          now,
+          leaseMs: this.leaseMs,
+          idempotencyKey,
+        });
+      } catch {
+        result.failed += 1;
+        continue;
+      }
       if (!run || !run.leaseToken || run.idempotencyKey !== idempotencyKey || !activeRunStatuses.has(run.status)) {
         result.skipped += 1;
         continue;
       }
       result.claimed += 1;
+      let approvalEventRecorded = false;
       try {
         const execution = await planExecution(this.adapters, identity, work, now, run.id);
         const plan = execution.plan;
@@ -599,15 +639,6 @@ export class AgentWorkRunner {
           runId: run.id,
           snapshot: { ...execution.evidence, checkedAt: now.toISOString() },
           retentionClass: "standard",
-        });
-        await this.runtime.completeRun({
-          identity,
-          run,
-          status: plan.status,
-          verification: plan.verification,
-          error: plan.error ?? null,
-          nextRunAt: plan.nextRunAt,
-          workStatus: plan.workStatus,
         });
         if (plan.approvalOperationId) {
           await this.adapters.storage.addEvent({
@@ -626,7 +657,18 @@ export class AgentWorkRunner {
             },
             dedupeKey: `agent-work-approval-requested:${plan.approvalOperationId}`,
           });
+          approvalEventRecorded = true;
         }
+        await this.runtime.completeRun({
+          identity,
+          run,
+          status: plan.status,
+          verification: plan.verification,
+          error: plan.error ?? null,
+          nextRunAt: plan.nextRunAt,
+          workStatus: plan.workStatus,
+          completedAt: this.now(),
+        });
         if (plan.status === "failed") {
           await this.adapters.storage.addEvent({
             identity,
@@ -692,6 +734,10 @@ export class AgentWorkRunner {
         result.completed += 1;
       } catch (error) {
         result.failed += 1;
+        // The approval operation and its durable link must remain resumable
+        // if completion lost its lease. Marking the Work failed here would
+        // strand a valid approval and make a later retry unsafe.
+        if (approvalEventRecorded) continue;
         try {
           await this.runtime.completeRun({
             identity,
@@ -701,6 +747,7 @@ export class AgentWorkRunner {
             verification: { kind: "runner_failure", safe: false },
             workStatus: "failed",
             nextRunAt: null,
+            completedAt: this.now(),
           });
         } catch {
           // The lease/DB failure is already represented by the runner counters.
