@@ -394,6 +394,8 @@ router.post("/turns", async (req, res): Promise<void> => {
     }
     if (operation) {
       void dispatchMobilePush(identity, {
+        dedupeKey: `secretary-approval-notification:${operation.operationId}`,
+        operationId: operation.operationId,
         title: result.action?.type === "pending_confirmation"
           ? "تأكيد سريع مطلوب"
           : "السكرتير يحتاج موافقتك",
@@ -575,6 +577,8 @@ router.post("/approvals/:operationId/approve", async (req, res): Promise<void> =
     }
     if (result.action?.type === "reminder_created") {
       void dispatchMobilePush(identity, {
+        dedupeKey: `secretary-reminder-created:${operationId}`,
+        operationId,
         title: "تذكير جديد",
         body: result.assistantMessage,
         data: {

@@ -18,6 +18,7 @@ import {
   agentWorksTable,
   db,
 } from "@workspace/db";
+import { enqueueMobilePushOutbox } from "../mobile-push";
 import { isLeaseExpired, redactEvidenceSnapshot, transitionWork } from "./contract";
 import type {
   AgentWorkEventRecord,
@@ -31,6 +32,7 @@ import type {
   AgentWorkDriver,
   ClaimAgentWorkRunInput,
   CompleteAgentWorkRunInput,
+  CompleteAgentWorkRunWithNotificationInput,
   CreateAgentWorkEventInput,
   CreateAgentWorkInput,
   DueAgentWorkRecord,
@@ -451,6 +453,99 @@ export class PostgresAgentWorkStorageAdapter implements StorageAdapter {
       ) {
         throw new Error("AGENT_WORK_RUN_LEASE_CONFLICT");
       }
+
+      const [run] = await tx.update(agentWorkRunsTable).set({
+        status: input.status,
+        verification: input.verification ?? null,
+        error: input.error ?? null,
+        completedAt: input.completedAt,
+        leaseToken: null,
+        leaseExpiresAt: null,
+        updatedAt: input.completedAt,
+      }).where(and(
+        eq(agentWorkRunsTable.tenantId, input.identity.tenantId),
+        eq(agentWorkRunsTable.ownerUserId, input.identity.userId),
+        eq(agentWorkRunsTable.id, input.runId),
+        eq(agentWorkRunsTable.leaseToken, input.leaseToken),
+        inArray(agentWorkRunsTable.status, activeRunStatuses),
+        gt(agentWorkRunsTable.leaseExpiresAt, input.completedAt),
+      )).returning();
+      if (!run) throw new Error("AGENT_WORK_RUN_LEASE_CONFLICT");
+      await tx.update(agentWorksTable).set({
+        lastRunAt: input.completedAt,
+        lastRunStatus: input.status,
+        ...(Object.prototype.hasOwnProperty.call(input, "nextRunAt")
+          ? { nextRunAt: input.nextRunAt ?? null }
+          : {}),
+        ...(input.workStatus ? { status: input.workStatus } : {}),
+        updatedAt: input.completedAt,
+        rowVersion: sql`${agentWorksTable.rowVersion} + 1`,
+      }).where(and(
+        eq(agentWorksTable.tenantId, input.identity.tenantId),
+        eq(agentWorksTable.ownerUserId, input.identity.userId),
+        eq(agentWorksTable.id, run.workId),
+      ));
+      await tx.insert(agentWorkEventsTable).values({
+        tenantId: input.identity.tenantId,
+        ownerUserId: input.identity.userId,
+        workId: run.workId,
+        runId: run.id,
+        eventType: "run_completed",
+        actorType: "system",
+        summary: `انتهت المحاولة بحالة ${input.status}.`,
+        metadata: {
+          status: input.status,
+          ...(input.verification ? { verification: input.verification } : {}),
+          ...(input.error ? { error: input.error } : {}),
+        },
+      });
+      return mapRun(run);
+    });
+  }
+
+  async completeRunWithNotification(
+    input: CompleteAgentWorkRunWithNotificationInput,
+  ): Promise<AgentWorkRunRecord> {
+    return db.transaction(async (tx) => {
+      const [identityRun] = await tx.select({ workId: agentWorkRunsTable.workId })
+        .from(agentWorkRunsTable)
+        .where(and(
+          eq(agentWorkRunsTable.tenantId, input.identity.tenantId),
+          eq(agentWorkRunsTable.ownerUserId, input.identity.userId),
+          eq(agentWorkRunsTable.id, input.runId),
+        ))
+        .limit(1);
+      if (!identityRun) throw new Error("AGENT_WORK_RUN_LEASE_CONFLICT");
+
+      const [work] = await tx.select().from(agentWorksTable).where(and(
+        ownerWhere(input.identity, agentWorksTable),
+        eq(agentWorksTable.id, identityRun.workId),
+      )).for("update");
+      if (!work) throw new Error("AGENT_WORK_RUN_LEASE_CONFLICT");
+
+      const [currentRun] = await tx.select().from(agentWorkRunsTable).where(and(
+        eq(agentWorkRunsTable.tenantId, input.identity.tenantId),
+        eq(agentWorkRunsTable.ownerUserId, input.identity.userId),
+        eq(agentWorkRunsTable.id, input.runId),
+      )).for("update");
+      if (
+        !currentRun
+        || !activeRunStatuses.includes(currentRun.status as AgentWorkRunStatus)
+        || currentRun.leaseToken !== input.leaseToken
+        || isLeaseExpired(input.completedAt, currentRun.leaseExpiresAt)
+      ) {
+        throw new Error("AGENT_WORK_RUN_LEASE_CONFLICT");
+      }
+
+      await enqueueMobilePushOutbox(tx, input.identity, {
+        title: input.notification.title,
+        body: input.notification.body,
+        data: input.notification.data,
+        dedupeKey: input.notification.dedupeKey,
+        workId: input.notification.workId,
+        runId: input.notification.runId,
+        sourceEventId: input.notification.eventId,
+      });
 
       const [run] = await tx.update(agentWorkRunsTable).set({
         status: input.status,

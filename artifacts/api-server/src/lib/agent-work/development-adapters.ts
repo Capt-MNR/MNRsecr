@@ -135,6 +135,11 @@ export class ExpoNotificationAdapter implements NotificationAdapter {
         title: input.title,
         body: input.body,
         data: input.data,
+        dedupeKey: input.dedupeKey,
+        sourceEventId: input.eventId,
+        workId: typeof input.data.workId === "string" ? input.data.workId : null,
+        runId: typeof input.data.runId === "string" ? input.data.runId : null,
+        operationId: typeof input.data.operationId === "string" ? input.data.operationId : null,
       });
       return { status: "accepted" as const, driver: this.driver };
     } catch (error) {

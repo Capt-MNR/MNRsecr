@@ -659,7 +659,36 @@ export class AgentWorkRunner {
           });
           approvalEventRecorded = true;
         }
-        await this.runtime.completeRun({
+        const notificationEvent = plan.notify
+          ? await this.adapters.storage.addEvent({
+              identity,
+              workId: work.id,
+              runId: run.id,
+              eventType: "run_notification",
+              actorType: "agent",
+              summary: plan.notificationBody,
+              metadata: { status: plan.status },
+              dedupeKey: `agent-work-notification:${run.id}`,
+            })
+          : null;
+        const notificationInput = notificationEvent
+          ? {
+              eventId: notificationEvent.id,
+              title: plan.notificationTitle,
+              body: plan.notificationBody,
+              data: {
+                workId: work.id,
+                runId: run.id,
+                status: plan.status,
+                deepLink: `/main?workId=${encodeURIComponent(work.id)}`,
+                ...(plan.notificationData ?? {}),
+              },
+              dedupeKey: `agent-work-notification:${run.id}`,
+              workId: work.id,
+              runId: run.id,
+            }
+          : null;
+        const completionInput = {
           identity,
           run,
           status: plan.status,
@@ -668,7 +697,23 @@ export class AgentWorkRunner {
           nextRunAt: plan.nextRunAt,
           workStatus: plan.workStatus,
           completedAt: this.now(),
-        });
+        };
+        if (notificationInput && this.adapters.storage.completeRunWithNotification) {
+          await this.adapters.storage.completeRunWithNotification({
+            identity,
+            runId: run.id,
+            leaseToken: run.leaseToken ?? "",
+            status: completionInput.status,
+            verification: completionInput.verification,
+            error: completionInput.error,
+            nextRunAt: completionInput.nextRunAt,
+            workStatus: completionInput.workStatus,
+            completedAt: completionInput.completedAt,
+            notification: notificationInput,
+          });
+        } else {
+          await this.runtime.completeRun(completionInput);
+        }
         if (plan.status === "failed") {
           await this.adapters.storage.addEvent({
             identity,
@@ -697,30 +742,20 @@ export class AgentWorkRunner {
           result.completed += 1;
           continue;
         }
-        const notificationEvent = await this.adapters.storage.addEvent({
-          identity,
-          workId: work.id,
-          runId: run.id,
-          eventType: "run_notification",
-          actorType: "agent",
-          summary: plan.notificationBody,
-          metadata: { status: plan.status },
-          dedupeKey: `agent-work-notification:${run.id}`,
-        });
-        const delivery = await this.adapters.notification.notify({
-          identity,
-          eventId: notificationEvent.id,
-          title: plan.notificationTitle,
-          body: plan.notificationBody,
-          data: {
-            workId: work.id,
-            runId: run.id,
-            status: plan.status,
-            deepLink: `/main?workId=${encodeURIComponent(work.id)}`,
-            ...(plan.notificationData ?? {}),
-          },
-          dedupeKey: `agent-work-notification:${run.id}`,
-        });
+        const delivery = notificationInput && this.adapters.storage.completeRunWithNotification
+          ? {
+              status: "accepted" as const,
+              driver: this.adapters.notification.driver,
+              reason: "durable_outbox_queued",
+            }
+          : await this.adapters.notification.notify({
+              identity,
+              eventId: notificationInput?.eventId ?? "",
+              title: plan.notificationTitle,
+              body: plan.notificationBody,
+              data: notificationInput?.data ?? {},
+              dedupeKey: notificationInput?.dedupeKey ?? `agent-work-notification:${run.id}`,
+            });
         await this.adapters.storage.addEvent({
           identity,
           workId: work.id,

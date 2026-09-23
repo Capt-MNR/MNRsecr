@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { agentWorkRunner } from "./lib/agent-work/runner";
+import { createNotificationRecovery } from "./lib/mobile-push";
 
 const rawPort = process.env["PORT"];
 
@@ -11,6 +12,7 @@ if (!rawPort) {
 }
 
 const port = Number(rawPort);
+const notificationRecovery = createNotificationRecovery();
 
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
@@ -24,7 +26,14 @@ app.listen(port, (err) => {
 
   logger.info({ port }, "Server listening");
   agentWorkRunner.start();
+  notificationRecovery.start();
 });
 
-process.once("SIGTERM", () => agentWorkRunner.stop());
-process.once("SIGINT", () => agentWorkRunner.stop());
+process.once("SIGTERM", () => {
+  agentWorkRunner.stop();
+  notificationRecovery.stop();
+});
+process.once("SIGINT", () => {
+  agentWorkRunner.stop();
+  notificationRecovery.stop();
+});

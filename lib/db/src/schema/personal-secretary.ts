@@ -679,6 +679,101 @@ export const mobilePushTokensTable = pgTable(
   ],
 );
 
+export const notificationOutboxTable = pgTable(
+  "notification_outbox",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    workId: uuid("work_id"),
+    runId: uuid("run_id"),
+    sourceEventId: uuid("source_event_id"),
+    operationId: text("operation_id"),
+    dedupeKey: text("dedupe_key").notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    data: jsonb("data").$type<Record<string, unknown>>().notNull().default({}),
+    status: text("status").notNull().default("queued"),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("notification_outbox_owner_dedupe_unique").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.dedupeKey,
+    ),
+    index("notification_outbox_status_next_attempt_idx").on(
+      table.status,
+      table.nextAttemptAt,
+    ),
+    index("notification_outbox_owner_created_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.createdAt,
+    ),
+  ],
+);
+
+export const notificationDeliveriesTable = pgTable(
+  "notification_deliveries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    notificationId: uuid("notification_id").notNull(),
+    tokenId: uuid("token_id").notNull(),
+    provider: text("provider").notNull(),
+    status: text("status").notNull().default("queued"),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
+    leaseToken: text("lease_token"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    providerTicket: text("provider_ticket"),
+    lastErrorClass: text("last_error_class"),
+    lastError: text("last_error"),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("notification_deliveries_owner_notification_token_unique").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.notificationId,
+      table.tokenId,
+    ),
+    index("notification_deliveries_status_next_attempt_idx").on(
+      table.status,
+      table.nextAttemptAt,
+    ),
+    index("notification_deliveries_notification_idx").on(table.notificationId),
+  ],
+);
+
+export const notificationDeliveryAttemptsTable = pgTable(
+  "notification_delivery_attempts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    deliveryId: uuid("delivery_id").notNull(),
+    attemptNumber: integer("attempt_number").notNull(),
+    status: text("status").notNull(),
+    providerRequestId: text("provider_request_id"),
+    errorClass: text("error_class"),
+    error: text("error"),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("notification_delivery_attempts_delivery_number_unique").on(
+      table.deliveryId,
+      table.attemptNumber,
+    ),
+    index("notification_delivery_attempts_delivery_idx").on(table.deliveryId),
+  ],
+);
+
 export const conversationMemoryTable = pgTable(
   "conversation_memory",
   {

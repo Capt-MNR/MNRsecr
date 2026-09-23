@@ -92,6 +92,13 @@
       "when": 1790119969000,
       "tag": "0012_resolver_shadow_log",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790169000000,
+      "tag": "0013_durable_notification_outbox",
+      "breakpoints": true
     }
   ]
 }

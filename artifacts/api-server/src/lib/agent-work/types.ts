@@ -216,6 +216,18 @@ export type CompleteAgentWorkRunInput = {
   workStatus?: AgentWorkStatus;
 };
 
+export type CompleteAgentWorkRunWithNotificationInput = CompleteAgentWorkRunInput & {
+  notification: {
+    eventId: string;
+    title: string;
+    body: string;
+    data: Record<string, unknown>;
+    dedupeKey: string;
+    workId: string;
+    runId: string;
+  };
+};
+
 export type CreateAgentWorkEventInput = {
   identity: AgentWorkIdentity;
   workId: string;
@@ -252,6 +264,9 @@ export interface StorageAdapter {
   getRun(identity: AgentWorkIdentity, runId: string): Promise<AgentWorkRunRecord | null>;
   listRuns(identity: AgentWorkIdentity, workId: string, limit?: number): Promise<AgentWorkRunRecord[]>;
   completeRun(input: CompleteAgentWorkRunInput): Promise<AgentWorkRunRecord>;
+  completeRunWithNotification?(
+    input: CompleteAgentWorkRunWithNotificationInput,
+  ): Promise<AgentWorkRunRecord>;
   addEvent(input: CreateAgentWorkEventInput): Promise<AgentWorkEventRecord>;
   listEvents(identity: AgentWorkIdentity, workId: string, limit?: number): Promise<AgentWorkEventRecord[]>;
   listEvidence(identity: AgentWorkIdentity, workId: string, limit?: number): Promise<AgentWorkEvidenceRecord[]>;
