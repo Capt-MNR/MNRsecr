@@ -1,0 +1,305 @@
+نفّذ الآن Phase 0 + Phase 1 فقط من الـProactive Architecture evolution التي انتهى إليها الـArchitecture Audit.
+
+القاعدة الأساسية
+
+اعمل أولًا audit سريع للكود الحالي للتأكد من أن التصميم المقترح يطابق implementation الفعلي، ثم نفّذ التعديلات مباشرة.
+
+لا تنشئ Replit Task.
+
+لا تنتقل إلى Phase 2.
+
+لا تضف Trigger Outbox أو Event Bus أو Queue خارجية أو Scheduler منفصل في هذه المرحلة.
+
+الهدف هو فصل المسؤوليات داخل الـexisting architecture مع الحفاظ على behavior الحالي بالكامل.
+
+---
+
+Phase 0 — تثبيت الـContracts
+
+عرّف boundaries/contracts واضحة للمفاهيم التالية، بما يتوافق مع الكود الحالي:
+
+- "TriggerDefinition"
+- "TriggerEvaluation"
+- "TriggerEvent"
+- "WorkIntent"
+- "ActionPlan"
+- "ExecutionOutcome"
+
+لا تجعل هذه الـcontracts مجرد types شكلية بلا استخدام واضح.
+
+يجب أن تعكس المسؤوليات الفعلية الموجودة حاليًا، وألا تضيف capabilities غير موجودة.
+
+إذا كان هناك type/interface موجود بالفعل يؤدي نفس الدور، أعد استخدامه بدل إنشاء duplicate abstraction.
+
+مهم
+
+لا تغيّر database schema لمجرد إنشاء هذه الـcontracts.
+
+لا تغيّر API contract الخارجي إلا إذا كان ضروريًا للحفاظ على type boundary الداخلي.
+
+---
+
+Phase 1 — فصل مسؤوليات الـRunner
+
+راجع "AgentWorkRunner" وخصوصًا "runner.ts".
+
+الهدف أن يصبح الـRunner orchestrator رفيعًا بدل أن يحتوي تفاصيل كل source وcondition وnotification.
+
+افصل منطقيًا المسؤوليات إلى وحدات واضحة قدر الإمكان:
+
+Trigger evaluation
+
+مسؤول عن تحديد:
+
+- هل الـWork due؟
+- هل trigger eligible؟
+- ما حالة الشرط؟
+- هل حدث transition يستحق التعامل؟
+- ما سبب evaluation؟
+
+Source adapters / readers
+
+كل source يحتفظ بمنطقه الخاص.
+
+مثل:
+
+- "internal_records"
+- "github_repository"
+- وأي source موجود فعليًا الآن.
+
+لا تنشئ adapters وهمية لمصادر غير موجودة.
+
+Condition evaluation
+
+انقل comparison logic إلى boundary مستقلة وقابلة للاختبار:
+
+- gt
+- gte
+- eq
+- lt
+- lte
+- condition state
+- evidence/hash comparison
+
+يجب ألا يتغير السلوك الحالي.
+
+Work intent / action planning
+
+افصل قرار:
+
+"الـtrigger تحقق، وما الذي ينبغي أن يحدث؟"
+
+عن تنفيذ الـaction نفسه.
+
+لكن لا تغيّر lifecycle الحالي للـAgent Work.
+
+Agent Work execution
+
+يظل مسؤولًا عن:
+
+- claim
+- row locking
+- lease
+- lease fencing
+- idempotency
+- recovery
+- uncertain outcome
+- approval
+- evidence
+- completion
+
+لا تعيد كتابة هذه الأجزاء إلا إذا كان refactor ضروريًا لفصل المسؤوليات.
+
+---
+
+Notification
+
+افصل notification formatting/decision عن execution orchestration.
+
+لكن:
+
+لا تغيّر durable notification outbox behavior.
+
+لا تنشئ notification system جديد.
+
+إذا وجدت مسارات notification حالية تتجاوز durable outbox، سجّلها في التقرير النهائي فقط.
+
+لا توسّع نطاق هذه المرحلة لإصلاحها إلا إذا كان الإصلاح صغيرًا ولا يغيّر lifecycle.
+
+---
+
+Scheduler
+
+أبقِ:
+
+- "nextRunAt"
+- current polling model
+- existing "SchedulerAdapter"
+- current recovery behavior
+
+كما هي من حيث السلوك.
+
+لا تضف scheduler جديدًا.
+
+لا تنقل الـrunner إلى process جديد.
+
+لا تستخدم external queue.
+
+---
+
+GitHub
+
+حافظ على السلوك الحالي بالكامل.
+
+لا تغيّر:
+
+- API behavior
+- evidence
+- validation
+- cooldown
+- coalescing
+
+إلا إذا كان refactor ضروريًا لنقل المسؤولية إلى source adapter مستقل.
+
+لا تحاول الآن حل distributed GitHub caching/rate control.
+
+---
+
+أهم شرط: Behavior Preservation
+
+بعد الـrefactor يجب أن تظل هذه الأشياء كما هي:
+
+- Agent Work lifecycle
+- tenant/owner isolation
+- approval flow
+- idempotency
+- leases
+- recovery
+- uncertain state
+- evidence
+- condition evaluation semantics
+- notification outbox
+- existing API behavior
+- existing manual run behavior
+- existing scheduled run behavior
+
+لا نريد feature development في هذه المرحلة.
+
+نريد architectural separation بدون تغيير المنتج.
+
+---
+
+Tests
+
+قبل التعديل شغّل الاختبارات الحالية ذات الصلة لتثبيت baseline.
+
+بعد التعديل شغّل على الأقل:
+
+- Agent Work tests
+- approval/reconciliation tests
+- notification-related tests
+- typecheck
+- build
+
+وأي tests مباشرة تخص الملفات التي تم تغييرها.
+
+إذا فشل test بسبب refactor، أصلح السبب.
+
+لا تعمل workaround يضعف invariant موجود.
+
+---
+
+لا تفعل هذه الأشياء الآن
+
+ممنوع في هذه المرحلة:
+
+- Kafka
+- Redis كـsource of truth
+- RabbitMQ
+- external event bus
+- external scheduler
+- Trigger Outbox
+- generic event queue
+- تحويل "activity_events" إلى queue
+- background LLM
+- LLM داخل polling
+- Calendar integration
+- Email integration
+- WhatsApp integration
+- A2A integration
+- generic URL monitoring
+- redesign شامل للـAgent Work
+- تغيير database schema لمجرد التحضير للمستقبل
+
+---
+
+Migration Safety
+
+لو أثناء التنفيذ اكتشفت أن abstraction المقترحة ستحتاج تغييرًا أكبر مما توقعنا:
+
+توقف عن التوسع.
+
+لا تعمل rewrite.
+
+بدلًا من ذلك سجّل:
+
+- ما الذي يمنع الفصل الآن؟
+- ما التغيير المطلوب؟
+- لماذا هو ضروري؟
+- هل يحتاج migration؟
+- ما خطره؟
+
+ثم أكمل فقط الجزء الآمن.
+
+---
+
+Output النهائي
+
+بعد التنفيذ أعطني تقريرًا مختصرًا ومنظمًا:
+
+1. Before
+
+كيف كانت المسؤوليات موزعة.
+
+2. After
+
+كيف أصبحت موزعة.
+
+3. Files changed
+
+الملفات التي تم تعديلها ولماذا.
+
+4. Contracts
+
+ما الـcontracts التي أُضيفت أو أُعيد استخدامها.
+
+5. Behavior preservation
+
+كيف تم التأكد أن الـAgent Work lifecycle لم يتغير.
+
+6. Tests
+
+نتائج الاختبارات، typecheck، build.
+
+7. Remaining architectural work
+
+ما الذي ما زال مطلوبًا للـPhase 2.
+
+8. Risks
+
+أي مخاطر أو technical debt ظهرت أثناء التنفيذ.
+
+9. Explicit confirmation
+
+أكد صراحة:
+
+- لم يتم إنشاء Replit Task.
+- لم تتم إضافة Trigger Outbox.
+- لم تتم إضافة Event Bus.
+- لم يتم تغيير Agent Work semantics.
+- لم يتم إدخال background LLM.
+- لم يتم تغيير notification delivery semantics.
+
+الهدف النهائي من هذه المرحلة:
+
+AgentWorkRunner يصبح orchestration layer واضحًا، والـsource/trigger/condition/action responsibilities تصبح قابلة للتوسع مستقبلًا، بينما تظل durability وrecovery وapproval وnotification infrastructure الحالية هي مصدر الثقة والتنفيذ.
