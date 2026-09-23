@@ -926,6 +926,34 @@ test("dryRun prevents writes even when failover happens", async () => {
   assert.equal(memory.length, 0);
 });
 
+test("Arabic expense lookup continues to record_expense after find_person", async () => {
+  const provider = new ScriptedProvider("gemini", (call, callNumber) => {
+    if (callNumber === 1) return toolCall("find_person", { name: "محمد" });
+    if (callNumber === 2) {
+      assert.ok(call.messages.some((message) =>
+        message.text?.includes("لم يتم العثور على شخص مطابق")
+        && message.text?.includes("استدع record_expense الآن")
+      ));
+      return toolCall("record_expense", {
+        amountMinor: 750000,
+        currency: "EGP",
+        description: "دفعت لمحمد 7500",
+      });
+    }
+    return finalResponse("جهزت المصروف للموافقة.");
+  });
+  const result = await new Phase2AgentRuntime(
+    new FailoverModelGateway({ gemini: provider }, ["gemini"]),
+  ).run(identity("arabic-expense-continuation"), {
+    message: "دفعت لمحمد 7500",
+    requestId: "arabic-expense-continuation-request",
+  }, { dryRun: true });
+
+  assert.equal(result.response?.kind, "answer");
+  assert.equal(result.action?.lastTool, "record_expense");
+  assert.equal(provider.calls.length, 3);
+});
+
 test("conversation state survives a provider transition and the next Arabic turn", async () => {
   const testIdentity = identity("state");
   await db.insert(projectsTable).values({
