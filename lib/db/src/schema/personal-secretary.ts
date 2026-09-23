@@ -776,6 +776,51 @@ export const notificationOutboxTable = pgTable(
   ],
 );
 
+export const triggerOutboxTable = pgTable(
+  "trigger_outbox",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    eventType: text("event_type").notNull(),
+    aggregateType: text("aggregate_type").notNull(),
+    aggregateId: text("aggregate_id").notNull(),
+    schemaVersion: integer("schema_version").notNull().default(1),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
+    dedupeKey: text("dedupe_key").notNull(),
+    status: text("status").notNull().default("pending"),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    availableAt: timestamp("available_at", { withTimezone: true }).notNull().defaultNow(),
+    leaseToken: text("lease_token"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+    quarantinedAt: timestamp("quarantined_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("trigger_outbox_owner_dedupe_unique").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.dedupeKey,
+    ),
+    index("trigger_outbox_status_available_idx").on(
+      table.status,
+      table.availableAt,
+    ),
+    index("trigger_outbox_lease_idx").on(
+      table.status,
+      table.leaseExpiresAt,
+    ),
+    index("trigger_outbox_owner_occurred_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.occurredAt,
+    ),
+  ],
+);
+
 export const notificationDeliveriesTable = pgTable(
   "notification_deliveries",
   {
@@ -1130,6 +1175,7 @@ export const agentWorksTable = pgTable(
     condition: jsonb("condition").$type<Record<string, unknown>>().notNull().default({}),
     action: jsonb("action").$type<Record<string, unknown>>().notNull().default({}),
     schedule: jsonb("schedule").$type<Record<string, unknown>>().notNull().default({}),
+    dedupeKey: text("dedupe_key"),
     nextRunAt: timestamp("next_run_at", { withTimezone: true }),
     lastRunAt: timestamp("last_run_at", { withTimezone: true }),
     lastRunStatus: text("last_run_status"),
@@ -1148,6 +1194,11 @@ export const agentWorksTable = pgTable(
       table.tenantId,
       table.ownerUserId,
       table.updatedAt,
+    ),
+    uniqueIndex("agent_works_owner_dedupe_unique").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.dedupeKey,
     ),
   ],
 );

@@ -63,6 +63,7 @@ function mapWork(row: typeof agentWorksTable.$inferSelect): AgentWorkRecord {
     condition: row.condition,
     action: row.action,
     schedule: row.schedule,
+    dedupeKey: row.dedupeKey,
     nextRunAt: row.nextRunAt,
     lastRunAt: row.lastRunAt,
     lastRunStatus: row.lastRunStatus as AgentWorkRunStatus | null,
@@ -151,12 +152,27 @@ export class PostgresAgentWorkStorageAdapter implements StorageAdapter {
         kind: input.kind,
         title: input.title,
         description: input.description ?? null,
+        status: input.status ?? "draft",
         source: input.source ?? {},
         condition: input.condition ?? {},
         action: input.action ?? {},
         schedule: input.schedule ?? {},
+        dedupeKey: input.dedupeKey ?? null,
         nextRunAt: input.nextRunAt ?? null,
+      }).onConflictDoNothing({
+        target: [
+          agentWorksTable.tenantId,
+          agentWorksTable.ownerUserId,
+          agentWorksTable.dedupeKey,
+        ],
       }).returning();
+      if (!row && input.dedupeKey) {
+        const [existing] = await tx.select().from(agentWorksTable).where(and(
+          ownerWhere(input.identity, agentWorksTable),
+          eq(agentWorksTable.dedupeKey, input.dedupeKey),
+        )).for("update");
+        if (existing) return mapWork(existing);
+      }
       if (!row) throw new Error("AGENT_WORK_CREATE_FAILED");
       await tx.insert(agentWorkEventsTable).values({
         tenantId: input.identity.tenantId,

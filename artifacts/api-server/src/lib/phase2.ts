@@ -127,6 +127,7 @@ import {
 import { runWithIdempotencyLock } from "./idempotency-lock";
 import { agentWorkRuntime } from "./agent-work/runtime";
 import type { AgentWorkKind } from "./agent-work/types";
+import { enqueueTriggerOutbox } from "./trigger-outbox";
 
 const db = database;
 
@@ -1953,6 +1954,7 @@ async function executeTool(
     activityWriter?: typeof recordToolActivity;
     verificationResolver?: MutationVerificationResolver;
     operationCompletion?: (result: ToolResult, executor: DbExecutor) => Promise<void>;
+    triggerOutboxWriter?: typeof enqueueTriggerOutbox;
   },
 ): Promise<ToolResult> {
   if (WRITE_TOOLS.has(name) && options.approvedOperationId && !options.transactionExecutor) {
@@ -2928,6 +2930,22 @@ async function executeTool(
         sourceTurnId: options.sourceTurnId ?? options.requestId,
         sourceOperationId: options.approvedOperationId ?? null,
       }).returning();
+      if (!task) return { ok: false, error: "Could not create task." };
+      const triggerOutboxWriter = options.triggerOutboxWriter ?? enqueueTriggerOutbox;
+      await triggerOutboxWriter({
+        identity,
+        eventType: "task.created",
+        aggregateType: "task",
+        aggregateId: task.id,
+        payload: {
+          taskId: task.id,
+          title: task.title,
+          status: task.status,
+          dueAt: task.dueAt?.toISOString() ?? null,
+          rowVersion: task.rowVersion,
+        },
+        dedupeKey: `task-created:v1:${identity.tenantId}:${identity.userId}:${task.id}`,
+      }, db);
       result = { ok: true, task };
       break;
     }
@@ -3092,6 +3110,7 @@ export async function executeStructuredTool(
     activityWriter?: typeof recordToolActivity;
     verificationResolver?: MutationVerificationResolver;
     operationCompletion?: (result: Record<string, unknown>, executor: DbExecutor) => Promise<void>;
+    triggerOutboxWriter?: typeof enqueueTriggerOutbox;
   } = { requestId: crypto.randomUUID() },
 ): Promise<ToolResult> {
   return executeTool(identity, name, args, options);

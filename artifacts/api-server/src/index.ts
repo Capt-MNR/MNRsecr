@@ -2,6 +2,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { agentWorkRunner } from "./lib/agent-work/runner";
 import { createNotificationRecovery } from "./lib/mobile-push";
+import { triggerOutboxDispatcher } from "./lib/trigger-outbox";
 
 const rawPort = process.env["PORT"];
 
@@ -26,14 +27,17 @@ app.listen(port, (err) => {
 
   logger.info({ port }, "Server listening");
   agentWorkRunner.start();
+  triggerOutboxDispatcher.start();
   notificationRecovery.start();
 });
 
 process.once("SIGTERM", () => {
   agentWorkRunner.stop();
+  triggerOutboxDispatcher.stop();
   notificationRecovery.stop();
 });
 process.once("SIGINT", () => {
   agentWorkRunner.stop();
+  triggerOutboxDispatcher.stop();
   notificationRecovery.stop();
 });

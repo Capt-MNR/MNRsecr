@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:phase2": "node --test test/phase2.integration.mjs",
     "test:agent-work": "../../scripts/node_modules/.bin/tsx --test test/agent-work-contract.test.ts test/agent-work-runner.test.ts test/agent-work-recovery.test.ts test/github-monitoring.test.ts test/delegated-action.test.ts test/agent-work-restart.test.ts test/notification-outbox.test.ts",
+    "test:trigger-outbox": "../../scripts/node_modules/.bin/tsx --test test/trigger-outbox.test.ts",
     "test:intent-eval-dataset": "../../scripts/node_modules/.bin/tsx --test test/intent-evaluation/dataset.test.mjs test/intent-evaluation/runner.test.ts",
     "test:brain-eval": "../../scripts/node_modules/.bin/tsx --test test/brain-evaluation/evaluation.test.ts",
     "test:brain-reasoning-safety": "../../scripts/node_modules/.bin/tsx --test test/brain-evaluation/reasoning-safety.test.ts",

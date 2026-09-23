@@ -211,6 +211,30 @@ async function buildActionPlan(
   }
 
   const source = asRecord(trigger.source);
+  if (source.type === "trigger_outbox") {
+    return {
+      plan: {
+        status: "verified",
+        workStatus: "completed",
+        nextRunAt: null,
+        verification: {
+          kind: "trigger_work_intent_handoff",
+          source: "trigger_outbox",
+          eventId: typeof source.eventId === "string" ? source.eventId : null,
+          triggerKey: typeof source.triggerKey === "string" ? source.triggerKey : null,
+        },
+        notificationTitle: title,
+        notificationBody: "",
+        notify: false,
+      },
+      evidence: {
+        workKind: work.kind,
+        status: "verified",
+        source: "trigger_outbox",
+        eventId: typeof source.eventId === "string" ? source.eventId : null,
+      },
+    };
+  }
   if (source.type === "clock" || source.type === "heartbeat") {
     return {
       plan: {

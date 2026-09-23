@@ -122,6 +122,7 @@ export type AgentWorkRecord = {
   condition: Record<string, unknown>;
   action: Record<string, unknown>;
   schedule: Record<string, unknown>;
+  dedupeKey?: string | null;
   nextRunAt: Date | null;
   lastRunAt: Date | null;
   lastRunStatus: AgentWorkRunStatus | null;
@@ -182,6 +183,8 @@ export type CreateAgentWorkInput = {
   condition?: Record<string, unknown>;
   action?: Record<string, unknown>;
   schedule?: Record<string, unknown>;
+  status?: AgentWorkStatus;
+  dedupeKey?: string | null;
   nextRunAt?: Date | null;
   transactionExecutor?: DbExecutor;
 };

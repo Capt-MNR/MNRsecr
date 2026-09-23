@@ -120,6 +120,13 @@
       "when": 1790185000000,
       "tag": "0016_mobile_push_disable_reason",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1790200500000,
+      "tag": "0017_trigger_outbox",
+      "breakpoints": true
     }
   ]
 }
