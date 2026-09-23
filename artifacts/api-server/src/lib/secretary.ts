@@ -24,11 +24,13 @@ import {
   type Task,
 } from "@workspace/db";
 import {
+  buildExpenseUnitAudit,
   configuredProvider,
   executeStructuredTool,
   phase2AgentRuntime,
   phase2Enabled,
   unavailableAgentRuntime,
+  type ExpenseUnitAuditReport,
 } from "./phase2";
 import {
   createPendingOperation,
@@ -115,11 +117,13 @@ type PersistedExpense = Expense & {
 
 export interface PersistencePort {
   getTodayContext(identity: Identity): Promise<TodayContext>;
+  auditExpenseUnits(identity: Identity): Promise<ExpenseUnitAuditReport>;
   getExpenseReport(identity: Identity): Promise<{
     count: number;
     totalMinor: number;
     currency: string;
     projectCount: number;
+    unitAudit: ExpenseUnitAuditReport;
   }>;
   createExpense(
     identity: Identity,
@@ -183,6 +187,19 @@ function normalizeArabic(value: string): string {
     .replace(/[\u064B-\u065F]/g, "")
     .replace(/\s+/g, " ")
     .toLocaleLowerCase("ar");
+}
+
+function expenseUnitAuditMessage(audit: ExpenseUnitAuditReport): string {
+  const details = audit.records
+    .filter((record) => record.status === "review")
+    .slice(0, 8)
+    .map((record) => {
+      const expected = record.expected.displayValue === null
+        ? "غير معروف"
+        : new Intl.NumberFormat("ar-EG", { maximumFractionDigits: 3 }).format(record.expected.displayValue);
+      return `${record.id}: المخزن ${new Intl.NumberFormat("ar-EG").format(record.stored.value)} بوحدة صغرى، المتوقع عرضه ${expected} بالوحدة الرئيسية`;
+    });
+  return `راجعت السجلات قبل حساب الإجمالي، ووجدت ${audit.reviewCount} سجل${audit.reviewCount === 1 ? "" : "ات"} تحتاج مراجعة بشرية. لم أعدّل أي سجل ولن أعرض إجماليًا قد يكون مضللًا.${details.length > 0 ? ` التفاصيل: ${details.join("؛ ")}` : ""}${audit.truncated ? " التقرير محدود بعدد من السجلات." : ""}`;
 }
 
 function ownerWhere(identity: Identity) {
@@ -607,8 +624,11 @@ class DrizzlePersistence implements PersistencePort {
   async getExpenseReport(identity: Identity) {
     const rows = await db
       .select({
+        id: expensesTable.id,
         amountMinor: expensesTable.amountMinor,
         currency: expensesTable.currency,
+        description: expensesTable.description,
+        occurredAt: expensesTable.occurredAt,
         projectId: expensesTable.projectId,
         projectName: projectsTable.name,
       })
@@ -632,7 +652,27 @@ class DrizzlePersistence implements PersistencePort {
       totalMinor,
       currency: currency || "EGP",
       projectCount: new Set(rows.map((row) => row.projectId).filter(Boolean)).size,
+      unitAudit: await this.auditExpenseUnits(identity),
     };
+  }
+
+  async auditExpenseUnits(identity: Identity): Promise<ExpenseUnitAuditReport> {
+    const rows = await db
+      .select({
+        id: expensesTable.id,
+        amountMinor: expensesTable.amountMinor,
+        currency: expensesTable.currency,
+        description: expensesTable.description,
+        occurredAt: expensesTable.occurredAt,
+      })
+      .from(expensesTable)
+      .where(and(
+        eq(expensesTable.tenantId, identity.tenantId),
+        eq(expensesTable.ownerUserId, identity.userId),
+      ))
+      .orderBy(desc(expensesTable.occurredAt))
+      .limit(101);
+    return buildExpenseUnitAudit(rows, 100);
   }
 
   async getIdempotentResponse(
@@ -1302,6 +1342,30 @@ export class DeterministicAgentRuntime {
     let result: TurnResult;
     if (isBroadExpenseReportRequest(message)) {
       const report = await this.persistence.getExpenseReport(identity);
+      if (report.unitAudit.reviewCount > 0) {
+        result = {
+          conversationId,
+          assistantMessage: expenseUnitAuditMessage(report.unitAudit),
+          action: {
+            type: "expense_unit_audit_required",
+            audit: report.unitAudit,
+          },
+          provider: "development",
+          model: "deterministic-ar-v1",
+        };
+        result = { ...result, turnId };
+        if (input.idempotencyKey) {
+          await this.persistence.saveIdempotentResponse(identity, input.idempotencyKey, result);
+        }
+        await saveConversationTurn(identity, conversationMemory, {
+          turnId,
+          ...(input.inputId ? { inputId: input.inputId } : {}),
+          userMessage: message,
+          assistantMessage: result.assistantMessage,
+          action: result.action,
+        });
+        return result;
+      }
       const amount = new Intl.NumberFormat("ar-EG", {
         style: "currency",
         currency: report.currency,
@@ -1311,7 +1375,7 @@ export class DeterministicAgentRuntime {
         assistantMessage: report.count === 0
           ? "لا توجد مصروفات محفوظة حتى الآن."
           : `تقرير المصروفات: ${amount} عبر ${report.count} مصروف${report.projectCount > 0 ? ` موزعة على ${report.projectCount} مشروع` : ""}.`,
-        action: { type: "expense_report", summary: report },
+        action: { type: "expense_report", summary: report, unitAudit: report.unitAudit },
         provider: "development",
         model: "deterministic-ar-v1",
       };

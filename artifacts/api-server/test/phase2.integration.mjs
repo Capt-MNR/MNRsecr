@@ -325,6 +325,42 @@ test("broad expense reports use a bounded deterministic response", async () => {
   assert.match(response.assistantMessage, /تقرير المصروفات|لا توجد مصروفات/);
 });
 
+test("historical unit audit blocks totals without changing stored values", async () => {
+  const description = `legacy-unit-audit-${Date.now()}`;
+  queryDb(`
+    INSERT INTO expenses (tenant_id, owner_user_id, amount_minor, currency, description)
+    VALUES ('${testTenantId}', '${testUserId}', 50, 'EGP', '${description}')
+  `);
+  const beforeAmount = queryDb(
+    `SELECT amount_minor FROM expenses WHERE ${scopedWhere} AND description = '${description}'`,
+  );
+  const beforeOperations = Number(queryDb(
+    `SELECT count(*) FROM secretary_operations WHERE ${scopedWhere}`,
+  ));
+
+  const response = await sendTurn(
+    "تقرير بالمصروفات",
+    `legacy-unit-audit-${Date.now()}`,
+    `legacy-unit-audit-request-${Date.now()}`,
+  );
+
+  assert.equal(response.action.type, "expense_unit_audit_required");
+  assert.equal(response.action.audit.reviewCount, 1);
+  assert.equal(response.action.audit.records[0].stored.value, 50);
+  assert.equal(response.action.audit.records[0].expected.minorPerMajor, 100);
+  assert.match(response.assistantMessage, /مراجعة بشرية|بوحدة صغرى/);
+  assert.equal(
+    queryDb(`SELECT amount_minor FROM expenses WHERE ${scopedWhere} AND description = '${description}'`),
+    beforeAmount,
+  );
+  assert.equal(
+    Number(queryDb(`SELECT count(*) FROM secretary_operations WHERE ${scopedWhere}`)),
+    beforeOperations,
+  );
+
+  queryDb(`DELETE FROM expenses WHERE ${scopedWhere} AND description = '${description}'`);
+});
+
 test("reminders ask for an optional exact time before approval", async () => {
   const conversationId = `reminder-time-${Date.now()}`;
   const first = await sendTurn("فكرني بكرة أراجع الفاتورة", conversationId, `${conversationId}-first`);

@@ -721,6 +721,107 @@ type ExpenseCurrencyTotal = {
   count: number;
 };
 
+const CURRENCY_MINOR_DIGITS: Record<string, number> = {
+  AED: 2,
+  BHD: 3,
+  EGP: 2,
+  EUR: 2,
+  JPY: 0,
+  KWD: 3,
+  QAR: 2,
+  SAR: 2,
+  USD: 2,
+};
+
+export type ExpenseUnitAuditRecord = {
+  id: string;
+  description: string;
+  occurredAt: string;
+  currency: string;
+  stored: {
+    value: number;
+    unit: "minor";
+  };
+  expected: {
+    unit: "minor";
+    minorPerMajor: number | null;
+    displayValue: number | null;
+  };
+  status: "ok" | "review";
+  reviewReasons: string[];
+};
+
+export type ExpenseUnitAuditReport = {
+  expectedStoredUnit: "minor";
+  scannedCount: number;
+  reviewCount: number;
+  truncated: boolean;
+  records: ExpenseUnitAuditRecord[];
+};
+
+type ExpenseUnitAuditInput = {
+  id: string;
+  amountMinor: number;
+  currency: string;
+  description: string;
+  occurredAt: Date | string;
+};
+
+/**
+ * Historical expense rows do not carry a unit-version marker. This audit
+ * reports the current contract without rewriting the row, and deliberately
+ * treats uncertain values as a human-review queue rather than a correction.
+ */
+export function buildExpenseUnitAudit(
+  rows: ExpenseUnitAuditInput[],
+  maxRecords = 100,
+): ExpenseUnitAuditReport {
+  const safeLimit = Number.isSafeInteger(maxRecords) && maxRecords > 0
+    ? Math.min(maxRecords, 200)
+    : 100;
+  const audited = rows.map((row) => {
+    const currency = row.currency.trim().toUpperCase();
+    const minorDigits = CURRENCY_MINOR_DIGITS[currency];
+    const minorPerMajor = minorDigits === undefined ? null : 10 ** minorDigits;
+    const reviewReasons: string[] = [];
+    if (minorPerMajor === null) {
+      reviewReasons.push("unknown_currency_scale");
+    }
+    if (!Number.isSafeInteger(row.amountMinor) || row.amountMinor <= 0) {
+      reviewReasons.push("non_positive_or_invalid_amount");
+    } else if (minorPerMajor !== null && row.amountMinor < minorPerMajor) {
+      reviewReasons.push("below_one_major_currency_unit");
+    }
+    const status: ExpenseUnitAuditRecord["status"] = reviewReasons.length > 0 ? "review" : "ok";
+    return {
+      id: row.id,
+      description: row.description,
+      occurredAt: row.occurredAt instanceof Date
+        ? row.occurredAt.toISOString()
+        : row.occurredAt,
+      currency,
+      stored: {
+        value: row.amountMinor,
+        unit: "minor" as const,
+      },
+      expected: {
+        unit: "minor" as const,
+        minorPerMajor,
+        displayValue: minorPerMajor === null ? null : row.amountMinor / minorPerMajor,
+      },
+      status,
+      reviewReasons,
+    };
+  });
+  return {
+    expectedStoredUnit: "minor",
+    scannedCount: audited.length,
+    reviewCount: audited.filter((record) => record.status === "review").length,
+    truncated: audited.length > safeLimit,
+    records: audited.slice(0, safeLimit),
+  };
+}
+
 type ExpenseSummary = {
   count: number;
   projectCount: number;
@@ -837,6 +938,28 @@ function broadExpenseReportResponse(
     groundedFacts: [
       { type: "money", value: totalMinor, currency, label: "إجمالي المصروفات" },
       { type: "count", value: count, label: "عدد المصروفات" },
+    ],
+  };
+}
+
+function expenseUnitAuditResponse(audit: ExpenseUnitAuditReport): FinalResponse {
+  const details = audit.records
+    .filter((record) => record.status === "review")
+    .slice(0, 8)
+    .map((record) => {
+      const stored = new Intl.NumberFormat("ar-EG").format(record.stored.value);
+      const expected = record.expected.displayValue === null
+        ? "غير معروف"
+        : new Intl.NumberFormat("ar-EG", { maximumFractionDigits: 3 }).format(record.expected.displayValue);
+      return `${record.id}: المخزن ${stored} بوحدة صغرى، المتوقع عرضه ${expected} بالوحدة الرئيسية (${record.reviewReasons.join("، ")})`;
+    });
+  const truncatedMessage = audit.truncated ? " التقرير محدود بعدد من السجلات، فاطلب متابعة للفحص الكامل." : "";
+  return {
+    kind: "answer",
+    message: `راجعت السجلات قبل حساب الإجمالي، ووجدت ${audit.reviewCount} سجل${audit.reviewCount === 1 ? "" : "ات"} تحتاج مراجعة بشرية. لم أعدّل أي سجل ولن أعرض إجماليًا قد يكون مضللًا.${details.length > 0 ? ` التفاصيل: ${details.join("؛ ")}` : ""}${truncatedMessage}`,
+    groundedFacts: [
+      { type: "count", value: audit.scannedCount, label: "السجلات المفحوصة" },
+      { type: "count", value: audit.reviewCount, label: "السجلات التي تحتاج مراجعة" },
     ],
   };
 }
@@ -1056,6 +1179,9 @@ export const phase2Tools: ToolDefinition[] = [
     toDate: { type: "STRING", description: "Optional exclusive ISO date/time upper bound" },
     limit: { type: "INTEGER" },
   }),
+  tool("audit_expense_units", "Read historical expenses before showing totals. Report each stored amountMinor value as minor currency units, the expected conversion to the major unit, and any row that needs human review. Never change or correct records.", {
+    limit: { type: "INTEGER", description: "Maximum number of detailed rows to return, capped by the server" },
+  }),
   tool("rank_expense_projects", "Rank saved project spending using database totals. Use for questions asking which project spent the most.", {
     period: {
       type: "STRING",
@@ -1161,6 +1287,7 @@ const READ_ONLY_TOOL_NAMES = new Set([
   "find_person",
   "find_project",
   "query_expenses",
+  "audit_expense_units",
   "rank_expense_projects",
   "get_person_expense_total",
   "get_project_expense_total",
@@ -2583,6 +2710,27 @@ async function executeTool(
       };
       break;
     }
+    case "audit_expense_units": {
+      const requestedLimit = Number(args.limit ?? 100);
+      const limit = Number.isFinite(requestedLimit)
+        ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 200)
+        : 100;
+      const rows = await db.select({
+        id: expensesTable.id,
+        amountMinor: expensesTable.amountMinor,
+        currency: expensesTable.currency,
+        description: expensesTable.description,
+        occurredAt: expensesTable.occurredAt,
+      }).from(expensesTable)
+        .where(identityWhere(identity, expensesTable))
+        .orderBy(desc(expensesTable.occurredAt))
+        .limit(limit + 1);
+      result = {
+        ok: true,
+        audit: buildExpenseUnitAudit(rows, limit),
+      };
+      break;
+    }
     case "rank_expense_projects": {
       const dateRange = expenseDateRange(args);
       const excludeProjectId = stringArg("excludeProjectId");
@@ -2962,6 +3110,7 @@ const requestGuidance = `إرشادات تنفيذ إضافية:
 - لا تجعل وجود اسم شخص وحده نية إنشاء. الفعل المالي + المبلغ يتغلب على مجرد ذكر الاسم، مع بقاء قرار الكتابة خاضعًا للموافقة.
 - إذا كانت الرسالة تسأل عن إجمالي ما صُرف على وصف أو فئة مثل "التشطيبات" من دون ذكر مشروع صريح، استخدم query_expenses مع description ثم احسب الناتج من الصفوف. لا تخترع مشروعًا اسمه الفئة.
 - إذا كانت الرسالة تسأل "محمد أخد مني كام؟"، نفّذ find_person ثم get_person_expense_total.
+- قبل عرض إجمالي عام للمصروفات، استخدم audit_expense_units أولًا. اعرض القيمة المخزنة بوحدة العملة الصغرى والتحويل المتوقع، وإذا وجدت سجلًا يحتاج مراجعة بشرية فلا تعرض الإجمالي ولا تعدّل السجل.
 - إذا كان اسم المشروع أو الشخص يطابق أكثر من كيان، لا تختار أي نتيجة عشوائيًا؛ اسأل المستخدم، إلا إذا كان السياق السابق يحتوي على اختيار واضح.
 - استخدم period = last_month أو this_month أو last_week أو this_week للعبارات الزمنية النسبية، ودع الخادم يحسب الحدود الزمنية.
 - استخدم rank_expense_projects لسؤال "أنهي مشروع صرفت فيه أكتر؟"، ولا تجمع أرقام الصفوف بنفسك.
@@ -6035,6 +6184,32 @@ export class Phase2AgentRuntime {
         deterministicMetrics.solvedWithoutLlm = true;
         deterministicMetrics.decision = "deterministic";
       }
+      const unitAuditResult = await executeStructuredTool(identity, "audit_expense_units", {
+        limit: 100,
+      }, {
+        requestId,
+        conversationId,
+      });
+      const unitAudit = unitAuditResult.audit as ExpenseUnitAuditReport | undefined;
+      if (!unitAuditResult.ok || !unitAudit) {
+        throw new SecretaryError("تعذر فحص وحدات المصروفات.", {
+          status: 500,
+          category: "agent_error",
+          code: "EXPENSE_UNIT_AUDIT_FAILED",
+          retryable: true,
+        });
+      }
+      if (unitAudit.reviewCount > 0) {
+        action = {
+          type: "expense_unit_audit_required",
+          audit: unitAudit,
+        };
+        try {
+          return await persistResult(expenseUnitAuditResponse(unitAudit));
+        } finally {
+          finishRequestInstrumentation();
+        }
+      }
       const report = await executeStructuredTool(identity, "query_expenses", {
         limit: 50,
         ...(deterministicExpensePeriodRequested ? { period: deterministicExpensePeriodRequested } : {}),
@@ -6053,6 +6228,7 @@ export class Phase2AgentRuntime {
       action = {
         type: "expense_report",
         summary: report.summary,
+        unitAudit,
       };
       try {
         return await persistResult(broadExpenseReportResponse(report, deterministicExpensePeriodRequested ?? undefined));
