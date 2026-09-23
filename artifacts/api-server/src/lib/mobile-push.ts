@@ -149,44 +149,64 @@ export async function registerMobilePushToken(
     deviceId?: string | null;
   },
 ): Promise<MobilePushToken> {
-  const existing = await db.select().from(mobilePushTokensTable).where(and(
-    eq(mobilePushTokensTable.token, input.token),
-  )).limit(1);
+  return db.transaction(async (tx) => {
+    const updateExisting = async (existing: MobilePushToken): Promise<MobilePushToken> => {
+      const sameOwner = existing.tenantId === identity.tenantId
+        && existing.ownerUserId === identity.userId;
+      const controlledHandoff = existing.enabled === 0
+        && existing.disabledReason === "unregistered";
+      if (!sameOwner && !controlledHandoff) {
+        throw new Error("PUSH_TOKEN_OWNERSHIP_CONFLICT");
+      }
+      const [updated] = await tx.update(mobilePushTokensTable)
+        .set({
+          tenantId: identity.tenantId,
+          ownerUserId: identity.userId,
+          provider: input.provider,
+          platform: input.platform,
+          appId: input.appId,
+          deviceId: input.deviceId ?? null,
+          enabled: 1,
+          disabledReason: null,
+          lastSeenAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(mobilePushTokensTable.id, existing.id))
+        .returning();
+      if (!updated) throw new Error("PUSH_TOKEN_REGISTRATION_FAILED");
+      return updated;
+    };
 
-  if (existing[0]) {
-    if (existing[0].tenantId !== identity.tenantId || existing[0].ownerUserId !== identity.userId) {
-      throw new Error("PUSH_TOKEN_OWNERSHIP_CONFLICT");
-    }
-    const [updated] = await db.update(mobilePushTokensTable)
-      .set({
-        provider: input.provider,
-        platform: input.platform,
-        appId: input.appId,
-        deviceId: input.deviceId ?? null,
-        enabled: 1,
-        lastSeenAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(mobilePushTokensTable.id, existing[0].id))
-      .returning();
-    return updated;
-  }
+    const [existing] = await tx.select().from(mobilePushTokensTable).where(
+      eq(mobilePushTokensTable.token, input.token),
+    ).for("update");
 
-  const [created] = await db.insert(mobilePushTokensTable).values({
-    tenantId: identity.tenantId,
-    ownerUserId: identity.userId,
-    token: input.token,
-    provider: input.provider,
-    platform: input.platform,
-    appId: input.appId,
-    deviceId: input.deviceId ?? null,
-  }).returning();
-  return created;
+    if (existing) return updateExisting(existing);
+
+    const [created] = await tx.insert(mobilePushTokensTable).values({
+      tenantId: identity.tenantId,
+      ownerUserId: identity.userId,
+      token: input.token,
+      provider: input.provider,
+      platform: input.platform,
+      appId: input.appId,
+      deviceId: input.deviceId ?? null,
+    }).onConflictDoNothing({
+      target: mobilePushTokensTable.token,
+    }).returning();
+    if (created) return created;
+
+    const [raced] = await tx.select().from(mobilePushTokensTable).where(
+      eq(mobilePushTokensTable.token, input.token),
+    ).for("update");
+    if (!raced) throw new Error("PUSH_TOKEN_REGISTRATION_FAILED");
+    return updateExisting(raced);
+  });
 }
 
 export async function disableMobilePushToken(identity: Identity, token: string): Promise<boolean> {
   const result = await db.update(mobilePushTokensTable)
-    .set({ enabled: 0, updatedAt: new Date() })
+    .set({ enabled: 0, disabledReason: "unregistered", updatedAt: new Date() })
     .where(and(
       eq(mobilePushTokensTable.tenantId, identity.tenantId),
       eq(mobilePushTokensTable.ownerUserId, identity.userId),
@@ -197,7 +217,7 @@ export async function disableMobilePushToken(identity: Identity, token: string):
 
 async function disableInvalidToken(tokenId: string): Promise<void> {
   await db.update(mobilePushTokensTable)
-    .set({ enabled: 0, updatedAt: new Date() })
+    .set({ enabled: 0, disabledReason: "provider_invalid", updatedAt: new Date() })
     .where(eq(mobilePushTokensTable.id, tokenId));
 }
 

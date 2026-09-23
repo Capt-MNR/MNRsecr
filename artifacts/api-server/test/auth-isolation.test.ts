@@ -139,13 +139,14 @@ test("unauthenticated, malformed, expired-development, and invalid sessions are 
   } finally {
     process.env.NODE_ENV = previousNodeEnv;
   }
+  const revokedAlice = await signup(`auth-revoked-${suffix}@example.test`);
   const logout = await request("/auth/logout", {
     method: "POST",
-    headers: { ...bearer(alice.token), "content-type": "application/json" },
-    body: JSON.stringify({ refreshToken: alice.refreshToken }),
+    headers: { ...bearer(revokedAlice.token), "content-type": "application/json" },
+    body: JSON.stringify({ refreshToken: revokedAlice.refreshToken }),
   });
   assert.equal(logout.status, 204);
-  assert.equal((await request("/records", { headers: bearer(alice.token) })).status, 401);
+  assert.equal((await request("/records", { headers: bearer(revokedAlice.token) })).status, 401);
 });
 
 test("authenticated user owns a tenant and cannot forge tenant or owner headers", async () => {

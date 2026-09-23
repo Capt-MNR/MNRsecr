@@ -720,6 +720,7 @@ export const mobilePushTokensTable = pgTable(
     appId: text("app_id").notNull(),
     deviceId: text("device_id"),
     enabled: integer("enabled").notNull().default(1),
+    disabledReason: text("disabled_reason"),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

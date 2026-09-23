@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 import {
   customFetch,
   setAuthRefreshHandler,
@@ -73,8 +74,12 @@ async function clearTokens(): Promise<void> {
   accessToken = null;
   refreshToken = null;
   await Promise.all([
-    SecureStore.deleteItemAsync(SECURE_ACCESS_KEY),
-    SecureStore.deleteItemAsync(SECURE_REFRESH_KEY),
+    ...(Platform.OS === 'web'
+      ? []
+      : [
+        SecureStore.deleteItemAsync(SECURE_ACCESS_KEY),
+        SecureStore.deleteItemAsync(SECURE_REFRESH_KEY),
+      ]),
     AsyncStorage.removeItem(ACCESS_KEY),
     AsyncStorage.removeItem(REFRESH_KEY),
   ]);
