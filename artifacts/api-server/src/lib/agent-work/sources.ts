@@ -2,9 +2,13 @@ import { createHash } from "node:crypto";
 import { and, eq, inArray, sql, not } from "drizzle-orm";
 import { db, tasksTable } from "@workspace/db";
 import type { AgentWorkIdentity, AgentWorkRecord } from "./types";
+import {
+  compareCondition,
+  comparisonOperator,
+  type ComparisonOperator,
+} from "./condition-evaluator";
 
 type InternalRecordMetric = "open_task_count";
-type ComparisonOperator = "gt" | "gte" | "eq" | "lt" | "lte";
 
 export type InternalRecordsSnapshot = {
   sourceType: "internal_records";
@@ -61,24 +65,6 @@ const GITHUB_COOLDOWN_MAX_MS = 15 * 60_000;
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? value as Record<string, unknown> : {};
-}
-
-function comparisonOperator(value: unknown): ComparisonOperator | null {
-  return value === "gt"
-    || value === "gte"
-    || value === "eq"
-    || value === "lt"
-    || value === "lte"
-    ? value
-    : null;
-}
-
-function compare(value: number, operator: ComparisonOperator, threshold: number): boolean {
-  if (operator === "gt") return value > threshold;
-  if (operator === "gte") return value >= threshold;
-  if (operator === "eq") return value === threshold;
-  if (operator === "lt") return value < threshold;
-  return value <= threshold;
 }
 
 function boundedCooldownMs(value: number): number {
@@ -189,7 +175,7 @@ export async function readInternalRecordsSource(
       value,
       currency: null,
       sourceHash: hashSnapshot({ entity: "tasks", metric: "open_task_count", value }),
-      conditionMet: compare(value, operator, threshold),
+        conditionMet: compareCondition(value, operator, threshold),
       comparisonKnown: true,
       reason: "tenant_scoped_read_verified",
     },
@@ -235,7 +221,7 @@ export function applyGitHubRepositoryCondition(
       ...sourceRead.snapshot,
       operator: parts.operator,
       threshold: parts.threshold,
-      conditionMet: compare(sourceRead.snapshot.value, parts.operator, parts.threshold),
+       conditionMet: compareCondition(sourceRead.snapshot.value, parts.operator, parts.threshold),
     },
   };
 }
@@ -365,10 +351,80 @@ export async function readGitHubRepositorySource(
       fetchedAt: now.toISOString(),
       responseDate,
       sourceHash,
-      conditionMet: compare(value, parts.operator, parts.threshold),
+       conditionMet: compareCondition(value, parts.operator, parts.threshold),
       comparisonKnown: true,
       reason: "github_api_read_verified",
     },
     ...(cooldownMs ? { cooldownMs } : {}),
   };
+}
+
+export type GitHubReadContext = {
+  cooldowns: Map<string, number>;
+  reads: Map<string, Promise<GitHubRepositorySourceRead>>;
+};
+
+function githubRepositoryReadKey(
+  identity: AgentWorkIdentity,
+  work: AgentWorkRecord,
+): string {
+  const condition = asRecord(work.condition);
+  const operator = typeof condition.operator === "string" && comparisonOperator(condition.operator)
+    ? "__valid_operator__"
+    : condition.operator;
+  const threshold = Number(condition.threshold);
+  const thresholdKey = Number.isSafeInteger(threshold) && threshold >= 0
+    ? "__valid_threshold__"
+    : condition.threshold;
+  return JSON.stringify([
+    identity.tenantId,
+    identity.userId,
+    condition.provider,
+    condition.entity,
+    condition.metric,
+    typeof condition.owner === "string" ? condition.owner.trim().toLowerCase() : "",
+    typeof condition.repository === "string" ? condition.repository.trim().toLowerCase() : "",
+    operator,
+    thresholdKey,
+  ]);
+}
+
+export async function readGitHubRepositoryWithSafeguards(
+  identity: AgentWorkIdentity,
+  work: AgentWorkRecord,
+  now: Date,
+  context?: GitHubReadContext,
+): Promise<GitHubRepositorySourceRead> {
+  if (!context) return readGitHubRepositorySource(identity, work, { now });
+
+  const key = githubRepositoryReadKey(identity, work);
+  const nowMs = now.getTime();
+  let read = context.reads.get(key);
+  if (read) {
+    const sourceRead = await read;
+    if (sourceRead.cooldownMs) {
+      const nextCooldownUntil = nowMs + sourceRead.cooldownMs;
+      const currentCooldownUntil = context.cooldowns.get(key) ?? 0;
+      context.cooldowns.set(key, Math.max(currentCooldownUntil, nextCooldownUntil));
+    }
+    return applyGitHubRepositoryCondition(sourceRead, work);
+  }
+
+  const cooldownUntil = context.cooldowns.get(key);
+  if (cooldownUntil !== undefined) {
+    if (cooldownUntil > nowMs) {
+      return { ok: false, reason: "source_unavailable" };
+    }
+    context.cooldowns.delete(key);
+  }
+
+  read = readGitHubRepositorySource(identity, work, { now });
+  context.reads.set(key, read);
+  const sourceRead = await read;
+  if (sourceRead.cooldownMs) {
+    const nextCooldownUntil = nowMs + sourceRead.cooldownMs;
+    const currentCooldownUntil = context.cooldowns.get(key) ?? 0;
+    context.cooldowns.set(key, Math.max(currentCooldownUntil, nextCooldownUntil));
+  }
+  return applyGitHubRepositoryCondition(sourceRead, work);
 }
