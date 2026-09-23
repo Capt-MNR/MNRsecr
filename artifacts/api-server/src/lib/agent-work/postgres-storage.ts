@@ -39,6 +39,7 @@ import type {
   ListAgentWorksInput,
   StorageAdapter,
 } from "./types";
+import type { DbExecutor } from "../entity-graph";
 
 const activeRunStatuses: AgentWorkRunStatus[] = ["claimed", "running", "verifying"];
 const defaultLimit = 50;
@@ -141,7 +142,7 @@ export class PostgresAgentWorkStorageAdapter implements StorageAdapter {
   readonly driver: AgentWorkDriver = "postgres";
 
   async createWork(input: CreateAgentWorkInput): Promise<AgentWorkRecord> {
-    return db.transaction(async (tx) => {
+    const create = async (tx: DbExecutor): Promise<AgentWorkRecord> => {
       const [row] = await tx.insert(agentWorksTable).values({
         tenantId: input.identity.tenantId,
         ownerUserId: input.identity.userId,
@@ -166,7 +167,10 @@ export class PostgresAgentWorkStorageAdapter implements StorageAdapter {
         metadata: { kind: input.kind },
       });
       return mapWork(row);
-    });
+    };
+    return input.transactionExecutor
+      ? create(input.transactionExecutor)
+      : db.transaction((tx) => create(tx));
   }
 
   async getWork(identity: AgentWorkIdentity, workId: string): Promise<AgentWorkRecord | null> {

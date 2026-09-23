@@ -21,6 +21,7 @@ import { executeStructuredTool } from "../lib/phase2";
 import {
   claimOperation,
   completeOperation,
+  completeOperationWithExecutor,
   failOperation,
   getOperation,
   rejectOperation,
@@ -151,23 +152,11 @@ function publicOperation(operation: PendingOperation) {
   };
 }
 
-async function executeExpenseApproval(
-  identity: Identity,
+function expenseApprovalResult(
   operation: PendingOperation,
-): Promise<OperationExecutionResult> {
-  if (configuredProvider() === "development") {
-    return executeApprovedOperation(identity, operation);
-  }
-
+  toolResult: Record<string, unknown>,
+): OperationExecutionResult {
   const args = persistedApprovalArgs(operation.args);
-  const toolResult = await executeStructuredTool(identity, operation.toolName, args, {
-    requestId: `approval-${operation.operationId}`,
-    conversationId: operation.conversationId,
-    approvedOperationId: operation.operationId,
-  });
-  if (!toolResult.ok || toolResult.pendingApproval) {
-    throw new Error(typeof toolResult.error === "string" ? toolResult.error : "تعذر تنفيذ العملية.");
-  }
   const verification = toolResult.verification;
   if (
     !verification
@@ -197,6 +186,34 @@ async function executeExpenseApproval(
     provider: "server",
     model: "approved-operation",
   };
+}
+
+async function executeExpenseApproval(
+  identity: Identity,
+  operation: PendingOperation,
+): Promise<OperationExecutionResult> {
+  if (configuredProvider() === "development") {
+    return executeApprovedOperation(identity, operation);
+  }
+
+  const args = persistedApprovalArgs(operation.args);
+  const toolResult = await executeStructuredTool(identity, operation.toolName, args, {
+    requestId: `approval-${operation.operationId}`,
+    conversationId: operation.conversationId,
+    approvedOperationId: operation.operationId,
+    operationCompletion: async (verifiedResult, executor) => {
+      await completeOperationWithExecutor(
+        identity,
+        operation.operationId,
+        expenseApprovalResult(operation, verifiedResult),
+        executor,
+      );
+    },
+  });
+  if (!toolResult.ok || toolResult.pendingApproval) {
+    throw new Error(typeof toolResult.error === "string" ? toolResult.error : "تعذر تنفيذ العملية.");
+  }
+  return expenseApprovalResult(operation, toolResult);
 }
 
 function resultWithActualArgs(

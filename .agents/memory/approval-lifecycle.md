@@ -14,3 +14,9 @@ Browser approval views must invalidate their cached operation after a terminal r
 **Why:** The server stores the pending intent and the post-approval event separately, so history refreshes can legitimately return the original pending action after the UI has already confirmed or rejected it.
 
 **How to apply:** On confirm or reject, refresh the scoped operation query and merge any locally terminal operation state over older history snapshots before rendering the approval form.
+
+Approved domain mutation, activity, verification, and operation completion must commit in the same database transaction whenever they share the existing database executor. A stale `executing` operation may only be reconciled from a tenant-scoped activity receipt carrying its operation ID; without a receipt, reset it only after the execution grace period and retry the existing approval.
+
+**Why:** A process can stop after a mutation commits but before a separate operation update, and blindly retrying would duplicate the mutation. The activity event is already in the mutation transaction, so it is the durable evidence needed to close the old boundary safely.
+
+**How to apply:** Pass the transaction executor through the existing approved tool path, persist `sourceOperationId` in activity metadata, and keep the existing row-version and tenant/owner predicates on every mutation and recovery update. Do not add a second approval executor.

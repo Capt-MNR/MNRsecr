@@ -1951,6 +1951,7 @@ async function executeTool(
     transactionExecutor?: DbExecutor;
     activityWriter?: typeof recordToolActivity;
     verificationResolver?: MutationVerificationResolver;
+    operationCompletion?: (result: ToolResult, executor: DbExecutor) => Promise<void>;
   },
 ): Promise<ToolResult> {
   if (WRITE_TOOLS.has(name) && options.approvedOperationId && !options.transactionExecutor) {
@@ -2964,6 +2965,7 @@ async function executeTool(
         action: objectArg("action"),
         schedule: objectArg("schedule"),
         nextRunAt,
+        transactionExecutor: db,
       });
       result = { ok: true, agentWork: work, created: true };
       break;
@@ -3040,11 +3042,22 @@ async function executeTool(
 
   if (result.ok && WRITE_TOOLS.has(name)) {
     const activityWriter = options.activityWriter ?? recordToolActivity;
-    await activityWriter(identity, name, args, result, db);
+    await activityWriter(
+      identity,
+      name,
+      options.approvedOperationId
+        ? { ...args, sourceOperationId: options.approvedOperationId }
+        : args,
+      result,
+      db,
+    );
     const verification = options.verificationResolver
       ? await options.verificationResolver(identity, name, result, db)
       : await verifyMutationResult(identity, name, result, db);
     result = { ...result, verification };
+    if (options.operationCompletion) {
+      await options.operationCompletion(result, db);
+    }
   }
 
   logger.info({
@@ -3071,6 +3084,7 @@ export async function executeStructuredTool(
     approvedOperationId?: string;
     activityWriter?: typeof recordToolActivity;
     verificationResolver?: MutationVerificationResolver;
+    operationCompletion?: (result: Record<string, unknown>, executor: DbExecutor) => Promise<void>;
   } = { requestId: crypto.randomUUID() },
 ): Promise<ToolResult> {
   return executeTool(identity, name, args, options);

@@ -1,3 +1,5 @@
+import type { DbExecutor } from "../entity-graph";
+
 export type AgentWorkDriver = "development" | "postgres" | "replit" | "expo" | "stub";
 
 export type AgentWorkIdentity = {
@@ -181,6 +183,7 @@ export type CreateAgentWorkInput = {
   action?: Record<string, unknown>;
   schedule?: Record<string, unknown>;
   nextRunAt?: Date | null;
+  transactionExecutor?: DbExecutor;
 };
 
 export type AgentWorkStatusChange = {

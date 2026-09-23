@@ -208,11 +208,17 @@ export async function recordToolActivity(
     sourceType,
     sourceId: typeof primaryId === "string" ? primaryId : null,
     summary: toolName,
-    metadata: { toolName, args: Object.fromEntries(
-      Object.entries(args).filter(([, value]) =>
-        ["string", "number", "boolean"].includes(typeof value) || value === null,
+    metadata: {
+      toolName,
+      ...(typeof args.sourceOperationId === "string"
+        ? { sourceOperationId: args.sourceOperationId }
+        : {}),
+      args: Object.fromEntries(
+        Object.entries(args).filter(([, value]) =>
+          ["string", "number", "boolean"].includes(typeof value) || value === null,
+        ),
       ),
-    ) },
+    },
     entities,
   }, executor);
 }

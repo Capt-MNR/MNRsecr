@@ -34,6 +34,7 @@ import {
 } from "./phase2";
 import {
   createPendingOperation,
+  completeOperationWithExecutor,
   displayForOperation,
   rejectPendingOperationForConversation,
   type OperationExecutionResult,
@@ -1742,111 +1743,130 @@ export async function executeApprovedOperation(
   operation: PendingOperation,
 ): Promise<OperationExecutionResult> {
   const conversationId = operation.conversationId ?? randomUUID();
-  let action: Record<string, unknown>;
-  let assistantMessage: string;
+  const buildResult = (toolResult: Record<string, unknown>): OperationExecutionResult => {
+    const verification = mutationVerification(toolResult);
+    const resultRecord = (key: string) => {
+      const value = toolResult[key];
+      return value && typeof value === "object" && !Array.isArray(value)
+        ? value as Record<string, unknown>
+        : undefined;
+    };
+    const expense = resultRecord("expense");
+    const project = resultRecord("project");
+    const person = resultRecord("person");
+    const reminder = resultRecord("reminder");
+    let action: Record<string, unknown>;
+    let assistantMessage: string;
+
+    if (operation.toolName === "record_expense" && expense) {
+      assistantMessage = `تمام، سجلت ${moneyLabel(Number(expense.amountMinor), String(expense.currency))}.`;
+      action = {
+        type: "expense_recorded",
+        operationId: operation.operationId,
+        expenseId: expense.id,
+        amountMinor: expense.amountMinor,
+        currency: expense.currency,
+        personId: expense.personId,
+        projectId: expense.projectId,
+        args: persistedApprovalArgs(operation.args),
+        personName: operationStringArg(operation, "personName"),
+        projectName: operationStringArg(operation, "projectName"),
+        ...(Array.isArray(operation.args.projectCandidates)
+          ? { projectCandidates: operation.args.projectCandidates }
+          : {}),
+        verification,
+      };
+    } else if (operation.toolName === "create_project" && project) {
+      assistantMessage = `تمام، سجلت مشروع ${String(project.name)}.`;
+      action = { type: "project_created", operationId: operation.operationId, projectId: project.id, projectName: project.name };
+    } else if (operation.toolName === "create_person" && person) {
+      assistantMessage = `تمام، سجلت ${String(person.name)}.`;
+      action = { type: "person_created", operationId: operation.operationId, personId: person.id, personName: person.name };
+    } else if (operation.toolName === "update_expense" && expense) {
+      const projectCorrection = operationNumberArg(operation, "amountMinor") === undefined
+        && Boolean(operationStringArg(operation, "projectId"));
+      assistantMessage = projectCorrection
+        ? "تمام، نقلت المصروف إلى المشروع الآخر."
+        : `تمام، صححت المصروف إلى ${moneyLabel(Number(expense.amountMinor), String(expense.currency))}.`;
+      action = {
+        type: projectCorrection ? "expense_project_corrected" : "expense_corrected",
+        operationId: operation.operationId,
+        expenseId: expense.id,
+        amountMinor: expense.amountMinor,
+        currency: expense.currency,
+        personId: expense.personId,
+        projectId: expense.projectId,
+        personName: operationStringArg(operation, "personName"),
+        projectName: operationStringArg(operation, "projectName"),
+        description: expense.description,
+        verification,
+      };
+    } else if (operation.toolName === "create_person_and_link_person_to_project" && person) {
+      assistantMessage = `تمام، ربطت ${String(person.name)} بالمشروع المحدد.`;
+      action = {
+        type: "person_linked",
+        operationId: operation.operationId,
+        personId: person.id,
+        personName: person.name,
+        projectId: operation.args.projectId,
+        projectName: operation.args.projectName,
+        relationship: operation.args.relationship,
+        verification,
+      };
+    } else if (operation.toolName === "create_reminder" && reminder) {
+      assistantMessage = `حاضر، هفكرك: ${String(reminder.text)}.`;
+      action = {
+        type: "reminder_created",
+        operationId: operation.operationId,
+        reminderId: reminder.id,
+        dueAt: reminder.dueAt instanceof Date ? reminder.dueAt.toISOString() : reminder.dueAt,
+        verification,
+      };
+    } else {
+      assistantMessage = "تم تنفيذ التغيير المطلوب.";
+      action = {
+        type: "operation_completed",
+        operationId: operation.operationId,
+        toolName: operation.toolName,
+        toolResult,
+        verification,
+      };
+    }
+
+    return {
+      conversationId,
+      assistantMessage,
+      action,
+      provider: "server",
+      model: "approved-operation",
+    };
+  };
+  const withActualArgs = (result: OperationExecutionResult): OperationExecutionResult => ({
+    ...result,
+    action: {
+      ...(result.action ?? {}),
+      args: persistedApprovalArgs(operation.args),
+    },
+  });
 
   const toolResult = await executeStructuredTool(identity, operation.toolName, operation.args, {
     requestId: `approval-${operation.operationId}`,
     conversationId,
     sourceTurnId: operation.sourceTurnId ?? undefined,
     approvedOperationId: operation.operationId,
+    operationCompletion: async (verifiedResult, executor) => {
+      await completeOperationWithExecutor(
+        identity,
+        operation.operationId,
+        withActualArgs(buildResult(verifiedResult)),
+        executor,
+      );
+    },
   });
   if (!toolResult.ok || toolResult.pendingApproval) {
     throw new Error(typeof toolResult.error === "string" ? toolResult.error : "تعذر تنفيذ العملية.");
   }
-  const verification = mutationVerification(toolResult);
-  const resultRecord = (key: string) => {
-    const value = toolResult[key];
-    return value && typeof value === "object" && !Array.isArray(value)
-      ? value as Record<string, unknown>
-      : undefined;
-  };
-  const expense = resultRecord("expense");
-  const project = resultRecord("project");
-  const person = resultRecord("person");
-  const reminder = resultRecord("reminder");
-  if (operation.toolName === "record_expense" && expense) {
-    assistantMessage = `تمام، سجلت ${moneyLabel(Number(expense.amountMinor), String(expense.currency))}.`;
-    action = {
-      type: "expense_recorded",
-      operationId: operation.operationId,
-      expenseId: expense.id,
-      amountMinor: expense.amountMinor,
-      currency: expense.currency,
-      personId: expense.personId,
-      projectId: expense.projectId,
-      args: persistedApprovalArgs(operation.args),
-      personName: operationStringArg(operation, "personName"),
-      projectName: operationStringArg(operation, "projectName"),
-      ...(Array.isArray(operation.args.projectCandidates)
-        ? { projectCandidates: operation.args.projectCandidates }
-        : {}),
-      verification,
-    };
-  } else if (operation.toolName === "create_project" && project) {
-    assistantMessage = `تمام، سجلت مشروع ${String(project.name)}.`;
-    action = { type: "project_created", operationId: operation.operationId, projectId: project.id, projectName: project.name };
-  } else if (operation.toolName === "create_person" && person) {
-    assistantMessage = `تمام، سجلت ${String(person.name)}.`;
-    action = { type: "person_created", operationId: operation.operationId, personId: person.id, personName: person.name };
-  } else if (operation.toolName === "update_expense" && expense) {
-    const projectCorrection = operationNumberArg(operation, "amountMinor") === undefined
-      && Boolean(operationStringArg(operation, "projectId"));
-    assistantMessage = projectCorrection
-      ? "تمام، نقلت المصروف إلى المشروع الآخر."
-      : `تمام، صححت المصروف إلى ${moneyLabel(Number(expense.amountMinor), String(expense.currency))}.`;
-    action = {
-      type: projectCorrection ? "expense_project_corrected" : "expense_corrected",
-      operationId: operation.operationId,
-      expenseId: expense.id,
-      amountMinor: expense.amountMinor,
-      currency: expense.currency,
-      personId: expense.personId,
-      projectId: expense.projectId,
-      personName: operationStringArg(operation, "personName"),
-      projectName: operationStringArg(operation, "projectName"),
-      description: expense.description,
-      verification,
-    };
-  } else if (operation.toolName === "create_person_and_link_person_to_project" && person) {
-    assistantMessage = `تمام، ربطت ${String(person.name)} بالمشروع المحدد.`;
-    action = {
-      type: "person_linked",
-      operationId: operation.operationId,
-      personId: person.id,
-      personName: person.name,
-      projectId: operation.args.projectId,
-      projectName: operation.args.projectName,
-      relationship: operation.args.relationship,
-      verification,
-    };
-  } else if (operation.toolName === "create_reminder" && reminder) {
-    assistantMessage = `حاضر، هفكرك: ${String(reminder.text)}.`;
-    action = {
-      type: "reminder_created",
-      operationId: operation.operationId,
-      reminderId: reminder.id,
-      dueAt: reminder.dueAt instanceof Date ? reminder.dueAt.toISOString() : reminder.dueAt,
-      verification,
-    };
-  } else {
-    assistantMessage = "تم تنفيذ التغيير المطلوب.";
-    action = {
-      type: "operation_completed",
-      operationId: operation.operationId,
-      toolName: operation.toolName,
-      toolResult,
-      verification,
-    };
-  }
-
-  return {
-    conversationId,
-    assistantMessage,
-    action,
-    provider: "server",
-    model: "approved-operation",
-  };
+  return withActualArgs(buildResult(toolResult));
 }
 
 export async function saveApprovedOperationTurn(

@@ -1,5 +1,10 @@
-import { and, desc, eq, gt, isNull, lte, or } from "drizzle-orm";
-import { db, secretaryOperationsTable, type SecretaryOperation } from "@workspace/db";
+import { and, desc, eq, gt, isNull, lte, or, sql } from "drizzle-orm";
+import {
+  activityEventsTable,
+  db,
+  secretaryOperationsTable,
+  type SecretaryOperation,
+} from "@workspace/db";
 import type { Identity } from "./secretary";
 import { persistedApprovalArgs } from "./approval-schemas";
 
@@ -26,6 +31,8 @@ export type OperationExecutionResult = {
   model: string;
 };
 
+type OperationDbExecutor = Pick<typeof db, "select" | "update">;
+
 export type PendingOperation = {
   operationId: string;
   conversationId: string | null;
@@ -40,6 +47,7 @@ export type PendingOperation = {
 };
 
 const OPERATION_TTL_MS = 24 * 60 * 60 * 1000;
+const EXECUTION_RECOVERY_GRACE_MS = 60 * 1000;
 
 function scopedOperation(identity: Identity, operationId: string) {
   return and(
@@ -260,6 +268,87 @@ export type ApprovalOutcome =
   | { kind: "claimed"; operation: PendingOperation }
   | { kind: "existing"; operation: PendingOperation };
 
+function recoveredOperationResult(
+  operation: PendingOperation,
+  event: typeof activityEventsTable.$inferSelect,
+): OperationExecutionResult {
+  return {
+    conversationId: operation.conversationId ?? "",
+    assistantMessage: "تم تنفيذ العملية، واستعدت نتيجتها بعد انقطاع التنفيذ.",
+    action: {
+      type: "operation_reconciled",
+      operationId: operation.operationId,
+      toolName: operation.toolName,
+      entityId: event.sourceId,
+      sourceType: event.sourceType,
+      activityEventId: event.id,
+      args: persistedApprovalArgs(operation.args),
+      verification: {
+        state: "verified",
+        checks: ["activity_event_receipt"],
+      },
+    },
+    provider: "server",
+    model: "approved-operation-reconciliation",
+  };
+}
+
+async function reconcileExecutingOperation(
+  identity: Identity,
+  operation: PendingOperation,
+): Promise<PendingOperation> {
+  const [row] = await db.select().from(secretaryOperationsTable)
+    .where(scopedOperation(identity, operation.operationId))
+    .limit(1);
+  if (!row || row.status !== "executing") return row ? toOperation(row) : operation;
+
+  const claimedAt = row.claimedAt?.getTime() ?? 0;
+  if (claimedAt > 0 && Date.now() - claimedAt < EXECUTION_RECOVERY_GRACE_MS) {
+    return toOperation(row);
+  }
+
+  const [event] = await db.select().from(activityEventsTable)
+    .where(and(
+      eq(activityEventsTable.tenantId, identity.tenantId),
+      eq(activityEventsTable.ownerUserId, identity.userId),
+      eq(activityEventsTable.eventType, `${row.toolName}.completed`),
+      sql`${activityEventsTable.metadata}->>'sourceOperationId' = ${row.id}`,
+    ))
+    .orderBy(desc(activityEventsTable.createdAt))
+    .limit(1);
+
+  if (event) {
+    const result = recoveredOperationResult(operation, event);
+    const [completed] = await db.update(secretaryOperationsTable)
+      .set({
+        status: "completed",
+        resultJson: JSON.stringify(result),
+        completedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(and(
+        scopedOperation(identity, operation.operationId),
+        eq(secretaryOperationsTable.status, "executing"),
+      ))
+      .returning();
+    return toOperation(completed ?? row);
+  }
+
+  const [reset] = await db.update(secretaryOperationsTable)
+    .set({
+      status: "pending",
+      approvedAt: null,
+      claimedAt: null,
+      updatedAt: new Date(),
+    })
+    .where(and(
+      scopedOperation(identity, operation.operationId),
+      eq(secretaryOperationsTable.status, "executing"),
+    ))
+    .returning();
+  return toOperation(reset ?? row);
+}
+
 export async function claimOperation(
   identity: Identity,
   operationId: string,
@@ -304,6 +393,13 @@ export async function claimOperation(
   }
   const operation = await getOperation(identity, operationId);
   if (!operation) throw new Error("Pending operation was not found.");
+  if (operation.status === "executing") {
+    const reconciled = await reconcileExecutingOperation(identity, operation);
+    if (reconciled.status === "pending") {
+      return claimOperation(identity, operationId, argsOverride);
+    }
+    return { kind: "existing", operation: reconciled };
+  }
   return { kind: "existing", operation };
 }
 
@@ -348,7 +444,16 @@ export async function completeOperation(
   operationId: string,
   result: OperationExecutionResult,
 ): Promise<PendingOperation> {
-  const [completed] = await db.update(secretaryOperationsTable)
+  return completeOperationWithExecutor(identity, operationId, result, db);
+}
+
+export async function completeOperationWithExecutor(
+  identity: Identity,
+  operationId: string,
+  result: OperationExecutionResult,
+  executor: OperationDbExecutor,
+): Promise<PendingOperation> {
+  const [completed] = await executor.update(secretaryOperationsTable)
     .set({
       status: "completed",
       resultJson: JSON.stringify(result),
@@ -361,7 +466,10 @@ export async function completeOperation(
     ))
     .returning();
   if (completed) return toOperation(completed);
-  const operation = await getOperation(identity, operationId);
+  const [row] = await executor.select().from(secretaryOperationsTable)
+    .where(scopedOperation(identity, operationId))
+    .limit(1);
+  const operation = row ? toOperation(row) : null;
   if (!operation) throw new Error("Operation disappeared during execution.");
   return operation;
 }
