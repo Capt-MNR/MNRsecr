@@ -1,8 +1,10 @@
 import { createContext, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   login as loginRequest,
   logout as logoutRequest,
   restoreSession,
+  setAuthSessionInvalidatedCallback,
   signup as signupRequest,
   type AuthUser,
 } from './auth';
@@ -20,6 +22,15 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    setAuthSessionInvalidatedCallback(() => {
+      setUser(null);
+      queryClient.clear();
+    });
+    return () => setAuthSessionInvalidatedCallback(null);
+  }, [queryClient]);
 
   useEffect(() => {
     void restoreSession().then(setUser).finally(() => setLoading(false));
@@ -28,10 +39,25 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const value = useMemo<AuthContextValue>(() => ({
     user,
     loading,
-    login: async (email, password) => setUser(await loginRequest(email, password)),
-    signup: async (email, password, name) => setUser(await signupRequest(email, password, name)),
-    logout: async () => { await logoutRequest(); setUser(null); },
-  }), [loading, user]);
+    login: async (email, password) => {
+      const nextUser = await loginRequest(email, password);
+      queryClient.clear();
+      setUser(nextUser);
+    },
+    signup: async (email, password, name) => {
+      const nextUser = await signupRequest(email, password, name);
+      queryClient.clear();
+      setUser(nextUser);
+    },
+    logout: async () => {
+      try {
+        await logoutRequest();
+      } finally {
+        queryClient.clear();
+        setUser(null);
+      }
+    },
+  }), [loading, queryClient, user]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

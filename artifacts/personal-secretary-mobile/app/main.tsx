@@ -10,6 +10,7 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors, useThemePreference } from '@/hooks/useColors';
 import { useLanguage } from '@/hooks/useLanguage';
+import { useAuth } from '@/services/auth-context';
 import { useSecretaryChatService } from '../services/secretary-chat';
 import {
   receiptDraft,
@@ -51,6 +52,7 @@ import {
 export default function MainRoute() {
   const { language, setLanguage } = useLanguage();
   const { themePreference, setThemePreference } = useThemePreference();
+  const { logout } = useAuth();
   const baseColors = useColors();
   const colors = themePreference === 'dark'
     ? {
@@ -139,6 +141,11 @@ export default function MainRoute() {
   function updateInputReview(result: SecretaryInputResult) {
     setInputReview(result);
     setDraft(result.kind === 'receipt' ? receiptDraft(result) : result.text);
+  }
+
+  async function handleLogout() {
+    setDrawerOpen(false);
+    await logout();
   }
 
   useEffect(() => {
@@ -415,6 +422,7 @@ export default function MainRoute() {
           onLanguageChange={setLanguage}
           assistantPreferences={assistantPreferences}
           onAssistantPreferencesChange={(patch) => setAssistantPreferences((current) => ({ ...current, ...patch }))}
+           onLogout={() => void handleLogout()}
         />
       )}
       <SecondBrainMemorySheet

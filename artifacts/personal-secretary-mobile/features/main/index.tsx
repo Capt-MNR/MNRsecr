@@ -3540,6 +3540,7 @@ export function MainDrawer({
   onLanguageChange,
   assistantPreferences,
   onAssistantPreferencesChange,
+  onLogout,
 }: {
   colors: ReturnType<typeof useColors>;
   language: AppLanguage;
@@ -3554,6 +3555,7 @@ export function MainDrawer({
   onLanguageChange: (language: AppLanguage) => void;
   assistantPreferences: AssistantPreferences;
   onAssistantPreferencesChange: (patch: Partial<AssistantPreferences>) => void;
+  onLogout: () => void;
 }) {
   if (!open) return null;
   return (
@@ -3804,6 +3806,21 @@ export function MainDrawer({
               </Pressable>
             ))}
           </View>
+          <Pressable
+            testID="drawer-logout"
+            accessibilityRole="button"
+            accessibilityLabel={localized(language, 'تسجيل الخروج', 'Log out')}
+            onPress={onLogout}
+            style={({ pressed }) => [
+              styles.drawerLogout,
+              { borderColor: colors.border, opacity: pressed ? 0.65 : 1 },
+            ]}
+          >
+            <Feather name="log-out" size={15} color={colors.destructive} />
+            <Text style={[styles.drawerLogoutText, { color: colors.destructive }]}>
+              {localized(language, 'تسجيل الخروج', 'Log out')}
+            </Text>
+          </Pressable>
         </View>
       </ScrollView>
     </View>
@@ -4063,6 +4080,20 @@ export const styles = StyleSheet.create({
   drawerMemoryText: {
     fontSize: 10,
     lineHeight: 15,
+  },
+  drawerLogout: {
+    marginTop: 18,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 11,
+  },
+  drawerLogoutText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   drawerSettingsTitle: {
     fontSize: 13,

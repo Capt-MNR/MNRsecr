@@ -142,6 +142,7 @@ async function startMetro(expoPublicDomain, expoPublicReplId) {
     ...process.env,
     EXPO_PUBLIC_DOMAIN: expoPublicDomain,
     EXPO_PUBLIC_REPL_ID: expoPublicReplId,
+    EXPO_PUBLIC_MOBILE_AUTH_MODE: 'real',
   };
 
   if (expoPublicReplId) {
