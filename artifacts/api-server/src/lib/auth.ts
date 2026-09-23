@@ -1,5 +1,5 @@
 import { createHash, createHmac, randomBytes, randomUUID, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
-import { and, eq, gt, isNull, or } from "drizzle-orm";
+import { and, eq, gt, isNull } from "drizzle-orm";
 import {
   authMembershipsTable,
   authSessionsTable,
@@ -304,19 +304,19 @@ export async function revokeAuthSession(input: {
   accessToken?: string | null;
   refreshToken?: string | null;
 }): Promise<void> {
-  const hashes = [input.accessToken, input.refreshToken]
-    .filter((value): value is string => Boolean(value))
-    .map(hashSessionToken);
-  if (hashes.length === 0) return;
+  const accessHash = input.accessToken ? hashSessionToken(input.accessToken) : null;
+  const refreshHash = input.refreshToken ? hashSessionToken(input.refreshToken) : null;
+  if (!accessHash && !refreshHash) return;
   await db.update(authSessionsTable)
     .set({ revokedAt: new Date() })
-    .where(hashes.length === 1
-      ? eq(authSessionsTable.accessTokenHash, hashes[0])
-      : sqlOrTokenHashes(hashes));
-}
-
-function sqlOrTokenHashes(hashes: string[]) {
-  return or(eq(authSessionsTable.accessTokenHash, hashes[0]), eq(authSessionsTable.refreshTokenHash, hashes[1]));
+    .where(accessHash && refreshHash
+      ? and(
+        eq(authSessionsTable.accessTokenHash, accessHash),
+        eq(authSessionsTable.refreshTokenHash, refreshHash),
+      )
+      : accessHash
+        ? eq(authSessionsTable.accessTokenHash, accessHash)
+        : eq(authSessionsTable.refreshTokenHash, refreshHash!));
 }
 
 export async function getAuthUser(identity: AuthIdentity): Promise<AuthUser | null> {

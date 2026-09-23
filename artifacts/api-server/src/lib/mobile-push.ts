@@ -362,8 +362,8 @@ async function sendDelivery(
   } catch (error) {
     const retry = attemptNumber < MAX_ATTEMPTS;
     await finishDelivery(delivery.id, delivery.leaseToken ?? "", attemptNumber, {
-      status: "unknown",
-      errorClass: "unknown_delivery",
+      status: retry ? "unknown" : "failed",
+      errorClass: retry ? "unknown_delivery" : "unknown_delivery_exhausted",
       error: boundedError(error),
       ...(retry ? { nextAttemptAt: new Date(Date.now() + notificationBackoffMs(attemptNumber)) } : {}),
     });

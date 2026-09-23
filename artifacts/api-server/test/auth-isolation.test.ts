@@ -234,3 +234,66 @@ test("refresh rotates the refresh token and logout revokes the session", async (
   const me = await request("/auth/me", { headers: bearer(refreshed.body.accessToken) });
   assert.equal(me.status, 401);
 });
+
+test("logout revokes access-only, refresh-only, and matching access-plus-refresh sessions", async () => {
+  const accessOnly = await signup(`auth-logout-access-${suffix}@example.test`);
+  const accessLogout = await request("/auth/logout", {
+    method: "POST",
+    headers: bearer(accessOnly.token),
+  });
+  assert.equal(accessLogout.status, 204);
+  const accessRefresh = await request("/auth/refresh", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-auth-transport": "bearer" },
+    body: JSON.stringify({ refreshToken: accessOnly.refreshToken }),
+  });
+  assert.equal(accessRefresh.status, 401);
+
+  const refreshOnly = await signup(`auth-logout-refresh-${suffix}@example.test`);
+  const refreshLogout = await request("/auth/logout", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ refreshToken: refreshOnly.refreshToken }),
+  });
+  assert.equal(refreshLogout.status, 204);
+  const refreshAfterLogout = await request("/auth/refresh", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-auth-transport": "bearer" },
+    body: JSON.stringify({ refreshToken: refreshOnly.refreshToken }),
+  });
+  assert.equal(refreshAfterLogout.status, 401);
+
+  const both = await signup(`auth-logout-both-${suffix}@example.test`);
+  const bothLogout = await request("/auth/logout", {
+    method: "POST",
+    headers: { ...bearer(both.token), "content-type": "application/json" },
+    body: JSON.stringify({ refreshToken: both.refreshToken }),
+  });
+  assert.equal(bothLogout.status, 204);
+  const bothAfterLogout = await request("/auth/refresh", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-auth-transport": "bearer" },
+    body: JSON.stringify({ refreshToken: both.refreshToken }),
+  });
+  assert.equal(bothAfterLogout.status, 401);
+});
+
+test("mismatched tokens cannot revoke either session", async () => {
+  const first = await signup(`auth-logout-mismatch-a-${suffix}@example.test`);
+  const second = await signup(`auth-logout-mismatch-b-${suffix}@example.test`);
+  const logout = await request("/auth/logout", {
+    method: "POST",
+    headers: { ...bearer(first.token), "content-type": "application/json" },
+    body: JSON.stringify({ refreshToken: second.refreshToken }),
+  });
+  assert.equal(logout.status, 204);
+
+  const firstMe = await request("/auth/me", { headers: bearer(first.token) });
+  assert.equal(firstMe.status, 200);
+  const secondRefresh = await request("/auth/refresh", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-auth-transport": "bearer" },
+    body: JSON.stringify({ refreshToken: second.refreshToken }),
+  });
+  assert.equal(secondRefresh.status, 200);
+});

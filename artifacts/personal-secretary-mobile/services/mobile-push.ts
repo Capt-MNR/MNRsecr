@@ -5,6 +5,7 @@ import {
   approveSecretaryOperation,
   registerMobilePushToken,
   rejectSecretaryOperation,
+  unregisterMobilePushToken,
 } from '@workspace/api-client-react';
 import { Linking } from 'react-native';
 
@@ -15,6 +16,7 @@ export const SECRETARY_REJECT_ACTION = 'secretary-reject';
 
 let registrationPromise: Promise<boolean> | null = null;
 let categoryPromise: Promise<void> | null = null;
+let registeredToken: string | null = null;
 const handledResponseIds = new Set<string>();
 
 export type SecretaryPushStatus =
@@ -64,6 +66,7 @@ async function registerForSecretaryPush(): Promise<boolean> {
     appId: appId(),
     deviceId: Constants.deviceId ?? null,
   });
+  registeredToken = token.data;
   return true;
 }
 
@@ -117,6 +120,16 @@ export async function initializeSecretaryPush(): Promise<SecretaryPushStatus> {
 export function retrySecretaryPush(): Promise<SecretaryPushStatus> {
   registrationPromise = null;
   return initializeSecretaryPush();
+}
+
+export async function disconnectSecretaryPush(): Promise<void> {
+  const pendingRegistration = registrationPromise;
+  registrationPromise = null;
+  await pendingRegistration?.catch(() => undefined);
+  const token = registeredToken;
+  registeredToken = null;
+  if (!token) return;
+  await unregisterMobilePushToken({ token }).catch(() => undefined);
 }
 
 export async function openSecretaryNotificationSettings(): Promise<void> {

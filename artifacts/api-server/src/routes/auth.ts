@@ -12,6 +12,7 @@ import {
   revokeAuthSession,
   type IssuedSession,
 } from "../lib/auth";
+import { checkAuthAbuse } from "../lib/auth-abuse";
 import { getIdentity, requestId } from "./route-context";
 
 const router: IRouter = Router();
@@ -77,10 +78,30 @@ function sendAuthError(req: Request, res: Response, error: unknown): void {
   });
 }
 
+function sendAuthRateLimit(req: Request, res: Response, retryAfterSeconds: number): void {
+  res.setHeader("Retry-After", String(retryAfterSeconds));
+  res.status(429).json({
+    error: "تعذر إكمال طلب المصادقة الآن. حاول لاحقًا.",
+    code: "AUTH_RATE_LIMITED",
+    category: "rate_limit",
+    requestId: requestId(req),
+    retryable: true,
+  });
+}
+
 router.post("/auth/signup", async (req, res): Promise<void> => {
   const parsed = signupSchema.safeParse(req.body);
   if (!parsed.success) {
     sendAuthError(req, res, new AuthError(400, "AUTH_INVALID_SIGNUP"));
+    return;
+  }
+  const abuse = checkAuthAbuse({
+    kind: "signup",
+    ip: req.ip || req.socket.remoteAddress || "unknown",
+    identity: parsed.data.email,
+  });
+  if (!abuse.allowed) {
+    sendAuthRateLimit(req, res, abuse.retryAfterSeconds);
     return;
   }
   try {
@@ -98,6 +119,15 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     sendAuthError(req, res, new AuthError(400, "AUTH_INVALID_LOGIN"));
     return;
   }
+  const abuse = checkAuthAbuse({
+    kind: "login",
+    ip: req.ip || req.socket.remoteAddress || "unknown",
+    identity: parsed.data.email,
+  });
+  if (!abuse.allowed) {
+    sendAuthRateLimit(req, res, abuse.retryAfterSeconds);
+    return;
+  }
   try {
     const session = await loginAuthUser(parsed.data);
     setSessionCookies(res, session);
@@ -111,6 +141,15 @@ router.post("/auth/refresh", async (req, res): Promise<void> => {
   const refreshToken = typeof req.body?.refreshToken === "string"
     ? req.body.refreshToken
     : req.cookies?.[REFRESH_COOKIE];
+  const abuse = checkAuthAbuse({
+    kind: "refresh",
+    ip: req.ip || req.socket.remoteAddress || "unknown",
+    identity: refreshToken,
+  });
+  if (!abuse.allowed) {
+    sendAuthRateLimit(req, res, abuse.retryAfterSeconds);
+    return;
+  }
   try {
     const session = await refreshAuthSession(refreshToken);
     setSessionCookies(res, session);

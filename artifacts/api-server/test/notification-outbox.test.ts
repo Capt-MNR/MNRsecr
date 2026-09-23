@@ -10,6 +10,7 @@ import {
   classifyExpoFailure,
   dispatchMobilePush,
   notificationBackoffMs,
+  processNotificationOutbox,
   registerMobilePushToken,
 } from "../src/lib/mobile-push.ts";
 
@@ -84,6 +85,67 @@ test("durable push outbox isolates devices and deduplicates a notification", asy
       eq(notificationOutboxTable.ownerUserId, identity.userId),
     ));
     assert.equal(outboxes.length, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("network ambiguity becomes terminal failure after max attempts", async () => {
+  const identity = {
+    tenantId: `notification-max-attempts-${process.pid}-${Date.now()}`,
+    userId: "outbox-owner",
+  };
+  const token = `ExponentPushToken[${identity.tenantId}]`;
+  await registerMobilePushToken(identity, {
+    token,
+    provider: "expo",
+    platform: "android",
+    appId: "test-app",
+  });
+
+  const originalFetch = globalThis.fetch;
+  let requestCount = 0;
+  globalThis.fetch = async () => {
+    requestCount += 1;
+    throw new Error("network unavailable");
+  };
+
+  try {
+    const queued = await dispatchMobilePush(identity, {
+      title: "اختبار الحد الأقصى",
+      body: "يجب أن يتوقف",
+      dedupeKey: "notification-outbox-test:max-attempts",
+    });
+    const [createdDelivery] = await db.select().from(notificationDeliveriesTable).where(
+      eq(notificationDeliveriesTable.notificationId, queued.id),
+    );
+    assert.ok(createdDelivery);
+
+    for (let attempt = 2; attempt <= 5; attempt += 1) {
+      await db.update(notificationDeliveriesTable)
+        .set({ nextAttemptAt: new Date(0) })
+        .where(eq(notificationDeliveriesTable.id, createdDelivery.id));
+      await processNotificationOutbox({ notificationId: queued.id, now: new Date() });
+    }
+
+    const [terminalDelivery] = await db.select().from(notificationDeliveriesTable).where(
+      eq(notificationDeliveriesTable.id, createdDelivery.id),
+    );
+    assert.equal(terminalDelivery?.status, "failed");
+    assert.equal(terminalDelivery?.attemptCount, 5);
+    assert.equal(terminalDelivery?.lastErrorClass, "unknown_delivery_exhausted");
+    assert.equal(requestCount, 5);
+
+    await processNotificationOutbox({
+      notificationId: queued.id,
+      now: new Date(Date.now() + 60 * 60_000),
+    });
+    assert.equal(requestCount, 5);
+
+    const [outbox] = await db.select().from(notificationOutboxTable).where(
+      eq(notificationOutboxTable.id, queued.id),
+    );
+    assert.equal(outbox?.status, "failed");
   } finally {
     globalThis.fetch = originalFetch;
   }
