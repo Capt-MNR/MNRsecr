@@ -23,7 +23,7 @@ type CorpusCase = {
   text: string;
   normalizedText: string;
   intent: SemanticIntent;
-  decision: "deterministic" | "clarification" | "llm";
+  decision: "deterministic" | "clarification" | "llm" | "no_op";
   person?: string;
   amountMinor?: number;
   currency?: "EGP" | "USD" | "SAR";
@@ -229,7 +229,7 @@ const corpus: CorpusCase[] = [
     text: "ما تسجلش مصروف ٥٠٠ لمحمد",
     normalizedText: "ما تسجلش مصروف ٥٠٠ لمحمد",
     intent: "unknown",
-    decision: "llm",
+    decision: "no_op",
   },
   {
     dialect: "gulf",
@@ -237,7 +237,7 @@ const corpus: CorpusCase[] = [
     text: "لا تسجل ١٠٠ ريال لخالد",
     normalizedText: "لا تسجل ١٠٠ ريال لخالد",
     intent: "unknown",
-    decision: "llm",
+    decision: "no_op",
   },
   {
     dialect: "levantine",
@@ -245,7 +245,7 @@ const corpus: CorpusCase[] = [
     text: "مو تسجل ٢٠٠ دولار لرامي",
     normalizedText: "مو تسجل ٢٠٠ دولار لرامي",
     intent: "unknown",
-    decision: "llm",
+    decision: "no_op",
   },
   {
     dialect: "egyptian",

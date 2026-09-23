@@ -130,6 +130,9 @@ export function parseRelationshipRequest(
   const personDebtPrefix = message.match(/^(.+?)\s+(?:عليه|له|ليه)\s+(?:كام|كم|قد\s*ايه)/iu);
   const personDebtSuffix = message.match(/(?:ليا|لي)\s+(?:كام|كم|قد\s*ايه)\s+عند\s+(.+?)(?:[؟?!.،؛:]|$)/iu);
   const activityPerson = message.match(/(?:اخر|آخر)\s+(?:حاجه|حاجة|شيء)\s+(?:حصلت|حصل)\s+مع\s+(.+?)(?:[؟?!.،؛:]|$)/iu);
+  const activityTarget = message.match(
+    /(?:اخر|آخر)\s+(?:نشاط|حاجه|حاجة|شيء)(?:\s+(?:سجلناها|سجلناه|حصلت|حصل|اتسجلت|اتسجل))?\s+(?:عن|بخصوص)\s+(?:(مشروع|شركة)\s+)?(.+?)(?:[؟?!.،؛:]|$)/iu,
+  );
   const aboutPerson = message.match(/(?:تفاصيل|ملخص|العلاقات|علاقه|علاقة|عن)\s+(?:الشخص\s+)?(.+?)(?:[؟?!.،؛:]|$)/iu);
   const usesConversationReference = /^(?:طب|طيب|و)?\s*(?:عليه|عندها|عنده|معاه|معها|والمدفوعات|والسلف|والديون|والمشروع|المشروع\s+التاني)/iu.test(message.trim());
   if (travelConflictRequest) {
@@ -202,8 +205,17 @@ export function parseRelationshipRequest(
   if (activityPerson?.[1] || /(?:اخر|آخر)\s+(?:نشاط|حاجه|حاجة)/u.test(normalized)) {
     return {
       intent: "recent_activity",
-      targetType: activityPerson?.[1] ? "person" : undefined,
-      targetQuery: cleanQuery(activityPerson?.[1]),
+      targetType: activityPerson?.[1]
+        ? "person"
+        : activityTarget?.[2]
+          ? "project"
+          : undefined,
+      targetQuery: cleanQuery(
+        activityPerson?.[1]
+          ?? (activityTarget?.[2]
+            ? `${activityTarget[1] ? `${activityTarget[1]} ` : ""}${activityTarget[2]}`
+            : undefined),
+      ),
       usesConversationReference,
     };
   }
@@ -318,13 +330,16 @@ async function resolveTarget(
   | { status: "none" }
 > {
   if (parsed.targetType && parsed.targetQuery) {
-    let result = await resolveEntity(identity, parsed.targetType, parsed.targetQuery);
-    if (
-      result.matchType === "none"
-      && parsed.targetType === "project"
-      && !/^مشروع\s+/u.test(parsed.targetQuery)
-    ) {
-      result = await resolveEntity(identity, "project", `مشروع ${parsed.targetQuery}`);
+    const queries = [parsed.targetQuery];
+    if (parsed.targetType === "project") {
+      const withoutLabel = parsed.targetQuery.replace(/^(?:مشروع|شركة)\s+/u, "").trim();
+      if (withoutLabel && withoutLabel !== parsed.targetQuery) queries.push(withoutLabel);
+      if (!/^مشروع\s+/u.test(parsed.targetQuery)) queries.push(`مشروع ${parsed.targetQuery}`);
+    }
+    let result = await resolveEntity(identity, parsed.targetType, queries[0]);
+    for (const query of queries.slice(1)) {
+      if (result.matchType !== "none") break;
+      result = await resolveEntity(identity, parsed.targetType, query);
     }
     if (result.matchType === "ambiguous") {
       return {

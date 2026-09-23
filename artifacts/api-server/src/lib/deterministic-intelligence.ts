@@ -53,6 +53,7 @@ export type SemanticParse = {
   dateTime?: ParsedDateTime;
   entityMentions: EntityMention[];
   hasWriteLanguage: boolean;
+  hasNegativeWriteLanguage: boolean;
   hasReadLanguage: boolean;
   ambiguous: boolean;
 };
@@ -63,6 +64,12 @@ export type DeterministicDecision =
       intent: SemanticIntent;
       confidence: number;
       requiresApproval: boolean;
+      reason: string;
+    }
+  | {
+      kind: "no_op";
+      intent: "unknown";
+      confidence: number;
       reason: string;
     }
   | {
@@ -418,8 +425,9 @@ function extractEntityMentions(message: string): EntityMention[] {
   return mentions;
 }
 
-function hasNegativeWriteLanguage(value: string): boolean {
-  return /(?:^|\s)(?:مدفعتش|مش\s+عايز(?:\s+\S+){0,3}\s+(?:ا?سجل\p{L}*|ا?دفع\p{L}*|ا?صرف\p{L}*)|(?:ما|لا|مش|مو|من\s+غير)(?:\s+\S+){0,3}\s+(?:سجل\p{L}*|تسجل\p{L}*|دفعتش|دفعت\p{L}*|دفع\p{L}*|تدفع\p{L}*|صرف\p{L}*|تصرف\p{L}*|اديت\p{L}*|اعطيت\p{L}*|عطيت\p{L}*|حولت\p{L}*|سددت\p{L}*))/iu.test(value);
+export function isNegativeWriteRequest(value: string): boolean {
+  const normalized = canonicalizeArabicText(value);
+  return /^\s*(?:مدفعتش|مش\s+عايز\s+(?:ا?سجل|ا?ضيف)(?=\s|$)|(?:ما|مو)\s+تسجلش?(?=\s|$)|متسجلش(?=\s|$)|لا\s+تسجل(?=\s|$))/u.test(normalized);
 }
 
 export function isExplicitCancellationRequest(value: string): boolean {
@@ -460,7 +468,7 @@ export function parseSemanticRequest(message: string): SemanticParse {
   const explicitExpenseWrite = Boolean(amount && hasWriteLanguage)
     || expenseWriteWithoutAmount
     || /(?:سجل)\s+(?:لي\s+)?(?:مصروف|مصاريف)|record\s+expense/iu.test(normalizedText);
-  const negativeWriteLanguage = hasNegativeWriteLanguage(normalizedText);
+  const negativeWriteLanguage = isNegativeWriteRequest(normalizedText);
   const safeExpenseWrite = !negativeWriteLanguage && explicitExpenseWrite;
   const domains = new Set<SemanticDomain>();
   if (MONEY_WORDS.test(normalizedText) || amount || personTotal) domains.add("expense");
@@ -539,12 +547,21 @@ export function parseSemanticRequest(message: string): SemanticParse {
     ...(REMINDER_WORDS.test(normalizedText) ? { dateTime: parseArabicDateTime(normalizedText) ?? undefined } : {}),
     entityMentions,
     hasWriteLanguage,
+    hasNegativeWriteLanguage: negativeWriteLanguage,
     hasReadLanguage,
     ambiguous,
   };
 }
 
 export function decideDeterministically(parsed: SemanticParse): DeterministicDecision {
+  if (parsed.hasNegativeWriteLanguage) {
+    return {
+      kind: "no_op",
+      intent: "unknown",
+      confidence: 0.99,
+      reason: "explicit_negative_write_request",
+    };
+  }
   if (parsed.ambiguous) {
     return { kind: "llm", intent: "unknown", confidence: parsed.confidence, reason: "multiple_domains_need_context" };
   }

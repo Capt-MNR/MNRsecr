@@ -14,6 +14,7 @@ import {
 } from "../src/lib/deterministic-intelligence.ts";
 import { buildPatternInsights } from "../src/lib/experimental-pattern-insights.ts";
 import { FailoverModelGateway, Phase2AgentRuntime, type ModelGateway } from "../src/lib/phase2.ts";
+import { expenseDescription } from "../src/lib/phase2.ts";
 import { parseRelationshipRequest } from "../src/lib/relationship-context.ts";
 import type { Identity } from "../src/lib/secretary.ts";
 
@@ -46,12 +47,22 @@ test("expense negation is non-mutating while positive expense language remains w
     "مدفعتش ٣٠٠",
     "مش عايز اسجل ٥٠٠",
     "ما تسجلش ٥٠٠",
+    "متسجلش ٥٠٠",
     "لا تسجل ٥٠٠",
     "مش عايز أسجل ٥٠٠",
+    "مش عايز أضيف المصروف ٥٠٠",
   ]) {
     const parsed = parseSemanticRequest(text);
     assert.notEqual(parsed.intent, "record_expense", text);
-    assert.notEqual(decideDeterministically(parsed).kind, "deterministic", text);
+    assert.equal(parsed.hasNegativeWriteLanguage, true, text);
+    assert.equal(decideDeterministically(parsed).kind, "no_op", text);
+  }
+  for (const text of [
+    "مش عايز أنسى أدفع الإيجار",
+    "المصروف اللي ما تسجلش الأسبوع اللي فات",
+    "المبلغ اللي لا تسجل في التقرير",
+  ]) {
+    assert.equal(parseSemanticRequest(text).hasNegativeWriteLanguage, false, text);
   }
   assert.equal(parseSemanticRequest("دفعت ٥٠٠ جنيه").intent, "record_expense");
 });
@@ -144,7 +155,29 @@ test("context-recall questions stay distinct from expense reports", () => {
   assert.equal(contextQuestion.domains.includes("memory"), true);
   assert.equal(contextQuestion.intent === "expense_report", false);
   assert.equal(contextQuestion.ambiguous, true);
-  assert.equal(parseRelationshipRequest("آخر حاجة سجلناها عن شركة المحجر؟")?.intent, "recent_activity");
+  assert.deepEqual(parseRelationshipRequest("آخر حاجة سجلناها عن شركة المحجر؟"), {
+    intent: "recent_activity",
+    targetType: "project",
+    targetQuery: "شركة المحجر",
+    usesConversationReference: false,
+  });
+  assert.equal(
+    parseRelationshipRequest("آخر نشاط بخصوص مشروع المحجر؟")?.targetQuery,
+    "مشروع المحجر",
+  );
+});
+
+test("expense descriptions remove the action, amount, currency, and connector only", () => {
+  const cases = [
+    ["دفعت 11500 تشطيبات شركة المحجر", "تشطيبات شركة المحجر"],
+    ["صرفت 11500 على تشطيبات شركة المحجر", "تشطيبات شركة المحجر"],
+    ["دفعت لمحمد 7500 على مشروع التشطيبات", "مشروع التشطيبات"],
+    ["دفعت 11 ألف ونص في تشطيبات الشركة", "تشطيبات الشركة"],
+    ["دفعت ١١٥٠٠ جنيه لتشطيبات المشروع", "تشطيبات المشروع"],
+  ] as const;
+  for (const [message, description] of cases) {
+    assert.equal(expenseDescription(message), description, message);
+  }
 });
 
 test("semantic layer recognizes natural delegation requests without opening Works", () => {
@@ -546,4 +579,38 @@ test("Phase2 asks for missing context without calling a provider", async () => {
     );
   }
   assert.equal(gateway.calls, 0);
+});
+
+test("Phase2 handles an explicit negative write as a deterministic no-op", async () => {
+  class UnreachableGateway implements ModelGateway {
+    readonly provider = "gemini" as const;
+    readonly modelName = "unreachable";
+    calls = 0;
+
+    async generate(): Promise<never> {
+      this.calls += 1;
+      throw new Error("provider should not be called");
+    }
+  }
+
+  const gateway = new UnreachableGateway();
+  const runtime = new Phase2AgentRuntime(gateway);
+  const result = await runtime.run({
+    tenantId: `negative-write-${process.pid}-${Date.now()}`,
+    userId: "negative-write-user",
+  }, {
+    message: "مش عايز أسجل ٥٠٠ جنيه",
+    conversationId: `negative-write-conversation-${Date.now()}`,
+  }, { dryRun: true });
+
+  assert.equal(gateway.calls, 0);
+  assert.equal(result.response?.kind, "answer");
+  assert.match(result.response?.message ?? "", /مش هسجل/);
+  assert.equal(result.action?.type, "no_op");
+  assert.equal(result.action?.llmCalls, 0);
+  assert.equal(result.action?.toolCalls, 0);
+  assert.equal(
+    (result.action?.deterministicIntelligence as { decision?: string } | undefined)?.decision,
+    "deterministic",
+  );
 });

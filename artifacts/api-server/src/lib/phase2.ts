@@ -5262,13 +5262,20 @@ function naturalAgentWorkArgs(message: string): Record<string, unknown> {
   };
 }
 
-function expenseDescription(message: string): string {
+export function expenseDescription(message: string): string {
   const compact = message.replace(/\s+/g, " ").trim();
   const purpose = compact
+    .replace(/^(?:سجل|سجّل|اكتب|اثبت)\s*(?:إني|اني)?\s*/iu, "")
+    .replace(/^(?:دفعت|صرف(?:ت)?|اديت|أديت|اعطيت|عطيت|حولت|سددت|دفع(?:ت)?)\s*/iu, "")
     .replace(
-      /^(?:سجل|سجّل|اكتب|اثبت)\s*(?:إني|اني)?\s*(?:دفعت|صرف(?:ت)?|دفعت)\s*(?:[\d٠-٩]+(?:[.,٬٫][\d٠-٩]+)?\s*(?:(?:ألفين|ألف|الفين|الف|الاف|آلاف)(?:\s+و?(?:نص|نصف))?)?|[\d٠-٩,٬.]+)\s*(?:جنيه|جنية|دولار|يورو|ريال|درهم)?\s*/iu,
+      /^(?:لـ?|ل)[\p{L}][\p{L}-]*(?:\s+[\p{L}][\p{L}-]*)*\s+(?:[\d٠-٩]+(?:[.,٬٫][\d٠-٩]+)?\s*(?:(?:ألفين|ألف|الفين|الف|الاف|آلاف)(?:\s+و?(?:نص|نصف))?)?|[\d٠-٩,٬.]+)\s*(?:جنيه|جنية|دولار|يورو|ريال|درهم)?\s+(?=(?:على|في|بـ|ب|لـ|ل)(?:\s|$))/iu,
       "",
     )
+    .replace(
+      /^(?:[\d٠-٩]+(?:[.,٬٫][\d٠-٩]+)?\s*(?:(?:ألفين|ألف|الفين|الف|الاف|آلاف)(?:\s+و?(?:نص|نصف))?)?|[\d٠-٩,٬.]+)\s*(?:جنيه|جنية|دولار|يورو|ريال|درهم)?\s*/iu,
+      "",
+    )
+    .replace(/^(?:على|في|بـ|ب|لـ|ل)\s*/iu, "")
     .trim();
   return (purpose || compact).slice(0, 320);
 }
@@ -5316,6 +5323,20 @@ async function deterministicPreflight(
     decision.kind === "deterministic"
     && ["expense_report", "schedule_read"].includes(parsed.intent)
   ) return null;
+
+  if (decision.kind === "no_op") {
+    return {
+      response: {
+        kind: "answer",
+        message: "تمام، مش هسجل أي مصروف، ومفيش أي تغيير اتعمل.",
+      },
+      action: {
+        type: "no_op",
+        source: "deterministic_intelligence",
+        reason: decision.reason,
+      },
+    };
+  }
 
   if (decision.kind === "clarification") {
     return {
@@ -5980,6 +6001,7 @@ export class Phase2AgentRuntime {
               entityMentions: semanticParse.entityMentions,
               dateTime: semanticParse.dateTime ?? null,
               hasWriteLanguage: semanticParse.hasWriteLanguage,
+              hasNegativeWriteLanguage: semanticParse.hasNegativeWriteLanguage,
               hasReadLanguage: semanticParse.hasReadLanguage,
               ambiguous: semanticParse.ambiguous,
             }
@@ -6056,7 +6078,11 @@ export class Phase2AgentRuntime {
             reason: "intent_outside_production_safe_gate",
           }
         : parsedDecision;
-      deterministicMetrics.decision = decision.kind === "llm" ? "llm_fallback" : decision.kind;
+      deterministicMetrics.decision = decision.kind === "llm"
+        ? "llm_fallback"
+        : decision.kind === "clarification"
+          ? "clarification"
+          : "deterministic";
       deterministicMetrics.falsePositiveGuard = decision.kind === "llm" ? "not_applicable" : "passed";
       if (decision.kind === "deterministic" && featureFlags.experimentalProviderClaims()) {
         deterministicMetrics.llmCallsAvoided = 1;

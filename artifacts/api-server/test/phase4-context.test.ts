@@ -33,6 +33,7 @@ import {
   retrieveRelationshipContext,
   serializeRelationshipContext,
 } from "../src/lib/relationship-context.ts";
+import { recordActivityEvent } from "../src/lib/entity-graph.ts";
 import {
   createFinancialObligation,
   createFinancialParty,
@@ -301,6 +302,49 @@ test("financial context uses canonical directions, settlements, currencies, and 
     { currency: "USD", amountMinor: 300, count: 1 },
   ]);
   assert.ok(serializeRelationshipContext(project!.context).length <= RELATIONSHIP_CONTEXT_LIMITS.maxContextChars);
+  await cleanup();
+});
+
+test("recent activity extracts and resolves a company-named project without provider calls", async () => {
+  await cleanup();
+  const seeded = await seedGraph();
+  await recordActivityEvent(identity, {
+    eventType: "diagnostic.activity",
+    sourceType: "test",
+    summary: "تم تحديث بيانات شركة المحجر",
+    entities: [{ entityType: "project", entityId: seeded.project.id }],
+  });
+
+  class UnreachableGateway implements ModelGateway {
+    readonly provider = "gemini" as const;
+    readonly modelName = "unreachable";
+    calls = 0;
+
+    async generate(): Promise<never> {
+      this.calls += 1;
+      throw new Error("provider should not be called");
+    }
+  }
+
+  const gateway = new UnreachableGateway();
+  const runtime = new Phase2AgentRuntime(gateway);
+  const result = await runtime.run(identity, {
+    message: "آخر حاجة سجلناها عن شركة المحجر؟",
+    conversationId: `phase4-recent-project-${Date.now()}`,
+  }, { dryRun: true });
+
+  assert.equal(gateway.calls, 0);
+  assert.equal(result.response?.kind, "answer");
+  assert.equal(result.action?.type, "relationship_context");
+  assert.equal(result.action?.llmCalls, 0);
+  const context = result.action?.context as {
+    resolvedEntities?: Array<{ id: string; type: string }>;
+    recentActivity?: Array<{ summary: string }>;
+  } | undefined;
+  assert.deepEqual(context?.resolvedEntities?.map((entity) => [entity.type, entity.id]), [
+    ["project", seeded.project.id],
+  ]);
+  assert.equal(context?.recentActivity?.[0]?.summary, "تم تحديث بيانات شركة المحجر");
   await cleanup();
 });
 
