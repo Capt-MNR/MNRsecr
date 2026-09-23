@@ -35,7 +35,6 @@ export type ResolverResult = {
 
 const PERSON_THRESHOLD = 0.88;
 const PROJECT_THRESHOLD = 0.92;
-const shadowTableReady = new Map<string, Promise<void>>();
 
 export function normalizeEntityText(value: string): string {
   return value
@@ -204,37 +203,6 @@ function extractMentions(message: string): Array<{ entityType: EntityType; query
   return mentions.filter((mention) => mention.query.length >= 2);
 }
 
-async function ensureShadowTable(identity: Identity): Promise<void> {
-  const key = `${identity.tenantId}:${identity.userId}`;
-  const existing = shadowTableReady.get(key);
-  if (existing) return existing;
-  const creation = pool.query(`
-    CREATE TABLE IF NOT EXISTS resolver_shadow_log (
-      id BIGSERIAL PRIMARY KEY,
-      tenant_id TEXT NOT NULL,
-      owner_user_id TEXT NOT NULL,
-      entity_type TEXT NOT NULL,
-      query_text TEXT NOT NULL,
-      candidate_count INTEGER NOT NULL,
-      selected_id UUID,
-      confidence DOUBLE PRECISION,
-      match_type TEXT NOT NULL,
-      would_change BOOLEAN NOT NULL,
-      metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
-    CREATE INDEX IF NOT EXISTS resolver_shadow_log_owner_created_idx
-      ON resolver_shadow_log (tenant_id, owner_user_id, created_at);
-  `).then(() => undefined);
-  shadowTableReady.set(key, creation);
-  try {
-    await creation;
-  } catch (error) {
-    shadowTableReady.delete(key);
-    throw error;
-  }
-}
-
 export async function recordResolverShadow(
   identity: Identity,
   message: string,
@@ -244,7 +212,6 @@ export async function recordResolverShadow(
   const mentions = extractMentions(message);
   if (mentions.length === 0) return;
   try {
-    await ensureShadowTable(identity);
     for (const mention of mentions) {
       const result = await resolveEntity(identity, mention.entityType, mention.query);
       await pool.query(

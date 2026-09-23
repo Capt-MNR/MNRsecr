@@ -23,5 +23,75 @@
       "tag": "0002_military_lady_deathstrike",
       "breakpoints": true
     },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789497554000,
+      "tag": "0003_record_conversation_provenance",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789557971000,
+      "tag": "0004_learning_signal_reviews",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1789640933000,
+      "tag": "0005_mobile_push_tokens",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789687665000,
+      "tag": "0006_input_asset_results",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789760410000,
+      "tag": "0007_second_brain_memories",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789763852000,
+      "tag": "0008_second_brain_candidates",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1789984175000,
+      "tag": "0009_agent_work",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789986444000,
+      "tag": "0010_agent_work_action",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790119968000,
+      "tag": "0011_input_asset_provenance",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790119969000,
+      "tag": "0012_resolver_shadow_log",
+      "breakpoints": true
+    }
   ]
 }

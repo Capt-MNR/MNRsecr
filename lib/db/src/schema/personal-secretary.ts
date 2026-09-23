@@ -1,5 +1,8 @@
 import {
   bigint,
+  bigserial,
+  boolean,
+  doublePrecision,
   index,
   integer,
   jsonb,
@@ -838,6 +841,30 @@ export const inputAssetProvenanceTable = pgTable(
       table.tenantId,
       table.ownerUserId,
       table.conversationId,
+    ),
+  ],
+);
+
+export const resolverShadowLogTable = pgTable(
+  "resolver_shadow_log",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    ...ownershipColumns,
+    entityType: text("entity_type").notNull(),
+    queryText: text("query_text").notNull(),
+    candidateCount: integer("candidate_count").notNull(),
+    selectedId: uuid("selected_id"),
+    confidence: doublePrecision("confidence"),
+    matchType: text("match_type").notNull(),
+    wouldChange: boolean("would_change").notNull(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("resolver_shadow_log_owner_created_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.createdAt,
     ),
   ],
 );

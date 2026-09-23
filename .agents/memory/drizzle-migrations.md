@@ -14,3 +14,9 @@ The development database still contains legacy tables that Drizzle may interpret
 **Why:** A people phone column was safe to add, but `push` also proposed deleting `resolver_shadow_log` and its existing rows.
 
 **How to apply:** Never force that broad push for an unrelated field. Apply the narrow additive SQL change, then regenerate API clients and verify the resulting schema.
+
+Hand-authored SQL migrations must be added to the Drizzle journal with their exact tags before they are allowed to run; historical entries must not be renumbered or rewritten to make a fresh replay appear cleaner.
+
+**Why:** The database had only the first three migration rows even though later SQL files had already shaped development indirectly. A clean replay exposed the gap without risking a guessed production repair.
+
+**How to apply:** Preserve existing tags, append missing entries and additive ownership migrations, run an isolated replay from the legacy baseline, then reconcile development bookkeeping. Treat any production history repair as a separately reviewed change.
