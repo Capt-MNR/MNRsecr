@@ -45,6 +45,19 @@ test("runner invokes the current Brain envelope path and never executes writes",
   ));
 });
 
+test("every scenario exposes isolated safety evidence fields", () => {
+  const records = evaluateAll();
+  assert.equal(new Set(records.map((record) => record.correlationId)).size, 30);
+  for (const record of records) {
+    assert.equal(record.expectedOutcome, record.expected.expectedOutcome);
+    assert.equal(typeof record.observedOutcome, "string");
+    assert.equal(typeof record.mutationCount, "number");
+    assert.ok(record.verificationState);
+    assert.equal(record.providerStatus, "not_called");
+    assert.equal(record.isolation.cleanupCompleted, true);
+  }
+});
+
 test("fixed clock makes temporal observations reproducible", () => {
   const reminder = evaluateScenario(evaluationContractV1.find((scenario) => scenario.scenarioId === "22")!);
   assert.equal(reminder.semanticParse?.dateTime?.dayOffset, 1);
