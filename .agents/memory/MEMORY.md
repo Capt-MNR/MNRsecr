@@ -63,3 +63,4 @@
 - [Real authentication boundary](real-auth-boundary.md) — tenant ownership comes from database-backed sessions or durable worker rows; development identity is explicitly gated and never used in production.
 - [Arabic expense parsing](arabic-expense-parsing.md) — colloquial thousand/half-thousand amounts must not be mistaken for recipient entities.
 - [Proactive engine boundary](proactive-engine-boundary.md) — separate deterministic Trigger/Rule eligibility from Agent Work execution; keep PostgreSQL coordination before adopting an external bus.
+- [Git pane authentication boundary](git-pane-auth-boundary.md) — GitHub API OAuth can work while Git pane HTTPS push remains unauthenticated; do not loop reauthorization or request tokens.
