@@ -1,0 +1,139 @@
+التقرير الأخير كشف blocker حقيقي في Mobile Auth lifecycle:
+
+A login
+→ push token registered to A
+→ A logout
+→ push token disabled
+→ ownership remains attached to A
+→ B login
+→ B tries to register the same device token
+→ 409 PUSH_TOKEN_OWNERSHIP_CONFLICT
+
+هذا يكسر السيناريو الطبيعي:
+Logout account A → Login account B على نفس الجهاز → إعادة استخدام نفس push token.
+
+نفّذ الآن إصلاح هذا الـblocker فقط، بعد مراجعة الكود الحالي.
+
+المطلوب
+
+حافظ على حماية push-token ownership الحالية، لكن أضف controlled ownership handoff:
+
+1. إذا كان push token:
+   
+   - مملوكًا لحساب آخر
+   - وما زال enabled
+     → ارفض الطلب كما هو حاليًا بـ "PUSH_TOKEN_OWNERSHIP_CONFLICT".
+
+2. إذا كان push token:
+   
+   - مملوكًا لحساب آخر
+   - لكنه disabled بسبب logout/unregister
+     → اسمح للحساب الحالي بتسجيل نفس token ونقل ownership إليه بشكل ذري وآمن.
+
+3. إذا كان token مملوكًا بالفعل لنفس المستخدم:
+   → حافظ على السلوك idempotent الموجود.
+
+4. لا تسمح أبدًا لحساب B بأن يستولي على token فعال مملوك لحساب A.
+
+5. عملية handoff يجب أن تكون atomic:
+   
+   - لا توجد لحظة يمكن أن يصبح فيها token enabled لحسابين.
+   - ownership + enabled state يتم تحديثهما في transaction واحدة.
+
+6. حافظ على tenant/user isolation.
+
+7. تأكد أن logout من A يظل:
+   
+   - session revoked
+   - push token disabled/unregistered
+   - ثم يستطيع B لاحقًا تسجيل نفس token.
+
+8. لا تغيّر semantics الخاصة بالـAuthentication أو Agent Work أو Quick/Main.
+
+مهم أمنيًا
+
+لا تعتمد فقط على:
+"token disabled = يسمح لأي حساب بأخذه"
+
+راجع الـexisting unregister/logout flow والـpush-token schema أولًا، وتأكد أن السماح بالـhandoff لا يخلق طريقة لحساب غير مصرح له بخطف token فعال.
+
+القاعدة المطلوبة:
+
+ACTIVE token owned by another user
+→ reject
+
+DISABLED token owned by another user after logout/unregister
+→ controlled reassignment
+
+الاختبارات المطلوبة
+
+أضف/شغّل regression tests تغطي على الأقل:
+
+A login
+→ register token T
+→ logout A
+→ T disabled
+→ B login
+→ register T
+→ success
+→ T enabled and owned by B
+
+ثم:
+
+A login
+→ register T
+→ B login
+→ B register T while T is still enabled for A
+→ 409 ownership conflict
+
+ثم:
+
+A login
+→ register T
+→ logout A
+→ B register T
+→ logout B
+→ C register T
+→ success
+
+وتأكد في كل مرحلة أن:
+
+- token له owner واحد فقط.
+- الحساب السابق لا يستطيع استخدامه بعد handoff.
+- لا يحدث cross-account notification delivery.
+- tenant isolation ما زالت سليمة.
+
+بخصوص SecureStore
+
+لا تدّعي أن SecureStore deletion أو native lifecycle تم إثباته إذا لم يوجد native device/E2E runtime.
+
+يمكنك:
+
+- فحص الكود.
+- تشغيل أي tests متاحة.
+- توثيق ما تم إثباته server-side.
+
+لكن صنّف native SecureStore verification بوضوح:
+PASS / NOT EXECUTABLE
+
+ولا تغيّر الكود فقط لكي تجعل التقرير PASS.
+
+النطاق
+
+- لا تعيد بناء Authentication.
+- لا تغيّر Backend auth/session architecture إلا بالقدر الضروري لإصلاح push-token handoff.
+- لا تغيّر Web UI.
+- لا تغيّر Quick/Main.
+- لا تغيّر Agent Work.
+- لا تنشئ Replit Task.
+- نفّذ مباشرة بعد audit صغير للكود المرتبط بالـpush-token ownership.
+- لا تعمل refactor واسع.
+
+في النهاية أعطني:
+
+1. سبب الـ409 الحالي.
+2. التعديل الذي تم.
+3. كيف تم منع token hijacking.
+4. نتائج regression tests.
+5. ما بقي غير قابل للاختبار بسبب عدم وجود native device.
+6. أي blocker حقيقي متبقٍ فقط.
