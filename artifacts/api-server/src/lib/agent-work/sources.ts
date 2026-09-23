@@ -45,8 +45,8 @@ export type GitHubRepositorySnapshot = {
 };
 
 export type GitHubRepositorySourceRead =
-  | { ok: true; snapshot: GitHubRepositorySnapshot }
-  | { ok: false; reason: "invalid_configuration" | "source_unavailable" | "timeout" | "malformed_response" | "stale_data" };
+  | { ok: true; snapshot: GitHubRepositorySnapshot; cooldownMs?: number }
+  | { ok: false; reason: "invalid_configuration" | "source_unavailable" | "timeout" | "malformed_response" | "stale_data"; cooldownMs?: number };
 
 export type GitHubRepositorySourceOptions = {
   fetchImpl?: typeof fetch;
@@ -54,6 +54,10 @@ export type GitHubRepositorySourceOptions = {
   timeoutMs?: number;
   maxAgeMs?: number;
 };
+
+const GITHUB_COOLDOWN_DEFAULT_MS = 60_000;
+const GITHUB_COOLDOWN_MIN_MS = 1_000;
+const GITHUB_COOLDOWN_MAX_MS = 15 * 60_000;
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? value as Record<string, unknown> : {};
@@ -75,6 +79,42 @@ function compare(value: number, operator: ComparisonOperator, threshold: number)
   if (operator === "eq") return value === threshold;
   if (operator === "lt") return value < threshold;
   return value <= threshold;
+}
+
+function boundedCooldownMs(value: number): number {
+  if (!Number.isFinite(value)) return GITHUB_COOLDOWN_DEFAULT_MS;
+  return Math.min(
+    GITHUB_COOLDOWN_MAX_MS,
+    Math.max(GITHUB_COOLDOWN_MIN_MS, Math.ceil(value)),
+  );
+}
+
+function retryAfterMs(response: Response, now: Date): number | null {
+  const retryAfter = response.headers.get("retry-after")?.trim();
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1_000;
+    const retryAt = Date.parse(retryAfter);
+    if (!Number.isNaN(retryAt)) return retryAt - now.getTime();
+  }
+
+  const remaining = response.headers.get("x-ratelimit-remaining")?.trim();
+  const reset = Number(response.headers.get("x-ratelimit-reset"));
+  if (remaining === "0" && Number.isFinite(reset) && reset > 0) {
+    return reset * 1_000 - now.getTime();
+  }
+  return null;
+}
+
+function responseCooldownMs(response: Response, now: Date): number | undefined {
+  const retryAfter = retryAfterMs(response, now);
+  const remaining = response.headers.get("x-ratelimit-remaining")?.trim();
+  const rateLimited = response.status === 429
+    || remaining === "0"
+    || retryAfter !== null;
+  return rateLimited
+    ? boundedCooldownMs(retryAfter ?? GITHUB_COOLDOWN_DEFAULT_MS)
+    : undefined;
 }
 
 function hashSnapshot(input: {
@@ -182,6 +222,24 @@ function githubRepositoryParts(work: AgentWorkRecord): {
   return { owner, repository, operator, threshold };
 }
 
+export function applyGitHubRepositoryCondition(
+  sourceRead: GitHubRepositorySourceRead,
+  work: AgentWorkRecord,
+): GitHubRepositorySourceRead {
+  const parts = githubRepositoryParts(work);
+  if (!parts) return { ok: false, reason: "invalid_configuration" };
+  if (!sourceRead.ok) return sourceRead;
+  return {
+    ...sourceRead,
+    snapshot: {
+      ...sourceRead.snapshot,
+      operator: parts.operator,
+      threshold: parts.threshold,
+      conditionMet: compare(sourceRead.snapshot.value, parts.operator, parts.threshold),
+    },
+  };
+}
+
 /**
  * The external vertical slice is intentionally limited to GitHub's official
  * repository endpoint. It reads public repository metadata only and never
@@ -225,20 +283,33 @@ export async function readGitHubRepositorySource(
     return { ok: false, reason: controller.signal.aborted || message.includes("timeout") ? "timeout" : "source_unavailable" };
   }
   clearTimeout(timeout);
+  const cooldownMs = responseCooldownMs(response, now);
 
   if (!response.ok) {
-    return { ok: false, reason: response.status === 408 || response.status === 504 ? "timeout" : "source_unavailable" };
+    return {
+      ok: false,
+      reason: response.status === 408 || response.status === 504 ? "timeout" : "source_unavailable",
+      ...(cooldownMs ? { cooldownMs } : {}),
+    };
   }
   const contentType = response.headers.get("content-type") ?? "";
   if (!contentType.toLowerCase().includes("json")) {
-    return { ok: false, reason: "malformed_response" };
+    return {
+      ok: false,
+      reason: "malformed_response",
+      ...(cooldownMs ? { cooldownMs } : {}),
+    };
   }
 
   let payload: unknown;
   try {
     payload = await response.json();
   } catch {
-    return { ok: false, reason: "malformed_response" };
+    return {
+      ok: false,
+      reason: "malformed_response",
+      ...(cooldownMs ? { cooldownMs } : {}),
+    };
   }
   const body = asRecord(payload);
   const repositoryId = Number(body.id);
@@ -255,14 +326,22 @@ export async function readGitHubRepositorySource(
     || !updatedAt
     || Number.isNaN(updatedTime)
   ) {
-    return { ok: false, reason: "malformed_response" };
+    return {
+      ok: false,
+      reason: "malformed_response",
+      ...(cooldownMs ? { cooldownMs } : {}),
+    };
   }
 
   const responseDate = response.headers.get("date");
   if (responseDate) {
     const responseTime = Date.parse(responseDate);
     if (Number.isNaN(responseTime) || now.getTime() - responseTime > maxAgeMs) {
-      return { ok: false, reason: "stale_data" };
+      return {
+        ok: false,
+        reason: "stale_data",
+        ...(cooldownMs ? { cooldownMs } : {}),
+      };
     }
   }
 
@@ -290,5 +369,6 @@ export async function readGitHubRepositorySource(
       comparisonKnown: true,
       reason: "github_api_read_verified",
     },
+    ...(cooldownMs ? { cooldownMs } : {}),
   };
 }

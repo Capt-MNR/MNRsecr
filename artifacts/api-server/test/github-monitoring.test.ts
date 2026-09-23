@@ -46,15 +46,27 @@ function createHarness(schedule: Record<string, unknown> = { frequency: "interva
   let runNumber = 0;
   let currentNow = baseNow;
   let currentValue = 3;
-  let mode: "ok" | "malformed" | "stale" | "unavailable" | "timeout" = "ok";
+  let mode: "ok" | "malformed" | "stale" | "unavailable" | "timeout" | "rate_limited" = "ok";
+  let fetchCalls = 0;
   const originalFetch = globalThis.fetch;
 
   globalThis.fetch = async (_input, _init) => {
+    fetchCalls += 1;
     if (mode === "timeout") throw new Error("request timeout");
     if (mode === "unavailable") {
       return new Response(JSON.stringify({ message: "temporary unavailable" }), {
         status: 503,
         headers: { "content-type": "application/json" },
+      });
+    }
+    if (mode === "rate_limited") {
+      return new Response(JSON.stringify({ message: "rate limited" }), {
+        status: 429,
+        headers: {
+          "content-type": "application/json",
+          "retry-after": "120",
+          "x-ratelimit-remaining": "0",
+        },
       });
     }
     if (mode === "malformed") {
@@ -215,6 +227,7 @@ function createHarness(schedule: Record<string, unknown> = { frequency: "interva
     evidence,
     events,
     notifications,
+    get fetchCalls() { return fetchCalls; },
     originalFetch,
     setNow(value: Date) { currentNow = value; },
     setValue(value: number) { currentValue = value; },
@@ -330,6 +343,98 @@ test("GitHub source rejects invalid configuration and verifies repository identi
       fetchImpl: async () => wrongRepositoryResponse,
     });
     assert.deepEqual(verified, { ok: false, reason: "malformed_response" });
+  } finally {
+    globalThis.fetch = harness.originalFetch;
+  }
+});
+
+test("GitHub source exposes bounded rate-limit cooldown metadata", async () => {
+  const harness = createHarness();
+  try {
+    const rateLimited = await readGitHubRepositorySource(harness.work.identity, harness.work, {
+      now: baseNow,
+      fetchImpl: async () => new Response(JSON.stringify({ message: "rate limited" }), {
+        status: 429,
+        headers: {
+          "content-type": "application/json",
+          "retry-after": "120",
+          "x-ratelimit-remaining": "0",
+        },
+      }),
+    });
+    assert.equal(rateLimited.ok, false);
+    assert.equal(rateLimited.reason, "source_unavailable");
+    assert.equal(rateLimited.cooldownMs, 120_000);
+
+    const bounded = await readGitHubRepositorySource(harness.work.identity, harness.work, {
+      now: baseNow,
+      fetchImpl: async () => new Response(JSON.stringify({ message: "rate limited" }), {
+        status: 429,
+        headers: {
+          "content-type": "application/json",
+          "retry-after": "999999",
+        },
+      }),
+    });
+    assert.equal(bounded.ok, false);
+    assert.equal(bounded.cooldownMs, 15 * 60_000);
+  } finally {
+    globalThis.fetch = harness.originalFetch;
+  }
+});
+
+test("GitHub runner coalesces repository reads and recovers after a source cooldown", async () => {
+  process.env.NODE_ENV = "development";
+  process.env.AGENT_WORK_ENABLED = "true";
+  process.env.AGENT_WORK_RUNNER_ENABLED = "true";
+  const harness = createHarness();
+  const originalListDueWorks = harness.adapters.storage.listDueWorks;
+  const runner = new AgentWorkRunner({
+    adapters: harness.adapters,
+    now: () => baseNow,
+  });
+  try {
+    harness.adapters.storage.listDueWorks = async () => [{
+      identity: harness.work.identity,
+      workId: harness.work.id,
+      nextRunAt: harness.work.nextRunAt,
+    }, {
+      identity: harness.work.identity,
+      workId: harness.work.id,
+      nextRunAt: harness.work.nextRunAt,
+    }];
+    const coalesced = await runner.tick(baseNow);
+    assert.equal(coalesced.completed, 2);
+    assert.equal(harness.fetchCalls, 1);
+
+    harness.adapters.storage.listDueWorks = originalListDueWorks;
+    harness.setMode("rate_limited");
+    const rateLimitedAt = new Date("2026-09-21T11:00:00.000Z");
+    harness.setNow(rateLimitedAt);
+    const rateLimited = await runner.tick(rateLimitedAt);
+    assert.equal(rateLimited.failed, 1);
+    assert.equal(harness.fetchCalls, 2);
+    assert.equal(harness.work.status, "active");
+
+    const cooldownAt = new Date("2026-09-21T11:01:00.000Z");
+    harness.setNow(cooldownAt);
+    harness.adapters.storage.listDueWorks = async () => [{
+      identity: harness.work.identity,
+      workId: harness.work.id,
+      nextRunAt: cooldownAt,
+    }];
+    const cooledDown = await runner.tick(cooldownAt);
+    assert.equal(cooledDown.failed, 1);
+    assert.equal(harness.fetchCalls, 2);
+
+    harness.setMode("ok");
+    const recoveredAt = new Date("2026-09-21T12:01:00.000Z");
+    harness.setNow(recoveredAt);
+    harness.setValue(6);
+    const recovered = await runner.tick(recoveredAt);
+    assert.equal(recovered.completed, 1);
+    assert.equal(harness.fetchCalls, 3);
+    assert.equal(harness.work.lastRunStatus, "verified");
   } finally {
     globalThis.fetch = harness.originalFetch;
   }

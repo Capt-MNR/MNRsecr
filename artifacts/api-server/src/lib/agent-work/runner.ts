@@ -2,7 +2,11 @@ import { featureFlags } from "../feature-flags";
 import { agentWorkAdapters } from "./factory";
 import { AgentWorkRuntime } from "./runtime";
 import { compareReadOnlyEvidence } from "./contract";
-import { readGitHubRepositorySource, readInternalRecordsSource } from "./sources";
+import {
+  applyGitHubRepositoryCondition,
+  readGitHubRepositorySource,
+  readInternalRecordsSource,
+} from "./sources";
 import {
   recordAgentWorkActionApproved,
   recordAgentWorkActionRejected,
@@ -18,6 +22,7 @@ import type {
   AgentWorkRunRecord,
   AgentWorkRunStatus,
 } from "./types";
+import type { GitHubRepositorySourceRead } from "./sources";
 
 const DEFAULT_POLL_MS = 15_000;
 const DEFAULT_LEASE_MS = 5 * 60_000;
@@ -130,6 +135,10 @@ type ExecutionPlan = {
   approvalAction?: string;
 };
 
+type GitHubReadContext = {
+  cooldowns: Map<string, number>;
+  reads: Map<string, Promise<GitHubRepositorySourceRead>>;
+};
 function delegatedTaskAction(work: AgentWorkRecord, current: {
   repository: string;
   value: number;
@@ -224,6 +233,7 @@ async function planExecution(
   work: AgentWorkRecord,
   now: Date,
   runId: string,
+  githubReadContext?: GitHubReadContext,
 ): Promise<{ plan: ExecutionPlan; evidence: Record<string, unknown> }> {
   const schedule = asRecord(work.schedule);
   const nextRunAt = nextScheduledAt(now, schedule);
@@ -364,7 +374,12 @@ async function planExecution(
   }
 
   if (source.type === "github_repository") {
-    const sourceRead = await readGitHubRepositorySource(identity, work, { now });
+    const sourceRead = await readGitHubRepositoryWithSafeguards(
+      identity,
+      work,
+      now,
+      githubReadContext,
+    );
     const schedule = asRecord(work.schedule);
     const nextRunAt = nextScheduledAt(now, schedule);
     const recurring = nextRunAt !== null;
@@ -546,6 +561,30 @@ async function planExecution(
   };
 }
 
+function githubRepositoryReadKey(
+  identity: AgentWorkRecord["identity"],
+  work: AgentWorkRecord,
+): string {
+  const condition = asRecord(work.condition);
+  const operator = typeof condition.operator === "string" && ["gt", "gte", "eq", "lt", "lte"].includes(condition.operator)
+    ? "__valid_operator__"
+    : condition.operator;
+  const threshold = Number(condition.threshold);
+  const thresholdKey = Number.isSafeInteger(threshold) && threshold >= 0
+    ? "__valid_threshold__"
+    : condition.threshold;
+  return JSON.stringify([
+    identity.tenantId,
+    identity.userId,
+    condition.provider,
+    condition.entity,
+    condition.metric,
+    typeof condition.owner === "string" ? condition.owner.trim().toLowerCase() : "",
+    typeof condition.repository === "string" ? condition.repository.trim().toLowerCase() : "",
+    operator,
+    thresholdKey,
+  ]);
+}
 export class AgentWorkRunner {
   private timer: ReturnType<typeof setInterval> | null = null;
   private ticking = false;
@@ -554,6 +593,7 @@ export class AgentWorkRunner {
   private readonly leaseMs: number;
   private readonly now: () => Date;
   private readonly runtime: AgentWorkRuntime;
+  private readonly githubCooldowns = new Map<string, number>();
 
   constructor(options: AgentWorkRunnerOptions = {}) {
     this.adapters = options.adapters ?? agentWorkAdapters;
@@ -578,6 +618,10 @@ export class AgentWorkRunner {
     }
     const candidates = [...due, ...waiting];
     const result: AgentWorkRunnerTickResult = { ...empty, enabled: true, inspected: candidates.length };
+    const githubReadContext: GitHubReadContext = {
+      cooldowns: this.githubCooldowns,
+      reads: new Map(),
+    };
 
     for (const candidate of candidates) {
       let identity: AgentWorkRecord["identity"] | null;
@@ -641,7 +685,7 @@ export class AgentWorkRunner {
       result.claimed += 1;
       let approvalEventRecorded = false;
       try {
-        const execution = await planExecution(this.adapters, identity, work, now, run.id);
+        const execution = await planExecution(this.adapters, identity, work, now, run.id, githubReadContext);
         const plan = execution.plan;
         await this.adapters.storage.storeEvidenceSnapshot({
           identity,
@@ -823,3 +867,43 @@ export class AgentWorkRunner {
 }
 
 export const agentWorkRunner = new AgentWorkRunner();
+
+async function readGitHubRepositoryWithSafeguards(
+  identity: AgentWorkRecord["identity"],
+  work: AgentWorkRecord,
+  now: Date,
+  context?: GitHubReadContext,
+): Promise<GitHubRepositorySourceRead> {
+  if (!context) return readGitHubRepositorySource(identity, work, { now });
+
+  const key = githubRepositoryReadKey(identity, work);
+  const nowMs = now.getTime();
+  let read = context.reads.get(key);
+  if (read) {
+    const sourceRead = await read;
+    if (sourceRead.cooldownMs) {
+      const nextCooldownUntil = nowMs + sourceRead.cooldownMs;
+      const currentCooldownUntil = context.cooldowns.get(key) ?? 0;
+      context.cooldowns.set(key, Math.max(currentCooldownUntil, nextCooldownUntil));
+    }
+    return applyGitHubRepositoryCondition(sourceRead, work);
+  }
+
+  const cooldownUntil = context.cooldowns.get(key);
+  if (cooldownUntil !== undefined) {
+    if (cooldownUntil > nowMs) {
+      return { ok: false, reason: "source_unavailable" };
+    }
+    context.cooldowns.delete(key);
+  }
+
+  read = readGitHubRepositorySource(identity, work, { now });
+  context.reads.set(key, read);
+  const sourceRead = await read;
+  if (sourceRead.cooldownMs) {
+    const nextCooldownUntil = nowMs + sourceRead.cooldownMs;
+    const currentCooldownUntil = context.cooldowns.get(key) ?? 0;
+    context.cooldowns.set(key, Math.max(currentCooldownUntil, nextCooldownUntil));
+  }
+  return applyGitHubRepositoryCondition(sourceRead, work);
+}
