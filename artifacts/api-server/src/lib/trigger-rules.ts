@@ -69,6 +69,7 @@ function thresholdEvaluation(event: TriggerOutboxEvent): TriggerEvaluation {
   const entity = stringValue(payload.entity);
   const metric = stringValue(payload.metric);
   const transitionKey = stringValue(payload.transitionKey);
+  const workId = stringValue(payload.workId);
   const mode = payload.mode === "level" ? "level" : "edge";
 
   if (
@@ -98,14 +99,28 @@ function thresholdEvaluation(event: TriggerOutboxEvent): TriggerEvaluation {
           ? currentMet ? "threshold_level_already_observed" : "threshold_below_condition"
           : currentMet ? "threshold_did_not_cross" : "threshold_below_condition",
       ),
-      workIntentDedupeKey: `trigger-threshold:${event.tenantId}:${event.ownerUserId}:${key}:${transitionKey}`,
+      workIntentDedupeKey: [
+        "trigger-threshold",
+        event.tenantId,
+        event.ownerUserId,
+        workId ?? "global",
+        key,
+        transitionKey,
+      ].join(":"),
     };
   }
   return {
     eligible: true,
     triggerKey,
     reason: mode === "level" ? "threshold_level_true" : "threshold_false_to_true",
-    workIntentDedupeKey: `trigger-threshold:${event.tenantId}:${event.ownerUserId}:${key}:${transitionKey}`,
+    workIntentDedupeKey: [
+      "trigger-threshold",
+      event.tenantId,
+      event.ownerUserId,
+      workId ?? "global",
+      key,
+      transitionKey,
+    ].join(":"),
   };
 }
 

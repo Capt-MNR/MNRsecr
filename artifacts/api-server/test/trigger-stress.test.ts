@@ -10,6 +10,7 @@ import {
   activityEventsTable,
   commitmentsTable,
   db,
+  tasksTable,
   triggerOutboxTable,
 } from "@workspace/db";
 import { executeStructuredTool } from "../src/lib/phase2";
@@ -71,6 +72,10 @@ async function cleanupOwner(owner: typeof identity): Promise<void> {
     eq(triggerOutboxTable.tenantId, owner.tenantId),
     eq(triggerOutboxTable.ownerUserId, owner.userId),
   ));
+  await db.delete(tasksTable).where(and(
+    eq(tasksTable.tenantId, owner.tenantId),
+    eq(tasksTable.ownerUserId, owner.userId),
+  ));
   await db.delete(commitmentsTable).where(and(
     eq(commitmentsTable.tenantId, owner.tenantId),
     eq(commitmentsTable.ownerUserId, owner.userId),
@@ -90,11 +95,23 @@ async function workCount(owner: typeof identity): Promise<number> {
   return works.length;
 }
 
+async function thresholdWorkCount(owner: typeof identity): Promise<number> {
+  const works = await db.select({ source: agentWorksTable.source }).from(agentWorksTable).where(and(
+    eq(agentWorksTable.tenantId, owner.tenantId),
+    eq(agentWorksTable.ownerUserId, owner.userId),
+  ));
+  return works.filter((work) =>
+    work.source?.type === "trigger_outbox"
+    && work.source?.eventType === "task.open_count_threshold",
+  ).length;
+}
+
 async function executeApproved(
   owner: typeof identity,
   toolName: string,
   args: Record<string, unknown>,
   requestId: string,
+  triggerOutboxWriter?: typeof enqueueTriggerOutbox,
 ): Promise<Record<string, unknown>> {
   const pending = await createPendingOperation(owner, {
     toolName,
@@ -106,6 +123,7 @@ async function executeApproved(
   return await executeStructuredTool(owner, toolName, args, {
     requestId,
     approvedOperationId: claimed.operation.operationId,
+    ...(triggerOutboxWriter ? { triggerOutboxWriter } : {}),
   }) as Record<string, unknown>;
 }
 
@@ -350,5 +368,125 @@ test("task threshold supports edge and level semantics, threshold changes, and t
 
   const runnerResult = await new AgentWorkRunner().tick(new Date());
   assert.equal(runnerResult.completed, 4);
+  await cleanup();
+});
+
+test("task mutations emit threshold events only when the open count changes", async () => {
+  process.env.AGENT_WORK_ENABLED = "true";
+  process.env.AGENT_WORK_RUNNER_ENABLED = "true";
+  process.env.AGENT_WORK_ALLOW_DEVELOPMENT_IDENTITY = "true";
+  await cleanup();
+
+  await db.insert(agentWorksTable).values({
+    tenantId: identity.tenantId,
+    ownerUserId: identity.userId,
+    kind: "monitor",
+    title: "Open task count alert",
+    status: "active",
+    source: { type: "internal_records" },
+    condition: {
+      entity: "tasks",
+      metric: "open_task_count",
+      operator: "gte",
+      threshold: 1,
+    },
+    action: { type: "notify" },
+    schedule: { frequency: "event" },
+    dedupeKey: `task-count-monitor:${identity.tenantId}`,
+  });
+
+  const thresholdEvents = async () => db.select().from(triggerOutboxTable).where(and(
+    eq(triggerOutboxTable.tenantId, identity.tenantId),
+    eq(triggerOutboxTable.ownerUserId, identity.userId),
+    eq(triggerOutboxTable.eventType, "task.open_count_threshold"),
+  ));
+  const dispatch = () => new TriggerOutboxDispatcher().tick(new Date(), 20);
+  await assert.rejects(
+    executeApproved(identity, "create_task", {
+      title: "Rolled back threshold task",
+    }, "trigger-stress-task-threshold-rollback", async () => {
+      throw new Error("forced task threshold trigger failure");
+    }),
+    /forced task threshold trigger failure/,
+  );
+  assert.equal((await db.select().from(tasksTable).where(and(
+    eq(tasksTable.tenantId, identity.tenantId),
+    eq(tasksTable.ownerUserId, identity.userId),
+  ))).length, 0);
+  assert.equal((await thresholdEvents()).length, 0);
+
+  const created = await executeApproved(identity, "create_task", {
+    title: "Mutation integration task",
+  }, "trigger-stress-task-create");
+  const firstTask = (created as {
+    task: { id: string; rowVersion: number };
+  }).task;
+  assert.equal((await thresholdEvents()).length, 1);
+  await dispatch();
+  assert.equal(await thresholdWorkCount(identity), 1);
+
+  const inProgress = await executeApproved(identity, "update_task", {
+    taskId: firstTask.id,
+    status: "in_progress",
+    expectedRowVersion: firstTask.rowVersion,
+  }, "trigger-stress-task-in-progress");
+  assert.equal((inProgress as { ok: boolean }).ok, true);
+  assert.equal((await thresholdEvents()).length, 1);
+
+  const completed = await executeApproved(identity, "update_task", {
+    taskId: firstTask.id,
+    status: "completed",
+    expectedRowVersion: (inProgress as { task: { rowVersion: number } }).task.rowVersion,
+  }, "trigger-stress-task-complete");
+  assert.equal((completed as { ok: boolean }).ok, true);
+  assert.equal((await thresholdEvents()).length, 2);
+  await dispatch();
+  assert.equal(await thresholdWorkCount(identity), 1);
+
+  const reopened = await executeApproved(identity, "update_task", {
+    taskId: firstTask.id,
+    status: "pending",
+    expectedRowVersion: (completed as { task: { rowVersion: number } }).task.rowVersion,
+  }, "trigger-stress-task-reopen");
+  assert.equal((reopened as { ok: boolean }).ok, true);
+  assert.equal((await thresholdEvents()).length, 3);
+  await dispatch();
+  assert.equal(await thresholdWorkCount(identity), 2);
+
+  const cancelled = await executeApproved(identity, "update_task", {
+    taskId: firstTask.id,
+    status: "cancelled",
+    expectedRowVersion: (reopened as { task: { rowVersion: number } }).task.rowVersion,
+  }, "trigger-stress-task-cancel");
+  assert.equal((cancelled as { ok: boolean }).ok, true);
+  assert.equal((await thresholdEvents()).length, 4);
+  await dispatch();
+  assert.equal(await thresholdWorkCount(identity), 2);
+
+  const secondCreated = await executeApproved(identity, "create_task", {
+    title: "Delete integration task",
+  }, "trigger-stress-task-delete-create");
+  const secondTask = (secondCreated as {
+    task: { id: string; createdAt: string; rowVersion: number };
+  }).task;
+  assert.equal((await thresholdEvents()).length, 5);
+  await dispatch();
+  assert.equal(await thresholdWorkCount(identity), 3);
+
+  const deleted = await executeApproved(identity, "delete_task", {
+    taskId: secondTask.id,
+    expectedCreatedAt: new Date(secondTask.createdAt).toISOString(),
+  }, "trigger-stress-task-delete");
+  assert.equal((deleted as { ok: boolean }).ok, true);
+  assert.equal((await thresholdEvents()).length, 6);
+  await dispatch();
+  assert.equal(await thresholdWorkCount(identity), 3);
+
+  const deleteClosed = await executeApproved(identity, "delete_task", {
+    taskId: firstTask.id,
+    expectedCreatedAt: new Date((created as { task: { createdAt: string } }).task.createdAt).toISOString(),
+  }, "trigger-stress-task-delete-closed");
+  assert.equal((deleteClosed as { ok: boolean }).ok, true);
+  assert.equal((await thresholdEvents()).length, 6);
   await cleanup();
 });

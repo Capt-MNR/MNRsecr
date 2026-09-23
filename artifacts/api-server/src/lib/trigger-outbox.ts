@@ -5,6 +5,7 @@ import {
   eq,
   gte,
   gt,
+  inArray,
   lte,
   or,
   sql,
@@ -12,12 +13,14 @@ import {
 import {
   db,
   agentWorksTable,
+  tasksTable,
   triggerOutboxTable,
 } from "@workspace/db";
 import type { DbExecutor, Identity } from "./entity-graph";
 import { logger } from "./logger";
 import { featureFlags } from "./feature-flags";
 import { agentWorkRuntime } from "./agent-work/runtime";
+import { comparisonOperator } from "./agent-work/condition-evaluator";
 import { evaluateTriggerEvent } from "./trigger-rules";
 
 export type TriggerOutboxStatus = "pending" | "claimed" | "processed" | "quarantined";
@@ -71,6 +74,8 @@ export type TriggerEvaluation = {
 
 export type EnqueueTaskThresholdTriggerInput = {
   identity: Identity;
+  taskId?: string;
+  workId?: string;
   operator: "gt" | "gte" | "eq" | "lt" | "lte";
   threshold: number;
   previousValue: number;
@@ -78,6 +83,16 @@ export type EnqueueTaskThresholdTriggerInput = {
   transitionKey: string;
   mode?: "edge" | "level";
   occurredAt?: Date;
+};
+
+export type EnqueueTaskThresholdTriggersForMutationInput = {
+  identity: Identity;
+  taskId: string;
+  previousValue: number;
+  currentValue: number;
+  mutationKey: string;
+  occurredAt?: Date;
+  writer?: typeof enqueueTriggerOutbox;
 };
 
 type TriggerOutboxRow = typeof triggerOutboxTable.$inferSelect;
@@ -158,9 +173,24 @@ export async function enqueueTriggerOutbox(
   return { event: mapEvent(existing), created: false };
 }
 
+export async function countOpenTasks(
+  identity: Identity,
+  executor: DbExecutor = db,
+): Promise<number> {
+  const [row] = await executor.select({
+    value: sql<number>`count(*)::int`,
+  }).from(tasksTable).where(and(
+    eq(tasksTable.tenantId, identity.tenantId),
+    eq(tasksTable.ownerUserId, identity.userId),
+    inArray(tasksTable.status, ["pending", "in_progress"]),
+  ));
+  return Number(row?.value ?? 0);
+}
+
 export async function enqueueTaskThresholdTrigger(
   input: EnqueueTaskThresholdTriggerInput,
   executor: DbExecutor = db,
+  writer: typeof enqueueTriggerOutbox = enqueueTriggerOutbox,
 ): Promise<EnqueueTriggerOutboxResult> {
   const conditionKey = [
     "tasks",
@@ -168,7 +198,7 @@ export async function enqueueTaskThresholdTrigger(
     input.operator,
     input.threshold,
   ].join(":");
-  return enqueueTriggerOutbox({
+  return writer({
     identity: input.identity,
     eventType: "task.open_count_threshold",
     aggregateType: "task",
@@ -177,6 +207,8 @@ export async function enqueueTaskThresholdTrigger(
     payload: {
       entity: "tasks",
       metric: "open_task_count",
+      taskId: input.taskId ?? null,
+      workId: input.workId ?? null,
       operator: input.operator,
       threshold: input.threshold,
       previousValue: input.previousValue,
@@ -188,10 +220,54 @@ export async function enqueueTaskThresholdTrigger(
       "task-threshold:v1",
       input.identity.tenantId,
       input.identity.userId,
+      input.workId ?? "global",
       conditionKey,
       input.transitionKey,
     ].join(":"),
   }, executor);
+}
+
+export async function enqueueTaskThresholdTriggersForMutation(
+  input: EnqueueTaskThresholdTriggersForMutationInput,
+  executor: DbExecutor = db,
+): Promise<EnqueueTriggerOutboxResult[]> {
+  if (input.previousValue === input.currentValue) return [];
+
+  const works = await executor.select({
+    id: agentWorksTable.id,
+    source: agentWorksTable.source,
+    condition: agentWorksTable.condition,
+  }).from(agentWorksTable).where(and(
+    eq(agentWorksTable.tenantId, input.identity.tenantId),
+    eq(agentWorksTable.ownerUserId, input.identity.userId),
+    eq(agentWorksTable.status, "active"),
+  ));
+  const writer = input.writer ?? enqueueTriggerOutbox;
+  const results: EnqueueTriggerOutboxResult[] = [];
+  for (const work of works) {
+    const source = work.source ?? {};
+    const condition = work.condition ?? {};
+    if (
+      source.type !== "internal_records"
+      || condition.entity !== "tasks"
+      || condition.metric !== "open_task_count"
+    ) continue;
+    const operator = comparisonOperator(condition.operator);
+    const threshold = Number(condition.threshold);
+    if (!operator || !Number.isSafeInteger(threshold) || threshold < 0) continue;
+    results.push(await enqueueTaskThresholdTrigger({
+      identity: input.identity,
+      taskId: input.taskId,
+      workId: work.id,
+      operator,
+      threshold,
+      previousValue: input.previousValue,
+      currentValue: input.currentValue,
+      transitionKey: input.mutationKey,
+      occurredAt: input.occurredAt,
+    }, executor, writer));
+  }
+  return results;
 }
 
 export { evaluateTriggerEvent };

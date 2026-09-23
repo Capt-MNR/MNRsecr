@@ -66,3 +66,4 @@
 - [Proactive trigger registry](proactive-trigger-registry.md) — add new trigger types through event/aggregate evaluator registration, not dispatcher branches.
 - [Git pane authentication boundary](git-pane-auth-boundary.md) — GitHub API OAuth can work while Git pane HTTPS push remains unauthenticated; do not loop reauthorization or request tokens.
 - [Transactional trigger outbox](transactional-trigger-outbox.md) — domain events stay in PostgreSQL, are separate from activity history, and hand off deterministically to deduplicated Agent Work.
+- [Task alert mutation identity](task-alert-mutation-identity.md) — task-trigger dedupe keys need the stable task identity plus the mutation version or transition.

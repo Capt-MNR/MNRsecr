@@ -127,7 +127,11 @@ import {
 import { runWithIdempotencyLock } from "./idempotency-lock";
 import { agentWorkRuntime } from "./agent-work/runtime";
 import type { AgentWorkKind } from "./agent-work/types";
-import { enqueueTriggerOutbox } from "./trigger-outbox";
+import {
+  countOpenTasks,
+  enqueueTaskThresholdTriggersForMutation,
+  enqueueTriggerOutbox,
+} from "./trigger-outbox";
 
 const db = database;
 
@@ -736,6 +740,27 @@ async function enqueueCommitmentDeadlineTrigger(
       commitment.id,
       `v${commitment.rowVersion}`,
     ].join(":"),
+  }, executor);
+}
+
+async function enqueueTaskCountTransition(
+  identity: Identity,
+  taskId: string,
+  previousValue: number,
+  currentValue: number,
+  mutationKey: string,
+  occurredAt: Date,
+  executor: DbExecutor,
+  writer: typeof enqueueTriggerOutbox,
+): Promise<void> {
+  await enqueueTaskThresholdTriggersForMutation({
+    identity,
+    taskId,
+    previousValue,
+    currentValue,
+    mutationKey,
+    occurredAt,
+    writer,
   }, executor);
 }
 
@@ -2427,6 +2452,7 @@ async function executeTool(
       const taskId = stringArg("taskId");
       if (!taskId) return { ok: false, error: "taskId is required." };
       const expectedVersion = expectedRowVersion(args);
+      const previousOpenCount = await countOpenTasks(identity, db);
        const updates: Record<string, unknown> = {
          updatedAt: new Date(),
          rowVersion: sql`${tasksTable.rowVersion} + 1`,
@@ -2445,6 +2471,19 @@ async function executeTool(
         eq(tasksTable.id, taskId),
         ...(expectedVersion === undefined ? [] : [eq(tasksTable.rowVersion, expectedVersion)]),
       )).returning();
+      if (updated) {
+        const currentOpenCount = await countOpenTasks(identity, db);
+        await enqueueTaskCountTransition(
+          identity,
+          updated.id,
+          previousOpenCount,
+          currentOpenCount,
+          `task-update:${updated.id}:v${updated.rowVersion}`,
+          updated.updatedAt,
+          db,
+          options.triggerOutboxWriter ?? enqueueTriggerOutbox,
+        );
+      }
       result = updated
         ? { ok: true, task: updated }
         : { ok: false, error: expectedVersion === undefined ? "Task not found." : "Record changed after this edit was opened." };
@@ -2635,6 +2674,7 @@ async function executeTool(
     case "delete_task": {
       const targetId = stringArg("taskId");
       if (!targetId) return { ok: false, error: "taskId is required." };
+      const previousOpenCount = await countOpenTasks(identity, db);
       const [existing] = await db.select().from(tasksTable).where(and(
         identityWhere(identity, tasksTable),
         eq(tasksTable.id, targetId),
@@ -2652,6 +2692,19 @@ async function executeTool(
         eq(tasksTable.id, targetId),
         expectedCreatedAtWhere(tasksTable.createdAt),
       )).returning();
+      if (deleted) {
+        const currentOpenCount = await countOpenTasks(identity, db);
+        await enqueueTaskCountTransition(
+          identity,
+          deleted.id,
+          previousOpenCount,
+          currentOpenCount,
+          `task-delete:${existing.id}:v${existing.rowVersion}`,
+          deleted.updatedAt,
+          db,
+          options.triggerOutboxWriter ?? enqueueTriggerOutbox,
+        );
+      }
       result = deleted ? { ok: true, deleted: true, deletedTask: deleted } : { ok: false, error: "Task not found." };
       break;
     }
@@ -2958,6 +3011,7 @@ async function executeTool(
       const dueAtValue = stringArg("dueAt");
       const dueAt = dueAtValue ? new Date(dueAtValue) : null;
       if (dueAt && Number.isNaN(dueAt.getTime())) return { ok: false, error: "dueAt must be a valid ISO timestamp." };
+      const previousOpenCount = await countOpenTasks(identity, db);
       const [task] = await db.insert(tasksTable).values({
         tenantId: identity.tenantId,
         ownerUserId: identity.userId,
@@ -2970,6 +3024,17 @@ async function executeTool(
       }).returning();
       if (!task) return { ok: false, error: "Could not create task." };
       const triggerOutboxWriter = options.triggerOutboxWriter ?? enqueueTriggerOutbox;
+      const currentOpenCount = await countOpenTasks(identity, db);
+      await enqueueTaskCountTransition(
+        identity,
+        task.id,
+        previousOpenCount,
+        currentOpenCount,
+        `task-create:${task.id}:v${task.rowVersion}`,
+        task.createdAt,
+        db,
+        triggerOutboxWriter,
+      );
       await triggerOutboxWriter({
         identity,
         eventType: "task.created",
