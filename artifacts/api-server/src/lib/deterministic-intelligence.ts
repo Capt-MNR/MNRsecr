@@ -192,6 +192,14 @@ function cleanMention(value: string): string {
     .trim();
 }
 
+function isNonPersonMention(value: string): boolean {
+  const normalized = canonicalizeArabicText(value);
+  return /^(?:على\s+)?(?:مشروع|project)(?:\s|$)/u.test(normalized)
+    || /^[\d٠-٩]/u.test(normalized)
+    || /(?:الف|الاف|آلاف|الفين|ألف|ألفين|ونص|ونصف|نص|نصف)/u.test(normalized)
+    || /^(?:واحد|واحده|اثنين|اتنين|ثلاثه|ثلاثة|اربعه|أربعة|خمسه|خمسة|سته|ستة|سبعه|سبعة|تمانيه|ثمانية|تسعه|تسعة|عشره|عشرة)(?:\s|$)/u.test(normalized);
+}
+
 function currencyFromText(value: string): ParsedAmount["currency"] {
   const normalized = canonicalizeArabicText(value);
   if (normalized.includes("دولار") || /\busd\b/i.test(normalized)) return "USD";
@@ -226,6 +234,22 @@ export function parseArabicAmount(value: string): ParsedAmount | null {
   const numeric = value.match(/[\d٠-٩]+(?:[.,٬٫][\d٠-٩]+)*/u);
   let amount: number | null = numeric ? amountNumber(numeric[0]) : null;
   let raw = numeric?.[0] ?? "";
+  let amountIncludesThousands = false;
+  let amountIncludesHalfThousand = false;
+
+  // Arabic speakers commonly say "11 ألف ونص" or "7 آلاف ونصف".
+  // The numeric token is valid by itself, but the unit and half-thousand
+  // suffix are part of the amount and must be consumed before converting to
+  // minor units.
+  const numericThousands = normalized.match(
+    /([\d٠-٩]+(?:[.,٬٫][\d٠-٩]+)?)\s*(?:الفين|الف|الاف|آلاف)(?=\s|$)(?:\s+و?(نص|نصف)(?=\s|$))?/u,
+  );
+  if (numericThousands) {
+    amount = amountNumber(numericThousands[1]) * 1000;
+    amountIncludesThousands = true;
+    amountIncludesHalfThousand = Boolean(numericThousands[2]);
+    raw = numericThousands[0];
+  }
 
   if (amount === null || !Number.isFinite(amount)) {
     const wordAmounts: Record<string, number> = {
@@ -234,7 +258,6 @@ export function parseArabicAmount(value: string): ParsedAmount | null {
       "ثلاثه الاف": 3000,
       "ثلاث الاف": 3000,
       "خمسه الاف": 5000,
-      "خمسه الاف ونصف": 5500,
       "خمسة الاف": 5000,
       "سبعه الاف": 7000,
       "سبعة الاف": 7000,
@@ -250,14 +273,19 @@ export function parseArabicAmount(value: string): ParsedAmount | null {
     if (matched) {
       raw = matched[0];
       amount = matched[1];
+      const matchedWords = matched[0].split(/\s+/u);
+      const matchedStart = normalizedWords.findIndex((word, index) =>
+        matchedWords.every((matchedWord, offset) => normalizedWords[index + offset] === matchedWord),
+      );
+      amountIncludesHalfThousand = matchedStart >= 0
+        && /^(?:ونص|ونصف|نص|نصف)$/u.test(normalizedWords[matchedStart + matchedWords.length] ?? "");
     }
   }
 
   if (amount === null || !Number.isFinite(amount) || amount <= 0) return null;
-  const thousand = /(?:^|\s)(?:الف|آلاف|الاف)(?=\s|$)/u.test(normalized) && numeric
-    ? amount * 1000
-    : amount;
-  const amountMinor = Math.round(thousand * 100);
+  const majorAmount = (amountIncludesThousands ? amount : amount)
+    + (amountIncludesHalfThousand ? 500 : 0);
+  const amountMinor = Math.round(majorAmount * 100);
   if (!Number.isSafeInteger(amountMinor) || amountMinor <= 0) return null;
   return {
     amountMinor,
@@ -372,11 +400,13 @@ export function parseArabicTimeOfDay(value: string): ParsedTimeOfDay | null {
 function extractEntityMentions(message: string): EntityMention[] {
   const mentions: EntityMention[] = [];
   const person = message.match(
-    /(?<!\p{L})(?:(?:ل(?!ا(?:\s|[،؛؟!.,]|$))|الى|إلى|مع|لصالح)\s*|(?:دفعت|اديت|أديت|اعطيت|عطيت|حولت|سددت)\s+(?:ل|الى|إلى|مع|لصالح)?\s*)([\p{L}][\p{L}\s-]{1,40}?)(?=\s+(?:بمبلغ|مبلغ|بقيمة|على|في|بمشروع|جنيه|جنية|دولار|ريال|الف|الفين|ألف|ألفين|امبارح|أمس|اليوم|بكره|بعد\s+بكره|[0-9٠-٩])|$)/u,
+    /(?<!\p{L})(?:(?:دفعت|دفع(?:ت)?|صرف(?:ت)?|حولت|سددت)\s+(?:ل|الى|إلى|مع|لصالح|على)\s*|(?:اديت|أديت|اعطيت|عطيت)\s+(?:ل|الى|إلى|مع|لصالح)?\s*)([\p{L}][\p{L}\s-]{1,40}?)(?=\s+(?:بمبلغ|مبلغ|بقيمة|على|في|بمشروع|جنيه|جنية|دولار|ريال|الف|الفين|ألف|ألفين|امبارح|أمس|اليوم|بكره|بعد\s+بكره|[0-9٠-٩])|[،؛؟!.,]|$)/u,
   );
   if (person?.[1]) {
     const query = cleanMention(person[1]);
-    if (query.length >= 2) mentions.push({ entityType: "person", query, confidence: 0.9 });
+    if (query.length >= 2 && !isNonPersonMention(query)) {
+      mentions.push({ entityType: "person", query, confidence: 0.9 });
+    }
   }
   const project = message.match(
     /(?:مشروع|project)\s+(?:اسمه\s+)?([\p{L}][\p{L}\s-]{1,50}?)(?=\s+(?:بمبلغ|مبلغ|بقيمة|جنيه|جنية|دولار|ريال|الف|الفين|ألف|ألفين|امبارح|أمس|اليوم|بكره|[0-9٠-٩])|$)/iu,

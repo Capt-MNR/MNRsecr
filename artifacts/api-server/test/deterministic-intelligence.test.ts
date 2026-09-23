@@ -120,6 +120,23 @@ test("semantic layer recognizes expense, totals, schedules, and reminders", () =
   assert.equal(projectExpenseRead.ambiguous, false);
 });
 
+test("Arabic thousand amounts include half-thousand suffixes", () => {
+  const cases = [
+    ["11 ألف ونص جنيه", 1_150_000],
+    ["7 آلاف ونصف", 750_000],
+    ["سبعة آلاف ونص", 750_000],
+    ["خمسة آلاف ونصف", 550_000],
+  ] as const;
+
+  for (const [text, amountMinor] of cases) {
+    const parsed = parseSemanticRequest(`سجل إني دفعت ${text} تشطيبات لشركة المحجر.`);
+    assert.equal(parsed.intent, "record_expense", text);
+    assert.equal(parsed.amount?.amountMinor, amountMinor, text);
+    assert.equal(parsed.entityMentions.length, 0, text);
+    assert.equal(decideDeterministically(parsed).kind, "deterministic", text);
+  }
+});
+
 test("context-recall questions stay distinct from expense reports", () => {
   const contextQuestion = parseSemanticRequest("آخر حاجة سجلناها عن شركة المحجر؟");
 

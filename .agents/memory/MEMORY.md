@@ -59,3 +59,4 @@
 - [Delegated action approvals](delegated-action-approval.md) — Agent Work actions must reserve the existing secretary operation and resume only after verified approval execution.
 - [Resolver shadow evaluation](resolver-shadow-evaluation.md) — measure entity candidates with seeded conversation state before allowing resolver output to influence orchestration.
 - [Real authentication boundary](real-auth-boundary.md) — tenant ownership comes from database-backed sessions or durable worker rows; development identity is explicitly gated and never used in production.
+- [Arabic expense parsing](arabic-expense-parsing.md) — colloquial thousand/half-thousand amounts must not be mistaken for recipient entities.

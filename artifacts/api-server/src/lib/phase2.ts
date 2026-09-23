@@ -5265,7 +5265,10 @@ function naturalAgentWorkArgs(message: string): Record<string, unknown> {
 function expenseDescription(message: string): string {
   const compact = message.replace(/\s+/g, " ").trim();
   const purpose = compact
-    .replace(/^(?:سجل|سجّل|اكتب|اثبت)\s*(?:إني|اني)?\s*(?:دفعت|صرف(?:ت)?|دفعت)\s*[\d٠-٩,٬.]+\s*(?:جنيه|جنية|دولار|يورو|ريال|درهم)?\s*/iu, "")
+    .replace(
+      /^(?:سجل|سجّل|اكتب|اثبت)\s*(?:إني|اني)?\s*(?:دفعت|صرف(?:ت)?|دفعت)\s*(?:[\d٠-٩]+(?:[.,٬٫][\d٠-٩]+)?\s*(?:(?:ألفين|ألف|الفين|الف|الاف|آلاف)(?:\s+و?(?:نص|نصف))?)?|[\d٠-٩,٬.]+)\s*(?:جنيه|جنية|دولار|يورو|ريال|درهم)?\s*/iu,
+      "",
+    )
     .trim();
   return (purpose || compact).slice(0, 320);
 }
