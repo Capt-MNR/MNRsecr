@@ -20,3 +20,9 @@ Approved domain mutation, activity, verification, and operation completion must 
 **Why:** A process can stop after a mutation commits but before a separate operation update, and blindly retrying would duplicate the mutation. The activity event is already in the mutation transaction, so it is the durable evidence needed to close the old boundary safely.
 
 **How to apply:** Pass the transaction executor through the existing approved tool path, lock the executing operation row for the full mutation transaction, persist `sourceOperationId` in activity metadata, and keep the existing row-version and tenant/owner predicates on every mutation and recovery update. Do not add a second approval executor.
+
+Idempotent turn replay must resolve the linked operation after the runtime returns its original approval envelope; terminal operations return the persisted operation result, while pending operations keep the approval envelope. The `/turns` response contract exposes terminal status through action fields rather than a top-level status field.
+
+**Why:** The original approval request remains the idempotent conversation result even after execution or rejection, so returning it with only a current status produces contradictory `approval_required`/terminal responses.
+
+**How to apply:** Keep operation lookup tenant-scoped, route completed/rejected/expired/failed operations through the existing operation-result helper, and do not dispatch a new approval notification for terminal replay.

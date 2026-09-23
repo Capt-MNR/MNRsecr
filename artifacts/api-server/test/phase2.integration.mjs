@@ -248,6 +248,9 @@ test("persists a natural-language expense and deduplicates an idempotent retry",
   const approved = await approveOperation(firstPayload.action.operationId);
   assert.equal(approved.status, "completed");
   assert.equal(approved.action.type, "expense_recorded");
+  assert.equal(Number(queryDb(
+    `SELECT count(*) FROM expenses WHERE ${scopedWhere} AND id = '${approved.action.expenseId}'`,
+  )), 1);
 
   const retry = await fetch(`${baseUrl}/turns`, {
     method: "POST",
@@ -257,10 +260,15 @@ test("persists a natural-language expense and deduplicates an idempotent retry",
   assert.equal(retry.status, 200);
   const retryPayload = await retry.json();
   assert.equal(retryPayload.action.operationId, firstPayload.action.operationId);
+  assert.equal(retryPayload.action.type, "expense_recorded");
+  assert.equal(retryPayload.action.expenseId, approved.action.expenseId);
 
   const approvalRetry = await approveOperation(firstPayload.action.operationId);
   assert.equal(approvalRetry.status, "completed");
   assert.equal(approvalRetry.action.expenseId, approved.action.expenseId);
+  assert.equal(Number(queryDb(
+    `SELECT count(*) FROM expenses WHERE ${scopedWhere} AND id = '${approved.action.expenseId}'`,
+  )), 1);
 
   const today = await fetch(`${baseUrl}/today`, {
     headers: { Authorization: "Bearer dev-user" },
@@ -437,12 +445,17 @@ test("record edits return approval and apply only after approval", async () => {
 
 test("rejected approval never writes and cannot be replayed", async () => {
   const description = `رفض approval ${Date.now()}`;
-  const pending = await sendTurn(`دفعت ${description} 125 جنيه`, `reject-${Date.now()}`, `reject-${Date.now()}`);
+  const idempotencyKey = `reject-${Date.now()}`;
+  const pending = await sendTurn(`دفعت ${description} 125 جنيه`, idempotencyKey, idempotencyKey);
   assert.equal(pending.action.type, "approval_required");
   const rejected = await rejectOperation(pending.action.operationId);
   assert.equal(rejected.status, "rejected");
-  const replay = await approveOperation(pending.action.operationId);
-  assert.equal(replay.status, "rejected");
+  const replay = await sendTurn(`دفعت ${description} 125 جنيه`, idempotencyKey, idempotencyKey);
+  assert.equal(replay.action.type, "approval_rejected");
+  assert.equal(replay.action.status, "rejected");
+  assert.equal(replay.action.operationId, pending.action.operationId);
+  const approvalReplay = await approveOperation(pending.action.operationId);
+  assert.equal(approvalReplay.status, "rejected");
   assert.equal(Number(queryDb(
     `SELECT count(*) FROM expenses WHERE ${scopedWhere} AND description = '${description}'`,
   )), 0);

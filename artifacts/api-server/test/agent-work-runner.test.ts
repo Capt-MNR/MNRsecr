@@ -32,7 +32,14 @@ function work(overrides: Partial<AgentWorkRecord> = {}): AgentWorkRecord {
 
 function adaptersFor(inputWork: AgentWorkRecord): {
   adapters: AgentWorkAdapters;
-  state: { runStatus: string; nextRunAt: Date | null; evidence: number; events: string[]; notifications: number };
+  state: {
+    runStatus: string;
+    nextRunAt: Date | null;
+    evidence: number;
+    events: string[];
+    notifications: number;
+    verifications: Array<Record<string, unknown>>;
+  };
 } {
   const run: AgentWorkRunRecord = {
     id: "run-1",
@@ -56,6 +63,7 @@ function adaptersFor(inputWork: AgentWorkRecord): {
     evidence: 0,
     events: [] as string[],
     notifications: 0,
+    verifications: [] as Array<Record<string, unknown>>,
   };
   const adapters = {
     scheduler: { driver: "stub", schedule: async () => ({ scheduled: false, driver: "stub", reason: "test" }), cancel: async () => undefined },
@@ -77,9 +85,14 @@ function adaptersFor(inputWork: AgentWorkRecord): {
         state.evidence += 1;
         return { reference: "evidence-1", stored: true, driver: "stub" as const };
       },
-      completeRun: async (input: { status: string; nextRunAt?: Date | null }) => {
+      completeRun: async (input: {
+        status: string;
+        nextRunAt?: Date | null;
+        verification?: Record<string, unknown>;
+      }) => {
         state.runStatus = input.status;
         state.nextRunAt = input.nextRunAt ?? null;
+        if (input.verification) state.verifications.push(input.verification);
         return { ...run, status: input.status as AgentWorkRunRecord["status"], leaseToken: null };
       },
       addEvent: async (input: { eventType: string }) => {
@@ -162,6 +175,9 @@ test("internal task monitoring establishes a quiet baseline and stays quiet when
   assert.equal(first.completed, 1);
   assert.equal(second.completed, 1);
   assert.equal(state.runStatus, "unchanged");
+  assert.equal(state.verifications[0]?.state, "unchanged");
+  assert.equal(state.verifications[0]?.reason, "baseline_established");
+  assert.equal(state.verifications[1]?.state, "unchanged");
   assert.equal(evidence.length, 2);
   assert.equal(notificationCount, 0);
   assert.deepEqual(state.events, ["run_unchanged", "run_unchanged"]);

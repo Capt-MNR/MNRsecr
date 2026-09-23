@@ -321,8 +321,9 @@ async function planExecution(
         verification: {
           kind: "read_only_monitor",
           source: "internal_records",
-          ...comparison,
-          ...(firstBaseline ? { reason: "baseline_established" } : {}),
+          ...(firstBaseline
+            ? { state: "unchanged", reason: "baseline_established" }
+            : comparison),
           conditionMet: current.conditionMet,
           comparisonKnown: current.comparisonKnown,
         },

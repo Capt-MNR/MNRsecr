@@ -87,7 +87,7 @@ function sendError(
 
 function operationResultResponse(
   operation: PendingOperation,
-): OperationExecutionResult & { operationId: string; status: string } {
+): OperationExecutionResult & { operationId: string; status: string; turnId: string } {
   if (operation.result) {
     return {
       ...operation.result,
@@ -345,7 +345,12 @@ router.post("/turns", async (req, res): Promise<void> => {
       ? actionOperationId
       : null;
     const operation = operationId ? await getOperation(identity, operationId) : null;
-    const response = operation
+    const terminalOperation = operation && ["completed", "rejected", "expired", "failed"].includes(operation.status)
+      ? operation
+      : null;
+    const response = terminalOperation
+      ? operationResultResponse(terminalOperation)
+      : operation
       ? {
           ...result,
           turnId: result.turnId ?? currentRequestId,
@@ -384,7 +389,7 @@ router.post("/turns", async (req, res): Promise<void> => {
         }, "Secretary input asset provenance link failed");
       }
     }
-    if (operation) {
+    if (operation && !terminalOperation) {
       void dispatchMobilePush(identity, {
         dedupeKey: `secretary-approval-notification:${operation.operationId}`,
         operationId: operation.operationId,
