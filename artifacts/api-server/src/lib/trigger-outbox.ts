@@ -70,6 +70,7 @@ export type TriggerEvaluation = {
   triggerKey: string;
   reason: string;
   workIntentDedupeKey?: string;
+  defer?: boolean;
 };
 
 export type EnqueueTaskThresholdTriggerInput = {
@@ -355,7 +356,7 @@ async function claimNextTriggerOutbox(input: {
   });
 }
 
-async function processClaimedEvent(event: TriggerOutboxEvent, now: Date): Promise<"processed" | "coalesced"> {
+async function processClaimedEvent(event: TriggerOutboxEvent, now: Date): Promise<"processed" | "coalesced" | "deferred"> {
   if (!event.leaseToken) throw new Error("TRIGGER_OUTBOX_LEASE_MISSING");
   const leaseToken = event.leaseToken;
   return db.transaction(async (tx) => {
@@ -374,6 +375,31 @@ async function processClaimedEvent(event: TriggerOutboxEvent, now: Date): Promis
       executor: tx,
       now,
     });
+    if (evaluation.defer) {
+      const [deferred] = await tx.update(triggerOutboxTable).set({
+        status: "pending",
+        attemptCount: sql`greatest(${triggerOutboxTable.attemptCount} - 1, 0)`,
+        availableAt: new Date(now.getTime() + 5_000),
+        updatedAt: now,
+        leaseToken: null,
+        leaseExpiresAt: null,
+        lastError: evaluation.reason,
+      }).where(and(
+        eq(triggerOutboxTable.id, currentEvent.eventId),
+        eq(triggerOutboxTable.status, "claimed"),
+        eq(triggerOutboxTable.leaseToken, leaseToken),
+        gt(triggerOutboxTable.leaseExpiresAt, now),
+      )).returning();
+      if (!deferred) throw new Error("TRIGGER_OUTBOX_LEASE_LOST");
+      logger.info({
+        eventId: currentEvent.eventId,
+        tenantId: currentEvent.tenantId,
+        ownerUserId: currentEvent.ownerUserId,
+        reason: evaluation.reason,
+        availableAt: deferred.availableAt.toISOString(),
+      }, "trigger outbox event deferred");
+      return "deferred";
+    }
     let outcome: "processed" | "coalesced" = "processed";
     if (evaluation.eligible) {
       const identity = { tenantId: currentEvent.tenantId, userId: currentEvent.ownerUserId };
@@ -518,6 +544,7 @@ export class TriggerOutboxDispatcher {
       try {
         const outcome = await processClaimedEvent(event, now);
         if (outcome === "coalesced") result.coalesced += 1;
+        else if (outcome === "deferred") result.retried += 1;
         else result.processed += 1;
       } catch (error) {
         await failClaimedEvent(event, error, now, this.maxAttempts);

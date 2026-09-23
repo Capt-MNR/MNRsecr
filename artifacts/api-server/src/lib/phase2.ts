@@ -764,6 +764,20 @@ async function enqueueTaskCountTransition(
   }, executor);
 }
 
+async function lockTaskOpenCount(
+  identity: Identity,
+  executor: DbExecutor,
+): Promise<void> {
+  const lockKey = JSON.stringify([
+    identity.tenantId,
+    identity.userId,
+    "tasks/open_task_count",
+  ]);
+  await executor.execute(sql`
+    select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))
+  `);
+}
+
 function jsonSafe(value: unknown): unknown {
   return JSON.parse(
     JSON.stringify(value, (_key, current) =>
@@ -2452,6 +2466,7 @@ async function executeTool(
       const taskId = stringArg("taskId");
       if (!taskId) return { ok: false, error: "taskId is required." };
       const expectedVersion = expectedRowVersion(args);
+      await lockTaskOpenCount(identity, db);
       const previousOpenCount = await countOpenTasks(identity, db);
        const updates: Record<string, unknown> = {
          updatedAt: new Date(),
@@ -2674,6 +2689,7 @@ async function executeTool(
     case "delete_task": {
       const targetId = stringArg("taskId");
       if (!targetId) return { ok: false, error: "taskId is required." };
+      await lockTaskOpenCount(identity, db);
       const previousOpenCount = await countOpenTasks(identity, db);
       const [existing] = await db.select().from(tasksTable).where(and(
         identityWhere(identity, tasksTable),
@@ -3011,6 +3027,7 @@ async function executeTool(
       const dueAtValue = stringArg("dueAt");
       const dueAt = dueAtValue ? new Date(dueAtValue) : null;
       if (dueAt && Number.isNaN(dueAt.getTime())) return { ok: false, error: "dueAt must be a valid ISO timestamp." };
+      await lockTaskOpenCount(identity, db);
       const previousOpenCount = await countOpenTasks(identity, db);
       const [task] = await db.insert(tasksTable).values({
         tenantId: identity.tenantId,

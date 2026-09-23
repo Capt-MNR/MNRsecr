@@ -490,3 +490,220 @@ test("task mutations emit threshold events only when the open count changes", as
   assert.equal((await thresholdEvents()).length, 6);
   await cleanup();
 });
+
+test("concurrent task creates produce one threshold WorkIntent for one crossing", async () => {
+  process.env.AGENT_WORK_ENABLED = "true";
+  process.env.AGENT_WORK_RUNNER_ENABLED = "true";
+  process.env.AGENT_WORK_ALLOW_DEVELOPMENT_IDENTITY = "true";
+  const owner = {
+    tenantId: `${identity.tenantId}-concurrent`,
+    userId: identity.userId,
+  };
+  await cleanupOwner(owner);
+
+  await db.insert(agentWorksTable).values({
+    tenantId: owner.tenantId,
+    ownerUserId: owner.userId,
+    kind: "monitor",
+    title: "Concurrent open task count alert",
+    status: "active",
+    source: { type: "internal_records" },
+    condition: {
+      entity: "tasks",
+      metric: "open_task_count",
+      operator: "gte",
+      threshold: 1,
+    },
+    action: { type: "notify" },
+    schedule: { frequency: "event" },
+    dedupeKey: `concurrent-task-count-monitor:${owner.tenantId}`,
+  });
+
+  const [first, second] = await Promise.all([
+    executeApproved(owner, "create_task", {
+      title: "Concurrent task one",
+    }, "trigger-stress-concurrent-task-one"),
+    executeApproved(owner, "create_task", {
+      title: "Concurrent task two",
+    }, "trigger-stress-concurrent-task-two"),
+  ]);
+  assert.equal(first.ok, true);
+  assert.equal(second.ok, true);
+
+  const tasks = await db.select().from(tasksTable).where(and(
+    eq(tasksTable.tenantId, owner.tenantId),
+    eq(tasksTable.ownerUserId, owner.userId),
+  ));
+  assert.equal(tasks.length, 2);
+  const events = await db.select().from(triggerOutboxTable).where(and(
+    eq(triggerOutboxTable.tenantId, owner.tenantId),
+    eq(triggerOutboxTable.ownerUserId, owner.userId),
+    eq(triggerOutboxTable.eventType, "task.open_count_threshold"),
+  ));
+  assert.equal(events.length, 2);
+
+  const dispatched = await new TriggerOutboxDispatcher().tick(new Date(), 20);
+  assert.equal(dispatched.processed + dispatched.coalesced, 4);
+  assert.equal(await thresholdWorkCount(owner), 1);
+
+  const firstTask = (first as { task: { id: string; rowVersion: number } }).task;
+  const secondTask = (second as { task: { id: string; rowVersion: number } }).task;
+  const [firstCompleted, secondCompleted] = await Promise.all([
+    executeApproved(owner, "update_task", {
+      taskId: firstTask.id,
+      status: "completed",
+      expectedRowVersion: firstTask.rowVersion,
+    }, "trigger-stress-concurrent-task-one-complete"),
+    executeApproved(owner, "update_task", {
+      taskId: secondTask.id,
+      status: "completed",
+      expectedRowVersion: secondTask.rowVersion,
+    }, "trigger-stress-concurrent-task-two-complete"),
+  ]);
+  assert.equal(firstCompleted.ok, true);
+  assert.equal(secondCompleted.ok, true);
+  await new TriggerOutboxDispatcher().tick(new Date(), 20);
+  assert.equal(await thresholdWorkCount(owner), 1);
+
+  await Promise.all([
+    executeApproved(owner, "update_task", {
+      taskId: firstTask.id,
+      status: "pending",
+      expectedRowVersion: (firstCompleted as { task: { rowVersion: number } }).task.rowVersion,
+    }, "trigger-stress-concurrent-task-one-reopen"),
+    executeApproved(owner, "update_task", {
+      taskId: secondTask.id,
+      status: "pending",
+      expectedRowVersion: (secondCompleted as { task: { rowVersion: number } }).task.rowVersion,
+    }, "trigger-stress-concurrent-task-two-reopen"),
+  ]);
+  await new TriggerOutboxDispatcher().tick(new Date(), 20);
+  assert.equal(await thresholdWorkCount(owner), 2);
+  await cleanupOwner(owner);
+});
+
+test("task threshold events wait while their Agent Work monitor is paused", async () => {
+  process.env.AGENT_WORK_ENABLED = "true";
+  process.env.AGENT_WORK_RUNNER_ENABLED = "true";
+  process.env.AGENT_WORK_ALLOW_DEVELOPMENT_IDENTITY = "true";
+  const owner = {
+    tenantId: `${identity.tenantId}-paused`,
+    userId: identity.userId,
+  };
+  await cleanupOwner(owner);
+
+  const [monitor] = await db.insert(agentWorksTable).values({
+    tenantId: owner.tenantId,
+    ownerUserId: owner.userId,
+    kind: "monitor",
+    title: "Pause-aware open task count alert",
+    status: "active",
+    source: { type: "internal_records" },
+    condition: {
+      entity: "tasks",
+      metric: "open_task_count",
+      operator: "gte",
+      threshold: 1,
+    },
+    action: { type: "notify" },
+    schedule: { frequency: "event" },
+    dedupeKey: `pause-aware-task-count-monitor:${owner.tenantId}`,
+  }).returning();
+  assert.ok(monitor);
+
+  await executeApproved(owner, "create_task", {
+    title: "Paused monitor task",
+  }, "trigger-stress-paused-monitor-task");
+  const [event] = await db.select().from(triggerOutboxTable).where(and(
+    eq(triggerOutboxTable.tenantId, owner.tenantId),
+    eq(triggerOutboxTable.ownerUserId, owner.userId),
+    eq(triggerOutboxTable.eventType, "task.open_count_threshold"),
+  ));
+  assert.ok(event);
+
+  await db.update(agentWorksTable).set({ status: "paused" }).where(and(
+    eq(agentWorksTable.tenantId, owner.tenantId),
+    eq(agentWorksTable.ownerUserId, owner.userId),
+    eq(agentWorksTable.id, monitor.id),
+  ));
+  const pausedDispatch = await new TriggerOutboxDispatcher().tick(new Date(), 20);
+  assert.equal(pausedDispatch.retried, 1);
+  assert.equal(await thresholdWorkCount(owner), 0);
+  const [deferred] = await db.select().from(triggerOutboxTable).where(eq(
+    triggerOutboxTable.id,
+    event.id,
+  ));
+  assert.equal(deferred?.status, "pending");
+  assert.equal(deferred?.lastError, "agent_work_not_active");
+
+  await db.update(agentWorksTable).set({ status: "active" }).where(and(
+    eq(agentWorksTable.tenantId, owner.tenantId),
+    eq(agentWorksTable.ownerUserId, owner.userId),
+    eq(agentWorksTable.id, monitor.id),
+  ));
+  const resumedDispatch = await new TriggerOutboxDispatcher().tick(
+    new Date(Date.now() + 10_000),
+    20,
+  );
+  assert.equal(resumedDispatch.processed + resumedDispatch.coalesced, 1);
+  assert.equal(await thresholdWorkCount(owner), 1);
+  await cleanupOwner(owner);
+});
+
+test("global Agent Work disable leaves task threshold events pending for later dispatch", async () => {
+  process.env.AGENT_WORK_ENABLED = "true";
+  process.env.AGENT_WORK_RUNNER_ENABLED = "true";
+  process.env.AGENT_WORK_ALLOW_DEVELOPMENT_IDENTITY = "true";
+  const owner = {
+    tenantId: `${identity.tenantId}-disabled`,
+    userId: identity.userId,
+  };
+  await cleanupOwner(owner);
+
+  await db.insert(agentWorksTable).values({
+    tenantId: owner.tenantId,
+    ownerUserId: owner.userId,
+    kind: "monitor",
+    title: "Disabled-aware open task count alert",
+    status: "active",
+    source: { type: "internal_records" },
+    condition: {
+      entity: "tasks",
+      metric: "open_task_count",
+      operator: "gte",
+      threshold: 1,
+    },
+    action: { type: "notify" },
+    schedule: { frequency: "event" },
+    dedupeKey: `disabled-aware-task-count-monitor:${owner.tenantId}`,
+  });
+
+  await executeApproved(owner, "create_task", {
+    title: "Globally disabled monitor task",
+  }, "trigger-stress-global-disabled-task");
+  const [event] = await db.select().from(triggerOutboxTable).where(and(
+    eq(triggerOutboxTable.tenantId, owner.tenantId),
+    eq(triggerOutboxTable.ownerUserId, owner.userId),
+    eq(triggerOutboxTable.eventType, "task.open_count_threshold"),
+  ));
+  assert.ok(event);
+
+  process.env.AGENT_WORK_ENABLED = "false";
+  const disabledDispatch = await new TriggerOutboxDispatcher().tick(new Date(), 20);
+  assert.equal(disabledDispatch.enabled, false);
+  assert.equal(await thresholdWorkCount(owner), 0);
+  const [pending] = await db.select().from(triggerOutboxTable).where(eq(
+    triggerOutboxTable.id,
+    event.id,
+  ));
+  assert.equal(pending?.status, "pending");
+
+  process.env.AGENT_WORK_ENABLED = "true";
+  const resumedDispatch = await new TriggerOutboxDispatcher().tick(
+    new Date(Date.now() + 10_000),
+    20,
+  );
+  assert.equal(resumedDispatch.processed + resumedDispatch.coalesced >= 1, true);
+  assert.equal(await thresholdWorkCount(owner), 1);
+  await cleanupOwner(owner);
+});

@@ -23,7 +23,7 @@ import {
   type ActivityEvent,
 } from "@workspace/db";
 
-export type DbExecutor = Pick<typeof db, "select" | "insert" | "update" | "delete">;
+export type DbExecutor = Pick<typeof db, "select" | "insert" | "update" | "delete" | "execute">;
 export type GraphEntityType = "person" | "project" | "financial_party";
 export type Identity = { tenantId: string; userId: string };
 const GRAPH_LIMIT = 100;

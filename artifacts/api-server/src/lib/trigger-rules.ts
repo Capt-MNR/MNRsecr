@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import {
   commitmentsTable,
   db,
+  agentWorksTable,
 } from "@workspace/db";
 import type { DbExecutor } from "./entity-graph";
 import {
@@ -59,7 +60,10 @@ function conditionKey(input: {
   ].join(":");
 }
 
-function thresholdEvaluation(event: TriggerOutboxEvent): TriggerEvaluation {
+async function thresholdEvaluation(
+  event: TriggerOutboxEvent,
+  context: TriggerEvaluationContext,
+): Promise<TriggerEvaluation> {
   const triggerKey = "task-open-count-threshold-v1";
   const payload = event.payload;
   const operator = comparisonOperator(payload.operator);
@@ -83,6 +87,25 @@ function thresholdEvaluation(event: TriggerOutboxEvent): TriggerEvaluation {
     || !transitionKey
   ) {
     return notEligible(triggerKey, "unsupported_threshold_condition");
+  }
+
+  if (workId) {
+    const [work] = await context.executor.select({ id: agentWorksTable.id })
+      .from(agentWorksTable)
+      .where(and(
+        eq(agentWorksTable.tenantId, event.tenantId),
+        eq(agentWorksTable.ownerUserId, event.ownerUserId),
+        eq(agentWorksTable.id, workId),
+        eq(agentWorksTable.status, "active"),
+      ))
+      .limit(1)
+      .for("update");
+    if (!work) {
+      return {
+        ...notEligible(triggerKey, "agent_work_not_active"),
+        defer: true,
+      };
+    }
   }
 
   const previousMet = compareCondition(previousValue, operator, threshold);
@@ -194,6 +217,6 @@ export async function evaluateTriggerEvent(
 
 registerTriggerEvaluator("task.created", "task", taskCreatedEvaluation);
 registerTriggerEvaluator("commitment.deadline", "commitment", commitmentDeadlineEvaluation);
-registerTriggerEvaluator("task.open_count_threshold", "task", async (event) => thresholdEvaluation(event));
+registerTriggerEvaluator("task.open_count_threshold", "task", thresholdEvaluation);
 
 export type { TriggerEvaluator };
