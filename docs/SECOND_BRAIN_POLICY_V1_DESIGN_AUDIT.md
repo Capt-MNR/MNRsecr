@@ -453,6 +453,7 @@ Candidate الناتج من extraction أو correction لا يصبح Final Memor
   "conversationId": "string|null",
   "strategy": "none | lexical_v1 | entity_v1 | explicit_recall",
   "triggered": true,
+  "outcome": "not_triggered | no_matches | excluded_matches | selected_context",
   "queryDomain": "preference | personal_fact | entity_resolution | structured_record_read | structured_record_mutation | general_conversation | memory_recall",
   "consideredCount": 12,
   "selected": [
@@ -475,6 +476,15 @@ Candidate الناتج من extraction أو correction لا يصبح Final Memor
   "excluded": [
     {
       "memoryId": "uuid",
+      "kind": "preference",
+      "relevanceScore": 0.12,
+      "confidence": 0.7,
+      "association": null,
+      "provenance": {
+        "sourceType": "inferred_user_statement",
+        "sourceConversationId": "string|null",
+        "sourceTurnId": "string|null"
+      },
       "reason": "archived | low_confidence | unrelated | conflict_structured_record | missing_entity_association | type_not_allowed | budget"
     }
   ],

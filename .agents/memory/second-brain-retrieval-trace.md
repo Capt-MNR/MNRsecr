@@ -9,6 +9,12 @@ Every retrieval decision should carry request and conversation correlation, boun
 
 **How to apply:** Keep no-op traces for non-triggered retrieval, record explicit-recall traces separately, and preserve the distinction between no matches, policy exclusion, structured precedence, and context inclusion.
 
+Use a stable outcome for each trace: `not_triggered`, `no_matches`, `excluded_matches`, or `selected_context`. Include scores, confidence, and redacted provenance on exclusions as well as selections, while keeping the trace bounded.
+
+**Why:** A global context reason alone can collapse an empty search into a policy rejection, and ID-only exclusions do not explain why a candidate lost.
+
+**How to apply:** Update the outcome after policy and context-budget stages; sanitize correlation and source identifiers before exposing them in the trace.
+
 Apply the context character budget before formatting the LLM payload, and mark any dropped selected memory as `budget` excluded.
 
 **Why:** Truncating after selection makes the trace claim that memories influenced the model when only a prefix actually did.

@@ -13,6 +13,9 @@ import {
   parseSecondBrainCandidate,
   parseSecondBrainCommand,
   createSecondBrainCandidate,
+  applySecondBrainContextBudget,
+  applySecondBrainPolicy,
+  emptyRetrievalTrace,
   rememberSecondBrain,
   retrieveSecondBrain,
   searchSecondBrain,
@@ -20,6 +23,7 @@ import {
   reviewSecondBrainCandidate,
   SecondBrainCandidateAssociationError,
 } from "../src/lib/second-brain.ts";
+import type { SecondBrainMemory } from "@workspace/db";
 import { Phase2AgentRuntime, type ModelGateway } from "../src/lib/phase2.ts";
 import { resolveEntity } from "../src/lib/entity-resolver.ts";
 
@@ -31,6 +35,31 @@ const otherIdentity = {
   tenantId: `${identity.tenantId}-other`,
   userId: identity.userId,
 };
+
+function traceMemory(overrides: Partial<SecondBrainMemory> = {}): SecondBrainMemory {
+  return {
+    id: "trace-memory",
+    tenantId: identity.tenantId,
+    ownerUserId: identity.userId,
+    kind: "fact",
+    key: "note:trace",
+    value: "secret memory value that must not enter the trace",
+    normalizedValue: "secret memory value that must not enter the trace",
+    confidenceBps: 10000,
+    status: "active",
+    metadata: {
+      source: "explicit_user_instruction",
+      entityType: "person",
+      entityId: "person-trace",
+    },
+    sourceConversationId: "source-conversation",
+    sourceTurnId: "source-turn",
+    createdAt: new Date("2026-09-22T00:00:00.000Z"),
+    updatedAt: new Date("2026-09-22T00:00:00.000Z"),
+    lastConfirmedAt: null,
+    ...overrides,
+  };
+}
 
 async function cleanup() {
   await db.delete(secondBrainCandidatesTable).where(and(
@@ -66,6 +95,115 @@ async function cleanup() {
     eq(projectsTable.ownerUserId, identity.userId),
   ));
 }
+
+test("retrieval traces explain every outcome without exposing memory values", () => {
+  const notTriggered = emptyRetrievalTrace(
+    "محادثة عادية",
+    false,
+    "general_conversation",
+    { requestId: "request-noop", conversationId: "conversation-noop" },
+  );
+  assert.equal(notTriggered.outcome, "not_triggered");
+  assert.equal(notTriggered.llmContextReason, "not_triggered");
+  assert.equal(notTriggered.requestId, "request-noop");
+  assert.equal(notTriggered.conversationId, "conversation-noop");
+
+  const excludedMemory = traceMemory({ confidenceBps: 7000 });
+  const excludedTrace = emptyRetrievalTrace(
+    "أنا بفضل الردود المختصرة",
+    true,
+    "preference",
+    { requestId: "request-excluded", conversationId: "conversation-excluded" },
+  );
+  excludedTrace.selected = [{
+    memoryId: excludedMemory.id,
+    kind: excludedMemory.kind,
+    relevanceScore: 0.8,
+    confidence: 0.7,
+    association: null,
+    provenance: {
+      sourceType: "explicit_user_instruction",
+      sourceConversationId: excludedMemory.sourceConversationId,
+      sourceTurnId: excludedMemory.sourceTurnId,
+    },
+  }];
+  const excluded = applySecondBrainPolicy([excludedMemory], excludedTrace);
+  assert.equal(excluded.trace.outcome, "excluded_matches");
+  assert.equal(excluded.trace.llmContextIncluded, false);
+  assert.equal(excluded.trace.excluded[0]?.reason, "type_not_allowed");
+  assert.equal(excluded.trace.excluded[0]?.confidence, 0.7);
+  assert.equal(excluded.trace.excluded[0]?.relevanceScore, 0.8);
+  assert.equal(excluded.trace.excluded[0]?.provenance?.sourceType, "explicit_user_instruction");
+  assert.equal(JSON.stringify(excluded.trace).includes(excludedMemory.value), false);
+
+  const selectedMemory = traceMemory({ id: "trace-selected", kind: "fact" });
+  const selectedTrace = emptyRetrievalTrace(
+    "فاكر المعلومة الشخصية",
+    true,
+    "personal_fact",
+    { requestId: "request-selected", conversationId: "conversation-selected" },
+  );
+  selectedTrace.selected = [{
+    memoryId: selectedMemory.id,
+    kind: selectedMemory.kind,
+    relevanceScore: 0.9,
+    confidence: 1,
+    association: null,
+    provenance: {
+      sourceType: "explicit_user_instruction",
+      sourceConversationId: selectedMemory.sourceConversationId,
+      sourceTurnId: selectedMemory.sourceTurnId,
+    },
+  }];
+  const selected = applySecondBrainPolicy([selectedMemory], selectedTrace);
+  assert.equal(selected.trace.outcome, "selected_context");
+  assert.equal(selected.trace.llmContextIncluded, true);
+  assert.equal(selected.trace.selected[0]?.provenance.sourceTurnId, "source-turn");
+
+  const noMatchTrace = emptyRetrievalTrace(
+    "فاكر إيه؟",
+    true,
+    "memory_recall",
+    { requestId: "request-empty", conversationId: "conversation-empty" },
+  );
+  const noMatch = applySecondBrainPolicy([], noMatchTrace);
+  assert.equal(noMatch.trace.outcome, "no_matches");
+  assert.equal(noMatch.trace.llmContextReason, "no_matches");
+
+  const boundedTrace = emptyRetrievalTrace("تفضيل", true, "preference");
+  const manyMemories = Array.from({ length: 140 }, (_, index) =>
+    traceMemory({
+      id: `trace-bounded-${index}`,
+      kind: "fact",
+      confidenceBps: 7000,
+    }));
+  const bounded = applySecondBrainPolicy(manyMemories, boundedTrace);
+  assert.equal(bounded.trace.outcome, "excluded_matches");
+  assert.equal(bounded.trace.excluded.length, 128);
+
+  const budgetTrace = emptyRetrievalTrace("معلومة", true, "personal_fact");
+  const oversized = traceMemory({
+    id: "trace-budget",
+    value: "x".repeat(5000),
+    normalizedValue: "x".repeat(5000),
+  });
+  budgetTrace.selected = [{
+    memoryId: oversized.id,
+    kind: oversized.kind,
+    relevanceScore: 1,
+    confidence: 1,
+    association: null,
+    provenance: {
+      sourceType: "explicit_user_instruction",
+      sourceConversationId: oversized.sourceConversationId,
+      sourceTurnId: oversized.sourceTurnId,
+    },
+  }];
+  const budgeted = applySecondBrainContextBudget([oversized], budgetTrace);
+  assert.equal(budgeted.length, 0);
+  assert.equal(budgetTrace.outcome, "excluded_matches");
+  assert.equal(budgetTrace.excluded[0]?.reason, "budget");
+});
 
 test("parses explicit remember, inferred preference candidates, and recall commands", () => {
   assert.deepEqual(parseSecondBrainCommand("افتكر إني بحب الردود المختصرة")?.type, "remember");

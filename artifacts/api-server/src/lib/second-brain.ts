@@ -23,6 +23,31 @@ export type SecondBrainQueryDomain =
   | "memory_recall";
 
 export type SecondBrainRetrievalMode = "none" | "lexical_v1" | "explicit_recall";
+export type SecondBrainRetrievalOutcome =
+  | "not_triggered"
+  | "no_matches"
+  | "excluded_matches"
+  | "selected_context";
+
+type SecondBrainTraceAssociation = {
+  entityType: string;
+  entityId: string;
+} | null;
+
+type SecondBrainTraceProvenance = {
+  sourceType: string;
+  sourceConversationId: string | null;
+  sourceTurnId: string | null;
+};
+
+type SecondBrainTraceMemory = {
+  memoryId: string;
+  kind: SecondBrainKind;
+  relevanceScore: number;
+  confidence: number;
+  association: SecondBrainTraceAssociation;
+  provenance: SecondBrainTraceProvenance;
+};
 
 export type SecondBrainRetrievalTrace = {
   traceId: string;
@@ -30,26 +55,15 @@ export type SecondBrainRetrievalTrace = {
   conversationId: string | null;
   strategy: SecondBrainRetrievalMode;
   triggered: boolean;
+  outcome: SecondBrainRetrievalOutcome;
   queryDomain: SecondBrainQueryDomain;
   consideredCount: number;
-  selected: Array<{
-    memoryId: string;
-    kind: SecondBrainKind;
-    relevanceScore: number;
-    confidence: number;
-    association: {
-      entityType: string;
-      entityId: string;
-    } | null;
-    provenance: {
-      sourceType: string;
-      sourceConversationId: string | null;
-      sourceTurnId: string | null;
-    };
-    sourceConversationId: string | null;
-    sourceTurnId: string | null;
+  selected: Array<SecondBrainTraceMemory & {
+    selectionReason?: "relevant_match" | "explicit_recall" | "policy_allowed";
+    sourceConversationId?: string | null;
+    sourceTurnId?: string | null;
   }>;
-  excluded: Array<{
+  excluded: Array<Partial<SecondBrainTraceMemory> & {
     memoryId: string;
     reason:
       | "no_match"
@@ -129,6 +143,7 @@ export class SecondBrainCandidateAssociationError extends Error {
 
 const MAX_MEMORY_VALUE_CHARS = 320;
 const MAX_CONTEXT_CHARS = 2800;
+const MAX_RETRIEVAL_TRACE_EXCLUSIONS = 128;
 const RECALL_WORDS = /(?:فاكر|تفتكر|اللي\s+فاكره|ماذا\s+تعرف\s+عني|ذاكرتك|المحفوظ|remember|recall|memory)/iu;
 const MEMORY_CONTEXT_WORDS = /(?:زي\s+ما\s+اتفقنا|المعتاد|تفضيل|أفضل|بفضل|بحب|فاكر|ذاكرة|remember|preference)/iu;
 const FINANCIAL_COMPARISON_WORDS = /(?:قارن|مقارنة|مقابل|الفرق|تعارض|متعارض|compare|comparison|versus|vs)/iu;
@@ -309,6 +324,7 @@ export function emptyRetrievalTrace(
     conversationId: options.conversationId ?? null,
     strategy: triggered ? "lexical_v1" : "none",
     triggered,
+    outcome: triggered ? "no_matches" : "not_triggered",
     queryDomain,
     consideredCount: 0,
     selected: [],
@@ -323,6 +339,60 @@ export function emptyRetrievalTrace(
     archivedRequested: false,
     archivedIncluded: false,
   };
+}
+
+function traceMemoryDetails(
+  memory: SecondBrainMemory,
+  relevanceScore = 0,
+): SecondBrainTraceMemory {
+  const safeIdentifier = (value: unknown, maxLength: number): string | null =>
+    typeof value === "string"
+      && value.length > 0
+      && value.length <= maxLength
+      && /^[a-z0-9][a-z0-9_.:-]*$/iu.test(value)
+      ? value
+      : null;
+  const sourceType = typeof memory.metadata?.source === "string"
+    && /^[a-z0-9_.-]{1,64}$/iu.test(memory.metadata.source)
+    ? memory.metadata.source
+    : "unknown";
+  const entityId = safeIdentifier(memory.metadata?.entityId, 128);
+  const entityType = safeIdentifier(memory.metadata?.entityType, 64);
+  const association = entityId && entityType
+    ? {
+        entityType,
+        entityId,
+      }
+    : null;
+  return {
+    memoryId: memory.id,
+    kind: memory.kind as SecondBrainKind,
+    relevanceScore: Math.max(0, Math.min(1, relevanceScore)),
+    confidence: Math.max(0, Math.min(1, memory.confidenceBps / 10000)),
+    association,
+    provenance: {
+      sourceType,
+      sourceConversationId: safeIdentifier(memory.sourceConversationId, 128),
+      sourceTurnId: safeIdentifier(memory.sourceTurnId, 128),
+    },
+  };
+}
+
+function boundRetrievalTrace(trace: SecondBrainRetrievalTrace): SecondBrainRetrievalTrace {
+  trace.excluded = trace.excluded.slice(0, MAX_RETRIEVAL_TRACE_EXCLUSIONS);
+  return trace;
+}
+
+function addTraceExclusion(
+  trace: SecondBrainRetrievalTrace,
+  memory: SecondBrainMemory,
+  reason: SecondBrainRetrievalTrace["excluded"][number]["reason"],
+  relevanceScore = 0,
+) {
+  trace.excluded.push({
+    ...traceMemoryDetails(memory, relevanceScore),
+    reason,
+  });
 }
 
 export function secondBrainValue(memory: SecondBrainMemory) {
@@ -763,51 +833,27 @@ export async function retrieveSecondBrain(
   trace.archivedIncluded = archivedIncluded;
   trace.consideredCount = rows.length;
   if (!archivedIncluded) {
-    trace.excluded.push(
-      ...archivedRows.map((memory) => ({
-        memoryId: memory.id,
-        reason: "archived_not_requested" as const,
-      })),
-    );
+    for (const memory of archivedRows) {
+      addTraceExclusion(trace, memory, "archived_not_requested");
+    }
   }
-  trace.excluded.push(
-    ...ranked
-      .filter((item) => !matching.includes(item))
-      .map((item) => ({
-        memoryId: item.memory.id,
-        reason: "no_match" as const,
-      })),
-    ...matching.slice(limit).map((item) => ({
-      memoryId: item.memory.id,
-      reason: "limit" as const,
-    })),
-  );
+  for (const item of ranked.filter((candidate) => !matching.includes(candidate))) {
+    addTraceExclusion(trace, item.memory, "no_match", item.score / 10);
+  }
+  for (const item of matching.slice(limit)) {
+    addTraceExclusion(trace, item.memory, "limit", item.score / 10);
+  }
   trace.selected = selected.map((item) => ({
-    memoryId: item.memory.id,
-    kind: item.memory.kind as SecondBrainKind,
-    relevanceScore: Math.max(0, Math.min(1, item.score / 10)),
-    confidence: item.memory.confidenceBps / 10000,
-    association: typeof item.memory.metadata?.entityId === "string"
-      && typeof item.memory.metadata?.entityType === "string"
-      ? {
-          entityType: item.memory.metadata.entityType,
-          entityId: item.memory.metadata.entityId,
-        }
-      : null,
-    provenance: {
-      sourceType: typeof item.memory.metadata?.source === "string"
-        ? item.memory.metadata.source
-        : "unknown",
-      sourceConversationId: item.memory.sourceConversationId,
-      sourceTurnId: item.memory.sourceTurnId,
-    },
+    ...traceMemoryDetails(item.memory, item.score / 10),
+    selectionReason: mode === "explicit_recall" ? "explicit_recall" : "relevant_match",
     sourceConversationId: item.memory.sourceConversationId,
     sourceTurnId: item.memory.sourceTurnId,
   }));
   trace.llmContextReason = selected.length > 0 ? "retrieved_matches" : "no_matches";
+  trace.outcome = selected.length > 0 ? "selected_context" : "no_matches";
   return {
     memories: selected.map((item) => item.memory),
-    trace,
+    trace: boundRetrievalTrace(trace),
   };
 }
 
@@ -830,31 +876,19 @@ export function applySecondBrainPolicy(
         : null;
   const allowed = memories.filter((memory) => {
     if (structuredDomain) {
-      trace.excluded.push({
-        memoryId: memory.id,
-        reason: "conflict_structured_record",
-      });
+      addTraceExclusion(trace, memory, "conflict_structured_record", selectedById.get(memory.id)?.relevanceScore);
       return false;
     }
     if (expectedKind && memory.kind !== expectedKind) {
-      trace.excluded.push({
-        memoryId: memory.id,
-        reason: "type_not_allowed",
-      });
+      addTraceExclusion(trace, memory, "type_not_allowed", selectedById.get(memory.id)?.relevanceScore);
       return false;
     }
     if (memory.confidenceBps < 8000) {
-      trace.excluded.push({
-        memoryId: memory.id,
-        reason: "low_confidence",
-      });
+      addTraceExclusion(trace, memory, "low_confidence", selectedById.get(memory.id)?.relevanceScore);
       return false;
     }
     if (memory.kind === "alias" && memory.confidenceBps < 9500) {
-      trace.excluded.push({
-        memoryId: memory.id,
-        reason: "low_confidence",
-      });
+      addTraceExclusion(trace, memory, "low_confidence", selectedById.get(memory.id)?.relevanceScore);
       return false;
     }
     if (
@@ -862,18 +896,12 @@ export function applySecondBrainPolicy(
       && trace.queryDomain === "entity_resolution"
       && typeof memory.metadata?.entityId !== "string"
     ) {
-      trace.excluded.push({
-        memoryId: memory.id,
-        reason: "missing_entity_association",
-      });
+      addTraceExclusion(trace, memory, "missing_entity_association", selectedById.get(memory.id)?.relevanceScore);
       return false;
     }
     const relevance = selectedById.get(memory.id)?.relevanceScore ?? 0;
     if (trace.queryDomain !== "memory_recall" && relevance <= 0) {
-      trace.excluded.push({
-        memoryId: memory.id,
-        reason: "unrelated",
-      });
+      addTraceExclusion(trace, memory, "unrelated", relevance);
       return false;
     }
     return true;
@@ -891,14 +919,24 @@ export function applySecondBrainPolicy(
     conflicts: structuredDomain || structuredComparison ? memories.map((memory) => memory.id) : [],
   };
   trace.llmContextIncluded = allowed.length > 0;
-  trace.llmContextReason = structuredDomain
-    ? "structured_record_precedence"
-    : structuredComparison && allowed.length > 0
+  if (!trace.triggered) {
+    trace.llmContextReason = "not_triggered";
+    trace.outcome = "not_triggered";
+  } else if (allowed.length > 0) {
+    trace.llmContextReason = structuredComparison
       ? "structured_record_comparison"
-    : allowed.length > 0
-      ? "policy_gates_passed"
-      : "policy_excluded_all";
-  return { memories: allowed, trace };
+      : structuredDomain
+        ? "structured_record_precedence"
+        : "policy_gates_passed";
+    trace.outcome = "selected_context";
+  } else if (memories.length === 0) {
+    trace.llmContextReason = "no_matches";
+    trace.outcome = "no_matches";
+  } else {
+    trace.llmContextReason = "policy_excluded_all";
+    trace.outcome = "excluded_matches";
+  }
+  return { memories: allowed, trace: boundRetrievalTrace(trace) };
 }
 
 function secondBrainHeader(queryDomain?: SecondBrainQueryDomain): string {
@@ -919,10 +957,7 @@ export function applySecondBrainContextBudget(
   for (const memory of memories) {
     const nextText = `${header}${JSON.stringify([...payload, secondBrainValue(memory)])}`;
     if (nextText.length > MAX_CONTEXT_CHARS) {
-      trace.excluded.push({
-        memoryId: memory.id,
-        reason: "budget",
-      });
+      addTraceExclusion(trace, memory, "budget");
       continue;
     }
     selected.push(memory);
@@ -937,6 +972,16 @@ export function applySecondBrainContextBudget(
   } else if (selected.length < memories.length) {
     trace.llmContextReason = "budget_bounded";
   }
+  if (trace.triggered) {
+    trace.outcome = selected.length > 0
+      ? "selected_context"
+      : memories.length > 0
+        ? "excluded_matches"
+        : "no_matches";
+  } else {
+    trace.outcome = "not_triggered";
+  }
+  boundRetrievalTrace(trace);
   return selected;
 }
 
