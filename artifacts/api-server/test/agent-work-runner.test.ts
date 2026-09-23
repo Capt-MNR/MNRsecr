@@ -38,6 +38,7 @@ function adaptersFor(inputWork: AgentWorkRecord): {
     evidence: number;
     events: string[];
     notifications: number;
+    notificationData: Record<string, unknown> | null;
     verifications: Array<Record<string, unknown>>;
   };
 } {
@@ -63,6 +64,7 @@ function adaptersFor(inputWork: AgentWorkRecord): {
     evidence: 0,
     events: [] as string[],
     notifications: 0,
+    notificationData: null,
     verifications: [] as Array<Record<string, unknown>>,
   };
   const adapters = {
@@ -70,8 +72,9 @@ function adaptersFor(inputWork: AgentWorkRecord): {
     identity: { driver: "development", resolveRequest: () => inputWork.identity, resolveBackground: () => inputWork.identity },
     notification: {
       driver: "development",
-      notify: async () => {
+      notify: async (input: { data: Record<string, unknown> }) => {
         state.notifications += 1;
+        state.notificationData = input.data;
         return { status: "accepted", driver: "development" as const };
       },
     },
@@ -115,6 +118,9 @@ test("runner claims a safe due Work, persists evidence, and reschedules it", asy
   assert.equal(state.runStatus, "verified");
   assert.equal(state.evidence, 1);
   assert.equal(state.notifications, 1);
+  assert.equal(state.notificationData?.kind, "secretary-event");
+  assert.equal(state.notificationData?.workId, "work-1");
+  assert.equal(state.notificationData?.deepLink, "/main?workId=work-1");
   assert.deepEqual(state.events, ["run_notification", "notification_delivery"]);
   assert.equal(state.nextRunAt?.toISOString(), "2026-09-21T11:00:00.000Z");
 });

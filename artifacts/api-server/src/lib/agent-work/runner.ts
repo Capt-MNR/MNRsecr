@@ -166,14 +166,24 @@ async function findLatestActionEvent(
   adapters: AgentWorkAdapters,
   identity: AgentWorkRecord["identity"],
   workId: string,
-): Promise<{ operationId: string; conditionHash: string; status: string } | null> {
+): Promise<{
+  operationId: string;
+  conditionHash: string;
+  status: string;
+  operation: NonNullable<Awaited<ReturnType<typeof getOperation>>>;
+} | null> {
   const events = await adapters.storage.listEvents(identity, workId, 30);
   const event = events.find((item) => item.eventType === "approval_requested");
   const metadata = asRecord(event?.metadata);
   if (typeof metadata.operationId !== "string" || typeof metadata.conditionHash !== "string") return null;
   const operation = await getOperation(identity, metadata.operationId);
   return operation
-    ? { operationId: operation.operationId, conditionHash: metadata.conditionHash, status: operation.status }
+    ? {
+        operationId: operation.operationId,
+        conditionHash: metadata.conditionHash,
+        status: operation.status,
+        operation,
+      }
     : null;
 }
 
@@ -187,8 +197,7 @@ async function reconcileWaitingApproval(
   if (action.type !== "create_task" && action.toolName !== "create_task") return false;
   const latestAction = await findLatestActionEvent(adapters, identity, work.id);
   if (!latestAction) return false;
-  const operation = await getOperation(identity, latestAction.operationId);
-  if (!operation) return false;
+  const operation = latestAction.operation;
   if (operation.status === "completed" && operation.result) {
     await recordAgentWorkActionApproved(identity, operation, operation.result, adapters);
     return true;
@@ -678,6 +687,7 @@ export class AgentWorkRunner {
               title: plan.notificationTitle,
               body: plan.notificationBody,
               data: {
+                kind: "secretary-event",
                 workId: work.id,
                 runId: run.id,
                 status: plan.status,
