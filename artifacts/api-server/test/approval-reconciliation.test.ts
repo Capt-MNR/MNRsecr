@@ -9,6 +9,7 @@ import {
   financialPartiesTable,
   secretaryOperationsTable,
 } from "@workspace/db";
+import { recordToolActivity } from "../src/lib/entity-graph";
 import { executeStructuredTool } from "../src/lib/phase2";
 import {
   executeApprovedOperation,
@@ -17,6 +18,7 @@ import {
 import {
   claimOperation,
   completeOperation,
+  completeOperationWithExecutor,
   createPendingOperation,
   failOperation,
   getOperation,
@@ -216,6 +218,73 @@ test("restart reconciles a committed mutation receipt without executing it again
   assert.equal(retry.kind, "existing");
   assert.equal(retry.operation.status, "completed");
   assert.equal(reconciled?.result?.action?.type, "operation_reconciled");
+  assert.equal((await parties(owner)).length, 1);
+  assert.equal((await events(owner)).length, 1);
+  await cleanup(owner);
+});
+
+test("a stale retry waits for an active mutation transaction instead of resetting it", async () => {
+  const owner = identity("active-race");
+  await cleanup(owner);
+  const operation = await claimedOperation(owner, "create_financial_party", {
+    partyType: "external",
+    name: "لا يتكرر",
+  });
+  await db.update(secretaryOperationsTable)
+    .set({ claimedAt: new Date(Date.now() - 2 * 60 * 1000) })
+    .where(and(
+      eq(secretaryOperationsTable.id, operation.operationId),
+      eq(secretaryOperationsTable.tenantId, owner.tenantId),
+      eq(secretaryOperationsTable.ownerUserId, owner.userId),
+    ));
+
+  let enteredActivity!: () => void;
+  const activityEntered = new Promise<void>((resolve) => {
+    enteredActivity = resolve;
+  });
+  let releaseTransaction!: () => void;
+  const transactionReleased = new Promise<void>((resolve) => {
+    releaseTransaction = resolve;
+  });
+
+  const originalExecution = executeStructuredTool(owner, "create_financial_party", {
+    partyType: "external",
+    name: "لا يتكرر",
+  }, {
+    requestId: `active-race-${operation.operationId}`,
+    approvedOperationId: operation.operationId,
+    activityWriter: async (activityIdentity, toolName, args, result, executor) => {
+      await recordToolActivity(activityIdentity, toolName, args, result, executor);
+      enteredActivity();
+      await transactionReleased;
+    },
+    operationCompletion: async (verifiedResult, executor) => {
+      await completeOperationWithExecutor(owner, operation.operationId, {
+        conversationId: "",
+        assistantMessage: "test",
+        action: { operationId: operation.operationId, toolResult: verifiedResult },
+        provider: "test",
+        model: "test",
+      }, executor, true);
+    },
+  });
+  await activityEntered;
+
+  let retrySettled = false;
+  const retry = claimOperation(owner, operation.operationId).then((value) => {
+    retrySettled = true;
+    return value;
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(retrySettled, false);
+
+  releaseTransaction();
+  const [, retryResult] = await Promise.all([originalExecution, retry]);
+  const completed = await getOperation(owner, operation.operationId);
+
+  assert.equal(retryResult.kind, "existing");
+  assert.equal(retryResult.operation.status, "completed");
+  assert.equal(completed?.status, "completed");
   assert.equal((await parties(owner)).length, 1);
   assert.equal((await events(owner)).length, 1);
   await cleanup(owner);

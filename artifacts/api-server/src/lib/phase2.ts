@@ -116,6 +116,7 @@ import {
   buildPatternInsights,
   loadExperimentalPatternHistory,
 } from "./experimental-pattern-insights";
+import { lockExecutingOperation } from "./secretary-operations";
 import type { SecretaryChatContext, SecretaryChatPeer, TurnInputChannel } from "@workspace/api-zod";
 import {
   brainLogFields,
@@ -1961,6 +1962,12 @@ async function executeTool(
     }));
   }
   const db = options.transactionExecutor ?? database;
+  if (WRITE_TOOLS.has(name) && options.approvedOperationId) {
+    // Hold the operation row lock for the entire mutation transaction. A
+    // stale retry may wait, but it cannot reset this operation while the
+    // original request can still commit.
+    await lockExecutingOperation(identity, options.approvedOperationId, db);
+  }
   const args = rawArgs ?? {};
   logger.info({
     requestId: options.requestId,

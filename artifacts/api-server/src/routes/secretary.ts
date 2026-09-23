@@ -207,6 +207,7 @@ async function executeExpenseApproval(
         operation.operationId,
         expenseApprovalResult(operation, verifiedResult),
         executor,
+        true,
       );
     },
   });

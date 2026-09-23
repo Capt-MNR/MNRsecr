@@ -6,8 +6,10 @@ import {
   activityEventsTable,
   db,
   financialPartiesTable,
+  secretaryOperationsTable,
 } from "@workspace/db";
 import { executeStructuredTool } from "../src/lib/phase2";
+import { claimOperation, createPendingOperation } from "../src/lib/secretary-operations";
 
 const identity = {
   tenantId: `activity-atomicity-${process.pid}-${Date.now()}`,
@@ -27,17 +29,33 @@ async function cleanup() {
     eq(financialPartiesTable.tenantId, identity.tenantId),
     eq(financialPartiesTable.ownerUserId, identity.userId),
   ));
+  await db.delete(secretaryOperationsTable).where(and(
+    eq(secretaryOperationsTable.tenantId, identity.tenantId),
+    eq(secretaryOperationsTable.ownerUserId, identity.userId),
+  ));
+}
+
+async function createApprovedOperation(label: string): Promise<string> {
+  const pending = await createPendingOperation(identity, {
+    toolName: "create_financial_party",
+    args: { partyType: "external", name: label },
+    idempotencyKey: `activity-${label}`,
+  });
+  const claimed = await claimOperation(identity, pending.operationId);
+  assert.equal(claimed.kind, "claimed");
+  return claimed.operation.operationId;
 }
 
 test("rolls back the financial mutation when activity recording fails", async () => {
   await cleanup();
+  const operationId = await createApprovedOperation("فشل النشاط");
   await assert.rejects(
     executeStructuredTool(identity, "create_financial_party", {
       partyType: "external",
       name: "فشل النشاط",
     }, {
       requestId: "activity-failure-test",
-      approvedOperationId: "activity-failure-operation",
+      approvedOperationId: operationId,
       activityWriter: async () => {
         throw new Error("forced activity failure");
       },
@@ -58,12 +76,13 @@ test("rolls back the financial mutation when activity recording fails", async ()
 
 test("commits the financial mutation and its activity event together", async () => {
   await cleanup();
+  const operationId = await createApprovedOperation("طرف مالي");
   const result = await executeStructuredTool(identity, "create_financial_party", {
     partyType: "external",
     name: "طرف مالي",
   }, {
     requestId: "activity-success-test",
-    approvedOperationId: "activity-success-operation",
+    approvedOperationId: operationId,
   });
   assert.equal(result.ok, true);
   const parties = await db.select().from(financialPartiesTable).where(and(

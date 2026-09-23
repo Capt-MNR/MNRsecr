@@ -19,4 +19,4 @@ Approved domain mutation, activity, verification, and operation completion must 
 
 **Why:** A process can stop after a mutation commits but before a separate operation update, and blindly retrying would duplicate the mutation. The activity event is already in the mutation transaction, so it is the durable evidence needed to close the old boundary safely.
 
-**How to apply:** Pass the transaction executor through the existing approved tool path, persist `sourceOperationId` in activity metadata, and keep the existing row-version and tenant/owner predicates on every mutation and recovery update. Do not add a second approval executor.
+**How to apply:** Pass the transaction executor through the existing approved tool path, lock the executing operation row for the full mutation transaction, persist `sourceOperationId` in activity metadata, and keep the existing row-version and tenant/owner predicates on every mutation and recovery update. Do not add a second approval executor.

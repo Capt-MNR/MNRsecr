@@ -1860,6 +1860,7 @@ export async function executeApprovedOperation(
         operation.operationId,
         withActualArgs(buildResult(verifiedResult)),
         executor,
+        true,
       );
     },
   });

@@ -297,33 +297,54 @@ async function reconcileExecutingOperation(
   identity: Identity,
   operation: PendingOperation,
 ): Promise<PendingOperation> {
-  const [row] = await db.select().from(secretaryOperationsTable)
-    .where(scopedOperation(identity, operation.operationId))
-    .limit(1);
-  if (!row || row.status !== "executing") return row ? toOperation(row) : operation;
+  return db.transaction(async (tx) => {
+    // Re-read and lock the row after any wait caused by an active execution.
+    // This prevents a stale snapshot from resetting an operation that has
+    // already completed while this reconciliation was waiting.
+    const [row] = await tx.select().from(secretaryOperationsTable)
+      .where(scopedOperation(identity, operation.operationId))
+      .limit(1)
+      .for("update");
+    if (!row || row.status !== "executing") return row ? toOperation(row) : operation;
 
-  const claimedAt = row.claimedAt?.getTime() ?? 0;
-  if (claimedAt > 0 && Date.now() - claimedAt < EXECUTION_RECOVERY_GRACE_MS) {
-    return toOperation(row);
-  }
+    const claimedAt = row.claimedAt?.getTime() ?? 0;
+    if (claimedAt > 0 && Date.now() - claimedAt < EXECUTION_RECOVERY_GRACE_MS) {
+      return toOperation(row);
+    }
 
-  const [event] = await db.select().from(activityEventsTable)
-    .where(and(
-      eq(activityEventsTable.tenantId, identity.tenantId),
-      eq(activityEventsTable.ownerUserId, identity.userId),
-      eq(activityEventsTable.eventType, `${row.toolName}.completed`),
-      sql`${activityEventsTable.metadata}->>'sourceOperationId' = ${row.id}`,
-    ))
-    .orderBy(desc(activityEventsTable.createdAt))
-    .limit(1);
+    const currentOperation = toOperation(row);
+    const [event] = await tx.select().from(activityEventsTable)
+      .where(and(
+        eq(activityEventsTable.tenantId, identity.tenantId),
+        eq(activityEventsTable.ownerUserId, identity.userId),
+        eq(activityEventsTable.eventType, `${row.toolName}.completed`),
+        sql`${activityEventsTable.metadata}->>'sourceOperationId' = ${row.id}`,
+      ))
+      .orderBy(desc(activityEventsTable.createdAt))
+      .limit(1);
 
-  if (event) {
-    const result = recoveredOperationResult(operation, event);
-    const [completed] = await db.update(secretaryOperationsTable)
+    if (event) {
+      const result = recoveredOperationResult(currentOperation, event);
+      const [completed] = await tx.update(secretaryOperationsTable)
+        .set({
+          status: "completed",
+          resultJson: JSON.stringify(result),
+          completedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(and(
+          scopedOperation(identity, operation.operationId),
+          eq(secretaryOperationsTable.status, "executing"),
+        ))
+        .returning();
+      return toOperation(completed ?? row);
+    }
+
+    const [reset] = await tx.update(secretaryOperationsTable)
       .set({
-        status: "completed",
-        resultJson: JSON.stringify(result),
-        completedAt: new Date(),
+        status: "pending",
+        approvedAt: null,
+        claimedAt: null,
         updatedAt: new Date(),
       })
       .where(and(
@@ -331,22 +352,23 @@ async function reconcileExecutingOperation(
         eq(secretaryOperationsTable.status, "executing"),
       ))
       .returning();
-    return toOperation(completed ?? row);
-  }
+    return toOperation(reset ?? row);
+  });
+}
 
-  const [reset] = await db.update(secretaryOperationsTable)
-    .set({
-      status: "pending",
-      approvedAt: null,
-      claimedAt: null,
-      updatedAt: new Date(),
-    })
-    .where(and(
-      scopedOperation(identity, operation.operationId),
-      eq(secretaryOperationsTable.status, "executing"),
-    ))
-    .returning();
-  return toOperation(reset ?? row);
+export async function lockExecutingOperation(
+  identity: Identity,
+  operationId: string,
+  executor: OperationDbExecutor,
+): Promise<void> {
+  const [row] = await executor.select().from(secretaryOperationsTable)
+    .where(scopedOperation(identity, operationId))
+    .limit(1)
+    .for("update");
+  if (!row) throw new Error("Pending operation was not found.");
+  if (row.status !== "executing") {
+    throw new Error("Operation is no longer executable.");
+  }
 }
 
 export async function claimOperation(
@@ -452,6 +474,7 @@ export async function completeOperationWithExecutor(
   operationId: string,
   result: OperationExecutionResult,
   executor: OperationDbExecutor,
+  requireExecuting = false,
 ): Promise<PendingOperation> {
   const [completed] = await executor.update(secretaryOperationsTable)
     .set({
@@ -471,6 +494,9 @@ export async function completeOperationWithExecutor(
     .limit(1);
   const operation = row ? toOperation(row) : null;
   if (!operation) throw new Error("Operation disappeared during execution.");
+  if (requireExecuting) {
+    throw new Error("Operation state changed before atomic completion.");
+  }
   return operation;
 }
 
