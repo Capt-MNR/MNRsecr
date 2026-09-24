@@ -11,7 +11,11 @@ delete process.env.AI_SECONDARY_FALLBACK_PROVIDER;
 
 const port = 8091 + (process.pid % 1000);
 const baseUrl = `http://127.0.0.1:${port}/api`;
-const testTenantId = `phase2-test-${process.pid}-${Date.now()}`;
+const testTenantId = process.env.PHASE2_TEST_TENANT_ID?.trim()
+  || `phase2-test-${process.pid}-${Date.now()}`;
+if (!/^[a-z0-9][a-z0-9_-]{0,100}$/iu.test(testTenantId)) {
+  throw new Error("PHASE2_TEST_TENANT_ID must contain only letters, numbers, underscores, and hyphens.");
+}
 const testUserId = "phase2-test-user";
 let server;
 let provider = "development";
@@ -50,6 +54,14 @@ async function startServer() {
   delete env.AI_SECONDARY_FALLBACK_PROVIDER;
   if (provider === "development" || provider === "unavailable") {
     delete env.GEMINI_API_KEY;
+    delete env.GROQ_API_KEY;
+    delete env.MISTRAL_API_KEY;
+    delete env.COHERE_API_KEY;
+    delete env.DEEPSEEK_API_KEY;
+    delete env.QWEN_API_KEY;
+    delete env.OPENROUTER_API_KEY;
+  }
+  if (provider === "gemini") {
     delete env.GROQ_API_KEY;
     delete env.MISTRAL_API_KEY;
     delete env.COHERE_API_KEY;
@@ -148,12 +160,66 @@ function queryDb(sql) {
 
 const scopedWhere = `tenant_id = '${testTenantId}' AND owner_user_id = '${testUserId}'`;
 
+function cleanupTestTenant() {
+  queryDb(`
+    DO $phase2_test_cleanup$
+    DECLARE
+      target_tenant text := '${testTenantId}';
+      table_to_clean text;
+      pending_tables text[];
+      made_progress boolean;
+      remaining_rows bigint;
+    BEGIN
+      SELECT array_agg(columns.table_name ORDER BY columns.table_name)
+      INTO pending_tables
+      FROM information_schema.columns AS columns
+      WHERE columns.table_schema = 'public' AND columns.column_name = 'tenant_id';
+
+      WHILE cardinality(pending_tables) > 0 LOOP
+        made_progress := false;
+        FOREACH table_to_clean IN ARRAY pending_tables LOOP
+          BEGIN
+            EXECUTE format('DELETE FROM public.%I WHERE tenant_id = $1', table_to_clean)
+              USING target_tenant;
+            pending_tables := array_remove(pending_tables, table_to_clean);
+            made_progress := true;
+          EXCEPTION WHEN foreign_key_violation THEN
+            NULL;
+          END;
+        END LOOP;
+
+        IF cardinality(pending_tables) > 0 AND NOT made_progress THEN
+          RAISE EXCEPTION 'Could not clean test tenant rows from tables: %', pending_tables;
+        END IF;
+      END LOOP;
+
+      FOR table_to_clean IN
+        SELECT columns.table_name
+        FROM information_schema.columns AS columns
+        WHERE columns.table_schema = 'public' AND columns.column_name = 'tenant_id'
+      LOOP
+        EXECUTE format('SELECT count(*) FROM public.%I WHERE tenant_id = $1', table_to_clean)
+          INTO remaining_rows
+          USING target_tenant;
+        IF remaining_rows > 0 THEN
+          RAISE EXCEPTION 'Test tenant cleanup left % rows in table %', remaining_rows, table_to_clean;
+        END IF;
+      END LOOP;
+    END
+    $phase2_test_cleanup$;
+  `);
+}
+
 test.before(async () => {
   await startServer();
 });
 
 test.after(async () => {
-  await stopServer();
+  try {
+    await stopServer();
+  } finally {
+    cleanupTestTenant();
+  }
 });
 
 test("rejects unauthenticated Today requests", async () => {
@@ -794,4 +860,37 @@ test("runs the real conversational reference flow in one isolated conversation",
     responses.some((response) => response.action?.lastTool === "rank_expense_projects"),
     "the model should use database ranking for project comparisons",
   );
+});
+
+test("runs isolated real Gemini agreement capture, correction, and recall", {
+  skip: process.env.RUN_REAL_GEMINI_TESTS !== "1",
+}, async () => {
+  await stopServer();
+  provider = "gemini";
+  await startServer();
+
+  const captured = await sendTurn(
+    "أنا اتفقت مع أحمد إن تسليم المشروع يوم الخميس.",
+    `gemini-agreement-capture-${Date.now()}`,
+    `gemini-agreement-capture-${Date.now()}`,
+  );
+  assert.equal(captured.provider, "second-brain");
+  assert.equal(captured.action.type, "second_brain_memory_saved");
+
+  const updated = await sendTurn(
+    "اتفقنا مع أحمد إن التسليم بقى يوم السبت بدل الخميس.",
+    `gemini-agreement-update-${Date.now()}`,
+    `gemini-agreement-update-${Date.now()}`,
+  );
+  assert.equal(updated.provider, "second-brain");
+  assert.equal(updated.action.type, "second_brain_memory_updated");
+
+  const recalled = await sendTurn(
+    "أحمد كان المفروض يعمل إيه؟",
+    `gemini-agreement-recall-${Date.now()}`,
+    `gemini-agreement-recall-${Date.now()}`,
+  );
+  assert.equal(recalled.provider, "gemini");
+  assert.match(recalled.assistantMessage, /السبت/u);
+  assert.equal(recalled.action.secondBrainRetrievalTrace.selected.length, 1);
 });

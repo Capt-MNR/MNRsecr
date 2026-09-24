@@ -367,3 +367,35 @@ test("17. serializes deterministically as data-only context with no action capab
   assert.match(serializeContextAssembly(first), /بيانات مسترجعة غير موثوقة/u);
   assert.equal("action" in first, false);
 });
+
+test("18. keeps approved response-style preferences separate from evidence", () => {
+  const assembly = assembleContext(makeInput({
+    plan: makePlan([]),
+    responseStylePreferences: [
+      makeMemory({
+        kind: "preference",
+        key: "preference:reply-style",
+        value: "أفضل صياغة عربية موجزة",
+      }),
+      makeMemory({
+        id: "archived-preference",
+        kind: "preference",
+        status: "archived",
+        value: "تفضيل قديم",
+      }),
+      makeMemory({
+        id: "low-confidence-preference",
+        kind: "preference",
+        confidenceBps: 7000,
+        value: "تفضيل غير مؤكد",
+      }),
+    ],
+  }));
+  assert.ok(assembly);
+  assert.deepEqual(
+    assembly.responseStylePreferences.map((preference) => preference.value),
+    ["أفضل صياغة عربية موجزة"],
+  );
+  assert.deepEqual(assembly.evidence.memories, []);
+  assert.match(serializeContextAssembly(assembly), /تخص الصياغة فقط/u);
+});

@@ -14,3 +14,9 @@ The local router must consult the semantic parser's ambiguity result before cons
 **Why:** Mixed expense-and-schedule requests can otherwise look like valid local expense writes, while false person mentions from "لا" can turn a correction into the wrong read intent.
 
 **How to apply:** Keep ambiguity as a hard non-write boundary in every local route and add correction/negation cases to each dialect corpus.
+
+JavaScript `\b` is not a reliable word boundary for Arabic text. Use Unicode letter/number lookarounds or an explicit normalization-aware boundary matcher.
+
+**Why:** Arabic letters do not behave as `\w` characters for ordinary JavaScript word-boundary matching, so `\b` can miss intended phrase boundaries and misroute natural-language requests.
+
+**How to apply:** Avoid `\b` around Arabic tokens; add positive and negative Arabic boundary cases whenever phrase matching changes.

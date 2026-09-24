@@ -131,6 +131,17 @@ export type SecondBrainCandidateSuggestion = {
   metadata: Record<string, unknown>;
 };
 
+export type NaturalMemoryStatement = {
+  memoryKind: "fact";
+  action: "capture" | "update";
+  key: string;
+  value: string;
+  personName: string;
+  projectName?: string;
+  topicKey: string;
+  metadata: Record<string, unknown>;
+};
+
 export type SecondBrainCandidateStatus =
   | "pending_review"
   | "approved"
@@ -179,6 +190,8 @@ const MEMORY_SOURCE_AUTHORITY: Record<string, number> = {
 };
 const RECALL_WORDS = /(?:فاكر|تفتكر|اللي\s+فاكره|ماذا\s+تعرف\s+عني|ذاكرتك|المحفوظ|remember|recall|memory)/iu;
 const MEMORY_CONTEXT_WORDS = /(?:زي\s+ما\s+اتفقنا|المعتاد|تفضيل|أفضل|بفضل|بحب|فاكر|ذاكرة|remember|preference)/iu;
+const AGREEMENT_RECALL_WORDS =
+  /(?:كان(?:ت)?\s+المفروض|(?:احنا|كنا)\s+متفقين|اتفقنا\s+عليه|اتفقت\s+مع|what\s+(?:had|did)\s+we\s+agree|what\s+was\s+.+?\s+supposed\s+to|supposed\s+to\s+do)/iu;
 const FINANCIAL_COMPARISON_WORDS = /(?:قارن|مقارنة|مقابل|الفرق|تعارض|متعارض|compare|comparison|versus|vs)/iu;
 const FINANCIAL_RECORD_WORDS = /(?:مصروف|مصاريف|مدفوع|مدفوعات|دفع|فلوس|مبلغ|جنيه|دولار|ريال|دين|سلف|التزام|مستحق|دخل|تبرع|حسابات|سجل|record)/iu;
 const EXPLICIT_MEMORY_WORDS = /(?:الذاكره|ذاكرة|ملاحظه\s+(?:قديمه|شخصيه)|معلومة\s+شخصية|معلومه\s+شخصيه|فاكر|تفتكر|memory|remember)/iu;
@@ -212,6 +225,87 @@ function keyFor(kind: SecondBrainKind, value: string, alias?: string): string {
     : kind === "alias"
       ? `alias:${normalizedValue}`
     : `note:${normalizedValue}`;
+}
+
+const AGREEMENT_DAYS =
+  /(?:الاحد|الاثنين|الثلاثاء|الاربعاء|الخميس|الجمعه|السبت|sunday|monday|tuesday|wednesday|thursday|friday|saturday)/giu;
+const AGREEMENT_STOP_WORDS = new Set([
+  "انا", "ان", "اتفق", "اتفقت", "اتفقنا", "على", "اننا", "ان", "الي", "الى",
+  "يوم", "في", "كان", "كانت", "بقي", "بقى", "اصبح", "اصبحت", "بدل", "بدلا",
+  "من", "المشروع", "مشروع", "the", "a", "an", "to", "that", "on", "at", "by",
+  "was", "were", "is", "are", "instead", "of", "project",
+]);
+
+function agreementTopicKey(statement: string): string {
+  const normalized = normalize(statement)
+    .replace(AGREEMENT_DAYS, " ")
+    .replace(/\b\d{1,4}(?:[/-]\d{1,2}){0,2}\b/gu, " ")
+    .replace(/\b(?:20\d{2})\b/gu, " ");
+  const tokens = normalized
+    .split(" ")
+    .map((token) => token.replace(/^ال(?=.{3,}$)/u, ""))
+    .filter((token) =>
+      token.length >= 3
+      && !AGREEMENT_STOP_WORDS.has(token)
+      && !/^\d+$/u.test(token));
+  return tokens.slice(0, 3).join("_").slice(0, 60);
+}
+
+function naturalProjectMention(statement: string): string | undefined {
+  const match = statement.match(
+    /(?<![\p{L}])(?:مشروع|project)\s+(.+?)(?=\s+(?:يوم|بتاريخ|في|on|at|by|قبل|بعد|كان|بقى|بدل|that|instead)\s|[،؛,.!?؟]|$)/iu,
+  );
+  const value = match?.[1]?.trim().replace(/^["'«“]|["'»”]$/g, "");
+  if (!value) return undefined;
+  const normalized = normalize(value);
+  if (["المشروع", "مشروع", "project", "the project"].includes(normalized)) return undefined;
+  return compact(value);
+}
+
+export function parseNaturalMemoryStatement(message: string): NaturalMemoryStatement | null {
+  const text = message.trim();
+  if (!text || /[؟?]/u.test(text)) return null;
+  const match = text.match(
+    /^(?:(?:انا|أنا)\s+)?(?:اتفق(?:ت|نا))\s+مع\s+(.+?)\s+(?:إن|ان|أن|على\s+أن|على\s+ان|that|to)\s+(.+)$/iu,
+  ) ?? text.match(
+    /^(?:I\s+)?(?:had\s+)?agreed\s+with\s+(.+?)\s+(?:that|to)\s+(.+)$/iu,
+  );
+  const personName = match?.[1]?.trim().replace(/^["'«“]|["'»”]$/g, "");
+  const statement = match?.[2]?.trim().replace(/[.!؟?]+$/u, "");
+  if (
+    !personName
+    || !statement
+     || /^(?:حد|شخص|احد|اي\s+شخص|شخص\s+ما|someone|anyone|a person)$/iu.test(normalize(personName))
+  ) {
+    return null;
+  }
+  const topicKey = agreementTopicKey(statement);
+  if (!topicKey) return null;
+
+  const normalizedPerson = normalize(personName).slice(0, 48);
+  const projectName = naturalProjectMention(statement);
+  const projectKey = projectName ? `:project:${normalize(projectName).slice(0, 42)}` : "";
+  const key = `note:agreement:${normalizedPerson}:topic:${topicKey}${projectKey}`.slice(0, 140);
+  const correction = /(?:بقى|بقت|اصبح|اصبحت|اتغير|تغير|غيرنا|بدل|بدلا\s+من|اتأجل|تأجل|changed|instead|moved|postponed)/iu
+    .test(text);
+  return {
+    memoryKind: "fact",
+    action: correction ? "update" : "capture",
+    key,
+    value: compact(text),
+    personName: compact(personName),
+    ...(projectName ? { projectName } : {}),
+    topicKey,
+    metadata: {
+      naturalCapture: "agreement_statement",
+      semanticKind: "commitment",
+      naturalMemoryAction: correction ? "update" : "capture",
+      personName: compact(personName),
+      normalizedPersonName: normalizedPerson,
+      ...(projectName ? { projectName } : {}),
+      topicKey,
+    },
+  };
 }
 
 export function parseSecondBrainCommand(message: string): SecondBrainCommand | null {
@@ -321,6 +415,10 @@ export function shouldSearchSecondBrain(message: string): boolean {
   return MEMORY_CONTEXT_WORDS.test(message);
 }
 
+export function isNaturalAgreementRecallQuery(message: string): boolean {
+  return AGREEMENT_RECALL_WORDS.test(normalize(message));
+}
+
 export function classifySecondBrainQuery(message: string): SecondBrainQueryDomain {
   const text = normalize(message);
   if (
@@ -330,6 +428,7 @@ export function classifySecondBrainQuery(message: string): SecondBrainQueryDomai
   ) {
     return "structured_record_comparison";
   }
+  if (AGREEMENT_RECALL_WORDS.test(text)) return "memory_recall";
   if (/(?:مصروف|مصاريف|مدفوع|مدفوعات|دفع|فلوس|مبلغ|جنيه|دولار|ريال|دين|سلف|التزام|مستحق|دخل|تبرع|موعد|تذكير|مهمة|سجل|record|expense|task|reminder|commitment|payment)/iu.test(text)) {
     return /(?:ضيف|زود|عدل|عدّل|غير|غيّر|سجل|احفظ|دفع|ادفع|أنشئ|اعمل|create|update|record)/iu.test(text)
       ? "structured_record_mutation"
@@ -732,6 +831,121 @@ export async function rememberSecondBrain(
     ...input,
     sourceKind: input.sourceKind ?? "explicit_user_instruction",
   }));
+}
+
+export async function updateSecondBrainMemoryIfPresent(
+  identity: Identity,
+  input: {
+    memoryKind: SecondBrainKind;
+    key: string;
+    value: string;
+    metadata?: Record<string, unknown>;
+    conversationId?: string | null;
+    turnId?: string | null;
+    sourceKind?: SecondBrainSourceKind;
+    expiresAt?: Date | null;
+  },
+): Promise<SecondBrainMemory | null> {
+  return db.transaction(async (tx) => {
+    const lockKey = JSON.stringify([
+      identity.tenantId,
+      identity.userId,
+      "second-brain-memory",
+      input.memoryKind,
+      input.key,
+    ]);
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`);
+    const [existing] = await tx
+      .select()
+      .from(secondBrainMemoriesTable)
+      .where(and(
+        eq(secondBrainMemoriesTable.tenantId, identity.tenantId),
+        eq(secondBrainMemoriesTable.ownerUserId, identity.userId),
+        eq(secondBrainMemoriesTable.kind, input.memoryKind),
+        eq(secondBrainMemoriesTable.key, input.key),
+      ))
+      .limit(1);
+    if (
+      !existing
+      || existing.status !== "active"
+      || (existing.expiresAt !== null && existing.expiresAt.getTime() <= Date.now())
+    ) {
+      return null;
+    }
+    return writeSecondBrainMemory(tx, identity, {
+      ...input,
+      metadata: {
+        ...(existing.metadata ?? {}),
+        ...(input.metadata ?? {}),
+      },
+      sourceKind: input.sourceKind ?? "explicit_user_instruction",
+    });
+  });
+}
+
+export async function getActiveSecondBrainMemory(
+  identity: Identity,
+  memoryKind: SecondBrainKind,
+  key: string,
+): Promise<SecondBrainMemory | null> {
+  const [existing] = await db
+    .select()
+    .from(secondBrainMemoriesTable)
+    .where(and(
+      eq(secondBrainMemoriesTable.tenantId, identity.tenantId),
+      eq(secondBrainMemoriesTable.ownerUserId, identity.userId),
+      eq(secondBrainMemoriesTable.kind, memoryKind),
+      eq(secondBrainMemoriesTable.key, key),
+      eq(secondBrainMemoriesTable.status, "active"),
+    ))
+    .limit(1);
+  if (existing?.expiresAt && existing.expiresAt.getTime() <= Date.now()) return null;
+  return existing ?? null;
+}
+
+export async function hasActiveSecondBrainMemory(
+  identity: Identity,
+  memoryKind: SecondBrainKind,
+  key: string,
+): Promise<boolean> {
+  const [existing] = await db
+    .select({
+      status: secondBrainMemoriesTable.status,
+      expiresAt: secondBrainMemoriesTable.expiresAt,
+    })
+    .from(secondBrainMemoriesTable)
+    .where(and(
+      eq(secondBrainMemoriesTable.tenantId, identity.tenantId),
+      eq(secondBrainMemoriesTable.ownerUserId, identity.userId),
+      eq(secondBrainMemoriesTable.kind, memoryKind),
+      eq(secondBrainMemoriesTable.key, key),
+    ))
+    .limit(1);
+  return existing?.status === "active"
+    && (existing.expiresAt === null || existing.expiresAt.getTime() > Date.now());
+}
+
+export async function listActiveSecondBrainPreferences(
+  identity: Identity,
+  limit = 3,
+): Promise<SecondBrainMemory[]> {
+  const now = new Date();
+  return db
+    .select()
+    .from(secondBrainMemoriesTable)
+    .where(and(
+      eq(secondBrainMemoriesTable.tenantId, identity.tenantId),
+      eq(secondBrainMemoriesTable.ownerUserId, identity.userId),
+      eq(secondBrainMemoriesTable.kind, "preference"),
+      eq(secondBrainMemoriesTable.status, "active"),
+      gt(secondBrainMemoriesTable.confidenceBps, 7999),
+      or(
+        sql`${secondBrainMemoriesTable.expiresAt} is null`,
+        gt(secondBrainMemoriesTable.expiresAt, now),
+      ),
+    ))
+    .orderBy(desc(secondBrainMemoriesTable.updatedAt))
+    .limit(Math.max(1, Math.min(Math.trunc(limit), 4)));
 }
 
 export async function createSecondBrainCandidate(
@@ -1188,8 +1402,11 @@ export async function retrieveSecondBrain(
     .slice(0, 160);
 
   const normalizedQuery = normalize(query);
+  const historicalComparison = /(?:قبل\s+التعديل|قبل\s+ما\s+(?:يتغير|اتغير)|الاصلي|original|before\s+(?:the\s+)?change|prior\s+to\s+(?:the\s+)?change)/iu
+    .test(normalizedQuery);
   const broadRecall = /^(?:فاكر|تفتكر)\s+(?:ايه|إيه|ماذا|ما)\s+(?:اللي\s+)?(?:حفظته|فاكره|عندك)/iu.test(normalizedQuery)
     || /^(?:what\s+do\s+you\s+remember|show\s+my\s+memories)/iu.test(normalizedQuery)
+    || /(?:(?:احنا|كنا)\s+متفقين|ايه\s+اللي\s+اتفقنا\s+عليه|what\s+(?:had|did)\s+we\s+agree)/iu.test(normalizedQuery)
       || (temporalMode === "historical" && normalize(query).split(" ").length <= 2);
   const terms = normalize(query)
     .split(" ")
@@ -1215,6 +1432,16 @@ export async function retrieveSecondBrain(
       "previous",
       "earlier",
       "historical",
+      "original",
+      "before",
+      "the",
+      "change",
+      "prior",
+      "to",
+      "التعديل",
+      "الاصلي",
+      "يتغير",
+      "اتغير",
       "قبل",
       "كده",
       "قديم",
@@ -1225,12 +1452,21 @@ export async function retrieveSecondBrain(
   const ranked = rows.map((memory, index) => {
     const haystack = `${normalize(memory.key)} ${memory.normalizedValue}`;
     const matches = terms.filter((term) => haystack.includes(term)).length;
-    return { memory, score: matches * 10 + (terms.length === 0 || broadRecall ? 1 : 0) - index / 1000 };
+    const score = matches * 10 + (terms.length === 0 || broadRecall ? 1 : 0) - index / 1000;
+    const state = temporalStateFor(memory, now);
+    const historicalPriority = historicalComparison
+      && ["historical", "superseded", "expired", "archived", "conflict"].includes(state)
+      ? 100
+      : 0;
+    return { memory, score, orderingScore: score + historicalPriority };
   });
 
   const matching = ranked
     .filter((item) => terms.length === 0 || broadRecall || item.score > 0)
-    .sort((left, right) => right.score - left.score)
+    .sort((left, right) =>
+      right.orderingScore - left.orderingScore
+      || right.score - left.score
+      || left.memory.id.localeCompare(right.memory.id))
   const selected = matching.slice(0, limit);
   const trace = emptyRetrievalTrace(query, true, queryDomain, {
     requestId: options.requestId,

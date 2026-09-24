@@ -13,8 +13,10 @@ import {
 import {
   parseSecondBrainCandidate,
   parseSecondBrainCommand,
+  parseNaturalMemoryStatement,
   archiveSecondBrainMemory,
   createSecondBrainCandidate,
+  listActiveSecondBrainPreferences,
   listSecondBrainMemories,
   listSecondBrainMemoryHistory,
   applySecondBrainContextBudget,
@@ -28,6 +30,7 @@ import {
   shouldSearchSecondBrain,
   secondBrainRecallMessage,
   restoreSecondBrainMemory,
+  updateSecondBrainMemoryIfPresent,
   associateSecondBrainCandidate,
   reviewSecondBrainCandidate,
   SecondBrainCandidateAssociationError,
@@ -36,6 +39,7 @@ import {
 import type { SecondBrainMemory } from "@workspace/db";
 import { Phase2AgentRuntime, type ModelGateway } from "../src/lib/phase2.ts";
 import { resolveEntity } from "../src/lib/entity-resolver.ts";
+import { parseRelationshipRequest } from "../src/lib/relationship-context.ts";
 import {
   buildRecallPlan,
   RETRIEVED_MEMORY_SAFETY_RULE,
@@ -269,6 +273,101 @@ test("parses explicit remember, inferred preference candidates, and recall comma
   assert.equal(parseSecondBrainCommand("سجل مصروف لمحمد ٥٠٠"), null);
 });
 
+test("parses natural agreement capture and correction with a stable subject key", () => {
+  const first = parseNaturalMemoryStatement("أنا اتفقت مع أحمد إن تسليم المشروع يوم الخميس.");
+  const correction = parseNaturalMemoryStatement(
+    "اتفقنا مع أحمد إن التسليم بقى يوم السبت بدل الخميس.",
+  );
+  assert.ok(first);
+  assert.ok(correction);
+  assert.equal(first.memoryKind, "fact");
+  assert.equal(first.action, "capture");
+  assert.equal(first.topicKey, correction.topicKey);
+  assert.equal(first.key, correction.key);
+  assert.equal(correction.action, "update");
+  assert.equal(first.metadata.semanticKind, "commitment");
+  assert.equal(first.projectName, undefined);
+  assert.equal(parseNaturalMemoryStatement("أحمد كان المفروض يعمل إيه؟"), null);
+  assert.equal(parseNaturalMemoryStatement("دفعت لأحمد ٥٠٠ جنيه"), null);
+});
+
+test("recall planning routes natural agreement questions to bounded records and memory", () => {
+  const currentAgreement = buildRecallPlan("أحمد كان المفروض يعمل إيه؟");
+  assert.equal(currentAgreement.queryDomain, "memory_recall");
+  assert.equal(currentAgreement.temporalMode, "current");
+  assert.ok(currentAgreement.sources.includes("structured_records"));
+  assert.ok(currentAgreement.sources.includes("relationships"));
+  assert.ok(currentAgreement.sources.includes("second_brain"));
+  assert.equal(
+    parseRelationshipRequest("أحمد كان المفروض يعمل إيه؟")?.targetQuery,
+    "أحمد",
+  );
+
+  const originalAgreement = buildRecallPlan("إيه اللي اتفقنا عليه قبل التعديل الأصلي؟");
+  assert.equal(originalAgreement.queryDomain, "memory_recall");
+  assert.equal(originalAgreement.temporalMode, "historical");
+  assert.ok(originalAgreement.sources.includes("second_brain"));
+  assert.ok(originalAgreement.sources.includes("activity"));
+});
+
+test("natural agreement correction revises one memory and preserves the prior version", async () => {
+  await cleanup();
+  const first = parseNaturalMemoryStatement("أنا اتفقت مع أحمد إن تسليم المشروع يوم الخميس.");
+  const correction = parseNaturalMemoryStatement(
+    "اتفقنا مع أحمد إن التسليم بقى يوم السبت بدل الخميس.",
+  );
+  assert.ok(first);
+  assert.ok(correction);
+  const original = await rememberSecondBrain(identity, {
+    memoryKind: first.memoryKind,
+    key: first.key,
+    value: first.value,
+    metadata: first.metadata,
+    conversationId: "agreement-conversation-a",
+    turnId: "agreement-capture",
+  });
+  const updated = await updateSecondBrainMemoryIfPresent(identity, {
+    memoryKind: correction.memoryKind,
+    key: correction.key,
+    value: correction.value,
+    metadata: correction.metadata,
+    conversationId: "agreement-conversation-b",
+    turnId: "agreement-update",
+  });
+  assert.equal(updated?.id, original.id);
+  assert.equal(updated?.revision, original.revision + 1);
+  assert.match(updated?.value ?? "", /السبت/u);
+  assert.equal(await updateSecondBrainMemoryIfPresent(otherIdentity, {
+    memoryKind: correction.memoryKind,
+    key: correction.key,
+    value: correction.value,
+  }), null);
+
+  const history = await listSecondBrainMemoryHistory(identity, original.id);
+  assert.equal(history?.length, 2);
+  assert.ok(history?.some((version) =>
+    version.value === first.value && version.temporalState === "superseded",
+  ));
+  assert.ok(history?.some((version) =>
+    version.value === correction.value && version.temporalState === "current",
+  ));
+
+  const current = await retrieveSecondBrain(identity, "أحمد كان المفروض يعمل إيه؟", {
+    queryDomain: "memory_recall",
+  });
+  assert.equal(current.memories[0]?.value, correction.value);
+  assert.equal(current.trace.selected[0]?.temporalState, "current");
+
+  const historical = await retrieveSecondBrain(
+    identity,
+    "إيه اللي اتفقنا عليه قبل التعديل الأصلي؟",
+    { queryDomain: "memory_recall", temporalMode: "historical" },
+  );
+  assert.equal(historical.memories[0]?.value, first.value);
+  assert.equal(historical.trace.selected[0]?.temporalState, "historical");
+  await cleanup();
+});
+
 test("stores explicit memories with replacement and tenant isolation", async () => {
   await cleanup();
   await rememberSecondBrain(identity, {
@@ -369,6 +468,10 @@ test("only excludes memory after its explicit expiry and retains it for historic
     queryDomain: "preference",
   });
   assert.equal(beforeExpiry.memories.length, 1);
+  assert.equal(
+    (await listActiveSecondBrainPreferences(identity)).some((preference) => preference.id === memory.id),
+    true,
+  );
 
   await db.update(secondBrainMemoriesTable)
     .set({ expiresAt: new Date(Date.now() - 1) })
@@ -377,6 +480,10 @@ test("only excludes memory after its explicit expiry and retains it for historic
     queryDomain: "preference",
   });
   assert.equal(afterExpiry.memories.length, 0);
+  assert.equal(
+    (await listActiveSecondBrainPreferences(identity)).some((preference) => preference.id === memory.id),
+    false,
+  );
   assert.ok(afterExpiry.trace.excluded.some(
     (item) => item.memoryId === memory.id && item.reason === "expired_not_requested",
   ));
@@ -650,6 +757,116 @@ test("handles memory commands without calling the model gateway", async () => {
   assert.equal(suggested.action?.type, "second_brain_memory_candidate_created");
   assert.equal(recalled.assistantMessage, "لسه ما عنديش ملاحظات شخصية محفوظة عنك.");
   assert.equal(gatewayCalls, 0);
+  await cleanup();
+});
+
+test("approved response preferences enter context on an unrelated topic as style data only", async () => {
+  await cleanup();
+  await rememberSecondBrain(identity, {
+    memoryKind: "preference",
+    key: "preference:response-style",
+    value: "أفضل صياغة عربية موجزة",
+    conversationId: "preference-conversation",
+    turnId: "preference-approved",
+    sourceKind: "reviewed_memory_candidate",
+  });
+  const preferences = await listActiveSecondBrainPreferences(identity);
+  assert.deepEqual(preferences.map((preference) => preference.value), [
+    "أفضل صياغة عربية موجزة",
+  ]);
+  assert.deepEqual(await listActiveSecondBrainPreferences(otherIdentity), []);
+
+  let contextAssembly: Record<string, unknown> | null = null;
+  const gateway: ModelGateway = {
+    provider: "groq",
+    modelName: "test-style-context-gateway",
+    async generate(messages) {
+      const contextMessage = messages.find((message) =>
+        message.role === "user" && message.text.startsWith("[Context Assembly"));
+      assert.ok(contextMessage);
+      contextAssembly = JSON.parse(contextMessage.text.slice(contextMessage.text.indexOf("{")));
+      return { text: "مرحبًا، يسعدني مساعدتك.", toolCalls: [] };
+    },
+  };
+  const result = await new Phase2AgentRuntime(gateway).run(identity, {
+    message: "اكتب تحية قصيرة عن القراءة.",
+    conversationId: "unrelated-topic-conversation",
+    requestId: "unrelated-topic-preference",
+  });
+  assert.equal(result.assistantMessage, "مرحبًا، يسعدني مساعدتك.");
+  assert.ok(contextAssembly);
+  assert.deepEqual(
+    (contextAssembly as { responseStylePreferences: Array<{ value: string }> })
+      .responseStylePreferences.map((preference) => preference.value),
+    ["أفضل صياغة عربية موجزة"],
+  );
+  assert.deepEqual(
+    (contextAssembly as { evidence: { memories: unknown[] } }).evidence.memories,
+    [],
+  );
+  await cleanup();
+});
+
+test("natural agreement capture and update avoid model calls and recall enters assembled context", async () => {
+  await cleanup();
+  let gatewayCalls = 0;
+  let recalledMessages = "";
+  const gateway: ModelGateway = {
+    provider: "groq",
+    modelName: "test-natural-agreement-gateway",
+    async generate(messages) {
+      gatewayCalls += 1;
+      recalledMessages = messages.map((message) => message.text).join("\n");
+      return {
+        text: "حسب الاتفاق المحفوظ، كان تسليم المشروع يوم السبت.",
+        toolCalls: [],
+      };
+    },
+  };
+  const runtime = new Phase2AgentRuntime(gateway);
+  const captured = await runtime.run(identity, {
+    message: "أنا اتفقت مع أحمد إن تسليم المشروع يوم الخميس.",
+    conversationId: "agreement-original-conversation",
+    requestId: "agreement-capture-no-llm",
+  });
+  assert.equal(captured.action?.type, "second_brain_memory_saved");
+  assert.equal(gatewayCalls, 0);
+
+  const noMatchUpdate = await runtime.run(identity, {
+    message: "اتفقنا مع مريم إن التسليم بقى يوم السبت بدل الخميس.",
+    conversationId: "agreement-missing-conversation",
+    requestId: "agreement-missing-update",
+  });
+  assert.equal(noMatchUpdate.response.kind, "clarification");
+  assert.equal(noMatchUpdate.action?.type, "clarification_needed");
+  assert.equal(gatewayCalls, 0);
+
+  const updated = await runtime.run(identity, {
+    message: "اتفقنا مع أحمد إن التسليم بقى يوم السبت بدل الخميس.",
+    conversationId: "agreement-correction-conversation",
+    requestId: "agreement-update-no-llm",
+  });
+  assert.equal(updated.action?.type, "second_brain_memory_updated");
+  assert.equal(gatewayCalls, 0);
+  const memories = await listSecondBrainMemories(identity);
+  assert.equal(memories.length, 1);
+  assert.match(memories[0]?.value ?? "", /السبت/u);
+
+  const recalled = await runtime.run(identity, {
+    message: "أحمد كان المفروض يعمل إيه؟",
+    conversationId: "agreement-recall-another-conversation",
+    requestId: "agreement-recall-context",
+  });
+  assert.equal(recalled.assistantMessage, "حسب الاتفاق المحفوظ، كان تسليم المشروع يوم السبت.");
+  assert.equal(gatewayCalls, 1);
+  assert.match(recalledMessages, /Context Assembly/u);
+  assert.match(recalledMessages, /note:agreement:احمد/u);
+  assert.match(recalledMessages, /التسليم بقى يوم السبت بدل الخميس/u);
+  const trace = (recalled.action as {
+    secondBrainRetrievalTrace?: { selected?: Array<{ memoryId: string }> };
+  } | undefined)?.secondBrainRetrievalTrace;
+  assert.equal(trace?.selected?.length, 1);
+  assert.equal(trace?.selected?.[0]?.memoryId, memories[0]?.id);
   await cleanup();
 });
 

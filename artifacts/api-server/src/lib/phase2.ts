@@ -39,13 +39,19 @@ import {
   applySecondBrainContextBudget,
   createSecondBrainCandidate,
   emptyRetrievalTrace,
+  getActiveSecondBrainMemory,
+  hasActiveSecondBrainMemory,
+  listActiveSecondBrainPreferences,
   parseSecondBrainCandidate,
   parseSecondBrainCommand,
+  parseNaturalMemoryStatement,
   rememberSecondBrain,
   retrieveSecondBrain,
   secondBrainRecallMessage,
+  updateSecondBrainMemoryIfPresent,
   type SecondBrainCommand,
   type SecondBrainCandidateSuggestion,
+  type NaturalMemoryStatement,
 } from "./second-brain";
 import { buildRecallPlan, RETRIEVED_MEMORY_SAFETY_RULE } from "./recall-plan";
 import { assembleContext, serializeContextAssembly } from "./context-assembly";
@@ -95,7 +101,12 @@ import {
   type DeterministicDecision,
   type SemanticParse,
 } from "./deterministic-intelligence";
-import { recordResolverShadow, resolveEntity, type ResolverResult } from "./entity-resolver";
+import {
+  normalizeEntityText,
+  recordResolverShadow,
+  resolveEntity,
+  type ResolverResult,
+} from "./entity-resolver";
 import { recordToolActivity, type DbExecutor } from "./entity-graph";
 import {
   createDonation,
@@ -169,13 +180,17 @@ async function persistSecondBrainCommand(
   dryRun: boolean,
 ): Promise<Phase2TurnResult> {
   const conversationId = input.conversationId || conversationMemory.conversationId;
+  const naturalCapture = command.type === "remember"
+    && command.metadata?.naturalCapture === "agreement_statement";
+  const naturalUpdate = naturalCapture
+    && command.metadata?.naturalMemoryAction === "update";
   const action = command.type === "remember"
     ? {
-        type: "second_brain_memory_saved",
+        type: naturalUpdate ? "second_brain_memory_updated" : "second_brain_memory_saved",
         memoryKind: command.memoryKind,
         key: command.key,
         value: command.value,
-        source: "explicit_user_instruction",
+        source: naturalCapture ? "natural_language_statement" : "explicit_user_instruction",
         ...(dryRun ? { dryRun: true } : {}),
       }
     : {
@@ -209,12 +224,20 @@ async function persistSecondBrainCommand(
     conversationId,
     turnId: requestId,
     assistantMessage: command.type === "remember"
-      ? "تمام، حفظتها في الذاكرة الشخصية. هستخدمها كسياق مساعد، لكن مش هاعتبرها بديلًا عن السجلات الرسمية."
+      ? naturalCapture
+        ? naturalUpdate
+          ? "تمام، حدّثت الاتفاق في الذاكرة واحتفظت بالصيغة السابقة كتاريخ. لم أغيّر أي سجل رسمي."
+          : "حفظت الاتفاق كسياق في الذاكرة، من غير إنشاء التزام رسمي أو افتراض ربط غير مؤكد."
+        : "تمام، حفظتها في الذاكرة الشخصية. هستخدمها كسياق مساعد، لكن مش هاعتبرها بديلًا عن السجلات الرسمية."
       : secondBrainRecallMessage(memories),
     response: {
       kind: "answer",
       message: command.type === "remember"
-        ? "تم حفظ المعلومة في Second Brain."
+        ? naturalCapture
+          ? naturalUpdate
+            ? "تم تحديث الاتفاق مع الاحتفاظ بالنسخة السابقة."
+            : "تم حفظ الاتفاق كسياق في Second Brain، وليس كسجل التزام رسمي."
+          : "تم حفظ المعلومة في Second Brain."
         : secondBrainRecallMessage(memories),
     },
     action: command.type === "remember"
@@ -224,6 +247,110 @@ async function persistSecondBrainCommand(
           memories: memories.map((memory) => memory.id),
           secondBrainRetrievalTrace: governedRetrieval?.trace,
         },
+    provider: "second-brain",
+    model: "deterministic-memory-v1",
+  };
+  if (!dryRun) {
+    await saveConversationTurn(identity, conversationMemory, {
+      turnId: requestId,
+      userMessage: input.message.trim(),
+      assistantMessage: result.assistantMessage,
+      action: result.action,
+    });
+    if (input.idempotencyKey) await saveIdempotent(identity, input.idempotencyKey, result);
+  }
+  return result;
+}
+
+async function resolveNaturalMemoryMetadata(
+  identity: Identity,
+  statement: NaturalMemoryStatement,
+): Promise<Record<string, unknown>> {
+  const unresolvedEntities: Array<Record<string, unknown>> = [];
+  const resolvedEntities: Array<{
+    entityType: "person" | "project";
+    entityId: string;
+    name: string;
+    matchType: "exact" | "alias";
+    confidence: number;
+  }> = [];
+  const resolveTrusted = async (
+    entityType: "person" | "project",
+    name: string,
+  ): Promise<void> => {
+    try {
+      const result = await resolveEntity(identity, entityType, name);
+      if (
+        result.selected
+        && (result.matchType === "exact" || result.matchType === "alias")
+        && result.confidence >= 0.95
+      ) {
+        resolvedEntities.push({
+          entityType,
+          entityId: result.selected.id,
+          name: result.selected.name,
+          matchType: result.matchType,
+          confidence: result.confidence,
+        });
+        return;
+      }
+      unresolvedEntities.push({
+        entityType,
+        name,
+        resolution: result.matchType,
+        candidateCount: result.candidates.length,
+      });
+    } catch (error) {
+      logger.warn({
+        entityType,
+        error: error instanceof Error ? error.message : "ENTITY_RESOLUTION_FAILED",
+      }, "natural memory entity resolution failed; keeping the reference unlinked");
+      unresolvedEntities.push({ entityType, name, resolution: "unavailable" });
+    }
+  };
+
+  await Promise.all([
+    resolveTrusted("person", statement.personName),
+    ...(statement.projectName ? [resolveTrusted("project", statement.projectName)] : []),
+  ]);
+  const primary = resolvedEntities.find((entity) => entity.entityType === "person")
+    ?? resolvedEntities[0];
+  return {
+    ...statement.metadata,
+    ...(primary ? { entityType: primary.entityType, entityId: primary.entityId } : {}),
+    ...(resolvedEntities.length > 1 ? { relatedEntities: resolvedEntities } : {}),
+    ...(unresolvedEntities.length > 0 ? { unresolvedEntities } : {}),
+  };
+}
+
+async function persistNaturalMemoryUpdateClarification(
+  identity: Identity,
+  input: Phase2TurnInput,
+  conversationMemory: ConversationMemorySnapshot,
+  statement: NaturalMemoryStatement,
+  requestId: string,
+  dryRun: boolean,
+  clarification: {
+    reason: string;
+    message: string;
+  } = {
+    reason: "natural_memory_update_target_missing",
+    message: `لم أجد اتفاقًا حاليًا محفوظًا عن ${statement.personName} و${statement.topicKey.replace(/_/g, " ")}. هل تقصد اتفاقًا آخر؟`,
+  },
+): Promise<Phase2TurnResult> {
+  const conversationId = input.conversationId || conversationMemory.conversationId;
+  const message = clarification.message;
+  const result: Phase2TurnResult = {
+    conversationId,
+    turnId: requestId,
+    assistantMessage: message,
+    response: { kind: "clarification", message },
+    action: {
+      type: "clarification_needed",
+      reason: clarification.reason,
+      memoryKey: statement.key,
+      ...(dryRun ? { dryRun: true } : {}),
+    },
     provider: "second-brain",
     model: "deterministic-memory-v1",
   };
@@ -5936,6 +6063,96 @@ export class Phase2AgentRuntime {
         Boolean(options.dryRun),
       );
     }
+    const naturalMemoryStatement = parseNaturalMemoryStatement(input.message);
+    if (naturalMemoryStatement) {
+      if (naturalMemoryStatement.action === "update") {
+        const exists = await hasActiveSecondBrainMemory(
+          identity,
+          naturalMemoryStatement.memoryKind,
+          naturalMemoryStatement.key,
+        );
+        if (!exists) {
+          return persistNaturalMemoryUpdateClarification(
+            identity,
+            { ...input, conversationId },
+            conversationMemory,
+            naturalMemoryStatement,
+            requestId,
+            Boolean(options.dryRun),
+          );
+        }
+      } else {
+        const existing = await getActiveSecondBrainMemory(
+          identity,
+          naturalMemoryStatement.memoryKind,
+          naturalMemoryStatement.key,
+        );
+        if (existing && existing.value !== naturalMemoryStatement.value) {
+          return persistNaturalMemoryUpdateClarification(
+            identity,
+            { ...input, conversationId },
+            conversationMemory,
+            naturalMemoryStatement,
+            requestId,
+            Boolean(options.dryRun),
+            {
+              reason: "natural_memory_capture_conflicts_with_current",
+              message: `لدي اتفاق محفوظ عن ${naturalMemoryStatement.personName} و${naturalMemoryStatement.topicKey.replace(/_/g, " ")}. هل هذه صياغة جديدة للاتفاق نفسه أم اتفاق منفصل؟`,
+            },
+          );
+        }
+      }
+      const metadata = await resolveNaturalMemoryMetadata(identity, naturalMemoryStatement);
+      const command: SecondBrainCommand = {
+        type: "remember",
+        memoryKind: naturalMemoryStatement.memoryKind,
+        key: naturalMemoryStatement.key,
+        value: naturalMemoryStatement.value,
+        metadata: {
+          ...metadata,
+          naturalMemoryAction: naturalMemoryStatement.action,
+        },
+      };
+      if (naturalMemoryStatement.action === "update") {
+        if (!options.dryRun) {
+          const updated = await updateSecondBrainMemoryIfPresent(identity, {
+            memoryKind: command.memoryKind,
+            key: command.key,
+            value: command.value,
+            metadata: command.metadata,
+            conversationId,
+            turnId: requestId,
+          });
+          if (!updated) {
+            return persistNaturalMemoryUpdateClarification(
+              identity,
+              { ...input, conversationId },
+              conversationMemory,
+              naturalMemoryStatement,
+              requestId,
+              false,
+            );
+          }
+        }
+      } else if (!options.dryRun) {
+        await rememberSecondBrain(identity, {
+          memoryKind: command.memoryKind,
+          key: command.key,
+          value: command.value,
+          metadata: command.metadata,
+          conversationId,
+          turnId: requestId,
+        });
+      }
+      return persistSecondBrainCommand(
+        identity,
+        { ...input, conversationId },
+        conversationMemory,
+        command,
+        requestId,
+        Boolean(options.dryRun),
+      );
+    }
     const learningSignal = detectLearningSignal(input.message, conversationMemory.recentTurns);
     const semanticParse = featureFlags.deterministicIntelligence()
       ? parseSemanticRequest(input.message)
@@ -5966,8 +6183,9 @@ export class Phase2AgentRuntime {
         })
       : null;
     const secondBrainQueryDomain = recallPlan.queryDomain;
-    const secondBrainRetrieval = recallPlan.sources.includes("second_brain")
-      ? await retrieveSecondBrain(identity, input.message, {
+    const [secondBrainRetrieval, responseStylePreferences] = await Promise.all([
+      recallPlan.sources.includes("second_brain")
+        ? retrieveSecondBrain(identity, input.message, {
           limit: recallPlan.limits.secondBrain,
           mode: parsedMemoryCommand?.type === "recall" ? "explicit_recall" : "lexical_v1",
           queryDomain: secondBrainQueryDomain,
@@ -5976,13 +6194,15 @@ export class Phase2AgentRuntime {
           temporalMode: recallPlan.temporalMode,
           includeArchived: parsedMemoryCommand?.type === "recall",
         })
-      : {
+        : Promise.resolve({
           memories: [],
           trace: emptyRetrievalTrace(input.message, false, secondBrainQueryDomain, {
             requestId,
             conversationId,
           }),
-        };
+        }),
+      listActiveSecondBrainPreferences(identity, 3),
+    ]);
     secondBrainRetrieval.trace.recallPlan = {
       sources: recallPlan.sources,
       selection: recallPlan.selection,
@@ -6042,6 +6262,7 @@ export class Phase2AgentRuntime {
       plan: recallPlan,
       relationshipContext: relationshipContext?.context,
       memories: secondBrainMemories,
+      responseStylePreferences,
       secondBrainTrace: governedSecondBrain.trace,
       structuredComparison: structuredComparisonData,
     });
@@ -6484,7 +6705,26 @@ export class Phase2AgentRuntime {
       }
     }
 
-    if (relationshipContext?.response) {
+    const canRecallUnlinkedAgreement = (
+      relationshipContext?.response?.kind === "not_found"
+      || (
+        relationshipContext?.response?.kind === "clarification"
+        && relationshipContext.context.uncertainties.includes("entity_not_resolved")
+      )
+    )
+      && governedSecondBrain.memories.some((memory) => {
+        if (
+          memory.kind !== "fact"
+          || memory.metadata?.naturalCapture !== "agreement_statement"
+          || typeof memory.metadata?.entityId === "string"
+          || typeof memory.metadata?.normalizedPersonName !== "string"
+        ) {
+          return false;
+        }
+        return normalizeEntityText(input.message)
+          .includes(normalizeEntityText(memory.metadata.normalizedPersonName as string));
+      });
+    if (relationshipContext?.response && !canRecallUnlinkedAgreement) {
       deterministicMetrics.solvedWithoutLlm = true;
       deterministicMetrics.decision = relationshipContext.response.kind === "clarification"
         ? "clarification"

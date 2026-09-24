@@ -135,6 +135,25 @@ export function parseRelationshipRequest(
   );
   const aboutPerson = message.match(/(?:تفاصيل|ملخص|العلاقات|علاقه|علاقة|عن)\s+(?:الشخص\s+)?(.+?)(?:[؟?!.،؛:]|$)/iu);
   const usesConversationReference = /^(?:طب|طيب|و)?\s*(?:عليه|عندها|عنده|معاه|معها|والمدفوعات|والسلف|والديون|والمشروع|المشروع\s+التاني)/iu.test(message.trim());
+  const arabicExpectedPerson = message.match(
+    /^\s*(.+?)\s+كان(?:ت)?\s+المفروض(?=\s|[؟?!.،؛:]|$)/iu,
+  )?.[1]?.trim();
+  const englishExpectedPerson = message.match(
+    /^\s*what\s+was\s+(.+?)\s+supposed\s+to\b/iu,
+  )?.[1]?.trim();
+  const expectedPerson = arabicExpectedPerson ?? englishExpectedPerson;
+  if (
+    expectedPerson
+    && (/[؟?]/u.test(message) || /(?:ايه|إيه|ماذا|what)\s*$/iu.test(message))
+    && !/^(?:مين|من|ايه|إيه|ماذا|انا|احنا|who|what)$/iu.test(normalizeEntityText(expectedPerson))
+  ) {
+    return {
+      intent: "entity_context",
+      targetType: "person",
+      targetQuery: cleanQuery(expectedPerson),
+      usesConversationReference: false,
+    };
+  }
   if (travelConflictRequest) {
     return { intent: "planning_conflict", usesConversationReference: false };
   }

@@ -1,5 +1,6 @@
 import {
   classifySecondBrainQuery,
+  isNaturalAgreementRecallQuery,
   shouldSearchSecondBrain,
   type SecondBrainQueryDomain,
 } from "./second-brain";
@@ -29,11 +30,11 @@ export type RecallPlan = {
 };
 
 const HISTORICAL_WORDS =
-  /(?:قبل\s+كده|من\s+قبل|قديم(?:ه|ة)?|سابق(?:ا|ة)?|الماضي|زمان|تاريخي|historical|previous(?:ly)?|earlier|used\s+to|before)/iu;
+  /(?:قبل\s+كده|من\s+قبل|قبل\s+التعديل|قبل\s+ما\s+(?:يتغير|اتغير)|قبل\s+تغيير|الاصلي|اصلي|قديم(?:ه|ة)?|سابق(?:ا|ة)?|الماضي|زمان|تاريخي|historical|previous(?:ly)?|earlier|used\s+to|before|original|prior\s+to\s+(?:the\s+)?change)/iu;
 const RECENCY_WORDS =
   /(?:آخر|اخر|أحدث|اللي\s+فات|مؤخر(?:ا|ة)?|حصل|اتسجل|سجلنا|تسجل|recent|latest|last|activity|timeline)/iu;
 const STRUCTURED_WORDS =
-  /(?:مصروف|مصاريف|مدفوع|مدفوعات|دفع|فلوس|مبلغ|جنيه|دولار|ريال|دين|سلف|التزام|مستحق|دخل|تبرع|موعد|تذكير|مهمة|سجل|اتفاق|اتفق|وعد|record|expense|task|reminder|commitment|payment|agreed|promise)/iu;
+  /(?:مصروف|مصاريف|مدفوع|مدفوعات|دفع|فلوس|مبلغ|جنيه|دولار|ريال|دين|سلف|التزام|مستحق|دخل|تبرع|موعد|تذكير|مهمة|سجل|اتفاق|اتفق|وعد|مفروض|record|expense|task|reminder|commitment|payment|agreed|promise|supposed)/iu;
 const RELATIONSHIP_WORDS =
   /(?:مين|شخص|مشروع|طرف|علاق|مرتبط|بين|تابع|تبعه|ليه|له|معاه|عليه|عن\s+مين|who|person|project|related|relationship)/iu;
 const PERSONAL_HISTORY_WORDS =
@@ -66,6 +67,7 @@ export function buildRecallPlan(
   const originalDomain = classifySecondBrainQuery(query);
   const historical = HISTORICAL_WORDS.test(normalized);
   const recency = RECENCY_WORDS.test(normalized);
+  const agreementRecall = isNaturalAgreementRecallQuery(normalized);
   const pastRecordQuery = PAST_RECORD_WORDS.test(normalized);
   const explicitWrite = EXPLICIT_WRITE_WORDS.test(normalized) && !pastRecordQuery;
   const structuredRequested = STRUCTURED_WORDS.test(normalized)
@@ -84,7 +86,8 @@ export function buildRecallPlan(
     : options.explicitMemoryRecall
       ? "memory_recall"
       : originalDomain;
-  const relationRequested = RELATIONSHIP_WORDS.test(normalized)
+  const relationRequested = agreementRecall
+    || RELATIONSHIP_WORDS.test(normalized)
     || queryDomain === "entity_resolution"
     || (queryDomain === "structured_record_mutation" && /\p{L}{3,}/u.test(normalized));
   const activityRequested = recency
@@ -93,6 +96,7 @@ export function buildRecallPlan(
   const explicitMemoryRequested = options.explicitMemoryRecall === true
     || queryDomain === "memory_recall"
     || queryDomain === "structured_record_comparison"
+    || agreementRecall
     || (shouldSearchSecondBrain(query) && !structuredRequested);
   const preferenceRequested = queryDomain === "preference";
   const personalHistoricalRecall = historical && PERSONAL_HISTORY_WORDS.test(normalized);
