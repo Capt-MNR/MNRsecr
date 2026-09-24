@@ -9,9 +9,11 @@ test("separates a safety-rejected final response from API and tool-call failures
     finalResponseCallCount: 1,
     finalResponseArgumentsParsed: true,
     finalResponseMessagePresent: true,
+    providerFinalResponseMessagePresent: true,
     finalResponseGroundedFactsCount: 3,
     nonFinalToolCallCount: 0,
     runtimeResponseKind: "error",
+    providerLiteralFactCoverage: [true, true, true],
     literalFactCoverage: [false, false, false],
   });
 
@@ -24,6 +26,8 @@ test("separates a safety-rejected final response from API and tool-call failures
     "UNVERIFIED_GROUNDED_FACTS_WITH_NO_NONFINAL_TOOL_CALLS",
   );
   assert.equal(classification.benchmarkAssertion, "FAIL");
+  assert.equal(classification.providerResponseAssertion, "PASS");
+  assert.equal(classification.providerExpectedFactsPassed, 3);
   assert.equal(classification.overall, "FINAL_RESPONSE_SAFETY_REJECTION");
 });
 
@@ -34,15 +38,18 @@ test("accepts a parsed, runtime-approved answer when all benchmark facts match",
     finalResponseCallCount: 1,
     finalResponseArgumentsParsed: true,
     finalResponseMessagePresent: true,
+    providerFinalResponseMessagePresent: true,
     finalResponseGroundedFactsCount: 0,
     nonFinalToolCallCount: 0,
     runtimeResponseKind: "answer",
+    providerLiteralFactCoverage: [true, true, true],
     literalFactCoverage: [true, true, true],
   });
 
   assert.equal(classification.providerApi, "SUCCESS");
   assert.equal(classification.toolCallStatus, "PARSED_FINAL_RESPONSE");
   assert.equal(classification.finalResponseValidation, "ACCEPTED");
+  assert.equal(classification.providerResponseAssertion, "PASS");
   assert.equal(classification.benchmarkAssertion, "PASS");
   assert.equal(classification.overall, "CORRECT_PROVIDER_RESPONSE");
 });
@@ -54,9 +61,11 @@ test("keeps API failure distinct from an HTTP-success response that failed gener
     finalResponseCallCount: 0,
     finalResponseArgumentsParsed: false,
     finalResponseMessagePresent: false,
+    providerFinalResponseMessagePresent: false,
     finalResponseGroundedFactsCount: 0,
     nonFinalToolCallCount: 0,
     runtimeResponseKind: null,
+    providerLiteralFactCoverage: [false],
     literalFactCoverage: [false],
   });
   const adapterFailure = classifyBenchmarkRun({
@@ -65,9 +74,11 @@ test("keeps API failure distinct from an HTTP-success response that failed gener
     finalResponseCallCount: 0,
     finalResponseArgumentsParsed: false,
     finalResponseMessagePresent: false,
+    providerFinalResponseMessagePresent: false,
     finalResponseGroundedFactsCount: 0,
     nonFinalToolCallCount: 0,
     runtimeResponseKind: null,
+    providerLiteralFactCoverage: [false],
     literalFactCoverage: [false],
   });
 
@@ -83,9 +94,11 @@ test("reports missing tool calls, malformed arguments, and assertion failures se
     finalResponseCallCount: 0,
     finalResponseArgumentsParsed: false,
     finalResponseMessagePresent: false,
+    providerFinalResponseMessagePresent: false,
     finalResponseGroundedFactsCount: 0,
     nonFinalToolCallCount: 1,
     runtimeResponseKind: null,
+    providerLiteralFactCoverage: [false],
     literalFactCoverage: [false],
   });
   const malformedArguments = classifyBenchmarkRun({
@@ -94,9 +107,11 @@ test("reports missing tool calls, malformed arguments, and assertion failures se
     finalResponseCallCount: 1,
     finalResponseArgumentsParsed: false,
     finalResponseMessagePresent: false,
+    providerFinalResponseMessagePresent: false,
     finalResponseGroundedFactsCount: 0,
     nonFinalToolCallCount: 0,
     runtimeResponseKind: "error",
+    providerLiteralFactCoverage: [false],
     literalFactCoverage: [false],
   });
   const failedAssertion = classifyBenchmarkRun({
@@ -105,15 +120,18 @@ test("reports missing tool calls, malformed arguments, and assertion failures se
     finalResponseCallCount: 1,
     finalResponseArgumentsParsed: true,
     finalResponseMessagePresent: true,
+    providerFinalResponseMessagePresent: true,
     finalResponseGroundedFactsCount: 0,
     nonFinalToolCallCount: 0,
     runtimeResponseKind: "answer",
+    providerLiteralFactCoverage: [true, false],
     literalFactCoverage: [true, false],
   });
 
   assert.equal(missingToolCall.overall, "TOOL_CALL_FAILURE");
   assert.equal(malformedArguments.overall, "FINAL_RESPONSE_PARSE_FAILURE");
   assert.equal(failedAssertion.finalResponseValidation, "ACCEPTED");
+  assert.equal(failedAssertion.providerResponseAssertion, "FAIL");
   assert.equal(failedAssertion.benchmarkAssertion, "FAIL");
   assert.equal(failedAssertion.overall, "BENCHMARK_ASSERTION_FAILURE");
 });

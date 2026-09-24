@@ -6,9 +6,11 @@ export type BenchmarkClassificationInput = {
   finalResponseCallCount: number;
   finalResponseArgumentsParsed: boolean;
   finalResponseMessagePresent: boolean;
+  providerFinalResponseMessagePresent: boolean;
   finalResponseGroundedFactsCount: number;
   nonFinalToolCallCount: number;
   runtimeResponseKind: string | null;
+  providerLiteralFactCoverage: boolean[];
   literalFactCoverage: boolean[];
 };
 
@@ -30,6 +32,9 @@ export type BenchmarkClassification = {
     | "UNVERIFIED_GROUNDED_FACTS_WITH_NO_NONFINAL_TOOL_CALLS"
     | "OTHER_RUNTIME_REJECTION"
     | null;
+  providerResponseAssertion: "PASS" | "FAIL" | "NOT_APPLICABLE" | "NOT_RUN";
+  providerExpectedFactsPassed: number;
+  providerExpectedFactsTotal: number;
   benchmarkAssertion: "PASS" | "FAIL" | "NOT_APPLICABLE" | "NOT_RUN";
   expectedFactsPassed: number;
   expectedFactsTotal: number;
@@ -98,6 +103,17 @@ export function classifyBenchmarkRun(
         ? "UNVERIFIED_GROUNDED_FACTS_WITH_NO_NONFINAL_TOOL_CALLS"
         : "OTHER_RUNTIME_REJECTION";
 
+  const providerExpectedFactsPassed = input.providerLiteralFactCoverage.filter(Boolean).length;
+  const providerExpectedFactsTotal = input.providerLiteralFactCoverage.length;
+  const providerResponseAssertion: BenchmarkClassification["providerResponseAssertion"] =
+    !input.providerFinalResponseMessagePresent
+      ? "NOT_RUN"
+      : providerExpectedFactsTotal === 0
+        ? "NOT_APPLICABLE"
+        : providerExpectedFactsPassed === providerExpectedFactsTotal
+          ? "PASS"
+          : "FAIL";
+
   const expectedFactsPassed = input.literalFactCoverage.filter(Boolean).length;
   const expectedFactsTotal = input.literalFactCoverage.length;
   const benchmarkAssertion: BenchmarkClassification["benchmarkAssertion"] =
@@ -128,7 +144,7 @@ export function classifyBenchmarkRun(
     overall = "FINAL_RESPONSE_SAFETY_REJECTION";
   } else if (finalResponseValidation !== "ACCEPTED") {
     overall = "TOOL_CALL_FAILURE";
-  } else if (benchmarkAssertion === "FAIL") {
+  } else if (benchmarkAssertion === "FAIL" || providerResponseAssertion === "FAIL") {
     overall = "BENCHMARK_ASSERTION_FAILURE";
   } else {
     overall = "CORRECT_PROVIDER_RESPONSE";
@@ -140,6 +156,9 @@ export function classifyBenchmarkRun(
     toolCallStatus,
     finalResponseValidation,
     rejectionReason,
+    providerResponseAssertion,
+    providerExpectedFactsPassed,
+    providerExpectedFactsTotal,
     benchmarkAssertion,
     expectedFactsPassed,
     expectedFactsTotal,

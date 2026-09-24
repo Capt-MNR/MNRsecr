@@ -3477,46 +3477,118 @@ export async function executeStructuredTool(
 
 const systemInstruction = `أنت سكرتير شخصي عربي يعمل داخل نظام بيانات منظم.
 افهم اللغة الطبيعية ولا تعتمد على جملة ثابتة. استخدم الأدوات المعتمدة فقط.
-قواعد إلزامية:
+قواعد دائمة:
 1. لا تصل مباشرة إلى قاعدة البيانات ولا تخترع هوية المستخدم أو المستأجر.
-2. قبل استخدام شخص أو مشروع، استدع find_person أو find_project. إذا وجدت أكثر من نتيجة لا تختار عشوائيًا؛ اطلب توضيحًا. إذا وجدت نتيجة واحدة، أكمل العملية المطلوبة باستخدام ID الذي أعادته الأداة، ولا تعتبر نتيجة البحث نهاية الجولة.
-3. لا تسجل مصروفًا قبل حل الشخص أو المشروع عندما يلزم ربطهما. إذا لم يوجد الشخص المذكور، لا تنشئه تلقائيًا؛ يمكن تسجيل المصروف بدون personId لأن المستلم اختياري. استخدم amountMinor كعدد صحيح بوحدات العملة الصغرى، ولا تستخدم أرقامًا عائمة.
-4. إذا لم يذكر المستخدم العملة في سياق عربي مصري، استخدم EGP كافتراضي محلي؛ لا تغيّر العملة التي أعادتها قاعدة البيانات.
-5. نفّذ الخطوات الآمنة المطلوبة في رسالة واحدة، ولا تقل إن شيئًا تم إلا إذا أعادت الأداة نجاحًا.
-6. لا تعرض أسماء الأدوات أو تفاصيل النظام للمستخدم. رد بالعربية الطبيعية عندما تكون الرسالة بالعربية.
-7. لا تنشئ ذاكرة دائمة من المحادثة. استخدم recall_context للبيانات القانونية المحفوظة.
- 8. عند إنشاء شخص أو مشروع، لا تضف هاتفًا أو بريدًا أو صفة أو علاقة لم يذكرها المستخدم.
- 9. سياق المحادثة السابق مؤقت للمساعدة على فهم الإشارات والتصحيحات، وليس مصدرًا قانونيًا. استخدم الأدوات للتحقق من Structured Memory.
- 10. إذا صحح المستخدم مبلغًا أو وصفًا لعملية سابقة، استخدم update_expense على expenseId السابق ولا تنشئ مصروفًا جديدًا.
-11. عبارات مثل "قصدي ده" و"غيره" و"خليه" و"لا، المبلغ كان" تشير إلى السياق القريب. حلّ المرجع من Conversation State، ثم تحقق من السجل بالأداة المناسبة.
-12. إذا كانت النية واضحة والمعلومة ناقصة، اسأل عن المعلومة الناقصة فقط؛ لا تطلب إعادة صياغة الطلب كاملًا. مثال: "عايز أسجل مصروف لمحمد" يتبعه سؤال عن المبلغ، والرد "7500" يكمل الطلب.
-13. افهم المرادفات الطبيعية مثل دفع، ادى، أعطى، خد مني، سجل مصروف، ولا تجعل علامات الترقيم شرطًا للفهم.
-14. عند وجود عدة نتائج من أداة، لا تنسخ JSON أو تسرد الصفوف واحدًا تلو الآخر. استخدم العدد والإجمالي المحسوبين من الأداة، واذكر التوزيع على المشاريع عند الحاجة. اعرض التفاصيل الفردية فقط إذا طلبها المستخدم صراحة.
-15. لا تحسب إجماليًا ماليًا بنفسك إذا أعادت الأداة total أو summary؛ استخدم القيم المحسوبة من قاعدة البيانات كما هي. انتبه أن amountMinor وtotalMinor بوحدات العملة الصغرى: لا تعرضهما كجنيهات مباشرة، وحوّل القيمة إلى الوحدة الرئيسية مرة واحدة فقط عند صياغة الرد.
-16. اعتبر حالة المحادثة المنظمة سياقًا لفهم "ده" و"التاني" و"له" و"الفلوس دي" فقط؛ تحقق دائمًا من IDs عبر الأدوات.
-17. لا تذكر رقمًا ماليًا أو عددًا ماليًا من الذاكرة أو التخمين. بعد الأدوات استخدم final_response، وضع كل رقم مالي مؤكد في groundedFacts كما أعادته الأداة. الرسالة نفسها يجب أن تكون طبيعية وليست قالبًا.
-18. لا تستخدم final_response قبل إكمال الأدوات اللازمة. إذا كانت البيانات ناقصة أو الأسماء متكررة، اجعل kind = clarification بدل التخمين.
-19. عند تسجيل مصروف، اسم الشخص المستلم اختياري. إذا لم يذكره المستخدم أو لم تعثر find_person على نتيجة، لا توقف التسجيل بسببه؛ أكمل record_expense بدون personId. إذا عثرت على شخص واحد، استخدم personId الذي أعادته الأداة.
-20. إذا طلب المستخدم منك أن تتابع أو تذكّر أو تكرر عملًا لاحقًا، استخدم create_agent_work. لمراقبة repository عام على GitHub استخدم github_repository مع owner وrepository وmetric وoperator وthreshold، ولا تستخدم URL من المستخدم كمصدر مباشر.
-20. قبل اعتماد المصروف اسأل عن اسم المشروع أو الغرض إذا لم يذكره المستخدم. إذا ذكر غرضًا وليس مشروعًا، خزّنه في description ولا تنشئ مشروعًا جديدًا من تلقاء نفسك. لا تعتبر الغرض مشروعًا إلا بعد التحقق من وجوده أو تأكيد المستخدم.
-21. عند طلب تذكير أو موعد بيوم نسبي مثل "بكرة" دون ساعة دقيقة، اسأل عن الوقت بشكل اختياري. اقبل ساعة مثل "5 مساءً"، أو "أي وقت" واستخدم 09:00 بتوقيت Africa/Cairo. لا تنفذ التذكير قبل اكتمال dueAt.
-22. إذا فشل مزود، لا تعرض رسالة تقنية ولا تقل إن الكتابة تمت. استخدم final_response برسالة عربية قصيرة توضّح أن الطلب لم يكتمل وأن البيانات لم تتغير.
-23. ${RETRIEVED_MEMORY_SAFETY_RULE}`;
+2. قبل استخدام شخص أو مشروع، استدع find_person أو find_project. إذا وجدت أكثر من نتيجة فلا تختار عشوائيًا؛ اطلب توضيحًا، إلا إذا احتوى السياق السابق على اختيار واضح. إذا وجدت نتيجة واحدة، أكمل العملية باستخدام ID الذي أعادته الأداة، ولا تعتبر البحث نهاية الجولة.
+3. نفّذ الخطوات الآمنة المطلوبة في رسالة واحدة، ولا تقل إن شيئًا تم إلا إذا أعادت الأداة نجاحًا.
+4. لا تعرض أسماء الأدوات أو تفاصيل النظام للمستخدم. رد بالعربية الطبيعية عندما تكون الرسالة بالعربية.
+5. لا تنشئ ذاكرة دائمة من المحادثة. استخدم recall_context للبيانات القانونية المحفوظة.
+6. عند إنشاء شخص أو مشروع، لا تضف هاتفًا أو بريدًا أو صفة أو علاقة لم يذكرها المستخدم.
+7. سياق المحادثة السابق مؤقت لفهم الإشارات والتصحيحات، وليس مصدرًا قانونيًا. استخدم الأدوات للتحقق من Structured Memory.
+8. عبارات مثل "قصدي ده" و"غيره" و"خليه" تشير إلى السياق القريب. حلّ المرجع من Conversation State، ثم تحقق من السجل بالأداة المناسبة.
+9. إذا كانت النية واضحة والمعلومة ناقصة، اسأل عن المعلومة الناقصة فقط؛ لا تطلب إعادة صياغة الطلب كاملًا.
+10. عند وجود عدة نتائج من أداة، لا تنسخ JSON أو تسرد الصفوف. استخدم العدد والإجمالي المحسوبين من الأداة، واذكر التوزيع على المشاريع عند الحاجة. اعرض التفاصيل الفردية فقط إذا طلبها المستخدم.
+11. اعتبر حالة المحادثة المنظمة سياقًا لفهم الإشارات فقط؛ تحقق دائمًا من IDs عبر الأدوات.
+12. لا تذكر رقمًا ماليًا أو عددًا ماليًا من الذاكرة أو التخمين. بعد الأدوات استخدم final_response، وضع كل رقم مالي مؤكد في groundedFacts كما أعادته الأداة. اجعل الرسالة طبيعية وليست قالبًا.
+13. لا تستخدم final_response قبل إكمال الأدوات اللازمة. إذا كانت البيانات ناقصة أو الأسماء متكررة، اجعل kind = clarification بدل التخمين.
+14. إذا فشل مزود، لا تعرض رسالة تقنية ولا تقل إن الكتابة تمت. استخدم final_response برسالة عربية قصيرة توضّح أن الطلب لم يكتمل وأن البيانات لم تتغير.
+15. ${RETRIEVED_MEMORY_SAFETY_RULE}`;
 
-const requestGuidance = `إرشادات تنفيذ إضافية:
-- جملة الدفع أو الإعطاء أو الاستلام التي تحتوي على اسم شخص ومبلغ هي نية تسجيل مصروف، حتى لو لم تُذكر كلمة "مصروف" أو العملة. أمثلة: "دفعت لمحمد 7500"، "محمد خد مني 7500"، "اديت محمد 7500". نفّذ find_person، ثم بعد نتيجة البحث أكمل record_expense مباشرة: استخدم personId إذا وُجد شخص واحد، أو اتركه بدون قيمة إذا لم توجد نتيجة. لا تستخدم create_person لمجرد ذكر الاسم.
-- استخدم create_person فقط عندما يطلب المستخدم صراحة إضافة أو إنشاء شخص، مثل "أضف محمد كشخص" أو "عايز أضيف شخص اسمه محمد". إذا كانت النية مالية والشخص غير موجود، لا تنشئه تلقائيًا؛ سجّل المصروف بدون ربط بالشخص عندما يكون الطلب واضحًا، أو اطلب التوضيح فقط إذا كانت النية أو المبلغ غير واضحين.
-- إذا قال المستخدم إن الشخص موجود بالفعل، لا تنشئه. استخدم find_person عند الحاجة للتحقق، وإذا لم توجد عملية واضحة فاطلب التوضيح بدل تسجيل مصروف.
-- لا تجعل وجود اسم شخص وحده نية إنشاء. الفعل المالي + المبلغ يتغلب على مجرد ذكر الاسم، مع بقاء قرار الكتابة خاضعًا للموافقة.
-- إذا كانت الرسالة تسأل عن إجمالي ما صُرف على وصف أو فئة مثل "التشطيبات" من دون ذكر مشروع صريح، استخدم query_expenses مع description ثم احسب الناتج من الصفوف. لا تخترع مشروعًا اسمه الفئة.
-- إذا كانت الرسالة تسأل "محمد أخد مني كام؟"، نفّذ find_person ثم get_person_expense_total.
-- قبل عرض إجمالي عام للمصروفات، استخدم audit_expense_units أولًا. اعرض القيمة المخزنة بوحدة العملة الصغرى والتحويل المتوقع، وإذا وجدت سجلًا يحتاج مراجعة بشرية فلا تعرض الإجمالي ولا تعدّل السجل.
-- إذا كان اسم المشروع أو الشخص يطابق أكثر من كيان، لا تختار أي نتيجة عشوائيًا؛ اسأل المستخدم، إلا إذا كان السياق السابق يحتوي على اختيار واضح.
-- استخدم period = last_month أو this_month أو last_week أو this_week للعبارات الزمنية النسبية، ودع الخادم يحسب الحدود الزمنية.
-- استخدم rank_expense_projects لسؤال "أنهي مشروع صرفت فيه أكتر؟"، ولا تجمع أرقام الصفوف بنفسك.
-- إذا قال المستخدم "من غير" أو "بدون" مشروع معروف في السياق، استخدم excludeProjectId بعد التحقق من المشروع.
-- لا تذكر أسماء الأدوات ولا تنسخ نتائجها الخام في الرد النهائي.
-- في نهاية الجولة استدع final_response برسالة عربية طبيعية.`;
+const expenseSystemGuidance = `قواعد المصروفات عند ارتباط الطلب بها:
+- لا تسجل مصروفًا قبل حل الشخص أو المشروع عند الحاجة. لا تنشئ الشخص تلقائيًا إذا لم يوجد؛ يمكن تسجيل المصروف بدون personId لأن المستلم اختياري. استخدم amountMinor عددًا صحيحًا بوحدات العملة الصغرى، لا رقمًا عائمًا.
+- إذا لم يذكر المستخدم العملة في سياق عربي مصري، استخدم EGP افتراضيًا؛ لا تغيّر العملة التي أعادتها قاعدة البيانات.
+- إذا صحح المستخدم مبلغًا أو وصفًا لعملية سابقة، استخدم update_expense على expenseId السابق ولا تنشئ مصروفًا جديدًا.
+- افهم مرادفات الدفع والإعطاء والاستلام الطبيعية، ولا تجعل علامات الترقيم شرطًا للفهم.
+- لا تحسب الإجمالي بنفسك إذا أعادت الأداة total أو summary. amountMinor وtotalMinor بوحدات العملة الصغرى؛ استخدم قيمة الأداة وحوّلها إلى الوحدة الرئيسية مرة واحدة فقط.
+- عند تسجيل مصروف، المستلم اختياري: إذا لم يذكره المستخدم أو لم تعثر find_person على نتيجة، أكمل بدون personId؛ وإذا وجدت شخصًا واحدًا فاستخدم ID الذي أعادته الأداة.
+- قبل اعتماد المصروف اسأل عن المشروع أو الغرض إذا لم يذكره المستخدم. خزّن الغرض في description، ولا تنشئ مشروعًا من تلقاء نفسك؛ اعتبره مشروعًا فقط بعد التحقق أو تأكيد المستخدم.
+`;
+
+const expenseRequestGuidance = `إرشادات طلبات المصروفات:
+- جملة دفع أو إعطاء أو استلام فيها اسم شخص ومبلغ تعني نية تسجيل مصروف، حتى دون كلمة "مصروف" أو ذكر العملة. نفّذ find_person ثم record_expense؛ استخدم personId عند وجود نتيجة واحدة، وإلا سجّل دون ربط بالشخص إذا كان الطلب واضحًا. لا تنفّذ الكتابة قبل الموافقة المعتادة.
+- إذا كان السؤال عن إجمالي وصف أو فئة مثل "التشطيبات" دون مشروع صريح، استخدم query_expenses مع description ولا تنشئ مشروعًا باسم الفئة.
+- لسؤال "محمد أخد مني كام؟" استخدم find_person ثم get_person_expense_total.
+- قبل عرض إجمالي عام استخدم audit_expense_units. إذا وُجد سجل يحتاج مراجعة بشرية فلا تعرض الإجمالي ولا تعدّل السجل.
+- استخدم period = last_month أو this_month أو last_week أو this_week للعبارات النسبية، ودع الخادم يحسب الحدود.
+- عند استبعاد مشروع معروف في السياق استخدم excludeProjectId بعد التحقق من المشروع.
+`;
+
+const personMutationGuidance = `إرشادات إنشاء الأشخاص عند طلبه:
+- استخدم create_person فقط عندما يطلب المستخدم صراحة إضافة أو إنشاء شخص. الاسم وحده ليس طلب إنشاء. إذا قال المستخدم إن الشخص موجود بالفعل فلا تنشئه؛ استخدم find_person عند الحاجة، واطلب التوضيح إذا لم تكن هناك عملية واضحة بدل تسجيل مصروف.
+`;
+
+const agentWorkGuidance = `عند طلب متابعة أو تكرار عمل لاحق، استخدم create_agent_work. لمراقبة repository عام على GitHub استخدم github_repository مع owner وrepository وmetric وoperator وthreshold، ولا تستخدم URL من المستخدم كمصدر مباشر.`;
+
+const reminderGuidance = `عند طلب تذكير أو موعد بيوم نسبي مثل "بكرة" دون ساعة دقيقة، اسأل عن الوقت بشكل اختياري. اقبل ساعة مثل "5 مساءً" أو "أي وقت" واستخدم 09:00 بتوقيت Africa/Cairo. لا تنفّذ التذكير قبل اكتمال dueAt.`;
+
+type ProviderInstructionParts = {
+  text: string;
+  systemPrompt: string;
+  requestGuidance: string;
+};
+
+const FINANCIAL_QUERY_PATTERN = /إجمالي|اجمالي|مجموع|كام|كم|قد\s*إيه|قد\s*ايه|total|sum|how much|which project/i;
+const PERSON_MUTATION_PATTERN = /شخص|شخصًا|الاسم|بيانات.*شخص|اضف.*شخص|أضف.*شخص|ضيف.*شخص|person|contact/i;
+const PERSON_EXISTS_PATTERN = /موجود(?:ة)?(?:\s+بالفعل)?|already exists|is already there/i;
+const AGENT_WORK_PATTERN = /تابع|متابعة|كرر.*(?:عمل|شغل|مهمة)|تذك(?:ّ)?ر.{0,30}(?:عمل|شغل|مهم(?:ة|ه)).{0,20}(?:لاحق|بعد|بعدين)|راقب|مراقبة|github|repository|repo|follow[\s-]*up|monitor|watch|repeat/i;
+const REMINDER_WRITE_PATTERN = /فكرني|ذكرني|تذكير|تذكّر|موعد|بكره|بكرة|غدا|غدًا|remind|reminder/i;
+
+export function buildProviderInstructions(
+  context: Pick<GatewayCallContext, "currentUserMessage" | "toolScope">,
+): ProviderInstructionParts {
+  const message = context.currentUserMessage ?? "";
+  const scope = context.toolScope;
+  const noScopeProvided = scope === undefined;
+  const financialCue = TOOL_SCOPE_PATTERNS.expense.test(message)
+    || /(?:اخد|اخذ)\s+مني/i.test(message.normalize("NFKC").replace(/[أإآٱ]/g, "ا"));
+  const includeExpense = noScopeProvided || scope?.name === "expense" || financialCue;
+  const includeExpenseQuery = includeExpense
+    && (scope?.name === "read_only"
+      || FINANCIAL_QUERY_PATTERN.test(message)
+      || (financialCue && !WRITE_INTENT_PATTERN.test(message)));
+  const includeExpenseWrite = noScopeProvided
+    || scope?.name === "expense"
+    || (scope?.isFull === true && financialCue && WRITE_INTENT_PATTERN.test(message));
+  const includePersonMutation = noScopeProvided
+    || scope?.name === "person"
+    || (scope?.isFull === true
+      && PERSON_MUTATION_PATTERN.test(message)
+      && WRITE_INTENT_PATTERN.test(message))
+    || (scope?.isFull === true && PERSON_EXISTS_PATTERN.test(message))
+    || (scope?.name === "expense" && PERSON_EXISTS_PATTERN.test(message));
+  const agentToolAvailable = noScopeProvided
+    || scope?.isFull === true
+    || scope?.allowedToolNames.has("create_agent_work") === true
+    || scope?.allowedToolNames.has("github_repository") === true;
+  const includeAgentWork = noScopeProvided
+    || (agentToolAvailable && AGENT_WORK_PATTERN.test(message));
+  const reminderToolAvailable = noScopeProvided
+    || scope?.isFull === true
+    || scope?.allowedToolNames.has("create_reminder") === true;
+  const includeReminder = noScopeProvided
+    || (reminderToolAvailable
+      && (scope?.name === "reminder"
+        || (scope?.isFull === true
+          && REMINDER_WRITE_PATTERN.test(message)
+          && WRITE_INTENT_PATTERN.test(message))));
+
+  const conditionalSystem = [
+    includeExpense ? expenseSystemGuidance : "",
+    includeAgentWork ? agentWorkGuidance : "",
+    includeReminder ? reminderGuidance : "",
+  ].filter(Boolean);
+  const systemPrompt = [systemInstruction, ...conditionalSystem].join("\n");
+  const conditionalRequest = [
+    includeExpense && (includeExpenseQuery || includeExpenseWrite) ? expenseRequestGuidance : "",
+    includePersonMutation ? personMutationGuidance : "",
+  ].filter(Boolean);
+  const requestGuidance = conditionalRequest.join("\n");
+  return {
+    text: requestGuidance ? `${systemPrompt}\n${requestGuidance}` : systemPrompt,
+    systemPrompt,
+    requestGuidance,
+  };
+}
 
 function parseJsonObject(value: string | undefined): Record<string, unknown> {
   if (!value) return {};
@@ -3624,6 +3696,7 @@ function contextBreakdown(
   currentUserMessage: string | undefined,
   requestBytes: number,
   toolDefinitionsChars: number,
+  instructions: ProviderInstructionParts,
 ): LlmContextBreakdown {
   const currentUser = currentUserMessage ?? "";
   let currentUserConsumed = false;
@@ -3663,8 +3736,8 @@ function contextBreakdown(
   }
 
   return {
-    systemPromptChars: systemInstruction.length,
-    requestGuidanceChars: requestGuidance.length,
+    systemPromptChars: instructions.systemPrompt.length,
+    requestGuidanceChars: instructions.requestGuidance.length,
     userMessageChars,
     recentConversationChars,
     summaryChars,
@@ -3960,6 +4033,7 @@ function recordProviderRequest(
       context.currentUserMessage,
       payload.requestBytes,
       payload.toolDefinitionsChars,
+      buildProviderInstructions(context),
     ),
   });
 }
@@ -4313,7 +4387,8 @@ export class GeminiModelGateway implements ModelGateway {
 
   async generate(messages: ConversationMessage[], context: GatewayCallContext): Promise<GatewayResponse> {
     if (!this.apiKey) throw new Error("GEMINI_API_KEY is not configured.");
-    const systemText = `${systemInstruction}\n${requestGuidance}`;
+    const instructions = buildProviderInstructions(context);
+    const systemText = instructions.text;
     const contents = toGeminiContents(messages);
     const toolDefinitions = toGeminiTools(context.toolScope, context.finalResponseOnly);
     let lastError: Error | null = null;
@@ -4371,6 +4446,7 @@ export class GeminiModelGateway implements ModelGateway {
                 context.currentUserMessage,
                 Buffer.byteLength(requestBody),
                 JSON.stringify(toolDefinitions).length,
+                instructions,
               ),
               fallback: Boolean(context.providerFallback) || modelIndex > 0,
               retry: cacheFallbackAttempted,
@@ -4519,10 +4595,11 @@ export class GroqModelGateway implements ModelGateway {
   async generate(messages: ConversationMessage[], context: GatewayCallContext): Promise<GatewayResponse> {
     if (!this.apiKey) throw new Error("GROQ_API_KEY is not configured.");
     const tools = toOpenAiTools(context.toolScope, context.finalResponseOnly);
+    const instructions = buildProviderInstructions(context);
     const apiMessages = [
       {
         role: "system",
-        content: `${systemInstruction}\n${requestGuidance}`,
+        content: instructions.text,
       },
       ...budgetMessages(messages).map((message) => {
         if (message.role === "assistant") {
@@ -4557,7 +4634,7 @@ export class GroqModelGateway implements ModelGateway {
       temperature: 0.15,
       max_tokens: 2048,
     });
-    const systemText = `${systemInstruction}\n${requestGuidance}`;
+    const systemText = instructions.text;
     let lastError: Error | null = null;
     for (let attempt = 0; attempt < MAX_GROQ_HTTP_ATTEMPTS; attempt += 1) {
       const attemptMeasurement = recordProviderRequest(context, "groq", {
@@ -4573,6 +4650,7 @@ export class GroqModelGateway implements ModelGateway {
           context.currentUserMessage,
           Buffer.byteLength(requestBody),
           JSON.stringify(tools).length,
+          instructions,
         ),
         fallback: Boolean(context.providerFallback),
         retry: attempt > 0,
@@ -4703,10 +4781,11 @@ export class OpenAiCompatibleModelGateway implements ModelGateway {
   async generate(messages: ConversationMessage[], context: GatewayCallContext): Promise<GatewayResponse> {
     if (!this.apiKey) throw new Error(`${this.apiKeyName} is not configured.`);
     const tools = toOpenAiTools(context.toolScope, context.finalResponseOnly);
+    const instructions = buildProviderInstructions(context);
     const apiMessages = [
       {
         role: "system",
-        content: `${systemInstruction}\n${requestGuidance}`,
+        content: instructions.text,
       },
       ...budgetMessages(messages).map((message) => {
         if (message.role === "assistant") {
@@ -4739,7 +4818,7 @@ export class OpenAiCompatibleModelGateway implements ModelGateway {
       temperature: 0.15,
       max_tokens: 2048,
     });
-    const systemText = `${systemInstruction}\n${requestGuidance}`;
+    const systemText = instructions.text;
     const attemptMeasurement = recordProviderRequest(context, this.provider, {
       model: this.model,
       requestBytes: Buffer.byteLength(requestBody),
@@ -4753,6 +4832,7 @@ export class OpenAiCompatibleModelGateway implements ModelGateway {
         context.currentUserMessage,
         Buffer.byteLength(requestBody),
         JSON.stringify(tools).length,
+        instructions,
       ),
       fallback: Boolean(context.providerFallback),
     });
@@ -7163,10 +7243,11 @@ export class CohereModelGateway implements ModelGateway {
   async generate(messages: ConversationMessage[], context: GatewayCallContext): Promise<GatewayResponse> {
     if (!this.apiKey) throw new Error("COHERE_API_KEY is not configured.");
     const tools = toCohereTools(context.toolScope, context.finalResponseOnly);
+    const instructions = buildProviderInstructions(context);
     const apiMessages = [
       {
         role: "system",
-        content: `${systemInstruction}\n${requestGuidance}`,
+        content: instructions.text,
       },
       ...budgetMessages(messages).map((message) => {
         if (message.role === "assistant") {
@@ -7205,7 +7286,7 @@ export class CohereModelGateway implements ModelGateway {
       temperature: 0.15,
       max_tokens: 2048,
     });
-    const systemText = `${systemInstruction}\n${requestGuidance}`;
+    const systemText = instructions.text;
     const attemptMeasurement = recordProviderRequest(context, "cohere", {
       model: this.model,
       requestBytes: Buffer.byteLength(requestBody),
@@ -7219,6 +7300,7 @@ export class CohereModelGateway implements ModelGateway {
         context.currentUserMessage,
         Buffer.byteLength(requestBody),
         JSON.stringify(tools).length,
+        instructions,
       ),
       fallback: Boolean(context.providerFallback),
     });

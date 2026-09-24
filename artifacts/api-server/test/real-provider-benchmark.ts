@@ -57,6 +57,7 @@ type ProviderGeneration = {
   finalResponseCallCount: number;
   finalResponseArgumentsParsed: boolean;
   finalResponseMessagePresent: boolean;
+  finalResponseMessage: string | null;
   finalResponseGroundedFactsCount: number;
   usage: ReturnType<typeof normalizeProviderUsage>;
 };
@@ -492,6 +493,7 @@ async function main(): Promise<void> {
             finalResponseCallCount: 0,
             finalResponseArgumentsParsed: false,
             finalResponseMessagePresent: false,
+            finalResponseMessage: null,
             finalResponseGroundedFactsCount: 0,
             usage: normalizeProviderUsage(providerConfig.name, undefined),
           };
@@ -514,6 +516,9 @@ async function main(): Promise<void> {
             generation.finalResponseMessagePresent = finalResponseArgsAreParsed
               && typeof finalResponseArgs.message === "string"
               && finalResponseArgs.message.trim().length > 0;
+            generation.finalResponseMessage = generation.finalResponseMessagePresent
+              ? (finalResponseArgs.message as string).trim()
+              : null;
             generation.finalResponseGroundedFactsCount = finalResponseArgsAreParsed
               && Array.isArray(finalResponseArgs.groundedFacts)
               ? finalResponseArgs.groundedFacts.length
@@ -573,6 +578,12 @@ async function main(): Promise<void> {
       const finalResponseCapture = [...providerGenerations]
         .reverse()
         .find((item) => item.finalResponseCallCount > 0);
+      const providerFinalResponseMessage = finalResponseCapture?.finalResponseMessage ?? null;
+      const providerFactCoverage = expectedFacts.map((fact) => ({
+        fact,
+        literalMatch: normalizeArabic(providerFinalResponseMessage ?? "")
+          .includes(normalizeArabic(fact)),
+      }));
       const nonFinalToolCallCount = providerGenerations.reduce(
         (count, item) => count + item.toolCalls.filter((toolName) => toolName !== "final_response").length,
         0,
@@ -583,9 +594,11 @@ async function main(): Promise<void> {
         finalResponseCallCount,
         finalResponseArgumentsParsed: finalResponseCapture?.finalResponseArgumentsParsed ?? false,
         finalResponseMessagePresent: finalResponseCapture?.finalResponseMessagePresent ?? false,
+        providerFinalResponseMessagePresent: providerFinalResponseMessage !== null,
         finalResponseGroundedFactsCount: finalResponseCapture?.finalResponseGroundedFactsCount ?? 0,
         nonFinalToolCallCount,
         runtimeResponseKind: result?.response?.kind ?? null,
+        providerLiteralFactCoverage: providerFactCoverage.map((item) => item.literalMatch),
         literalFactCoverage: factCoverage.map((item) => item.literalMatch),
       });
       const attemptsPerLogicalCall = providerGenerations.map((generation) => ({
@@ -626,6 +639,8 @@ async function main(): Promise<void> {
         retryOrModelFallbackObserved: attemptsPerLogicalCall.some((call) => call.networkAttempts > 1),
         domainToolsUsed: domainTools,
         response: finalMessage,
+        providerFinalResponseMessage,
+        providerLiteralFactCoverage: providerFactCoverage,
         literalFactCoverage: factCoverage,
         providerTrace: result?.action?.providerTrace,
         contextFingerprint: fingerprintsByProvider[providerConfig.name],
