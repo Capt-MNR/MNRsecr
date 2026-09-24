@@ -40,6 +40,7 @@ import {
   type ProviderName,
 } from "../src/lib/phase2.ts";
 import { analyzeProviderInputPayload } from "./provider-input-audit.ts";
+import { classifyBenchmarkRun } from "./provider-benchmark-classification.ts";
 import type { Identity } from "../src/lib/secretary.ts";
 
 type BenchmarkProvider = "groq" | "gemini" | "cohere";
@@ -53,6 +54,10 @@ type ProviderGeneration = {
   outcome: "SUCCESS" | "FAIL";
   errorCode?: string;
   toolCalls: string[];
+  finalResponseCallCount: number;
+  finalResponseArgumentsParsed: boolean;
+  finalResponseMessagePresent: boolean;
+  finalResponseGroundedFactsCount: number;
   usage: ReturnType<typeof normalizeProviderUsage>;
 };
 
@@ -484,6 +489,10 @@ async function main(): Promise<void> {
             elapsedMs: 0,
             outcome: "FAIL",
             toolCalls: [],
+            finalResponseCallCount: 0,
+            finalResponseArgumentsParsed: false,
+            finalResponseMessagePresent: false,
+            finalResponseGroundedFactsCount: 0,
             usage: normalizeProviderUsage(providerConfig.name, undefined),
           };
           generations.push(generation);
@@ -495,6 +504,20 @@ async function main(): Promise<void> {
             const response = await inner.generate(messages, { ...context, metrics: undefined });
             generation.outcome = "SUCCESS";
             generation.toolCalls = response.toolCalls.map((call) => call.name);
+            const finalResponseCalls = response.toolCalls.filter((call) => call.name === "final_response");
+            const finalResponseArgs = finalResponseCalls[0]?.args;
+            const finalResponseArgsAreParsed = !!finalResponseArgs
+              && typeof finalResponseArgs === "object"
+              && !Array.isArray(finalResponseArgs);
+            generation.finalResponseCallCount = finalResponseCalls.length;
+            generation.finalResponseArgumentsParsed = finalResponseArgsAreParsed;
+            generation.finalResponseMessagePresent = finalResponseArgsAreParsed
+              && typeof finalResponseArgs.message === "string"
+              && finalResponseArgs.message.trim().length > 0;
+            generation.finalResponseGroundedFactsCount = finalResponseArgsAreParsed
+              && Array.isArray(finalResponseArgs.groundedFacts)
+              ? finalResponseArgs.groundedFacts.length
+              : 0;
             generation.usage = normalizeProviderUsage(providerConfig.name, response.usage);
             return response;
           } catch (error) {
@@ -543,6 +566,28 @@ async function main(): Promise<void> {
       }));
       const domainTools = [...new Set(providerGenerations.flatMap((item) => item.toolCalls)
         .filter((toolName) => toolName !== "final_response"))];
+      const finalResponseCallCount = providerGenerations.reduce(
+        (count, item) => count + item.finalResponseCallCount,
+        0,
+      );
+      const finalResponseCapture = [...providerGenerations]
+        .reverse()
+        .find((item) => item.finalResponseCallCount > 0);
+      const nonFinalToolCallCount = providerGenerations.reduce(
+        (count, item) => count + item.toolCalls.filter((toolName) => toolName !== "final_response").length,
+        0,
+      );
+      const classification = classifyBenchmarkRun({
+        httpStatuses: providerHttp.map((attempt) => attempt.status),
+        generationOutcomes: providerGenerations.map((generation) => generation.outcome),
+        finalResponseCallCount,
+        finalResponseArgumentsParsed: finalResponseCapture?.finalResponseArgumentsParsed ?? false,
+        finalResponseMessagePresent: finalResponseCapture?.finalResponseMessagePresent ?? false,
+        finalResponseGroundedFactsCount: finalResponseCapture?.finalResponseGroundedFactsCount ?? 0,
+        nonFinalToolCallCount,
+        runtimeResponseKind: result?.response?.kind ?? null,
+        literalFactCoverage: factCoverage.map((item) => item.literalMatch),
+      });
       const attemptsPerLogicalCall = providerGenerations.map((generation) => ({
         callNumber: generation.callNumber,
         networkAttempts: providerHttp.filter((attempt) => attempt.callNumber === generation.callNumber).length,
@@ -556,6 +601,15 @@ async function main(): Promise<void> {
         provider: providerConfig.name,
         configuredModel: inner.modelName,
         outcome: result?.response?.kind ?? (runError ? "FAILED" : "NO_FINAL_RESPONSE"),
+        classification,
+        runtimeResponseKind: result?.response?.kind ?? null,
+        finalResponseCapture: {
+          callCount: finalResponseCallCount,
+          argumentsParsed: finalResponseCapture?.finalResponseArgumentsParsed ?? false,
+          messagePresent: finalResponseCapture?.finalResponseMessagePresent ?? false,
+          groundedFactsCount: finalResponseCapture?.finalResponseGroundedFactsCount ?? 0,
+          nonFinalToolCallCount,
+        },
         runError,
         totalElapsedMs: Math.round((performance.now() - totalStartedAt) * 10) / 10,
         providerGenerations: providerGenerations.map((generation) => ({
