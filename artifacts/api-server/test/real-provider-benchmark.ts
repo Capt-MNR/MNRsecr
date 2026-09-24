@@ -1,5 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   activityEventEntitiesTable,
   activityEventsTable,
@@ -72,7 +74,7 @@ type HttpAttempt = {
   errorName?: string;
 };
 
-type ContextAssembly = {
+export type ContextAssembly = {
   primaryEntity: { id: string; name: string | null } | null;
   evidence: {
     structuredRecords: Array<{
@@ -156,10 +158,10 @@ const cleanupTables = [
   peopleTable,
 ] as const;
 
-const prompt = "أحمد كان المفروض يعمل إيه؟";
-const expectedFacts = ["تسليم التقرير", "إرسال العرض", "مراجعة التقرير"];
+export const prompt = "أحمد كان المفروض يعمل إيه؟";
+export const expectedFacts = ["تسليم التقرير", "إرسال العرض", "مراجعة التقرير"];
 
-function createIdentity(): Identity {
+export function createIdentity(): Identity {
   return {
     tenantId: `real-provider-benchmark-${randomUUID()}`,
     userId: "real-provider-benchmark",
@@ -173,7 +175,7 @@ function ownerScope(table: any, identity: Identity) {
   );
 }
 
-async function mutationSnapshot(identity: Identity): Promise<Record<string, number>> {
+export async function mutationSnapshot(identity: Identity): Promise<Record<string, number>> {
   const entries = Object.entries(mutationTables);
   const counts = await Promise.all(entries.map(async ([, table]) => {
     const scopedTable = table as any;
@@ -185,14 +187,14 @@ async function mutationSnapshot(identity: Identity): Promise<Record<string, numb
   return Object.fromEntries(entries.map(([name], index) => [name, counts[index]]));
 }
 
-async function cleanupIdentity(identity: Identity): Promise<void> {
+export async function cleanupIdentity(identity: Identity): Promise<void> {
   for (const table of cleanupTables) {
     const scopedTable = table as any;
     await db.delete(scopedTable).where(ownerScope(scopedTable, identity));
   }
 }
 
-function stableRequestSerialization(
+export function stableRequestSerialization(
   messages: ConversationMessage[],
   context: GatewayCallContext,
 ): string {
@@ -215,7 +217,7 @@ function stableRequestSerialization(
   });
 }
 
-function contextAssemblyFrom(messages: ConversationMessage[]): ContextAssembly | null {
+export function contextAssemblyFrom(messages: ConversationMessage[]): ContextAssembly | null {
   const message = messages.find((item) => item.text?.startsWith("[Context Assembly v1"));
   if (!message?.text) return null;
   const separator = message.text.indexOf("\n");
@@ -693,9 +695,9 @@ async function main(): Promise<void> {
   }
 }
 
-let expectedFixtureIds: string[] = [];
+export let expectedFixtureIds: string[] = [];
 
-async function seedFixture(identity: Identity): Promise<void> {
+export async function seedFixture(identity: Identity): Promise<void> {
   const [ahmad] = await db.insert(peopleTable).values({
     tenantId: identity.tenantId,
     ownerUserId: identity.userId,
@@ -758,7 +760,12 @@ async function seedFixture(identity: Identity): Promise<void> {
   expectedFixtureIds = [commitment.id, task.id, reminder.id];
 }
 
-main().catch((error: unknown) => {
-  console.error("REAL_PROVIDER_BENCHMARK_FAILED", errorCode(error));
-  process.exitCode = 1;
-});
+const invokedEntry = process.argv[1]
+  ? pathToFileURL(resolve(process.argv[1])).href
+  : null;
+if (invokedEntry === import.meta.url) {
+  main().catch((error: unknown) => {
+    console.error("REAL_PROVIDER_BENCHMARK_FAILED", errorCode(error));
+    process.exitCode = 1;
+  });
+}
