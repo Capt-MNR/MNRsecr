@@ -3,6 +3,7 @@ import { logger } from "./lib/logger";
 import { agentWorkRunner } from "./lib/agent-work/runner";
 import { createNotificationRecovery } from "./lib/mobile-push";
 import { triggerOutboxDispatcher } from "./lib/trigger-outbox";
+import { seedUpcomingProactiveDeadlineEvents } from "./lib/proactive-triggers";
 
 const rawPort = process.env["PORT"];
 
@@ -26,6 +27,9 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+  void seedUpcomingProactiveDeadlineEvents()
+    .then((count) => logger.info({ count }, "future proactive deadlines reconciled"))
+    .catch((error) => logger.error({ error }, "future proactive deadline reconciliation failed"));
   agentWorkRunner.start();
   triggerOutboxDispatcher.start();
   notificationRecovery.start();

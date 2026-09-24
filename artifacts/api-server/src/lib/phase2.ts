@@ -132,6 +132,7 @@ import {
   enqueueTaskThresholdTriggersForMutation,
   enqueueTriggerOutbox,
 } from "./trigger-outbox";
+import { enqueueProactiveDeadlineTriggers } from "./proactive-triggers";
 
 const db = database;
 
@@ -2468,6 +2469,13 @@ async function executeTool(
       const expectedVersion = expectedRowVersion(args);
       await lockTaskOpenCount(identity, db);
       const previousOpenCount = await countOpenTasks(identity, db);
+      const [previous] = await db.select({
+        dueAt: tasksTable.dueAt,
+        status: tasksTable.status,
+      }).from(tasksTable).where(and(
+        identityWhere(identity, tasksTable),
+        eq(tasksTable.id, taskId),
+      )).limit(1);
        const updates: Record<string, unknown> = {
          updatedAt: new Date(),
          rowVersion: sql`${tasksTable.rowVersion} + 1`,
@@ -2487,6 +2495,20 @@ async function executeTool(
         ...(expectedVersion === undefined ? [] : [eq(tasksTable.rowVersion, expectedVersion)]),
       )).returning();
       if (updated) {
+        const wasActive = ["pending", "in_progress"].includes(previous?.status ?? "");
+        const isActive = ["pending", "in_progress"].includes(updated.status);
+        const deadlineChanged = previous?.dueAt?.getTime() !== updated.dueAt?.getTime();
+        if (isActive && updated.dueAt && (!wasActive || deadlineChanged)) {
+          await enqueueProactiveDeadlineTriggers(identity, {
+            entityType: "task",
+            entityId: updated.id,
+            title: updated.title,
+            dueAt: updated.dueAt,
+            status: updated.status,
+            rowVersion: updated.rowVersion,
+            occurredAt: updated.updatedAt,
+          }, db, options.triggerOutboxWriter ?? enqueueTriggerOutbox);
+        }
         const currentOpenCount = await countOpenTasks(identity, db);
         await enqueueTaskCountTransition(
           identity,
@@ -2508,6 +2530,13 @@ async function executeTool(
       const commitmentId = stringArg("commitmentId");
       if (!commitmentId) return { ok: false, error: "commitmentId is required." };
       const expectedVersion = expectedRowVersion(args);
+      const [previous] = await db.select({
+        dueAt: commitmentsTable.dueAt,
+        status: commitmentsTable.status,
+      }).from(commitmentsTable).where(and(
+        identityWhere(identity, commitmentsTable),
+        eq(commitmentsTable.id, commitmentId),
+      )).limit(1);
        const updates: Record<string, unknown> = {
          updatedAt: new Date(),
          rowVersion: sql`${commitmentsTable.rowVersion} + 1`,
@@ -2537,6 +2566,20 @@ async function executeTool(
         ...(expectedVersion === undefined ? [] : [eq(commitmentsTable.rowVersion, expectedVersion)]),
       )).returning();
       if (updated) {
+        const wasActive = ["open", "active", "in_progress", "pending"].includes(previous?.status ?? "");
+        const isActive = ["open", "active", "in_progress", "pending"].includes(updated.status);
+        const deadlineChanged = previous?.dueAt?.getTime() !== updated.dueAt?.getTime();
+        if (isActive && updated.dueAt && (!wasActive || deadlineChanged)) {
+          await enqueueProactiveDeadlineTriggers(identity, {
+            entityType: "commitment",
+            entityId: updated.id,
+            title: updated.title,
+            dueAt: updated.dueAt,
+            status: updated.status,
+            rowVersion: updated.rowVersion,
+            occurredAt: updated.updatedAt,
+          }, db, options.triggerOutboxWriter ?? enqueueTriggerOutbox);
+        }
         await enqueueCommitmentDeadlineTrigger(
           identity,
           updated,
@@ -2553,6 +2596,13 @@ async function executeTool(
       const reminderId = stringArg("reminderId");
       if (!reminderId) return { ok: false, error: "reminderId is required." };
       const expectedVersion = expectedRowVersion(args);
+      const [previous] = await db.select({
+        dueAt: remindersTable.dueAt,
+        status: remindersTable.status,
+      }).from(remindersTable).where(and(
+        identityWhere(identity, remindersTable),
+        eq(remindersTable.id, reminderId),
+      )).limit(1);
        const updates: Record<string, unknown> = {
          updatedAt: new Date(),
          rowVersion: sql`${remindersTable.rowVersion} + 1`,
@@ -2570,6 +2620,22 @@ async function executeTool(
         eq(remindersTable.id, reminderId),
         ...(expectedVersion === undefined ? [] : [eq(remindersTable.rowVersion, expectedVersion)]),
       )).returning();
+      if (updated) {
+        const wasActive = ["scheduled", "pending", "open", "active"].includes(previous?.status ?? "");
+        const isActive = ["scheduled", "pending", "open", "active"].includes(updated.status);
+        const deadlineChanged = previous?.dueAt?.getTime() !== updated.dueAt?.getTime();
+        if (isActive && updated.dueAt && (!wasActive || deadlineChanged)) {
+          await enqueueProactiveDeadlineTriggers(identity, {
+            entityType: "reminder",
+            entityId: updated.id,
+            title: updated.text,
+            dueAt: updated.dueAt,
+            status: updated.status,
+            rowVersion: updated.rowVersion,
+            occurredAt: updated.updatedAt,
+          }, db, options.triggerOutboxWriter ?? enqueueTriggerOutbox);
+        }
+      }
       result = updated
         ? { ok: true, reminder: updated }
         : { ok: false, error: expectedVersion === undefined ? "Reminder not found." : "Record changed after this edit was opened." };
@@ -3066,6 +3132,15 @@ async function executeTool(
         },
         dedupeKey: `task-created:v1:${identity.tenantId}:${identity.userId}:${task.id}`,
       }, db);
+      await enqueueProactiveDeadlineTriggers(identity, {
+        entityType: "task",
+        entityId: task.id,
+        title: task.title,
+        dueAt: task.dueAt,
+        status: task.status,
+        rowVersion: task.rowVersion,
+        occurredAt: task.createdAt,
+      }, db, triggerOutboxWriter);
       result = { ok: true, task };
       break;
     }
@@ -3139,6 +3214,15 @@ async function executeTool(
         db,
         options.triggerOutboxWriter ?? enqueueTriggerOutbox,
       );
+      await enqueueProactiveDeadlineTriggers(identity, {
+        entityType: "commitment",
+        entityId: commitment.id,
+        title: commitment.title,
+        dueAt: commitment.dueAt,
+        status: commitment.status,
+        rowVersion: commitment.rowVersion,
+        occurredAt: commitment.createdAt,
+      }, db, options.triggerOutboxWriter ?? enqueueTriggerOutbox);
       result = { ok: true, commitment };
       break;
     }
@@ -3156,6 +3240,17 @@ async function executeTool(
         sourceTurnId: options.sourceTurnId ?? options.requestId,
         sourceOperationId: options.approvedOperationId ?? null,
       }).returning();
+      if (reminder) {
+        await enqueueProactiveDeadlineTriggers(identity, {
+          entityType: "reminder",
+          entityId: reminder.id,
+          title: reminder.text,
+          dueAt: reminder.dueAt,
+          status: reminder.status,
+          rowVersion: reminder.rowVersion,
+          occurredAt: reminder.createdAt,
+        }, db, options.triggerOutboxWriter ?? enqueueTriggerOutbox);
+      }
       result = { ok: true, reminder };
       break;
     }

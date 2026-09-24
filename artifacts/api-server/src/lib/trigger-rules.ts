@@ -1,6 +1,5 @@
 import { and, eq } from "drizzle-orm";
 import {
-  commitmentsTable,
   db,
   agentWorksTable,
 } from "@workspace/db";
@@ -14,6 +13,7 @@ import type {
   TriggerEvaluation,
   TriggerOutboxEvent,
 } from "./trigger-outbox";
+import { evaluateProactiveTrigger } from "./proactive-evaluator";
 
 export type TriggerEvaluationContext = {
   executor: DbExecutor;
@@ -159,41 +159,7 @@ async function commitmentDeadlineEvaluation(
   event: TriggerOutboxEvent,
   context: TriggerEvaluationContext,
 ): Promise<TriggerEvaluation> {
-  const triggerKey = "commitment-deadline-v1";
-  const [commitment] = await context.executor.select().from(commitmentsTable).where(and(
-    eq(commitmentsTable.tenantId, event.tenantId),
-    eq(commitmentsTable.ownerUserId, event.ownerUserId),
-    eq(commitmentsTable.id, event.aggregateId),
-  )).limit(1);
-  if (!commitment) return notEligible(triggerKey, "commitment_not_found");
-  if (["completed", "closed", "cancelled"].includes(commitment.status)) {
-    return notEligible(triggerKey, "commitment_already_completed");
-  }
-  if (!commitment.dueAt) return notEligible(triggerKey, "commitment_has_no_deadline");
-
-  const expectedVersion = integerValue(event.payload.rowVersion);
-  const expectedDueAt = stringValue(event.payload.dueAt);
-  if (expectedVersion !== commitment.rowVersion) {
-    return notEligible(triggerKey, "commitment_deadline_version_changed");
-  }
-  if (!expectedDueAt || expectedDueAt !== commitment.dueAt.toISOString()) {
-    return notEligible(triggerKey, "commitment_deadline_changed");
-  }
-  if (commitment.dueAt.getTime() > context.now.getTime()) {
-    return notEligible(triggerKey, "commitment_deadline_not_reached");
-  }
-  return {
-    eligible: true,
-    triggerKey,
-    reason: "commitment_deadline_reached",
-    workIntentDedupeKey: [
-      "trigger-commitment-deadline",
-      event.tenantId,
-      event.ownerUserId,
-      event.aggregateId,
-      `v${commitment.rowVersion}`,
-    ].join(":"),
-  };
+  return evaluateProactiveTrigger(event, context.executor, context.now);
 }
 
 export function registerTriggerEvaluator(
@@ -218,5 +184,12 @@ export async function evaluateTriggerEvent(
 registerTriggerEvaluator("task.created", "task", taskCreatedEvaluation);
 registerTriggerEvaluator("commitment.deadline", "commitment", commitmentDeadlineEvaluation);
 registerTriggerEvaluator("task.open_count_threshold", "task", thresholdEvaluation);
+registerTriggerEvaluator("task.approaching", "task", commitmentDeadlineEvaluation);
+registerTriggerEvaluator("task.overdue", "task", commitmentDeadlineEvaluation);
+registerTriggerEvaluator("commitment.approaching", "commitment", commitmentDeadlineEvaluation);
+registerTriggerEvaluator("commitment.overdue", "commitment", commitmentDeadlineEvaluation);
+registerTriggerEvaluator("reminder.approaching", "reminder", commitmentDeadlineEvaluation);
+registerTriggerEvaluator("relationship.candidate", "project_people", async (event, context) =>
+  evaluateProactiveTrigger(event, context.executor, context.now));
 
 export type { TriggerEvaluator };

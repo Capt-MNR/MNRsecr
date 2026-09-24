@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { getGetTodayContextQueryKey, getListRecordsQueryKey, useGetEntityGraph, useGetTodayContext, useListRecords, useUpdateRecord, type ApprovalRequest, type CommitmentRecord, type ConversationListResponse, type ExpenseRecord, type PersonRecord, type ProjectRecord, type RecordMutationResponse, type RecordType, type RecordsResponse, type RecordUpdateInput, type ReminderRecord, type TaskRecord, type TodayContext, type TurnResponse } from '@workspace/api-client-react';
+import { getGetTodayContextQueryKey, getListRecordsQueryKey, useCreateProactiveSuppression, useGetEntityGraph, useGetTodayContext, useListRecords, useUpdateRecord, type ApprovalRequest, type CommitmentRecord, type ConversationListResponse, type ExpenseRecord, type PersonRecord, type ProjectRecord, type RecordMutationResponse, type RecordType, type RecordsResponse, type RecordUpdateInput, type ReminderRecord, type TaskRecord, type TodayContext, type TurnResponse } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import {
@@ -109,11 +109,15 @@ export type AssistantPreferences = {
   activity: 'focused' | 'balanced' | 'quiet';
   proactive: 'low' | 'balanced' | 'high';
   intelligence: 'fast' | 'balanced' | 'deep';
+  communicationStyle: 'formal' | 'friendly' | 'concise' | 'balanced';
+  repeatReminders: boolean;
 };
 export const defaultAssistantPreferences: AssistantPreferences = {
   activity: 'balanced',
   proactive: 'balanced',
   intelligence: 'balanced',
+  communicationStyle: 'balanced',
+  repeatReminders: false,
 };
 type ConversationSummary = ConversationListResponse['conversations'][number];
 
@@ -3003,6 +3007,7 @@ function MobileEditSheet({
 export function RecordDetailView({
   record,
   colors,
+  language,
   onBack,
   onAskSecretary,
   onOpenConversation,
@@ -3021,6 +3026,7 @@ export function RecordDetailView({
 }: {
   record: MobileRecordRow;
   colors: ReturnType<typeof useColors>;
+  language: AppLanguage;
   onBack: () => void;
   onAskSecretary: () => void;
   onOpenConversation?: (origin: RecordOrigin) => void;
@@ -3040,13 +3046,21 @@ export function RecordDetailView({
   const queryClient = useQueryClient();
   const recordsQuery = useListRecords({ query: { queryKey: getListRecordsQueryKey(), staleTime: 20_000 } });
   const updateMutation = useUpdateRecord();
+  const suppressionMutation = useCreateProactiveSuppression();
   const [editingRecord, setEditingRecord] = useState<EditableRecord | null>(null);
   const [editingError, setEditingError] = useState<string | null>(null);
+  const [suppressionMessage, setSuppressionMessage] = useState<string | null>(null);
+  const [suppressionError, setSuppressionError] = useState<string | null>(null);
   const [latestRecord, setLatestRecord] = useState<MobileRecordRow | null>(null);
   const editableKind = (record.recordType in editableRecordCollections) ? record.recordType as RecordType : null;
   const displayRecord = latestRecord ?? record;
   const detailRecord = editableKind ? findEditableRecord(recordsQuery.data, displayRecord) : null;
   const detailFields = detailFieldsForRecord(detailRecord, editableKind);
+  const detailStatus = stringValue(objectValue(detailRecord).status, '');
+  const canSuppressProactive = (record.recordType === 'task'
+    && ['pending', 'in_progress'].includes(detailStatus))
+    || (record.recordType === 'commitment'
+      && ['open', 'active', 'in_progress', 'pending'].includes(detailStatus));
   const isEntity = record.recordType === 'person'
     || record.recordType === 'project'
     || record.recordType === 'financial_party';
@@ -3167,6 +3181,64 @@ export function RecordDetailView({
         <Text style={[detailStyles.detailSubtitle, { color: colors.mutedForeground }]}>
           {isEntity ? entitySubtitle : displayRecord.subtitle}
         </Text>
+        {canSuppressProactive && (
+          <View style={{ marginTop: 14, gap: 7 }}>
+            <Pressable
+              testID="record-pause-proactive"
+              accessibilityRole="button"
+              accessibilityLabel={localized(language, 'أنا أتابع هذا الأمر، أوقف التنبيهات مؤقتًا', 'I am tracking this; pause proactive alerts')}
+              disabled={suppressionMutation.isPending || Boolean(suppressionMessage)}
+              onPress={() => {
+                setSuppressionError(null);
+                setSuppressionMessage(null);
+                suppressionMutation.mutate(
+                  {
+                    data: {
+                      entityType: record.recordType as 'task' | 'commitment',
+                      entityId: record.id,
+                    },
+                  },
+                  {
+                    onSuccess: () => setSuppressionMessage(localized(
+                      language,
+                      'تم إيقاف التنبيهات لهذا السجل لمدة 24 ساعة.',
+                      'Proactive alerts for this record are paused for 24 hours.',
+                    )),
+                    onError: () => setSuppressionError(localized(
+                      language,
+                      'تعذر إيقاف التنبيهات. قد لا يكون السجل نشطًا الآن.',
+                      'Could not pause alerts. The record may no longer be active.',
+                    )),
+                  },
+                );
+              }}
+              style={({ pressed }) => [
+                detailStyles.relatedRow,
+                { borderColor: colors.border, borderWidth: 1, borderRadius: 13, opacity: pressed || suppressionMutation.isPending ? 0.65 : 1 },
+              ]}
+            >
+              <Feather name="bell-off" size={15} color={colors.primary} />
+              <Text style={[detailStyles.relatedLabel, { color: colors.foreground, flex: 1 }]}>
+                {localized(language, 'أنا أتابع هذا الأمر', 'I am tracking this')}
+              </Text>
+              <Text style={{ color: colors.mutedForeground, fontSize: 12, textAlign: 'right' }}>
+                {suppressionMutation.isPending
+                  ? localized(language, 'جارٍ الحفظ', 'Saving')
+                  : localized(language, 'إيقاف 24 ساعة', 'Pause 24 hours')}
+              </Text>
+            </Pressable>
+            {suppressionMessage && (
+              <Text accessibilityRole="text" style={{ color: colors.accent, fontSize: 12, textAlign: 'right' }}>
+                {suppressionMessage}
+              </Text>
+            )}
+            {suppressionError && (
+              <Text accessibilityRole="alert" style={{ color: colors.destructive, fontSize: 12, textAlign: 'right' }}>
+                {suppressionError}
+              </Text>
+            )}
+          </View>
+        )}
         {isEntity && typeof entity.phone === 'string' && (
           <Text style={[detailStyles.detailMeta, { color: colors.mutedForeground }]}>{entity.phone}</Text>
         )}
@@ -3801,6 +3873,63 @@ export function MainDrawer({
                 ]}
               >
                 <Text style={[styles.drawerChoiceText, { color: assistantPreferences.intelligence === value ? colors.foreground : colors.mutedForeground }]}>
+                  {localized(language, arabicLabel, englishLabel)}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <Text style={[styles.drawerSettingLabel, { color: colors.mutedForeground }]}>
+            {localized(language, 'أسلوب التواصل', 'Communication style')}
+          </Text>
+          <View style={[styles.drawerChoiceRow, { backgroundColor: colors.muted }]}>
+            {([
+              ['balanced', 'متوازن', 'Balanced'],
+              ['friendly', 'ودود', 'Friendly'],
+              ['concise', 'موجز', 'Concise'],
+              ['formal', 'رسمي', 'Formal'],
+            ] as const).map(([value, arabicLabel, englishLabel]) => (
+              <Pressable
+                key={value}
+                testID={`assistant-style-${value}`}
+                accessibilityRole="button"
+                accessibilityState={{ selected: assistantPreferences.communicationStyle === value }}
+                onPress={() => onAssistantPreferencesChange({ communicationStyle: value })}
+                style={({ pressed }) => [
+                  styles.drawerChoice,
+                  assistantPreferences.communicationStyle === value && { backgroundColor: colors.card, borderColor: colors.border },
+                  { opacity: pressed ? 0.65 : 1 },
+                ]}
+              >
+                <Text style={[styles.drawerChoiceText, { color: assistantPreferences.communicationStyle === value ? colors.foreground : colors.mutedForeground }]}>
+                  {localized(language, arabicLabel, englishLabel)}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <Text style={[styles.drawerSettingLabel, { color: colors.mutedForeground }]}>
+            {localized(language, 'تكرار التذكير', 'Repeat reminders')}
+          </Text>
+          <Text style={[styles.drawerSettingHint, { color: colors.mutedForeground }]}>
+            {localized(language, 'التكرار متوقف افتراضيًا؛ فعّله فقط إذا كنت تريده.', 'Repeats are off by default; enable them only if you want them.') }
+          </Text>
+          <View style={[styles.drawerChoiceRow, { backgroundColor: colors.muted }]}>
+            {([
+              [false, 'مرة واحدة', 'Once'],
+              [true, 'السماح بالتكرار', 'Allow repeats'],
+            ] as const).map(([value, arabicLabel, englishLabel]) => (
+              <Pressable
+                key={String(value)}
+                testID={`assistant-repeat-${value}`}
+                accessibilityRole="button"
+                accessibilityState={{ selected: assistantPreferences.repeatReminders === value }}
+                onPress={() => onAssistantPreferencesChange({ repeatReminders: value })}
+                style={({ pressed }) => [
+                  styles.drawerChoice,
+                  assistantPreferences.repeatReminders === value && { backgroundColor: colors.card, borderColor: colors.border },
+                  { opacity: pressed ? 0.65 : 1 },
+                ]}
+              >
+                <Text style={[styles.drawerChoiceText, { color: assistantPreferences.repeatReminders === value ? colors.foreground : colors.mutedForeground }]}>
                   {localized(language, arabicLabel, englishLabel)}
                 </Text>
               </Pressable>

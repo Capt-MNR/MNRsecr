@@ -22,6 +22,8 @@ tags:
     description: Financial graph operations
   - name: notifications
     description: Mobile notification registration and delivery operations
+  - name: preferences
+    description: Explicit account-scoped secretary preferences and temporary context suppression
   - name: auth
     description: Database-backed user sessions
 paths:
@@ -125,6 +127,68 @@ paths:
                 $ref: "#/components/schemas/MobilePushTokenResponse"
         "400":
           description: Invalid token registration
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /proactive-preferences:
+    get:
+      operationId: getProactivePreferences
+      tags: [preferences]
+      summary: Get the authenticated user's explicit secretary preferences
+      responses:
+        "200":
+          description: Effective preferences and which values were explicitly selected
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProactivePreferences" }
+    patch:
+      operationId: updateProactivePreferences
+      tags: [preferences]
+      summary: Update explicit account-scoped secretary preferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProactivePreferencesUpdate" }
+      responses:
+        "200":
+          description: Updated preferences
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProactivePreferences" }
+        "400":
+          description: Invalid preference value
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /proactive-suppressions:
+    post:
+      operationId: createProactiveSuppression
+      tags: [preferences]
+      summary: Temporarily suppress proactive messages for one active record version
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProactiveSuppressionInput" }
+      responses:
+        "201":
+          description: Temporary suppression created or refreshed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProactiveSuppressionResponse" }
+        "400":
+          description: Invalid entity or inactive record
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "404":
+          description: Record is unavailable to the authenticated user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "409":
+          description: Record is no longer active
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -1928,6 +1992,50 @@ components:
         enabled:
           type: boolean
       required: [registered, enabled]
+    ProactivePreferences:
+      type: object
+      additionalProperties: false
+      properties:
+        activity: { type: string, enum: [focused, balanced, quiet] }
+        proactive: { type: string, enum: [low, balanced, high] }
+        intelligence: { type: string, enum: [fast, balanced, deep] }
+        communicationStyle: { type: string, enum: [formal, friendly, concise, balanced] }
+        language: { type: string, enum: [ar, en] }
+        repeatReminders: { type: boolean }
+        explicitFields:
+          type: array
+          items:
+            type: string
+            enum: [activity, proactive, intelligence, communicationStyle, language, repeatReminders]
+      required: [activity, proactive, intelligence, communicationStyle, language, repeatReminders, explicitFields]
+    ProactivePreferencesUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        activity: { type: ["string", "null"], enum: [focused, balanced, quiet, null] }
+        proactive: { type: ["string", "null"], enum: [low, balanced, high, null] }
+        intelligence: { type: ["string", "null"], enum: [fast, balanced, deep, null] }
+        communicationStyle: { type: ["string", "null"], enum: [formal, friendly, concise, balanced, null] }
+        language: { type: ["string", "null"], enum: [ar, en, null] }
+        repeatReminders: { type: ["boolean", "null"] }
+    ProactiveSuppressionInput:
+      type: object
+      additionalProperties: false
+      properties:
+        entityType: { type: string, enum: [task, commitment] }
+        entityId: { type: string, format: uuid }
+        sourceConversationId: { type: ["string", "null"] }
+        sourceTurnId: { type: ["string", "null"] }
+      required: [entityType, entityId]
+    ProactiveSuppressionResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        suppressed: { type: boolean }
+        entityType: { type: string, enum: [task, commitment] }
+        entityId: { type: string, format: uuid }
+        expiresAt: { type: string, format: date-time }
+      required: [suppressed, entityType, entityId, expiresAt]
     Candidate:
       type: object
       properties:

@@ -9,6 +9,104 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Create a user and private tenant
+ */
+export const signupBodyOneEmailMax = 320;
+
+export const signupBodyOnePasswordMin = 12;
+export const signupBodyOnePasswordMax = 256;
+
+export const signupBodyTwoNameMax = 120;
+
+
+
+export const SignupBody = zod.object({
+  "email": zod.string().email().max(signupBodyOneEmailMax),
+  "password": zod.string().min(signupBodyOnePasswordMin).max(signupBodyOnePasswordMax)
+}).and(zod.object({
+  "name": zod.string().min(1).max(signupBodyTwoNameMax).optional()
+}))
+
+export const SignupResponse = zod.object({
+  "user": zod.object({
+  "userId": zod.string(),
+  "tenantId": zod.string(),
+  "email": zod.string().email()
+}),
+  "accessToken": zod.string().optional(),
+  "refreshToken": zod.string().optional(),
+  "accessExpiresAt": zod.coerce.date(),
+  "refreshExpiresAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Start an authenticated session
+ */
+export const loginBodyEmailMax = 320;
+
+export const loginBodyPasswordMin = 12;
+export const loginBodyPasswordMax = 256;
+
+
+
+export const LoginBody = zod.object({
+  "email": zod.string().email().max(loginBodyEmailMax),
+  "password": zod.string().min(loginBodyPasswordMin).max(loginBodyPasswordMax)
+})
+
+export const LoginResponse = zod.object({
+  "user": zod.object({
+  "userId": zod.string(),
+  "tenantId": zod.string(),
+  "email": zod.string().email()
+}),
+  "accessToken": zod.string().optional(),
+  "refreshToken": zod.string().optional(),
+  "accessExpiresAt": zod.coerce.date(),
+  "refreshExpiresAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Rotate an authenticated session
+ */
+export const RefreshSessionBody = zod.object({
+  "refreshToken": zod.string().optional()
+})
+
+export const RefreshSessionResponse = zod.object({
+  "user": zod.object({
+  "userId": zod.string(),
+  "tenantId": zod.string(),
+  "email": zod.string().email()
+}),
+  "accessToken": zod.string().optional(),
+  "refreshToken": zod.string().optional(),
+  "accessExpiresAt": zod.coerce.date(),
+  "refreshExpiresAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Get the authenticated user
+ */
+export const GetCurrentUserResponse = zod.object({
+  "user": zod.object({
+  "userId": zod.string(),
+  "tenantId": zod.string(),
+  "email": zod.string().email()
+})
+})
+
+
+/**
+ * @summary Revoke the current session
+ */
+export const LogoutResponse = zod.void()
+
+
+/**
  * @summary Register a mobile push token
  */
 export const registerMobilePushTokenBodyTokenMin = 8;
@@ -44,6 +142,61 @@ export const UnregisterMobilePushTokenBody = zod.object({
 export const UnregisterMobilePushTokenResponse = zod.object({
   "registered": zod.boolean(),
   "enabled": zod.boolean()
+})
+
+
+/**
+ * @summary Get the authenticated user's explicit secretary preferences
+ */
+export const GetProactivePreferencesResponse = zod.object({
+  "activity": zod.enum(['focused', 'balanced', 'quiet']),
+  "proactive": zod.enum(['low', 'balanced', 'high']),
+  "intelligence": zod.enum(['fast', 'balanced', 'deep']),
+  "communicationStyle": zod.enum(['formal', 'friendly', 'concise', 'balanced']),
+  "language": zod.enum(['ar', 'en']),
+  "repeatReminders": zod.boolean(),
+  "explicitFields": zod.array(zod.enum(['activity', 'proactive', 'intelligence', 'communicationStyle', 'language', 'repeatReminders']))
+})
+
+
+/**
+ * @summary Update explicit account-scoped secretary preferences
+ */
+export const UpdateProactivePreferencesBody = zod.object({
+  "activity": zod.union([zod.literal('focused'),zod.literal('balanced'),zod.literal('quiet'),zod.literal(null)]).nullish(),
+  "proactive": zod.union([zod.literal('low'),zod.literal('balanced'),zod.literal('high'),zod.literal(null)]).nullish(),
+  "intelligence": zod.union([zod.literal('fast'),zod.literal('balanced'),zod.literal('deep'),zod.literal(null)]).nullish(),
+  "communicationStyle": zod.union([zod.literal('formal'),zod.literal('friendly'),zod.literal('concise'),zod.literal('balanced'),zod.literal(null)]).nullish(),
+  "language": zod.union([zod.literal('ar'),zod.literal('en'),zod.literal(null)]).nullish(),
+  "repeatReminders": zod.boolean().nullish()
+})
+
+export const UpdateProactivePreferencesResponse = zod.object({
+  "activity": zod.enum(['focused', 'balanced', 'quiet']),
+  "proactive": zod.enum(['low', 'balanced', 'high']),
+  "intelligence": zod.enum(['fast', 'balanced', 'deep']),
+  "communicationStyle": zod.enum(['formal', 'friendly', 'concise', 'balanced']),
+  "language": zod.enum(['ar', 'en']),
+  "repeatReminders": zod.boolean(),
+  "explicitFields": zod.array(zod.enum(['activity', 'proactive', 'intelligence', 'communicationStyle', 'language', 'repeatReminders']))
+})
+
+
+/**
+ * @summary Temporarily suppress proactive messages for one active record version
+ */
+export const CreateProactiveSuppressionBody = zod.object({
+  "entityType": zod.enum(['task', 'commitment']),
+  "entityId": zod.string().uuid(),
+  "sourceConversationId": zod.string().nullish(),
+  "sourceTurnId": zod.string().nullish()
+})
+
+export const CreateProactiveSuppressionResponse = zod.object({
+  "suppressed": zod.boolean(),
+  "entityType": zod.enum(['task', 'commitment']),
+  "entityId": zod.string().uuid(),
+  "expiresAt": zod.coerce.date()
 })
 
 

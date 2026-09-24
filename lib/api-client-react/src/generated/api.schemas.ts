@@ -229,6 +229,38 @@ export interface AgentWorkDetails {
   evidence: AgentWorkEvidence[];
 }
 
+export interface AuthUser {
+  userId: string;
+  tenantId: string;
+  email: string;
+}
+
+export interface AuthCredentials {
+  /** @maxLength 320 */
+  email: string;
+  /**
+     * @minLength 12
+     * @maxLength 256
+     */
+  password: string;
+}
+
+export type AuthSignupInput = AuthCredentials & {
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  name?: string;
+};
+
+export interface AuthSessionResponse {
+  user: AuthUser;
+  accessToken?: string;
+  refreshToken?: string;
+  accessExpiresAt: string;
+  refreshExpiresAt: string;
+}
+
 export type ErrorResponseCategory = typeof ErrorResponseCategory[keyof typeof ErrorResponseCategory];
 
 
@@ -624,6 +656,180 @@ export interface UnregisterMobilePushTokenInput {
 export interface MobilePushTokenResponse {
   registered: boolean;
   enabled: boolean;
+}
+
+export type ProactivePreferencesActivity = typeof ProactivePreferencesActivity[keyof typeof ProactivePreferencesActivity];
+
+
+export const ProactivePreferencesActivity = {
+  focused: 'focused',
+  balanced: 'balanced',
+  quiet: 'quiet',
+} as const;
+
+export type ProactivePreferencesProactive = typeof ProactivePreferencesProactive[keyof typeof ProactivePreferencesProactive];
+
+
+export const ProactivePreferencesProactive = {
+  low: 'low',
+  balanced: 'balanced',
+  high: 'high',
+} as const;
+
+export type ProactivePreferencesIntelligence = typeof ProactivePreferencesIntelligence[keyof typeof ProactivePreferencesIntelligence];
+
+
+export const ProactivePreferencesIntelligence = {
+  fast: 'fast',
+  balanced: 'balanced',
+  deep: 'deep',
+} as const;
+
+export type ProactivePreferencesCommunicationStyle = typeof ProactivePreferencesCommunicationStyle[keyof typeof ProactivePreferencesCommunicationStyle];
+
+
+export const ProactivePreferencesCommunicationStyle = {
+  formal: 'formal',
+  friendly: 'friendly',
+  concise: 'concise',
+  balanced: 'balanced',
+} as const;
+
+export type ProactivePreferencesLanguage = typeof ProactivePreferencesLanguage[keyof typeof ProactivePreferencesLanguage];
+
+
+export const ProactivePreferencesLanguage = {
+  ar: 'ar',
+  en: 'en',
+} as const;
+
+export type ProactivePreferencesExplicitFieldsItem = typeof ProactivePreferencesExplicitFieldsItem[keyof typeof ProactivePreferencesExplicitFieldsItem];
+
+
+export const ProactivePreferencesExplicitFieldsItem = {
+  activity: 'activity',
+  proactive: 'proactive',
+  intelligence: 'intelligence',
+  communicationStyle: 'communicationStyle',
+  language: 'language',
+  repeatReminders: 'repeatReminders',
+} as const;
+
+export interface ProactivePreferences {
+  activity: ProactivePreferencesActivity;
+  proactive: ProactivePreferencesProactive;
+  intelligence: ProactivePreferencesIntelligence;
+  communicationStyle: ProactivePreferencesCommunicationStyle;
+  language: ProactivePreferencesLanguage;
+  repeatReminders: boolean;
+  explicitFields: ProactivePreferencesExplicitFieldsItem[];
+}
+
+/**
+ * @nullable
+ */
+export type ProactivePreferencesUpdateActivity = typeof ProactivePreferencesUpdateActivity[keyof typeof ProactivePreferencesUpdateActivity] | null;
+
+
+export const ProactivePreferencesUpdateActivity = {
+  focused: 'focused',
+  balanced: 'balanced',
+  quiet: 'quiet',
+} as const;
+
+/**
+ * @nullable
+ */
+export type ProactivePreferencesUpdateProactive = typeof ProactivePreferencesUpdateProactive[keyof typeof ProactivePreferencesUpdateProactive] | null;
+
+
+export const ProactivePreferencesUpdateProactive = {
+  low: 'low',
+  balanced: 'balanced',
+  high: 'high',
+} as const;
+
+/**
+ * @nullable
+ */
+export type ProactivePreferencesUpdateIntelligence = typeof ProactivePreferencesUpdateIntelligence[keyof typeof ProactivePreferencesUpdateIntelligence] | null;
+
+
+export const ProactivePreferencesUpdateIntelligence = {
+  fast: 'fast',
+  balanced: 'balanced',
+  deep: 'deep',
+} as const;
+
+/**
+ * @nullable
+ */
+export type ProactivePreferencesUpdateCommunicationStyle = typeof ProactivePreferencesUpdateCommunicationStyle[keyof typeof ProactivePreferencesUpdateCommunicationStyle] | null;
+
+
+export const ProactivePreferencesUpdateCommunicationStyle = {
+  formal: 'formal',
+  friendly: 'friendly',
+  concise: 'concise',
+  balanced: 'balanced',
+} as const;
+
+/**
+ * @nullable
+ */
+export type ProactivePreferencesUpdateLanguage = typeof ProactivePreferencesUpdateLanguage[keyof typeof ProactivePreferencesUpdateLanguage] | null;
+
+
+export const ProactivePreferencesUpdateLanguage = {
+  ar: 'ar',
+  en: 'en',
+} as const;
+
+export interface ProactivePreferencesUpdate {
+  /** @nullable */
+  activity?: ProactivePreferencesUpdateActivity;
+  /** @nullable */
+  proactive?: ProactivePreferencesUpdateProactive;
+  /** @nullable */
+  intelligence?: ProactivePreferencesUpdateIntelligence;
+  /** @nullable */
+  communicationStyle?: ProactivePreferencesUpdateCommunicationStyle;
+  /** @nullable */
+  language?: ProactivePreferencesUpdateLanguage;
+  /** @nullable */
+  repeatReminders?: boolean | null;
+}
+
+export type ProactiveSuppressionInputEntityType = typeof ProactiveSuppressionInputEntityType[keyof typeof ProactiveSuppressionInputEntityType];
+
+
+export const ProactiveSuppressionInputEntityType = {
+  task: 'task',
+  commitment: 'commitment',
+} as const;
+
+export interface ProactiveSuppressionInput {
+  entityType: ProactiveSuppressionInputEntityType;
+  entityId: string;
+  /** @nullable */
+  sourceConversationId?: string | null;
+  /** @nullable */
+  sourceTurnId?: string | null;
+}
+
+export type ProactiveSuppressionResponseEntityType = typeof ProactiveSuppressionResponseEntityType[keyof typeof ProactiveSuppressionResponseEntityType];
+
+
+export const ProactiveSuppressionResponseEntityType = {
+  task: 'task',
+  commitment: 'commitment',
+} as const;
+
+export interface ProactiveSuppressionResponse {
+  suppressed: boolean;
+  entityType: ProactiveSuppressionResponseEntityType;
+  entityId: string;
+  expiresAt: string;
 }
 
 export interface Candidate {
@@ -1368,6 +1574,14 @@ export interface EntityGraphResponse {
   capabilities?: EntityGraphResponseCapabilities;
   [key: string]: unknown;
  }
+
+export type RefreshSessionBody = {
+  refreshToken?: string;
+};
+
+export type GetCurrentUser200 = {
+  user: AuthUser;
+};
 
 export type ListTypedRelationshipsParams = {
 relation: string;

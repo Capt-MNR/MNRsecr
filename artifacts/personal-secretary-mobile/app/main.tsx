@@ -1,10 +1,14 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
+import {
+  getGetProactivePreferencesQueryKey,
+  useGetProactivePreferences,
+  useUpdateProactivePreferences,
+} from '@workspace/api-client-react';
 import { ActivityIndicator, Platform, Pressable, Text, TextInput, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -126,6 +130,13 @@ export default function MainRoute() {
   const [conversationSearch, setConversationSearch] = useState('');
   const [assistantPreferences, setAssistantPreferences] = useState<AssistantPreferences>(defaultAssistantPreferences);
   const queryClient = useQueryClient();
+  const proactivePreferencesQuery = useGetProactivePreferences({
+    query: {
+      queryKey: getGetProactivePreferencesQueryKey(),
+      staleTime: 30_000,
+    },
+  });
+  const updateProactivePreferences = useUpdateProactivePreferences();
   const secretaryChat = useSecretaryChatService(conversationToLoad, conversationSearch.trim(), true);
   const conversationQuery = secretaryChat.conversationQuery;
   const recentConversations = secretaryChat.conversationsQuery.data?.conversations ?? [];
@@ -138,6 +149,56 @@ export default function MainRoute() {
     },
     setLocalError,
   );
+  function applyPreferenceResponse(preferences: NonNullable<typeof proactivePreferencesQuery.data>) {
+    setAssistantPreferences({
+      activity: preferences.activity,
+      proactive: preferences.proactive,
+      intelligence: preferences.intelligence,
+      communicationStyle: preferences.communicationStyle,
+      repeatReminders: preferences.repeatReminders,
+    });
+    if (preferences.explicitFields.includes('language')) {
+      setLanguage(preferences.language);
+    }
+  }
+  function updateAssistantPreference(patch: Partial<AssistantPreferences>) {
+    setAssistantPreferences((current) => ({ ...current, ...patch }));
+    updateProactivePreferences.mutate(
+      { data: patch },
+      {
+        onSuccess: (preferences) => {
+          queryClient.setQueryData(getGetProactivePreferencesQueryKey(), preferences);
+          applyPreferenceResponse(preferences);
+          setLocalError(null);
+        },
+        onError: () => {
+          if (proactivePreferencesQuery.data) applyPreferenceResponse(proactivePreferencesQuery.data);
+          setLocalError(language === 'ar'
+            ? 'تعذر حفظ الإعدادات على الحساب. تمت استعادة آخر إعداد محفوظ.'
+            : 'Could not save account settings. The last saved settings were restored.');
+        },
+      },
+    );
+  }
+  function updateAppLanguage(value: 'ar' | 'en') {
+    setLanguage(value);
+    updateProactivePreferences.mutate(
+      { data: { language: value } },
+      {
+        onSuccess: (preferences) => {
+          queryClient.setQueryData(getGetProactivePreferencesQueryKey(), preferences);
+          applyPreferenceResponse(preferences);
+          setLocalError(null);
+        },
+        onError: () => {
+          if (proactivePreferencesQuery.data) applyPreferenceResponse(proactivePreferencesQuery.data);
+          setLocalError(language === 'ar'
+            ? 'تعذر حفظ اللغة على الحساب.'
+            : 'Could not save the language to your account.');
+        },
+      },
+    );
+  }
   function updateInputReview(result: SecretaryInputResult) {
     setInputReview(result);
     setDraft(result.kind === 'receipt' ? receiptDraft(result) : result.text);
@@ -165,29 +226,19 @@ export default function MainRoute() {
   }, [params.workId]);
 
   useEffect(() => {
-    let active = true;
-    void AsyncStorage.getItem('secretary:assistant-preferences').then((storedPreferences) => {
-      if (!active) return;
-      if (storedPreferences) {
-        try {
-          const parsed = JSON.parse(storedPreferences) as Partial<AssistantPreferences>;
-          setAssistantPreferences({ ...defaultAssistantPreferences, ...parsed });
-        } catch {
-          setAssistantPreferences(defaultAssistantPreferences);
-        }
-      }
-      setHydrated(true);
-    }).catch(() => setHydrated(true));
     void initializeSecretaryPush();
-    return () => {
-      active = false;
-    };
-  }, [router]);
+  }, []);
 
   useEffect(() => {
-    if (!hydrated) return;
-    void AsyncStorage.setItem('secretary:assistant-preferences', JSON.stringify(assistantPreferences));
-  }, [assistantPreferences, hydrated]);
+    if (!proactivePreferencesQuery.isFetched) return;
+    if (proactivePreferencesQuery.data) applyPreferenceResponse(proactivePreferencesQuery.data);
+    else if (proactivePreferencesQuery.isError) {
+      setLocalError(language === 'ar'
+        ? 'تعذر تحميل تفضيلات الحساب.'
+        : 'Could not load account preferences.');
+    }
+    setHydrated(true);
+  }, [proactivePreferencesQuery.data, proactivePreferencesQuery.isFetched, proactivePreferencesQuery.isError]);
 
   useEffect(() => {
     if (!conversationToLoad || loadedConversationId === conversationToLoad || !conversationQuery.data) return;
@@ -389,7 +440,7 @@ export default function MainRoute() {
             </View>
             {selectedRecord && (
               <View style={[{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }, { backgroundColor: colors.background }]}>
-                <RecordDetailView record={selectedRecord} colors={colors} onBack={() => { setSelectedRecord(null); setMainSection(recordReturnSection); }} onAskSecretary={askSecretaryAboutRecord} onOpenConversation={openConversation} onOpenRelatedRecord={openRecord} onPendingApproval={handleRecordPendingApproval} onRecordSaved={() => setSelectedRecord(null)} chatMessages={messages} chatDraft={draft} onChangeChatDraft={setDraft} onSendChat={() => void sendMessage()} chatBusy={secretaryChat.isSending || conversationQuery.isFetching} onApprove={(approval, args) => void updateApproval(approval, 'completed', args)} onReject={(approval) => void updateApproval(approval, 'rejected')} busyOperationId={busyOperationId} chatContext={chatContext} />
+                <RecordDetailView record={selectedRecord} colors={colors} language={language} onBack={() => { setSelectedRecord(null); setMainSection(recordReturnSection); }} onAskSecretary={askSecretaryAboutRecord} onOpenConversation={openConversation} onOpenRelatedRecord={openRecord} onPendingApproval={handleRecordPendingApproval} onRecordSaved={() => setSelectedRecord(null)} chatMessages={messages} chatDraft={draft} onChangeChatDraft={setDraft} onSendChat={() => void sendMessage()} chatBusy={secretaryChat.isSending || conversationQuery.isFetching} onApprove={(approval, args) => void updateApproval(approval, 'completed', args)} onReject={(approval) => void updateApproval(approval, 'rejected')} busyOperationId={busyOperationId} chatContext={chatContext} />
               </View>
             )}
           </View>
@@ -419,9 +470,9 @@ export default function MainRoute() {
             setMemorySheetOpen(true);
           }}
           onThemeChange={setThemePreference}
-          onLanguageChange={setLanguage}
+          onLanguageChange={updateAppLanguage}
           assistantPreferences={assistantPreferences}
-          onAssistantPreferencesChange={(patch) => setAssistantPreferences((current) => ({ ...current, ...patch }))}
+          onAssistantPreferencesChange={updateAssistantPreference}
            onLogout={() => void handleLogout()}
         />
       )}

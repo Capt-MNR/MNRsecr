@@ -19,6 +19,12 @@ import {
   tasksTable,
 } from "@workspace/db";
 import type { DbExecutor, Identity } from "./entity-graph";
+import {
+  findProjectPeopleEvidence,
+  projectPersonAlreadyLinked,
+  relationshipCandidateNames,
+} from "./proactive-evaluator";
+import { enqueueTriggerOutbox } from "./trigger-outbox";
 
 export const RELATION_TYPES = [
   "project_people",
@@ -72,6 +78,67 @@ async function accessible(identity: Identity, table: any, id: string, executor: 
   if (!row) throw new Error("Related entity is not accessible.");
 }
 
+async function enqueueProjectPersonCandidates(
+  identity: Identity,
+  relation: string,
+  relationship: Record<string, unknown>,
+  executor: DbExecutor,
+): Promise<void> {
+  if (!["task_people", "task_projects", "reminder_people", "reminder_projects"].includes(relation)) return;
+  const evidenceRows = await findProjectPeopleEvidence(executor, identity, {
+    relation: relation as "task_people" | "task_projects" | "reminder_people" | "reminder_projects",
+    relationship,
+  });
+  for (const row of evidenceRows) {
+    if (await projectPersonAlreadyLinked(executor, identity, row.projectId, row.personId)) continue;
+    const names = await relationshipCandidateNames(executor, identity, row.projectId, row.personId);
+    if (!names.projectName || !names.personName) continue;
+    const personSource = row.anchorType === "task" ? "task_people" : "reminder_people";
+    const projectSource = row.anchorType === "task" ? "task_projects" : "reminder_projects";
+    const evidence = [
+      {
+        source: personSource,
+        sourceId: row.personRelationId,
+        value: `${row.anchorType} "${row.anchorType === "task" ? row.taskTitle : row.reminderTitle}" is explicitly linked to person "${names.personName}".`,
+        structured: true,
+      },
+      {
+        source: projectSource,
+        sourceId: row.projectRelationId,
+        value: `${row.anchorType} "${row.anchorType === "task" ? row.taskTitle : row.reminderTitle}" is explicitly linked to project "${names.projectName}".`,
+        structured: true,
+      },
+    ];
+    const evidenceVersion = evidence.map((item) => `${item.source}:${item.sourceId}`).sort().join("|");
+    await enqueueTriggerOutbox({
+      identity,
+      eventType: "relationship.candidate",
+      aggregateType: "project_people",
+      aggregateId: `${row.projectId}:${row.personId}`,
+      occurredAt: new Date(),
+      payload: {
+        candidate: {
+          id: `project:${row.projectId}:person:${row.personId}`,
+          name: `${names.personName} — ${names.projectName}`,
+          relation: "project_people",
+          projectId: row.projectId,
+          personId: row.personId,
+        },
+        evidence,
+        evidenceVersion,
+      },
+      dedupeKey: [
+        "proactive-relationship:v1",
+        identity.tenantId,
+        identity.userId,
+        row.projectId,
+        row.personId,
+        evidenceVersion,
+      ].join(":"),
+    }, executor);
+  }
+}
+
 export async function createTypedRelationship(
   identity: Identity,
   args: Record<string, unknown>,
@@ -93,7 +160,10 @@ export async function createTypedRelationship(
   };
   const createdRows = await executor.insert(config.table).values(values).onConflictDoNothing().returning() as any[];
   const created = createdRows[0];
-  if (created) return { relation, relationship: created };
+  if (created) {
+    await enqueueProjectPersonCandidates(identity, relation, created, executor);
+    return { relation, relationship: created };
+  }
   const [existing] = await executor.select().from(config.table).where(and(
     eq(config.table.tenantId, identity.tenantId),
     eq(config.table.ownerUserId, identity.userId),

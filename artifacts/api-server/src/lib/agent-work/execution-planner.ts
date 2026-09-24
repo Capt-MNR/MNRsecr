@@ -212,6 +212,9 @@ async function buildActionPlan(
 
   const source = asRecord(trigger.source);
   if (source.type === "trigger_outbox") {
+    const action = asRecord(work.action);
+    const notificationData = asRecord(action.data);
+    const proactive = action.type === "proactive_message";
     return {
       plan: {
         status: "verified",
@@ -223,9 +226,10 @@ async function buildActionPlan(
           eventId: typeof source.eventId === "string" ? source.eventId : null,
           triggerKey: typeof source.triggerKey === "string" ? source.triggerKey : null,
         },
-        notificationTitle: title,
-        notificationBody: "",
-        notify: false,
+        notificationTitle: typeof action.title === "string" ? action.title : title,
+        notificationBody: proactive && typeof action.body === "string" ? action.body : "",
+        notificationData: proactive ? notificationData : undefined,
+        notify: proactive,
       },
       evidence: {
         workKind: work.kind,

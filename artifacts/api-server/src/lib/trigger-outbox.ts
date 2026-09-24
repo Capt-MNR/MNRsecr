@@ -70,6 +70,11 @@ export type TriggerEvaluation = {
   triggerKey: string;
   reason: string;
   workIntentDedupeKey?: string;
+  proactiveMessage?: {
+    title: string;
+    body: string;
+    data: Record<string, unknown>;
+  };
   defer?: boolean;
 };
 
@@ -413,11 +418,12 @@ async function processClaimedEvent(event: TriggerOutboxEvent, now: Date): Promis
           eq(agentWorksTable.dedupeKey, dedupeKey),
         )).limit(1);
       outcome = existing ? "coalesced" : "processed";
+      const proactiveMessage = evaluation.proactiveMessage;
       await agentWorkRuntime.createWork({
         identity,
         kind: "workflow",
-        title: `Trigger: ${currentEvent.eventType}`,
-        description: `تم إنشاء WorkIntent من ${currentEvent.eventType}.`,
+        title: proactiveMessage?.title ?? `Trigger: ${currentEvent.eventType}`,
+        description: proactiveMessage?.body ?? `تم إنشاء WorkIntent من ${currentEvent.eventType}.`,
         status: "active",
         dedupeKey,
         source: {
@@ -435,9 +441,16 @@ async function processClaimedEvent(event: TriggerOutboxEvent, now: Date): Promis
           aggregateType: currentEvent.aggregateType,
           aggregateId: currentEvent.aggregateId,
         },
-        action: { type: "none" },
+        action: proactiveMessage
+          ? {
+              type: "proactive_message",
+              title: proactiveMessage.title,
+              body: proactiveMessage.body,
+              data: proactiveMessage.data,
+            }
+          : { type: "none" },
         schedule: { frequency: "once" },
-        nextRunAt: currentEvent.occurredAt,
+        nextRunAt: now,
         transactionExecutor: tx,
       });
     }

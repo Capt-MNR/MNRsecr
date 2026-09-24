@@ -1102,6 +1102,68 @@ export const learningSignalReviewsTable = pgTable(
   ],
 );
 
+/**
+ * Explicit, account-scoped operating and communication preferences.
+ * Null means the user has not explicitly selected a value; defaults are
+ * resolved by the application and are never inferred from observed behavior.
+ */
+export const proactivePreferencesTable = pgTable(
+  "proactive_preferences",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    activity: text("activity"),
+    proactive: text("proactive"),
+    intelligence: text("intelligence"),
+    communicationStyle: text("communication_style"),
+    language: text("language"),
+    repeatReminders: boolean("repeat_reminders"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("proactive_preferences_owner_unique").on(
+      table.tenantId,
+      table.ownerUserId,
+    ),
+  ],
+);
+
+/**
+ * Short-lived, record-and-version scoped suppression requested by the user.
+ * It is deliberately separate from account-wide notification preferences.
+ */
+export const proactiveSuppressionsTable = pgTable(
+  "proactive_suppressions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    entityType: text("entity_type").notNull(),
+    entityId: uuid("entity_id").notNull(),
+    contextVersion: integer("context_version").notNull(),
+    reason: text("reason").notNull(),
+    sourceConversationId: text("source_conversation_id"),
+    sourceTurnId: text("source_turn_id"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("proactive_suppressions_owner_context_unique").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.entityType,
+      table.entityId,
+      table.contextVersion,
+    ),
+    index("proactive_suppressions_owner_expiry_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.expiresAt,
+    ),
+  ],
+);
+
 export const activityEventsTable = pgTable(
   "activity_events",
   {

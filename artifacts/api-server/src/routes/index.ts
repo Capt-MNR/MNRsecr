@@ -11,10 +11,12 @@ import memoriesRouter from "./memories";
 import memoryCandidatesRouter from "./memory-candidates";
 import agentWorkRouter from "./agent-work";
 import authRouter from "./auth";
+import proactivePreferencesRouter from "./proactive-preferences";
 
 const router: IRouter = Router();
 
 router.use(authRouter);
+router.use(proactivePreferencesRouter);
 router.use(healthRouter);
 router.use(secretaryRouter);
 router.use(conversationsRouter);
