@@ -35,6 +35,7 @@ import type {
   ConversationDetail,
   ConversationListResponse,
   CreateAgentWork201,
+  CreateSecondBrainMemoryRequest,
   CreateTypedRelationshipParams,
   EntityGraphResponse,
   EntityTimelineResponse,
@@ -78,6 +79,7 @@ import type {
   SecondBrainCandidateListResponse,
   SecondBrainCandidateResponse,
   SecondBrainCandidateReviewInput,
+  SecondBrainMemoryHistoryListResponse,
   SecondBrainMemoryListResponse,
   SecondBrainMemoryResponse,
   TodayContextResponse,
@@ -3374,6 +3376,94 @@ export function useGetTodayContext<TData = Awaited<ReturnType<typeof getTodayCon
 
 
 
+export const getCreateSecondBrainMemoryUrl = () => {
+
+
+
+
+  return `/api/memories`
+}
+
+/**
+ * @summary Save an explicit personal memory with an optional expiry
+ */
+export const createSecondBrainMemory = async (createSecondBrainMemoryRequest: CreateSecondBrainMemoryRequest, options?: Parameters<typeof customFetch>[1]): Promise<SecondBrainMemoryResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<SecondBrainMemoryResponse>(getCreateSecondBrainMemoryUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(createSecondBrainMemoryRequest)
+  }
+);}
+
+
+
+
+
+export const getCreateSecondBrainMemoryMutationKey = () => ['createSecondBrainMemory'] as const;
+
+export const getCreateSecondBrainMemoryMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSecondBrainMemory>>, TError,CreateSecondBrainMemoryMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createSecondBrainMemory>>, TError,CreateSecondBrainMemoryMutationVariables, TContext> => {
+
+const mutationKey = getCreateSecondBrainMemoryMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createSecondBrainMemory>>, CreateSecondBrainMemoryMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createSecondBrainMemory(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateSecondBrainMemoryMutationResult = NonNullable<Awaited<ReturnType<typeof createSecondBrainMemory>>>
+    export type CreateSecondBrainMemoryMutationBody = BodyType<CreateSecondBrainMemoryRequest>
+    export type CreateSecondBrainMemoryMutationError = ErrorType<ErrorResponse>
+    export type CreateSecondBrainMemoryMutationVariables = {data: BodyType<CreateSecondBrainMemoryRequest>}
+
+    /**
+ * @summary Save an explicit personal memory with an optional expiry
+ */
+export const useCreateSecondBrainMemory = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSecondBrainMemory>>, TError,CreateSecondBrainMemoryMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createSecondBrainMemory>>,
+        TError,
+        CreateSecondBrainMemoryMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateSecondBrainMemoryMutationOptions(options));
+    }
+
 export const getListSecondBrainMemoriesUrl = (params?: ListSecondBrainMemoriesParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -3605,6 +3695,83 @@ export const useRestoreSecondBrainMemory = <TError = ErrorType<ErrorResponse>,
       > => {
       return useMutation(getRestoreSecondBrainMemoryMutationOptions(options));
     }
+
+export const getListSecondBrainMemoryHistoryUrl = (memoryId: string,) => {
+
+
+
+
+  return `/api/memories/${memoryId}/history`
+}
+
+/**
+ * @summary List the owner-scoped versions and temporal transitions for a memory
+ */
+export const listSecondBrainMemoryHistory = async (memoryId: string, options?: Parameters<typeof customFetch>[1]): Promise<SecondBrainMemoryHistoryListResponse> => {
+
+  return customFetch<SecondBrainMemoryHistoryListResponse>(getListSecondBrainMemoryHistoryUrl(memoryId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListSecondBrainMemoryHistoryQueryKey = (memoryId: string,) => {
+    return [
+    `/api/memories/${memoryId}/history`
+    ] as const;
+    }
+
+
+export const getListSecondBrainMemoryHistoryQueryOptions = <TData = Awaited<ReturnType<typeof listSecondBrainMemoryHistory>>, TError = ErrorType<ErrorResponse>>(memoryId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSecondBrainMemoryHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListSecondBrainMemoryHistoryQueryKey(memoryId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSecondBrainMemoryHistory>>> = ({ signal }) => listSecondBrainMemoryHistory(memoryId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: memoryId !== null && memoryId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSecondBrainMemoryHistory>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListSecondBrainMemoryHistoryQueryResult = NonNullable<Awaited<ReturnType<typeof listSecondBrainMemoryHistory>>>
+export type ListSecondBrainMemoryHistoryQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary List the owner-scoped versions and temporal transitions for a memory
+ */
+
+export function useListSecondBrainMemoryHistory<TData = Awaited<ReturnType<typeof listSecondBrainMemoryHistory>>, TError = ErrorType<ErrorResponse>>(
+ memoryId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSecondBrainMemoryHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListSecondBrainMemoryHistoryQueryOptions(memoryId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getListSecondBrainCandidatesUrl = (params?: ListSecondBrainCandidatesParams,) => {
   const normalizedParams = new URLSearchParams();

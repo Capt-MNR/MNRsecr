@@ -988,6 +988,43 @@ export const GetTodayContextResponse = zod.object({
 
 
 /**
+ * @summary Save an explicit personal memory with an optional expiry
+ */
+export const createSecondBrainMemoryBodyKeyMax = 160;
+
+export const createSecondBrainMemoryBodyValueMax = 320;
+
+
+
+export const CreateSecondBrainMemoryBody = zod.object({
+  "kind": zod.enum(['fact', 'preference']),
+  "key": zod.string().min(1).max(createSecondBrainMemoryBodyKeyMax),
+  "value": zod.string().min(1).max(createSecondBrainMemoryBodyValueMax),
+  "expiresAt": zod.coerce.date().nullish()
+})
+
+export const CreateSecondBrainMemoryResponse = zod.object({
+  "memory": zod.object({
+  "id": zod.string().uuid(),
+  "kind": zod.enum(['fact', 'preference', 'alias']),
+  "key": zod.string(),
+  "value": zod.string(),
+  "confidence": zod.number(),
+  "status": zod.enum(['active', 'archived']),
+  "temporalState": zod.enum(['current', 'expired', 'archived']),
+  "sourceKind": zod.string(),
+  "revision": zod.number().int(),
+  "sourceConversationId": zod.string().nullable(),
+  "sourceTurnId": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "lastConfirmedAt": zod.coerce.date().nullable(),
+  "expiresAt": zod.coerce.date().nullable()
+})
+})
+
+
+/**
  * @summary List active personal Second Brain memories
  */
 export const listSecondBrainMemoriesQuerySearchMax = 160;
@@ -1008,10 +1045,15 @@ export const ListSecondBrainMemoriesResponse = zod.object({
   "value": zod.string(),
   "confidence": zod.number(),
   "status": zod.enum(['active', 'archived']),
+  "temporalState": zod.enum(['current', 'expired', 'archived']),
+  "sourceKind": zod.string(),
+  "revision": zod.number().int(),
   "sourceConversationId": zod.string().nullable(),
   "sourceTurnId": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
-  "lastConfirmedAt": zod.coerce.date().nullable()
+  "lastConfirmedAt": zod.coerce.date().nullable(),
+  "expiresAt": zod.coerce.date().nullable()
 }))
 })
 
@@ -1031,10 +1073,15 @@ export const ArchiveSecondBrainMemoryResponse = zod.object({
   "value": zod.string(),
   "confidence": zod.number(),
   "status": zod.enum(['active', 'archived']),
+  "temporalState": zod.enum(['current', 'expired', 'archived']),
+  "sourceKind": zod.string(),
+  "revision": zod.number().int(),
   "sourceConversationId": zod.string().nullable(),
   "sourceTurnId": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
-  "lastConfirmedAt": zod.coerce.date().nullable()
+  "lastConfirmedAt": zod.coerce.date().nullable(),
+  "expiresAt": zod.coerce.date().nullable()
 })
 })
 
@@ -1054,11 +1101,47 @@ export const RestoreSecondBrainMemoryResponse = zod.object({
   "value": zod.string(),
   "confidence": zod.number(),
   "status": zod.enum(['active', 'archived']),
+  "temporalState": zod.enum(['current', 'expired', 'archived']),
+  "sourceKind": zod.string(),
+  "revision": zod.number().int(),
   "sourceConversationId": zod.string().nullable(),
   "sourceTurnId": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
-  "lastConfirmedAt": zod.coerce.date().nullable()
+  "lastConfirmedAt": zod.coerce.date().nullable(),
+  "expiresAt": zod.coerce.date().nullable()
 })
+})
+
+
+/**
+ * @summary List the owner-scoped versions and temporal transitions for a memory
+ */
+export const ListSecondBrainMemoryHistoryParams = zod.object({
+  "memoryId": zod.coerce.string().uuid()
+})
+
+export const ListSecondBrainMemoryHistoryResponse = zod.object({
+  "versions": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "memoryId": zod.string().uuid(),
+  "revision": zod.number().int(),
+  "kind": zod.enum(['fact', 'preference', 'alias']),
+  "key": zod.string(),
+  "value": zod.string(),
+  "confidence": zod.number(),
+  "temporalState": zod.enum(['current', 'historical', 'superseded', 'expired', 'archived', 'conflict']),
+  "sourceKind": zod.string(),
+  "sourceConversationId": zod.string().nullable(),
+  "sourceTurnId": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "lastConfirmedAt": zod.coerce.date().nullable(),
+  "expiresAt": zod.coerce.date().nullable(),
+  "validFrom": zod.coerce.date(),
+  "validTo": zod.coerce.date().nullable(),
+  "recordedAt": zod.coerce.date()
+}))
 })
 
 
@@ -1139,10 +1222,15 @@ export const CreateSecondBrainCandidateResponse = zod.object({
   "value": zod.string(),
   "confidence": zod.number(),
   "status": zod.enum(['active', 'archived']),
+  "temporalState": zod.enum(['current', 'expired', 'archived']),
+  "sourceKind": zod.string(),
+  "revision": zod.number().int(),
   "sourceConversationId": zod.string().nullable(),
   "sourceTurnId": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
-  "lastConfirmedAt": zod.coerce.date().nullable()
+  "lastConfirmedAt": zod.coerce.date().nullable(),
+  "expiresAt": zod.coerce.date().nullable()
 }),zod.null()])
 })
 
@@ -1189,10 +1277,15 @@ export const ReviewSecondBrainCandidateResponse = zod.object({
   "value": zod.string(),
   "confidence": zod.number(),
   "status": zod.enum(['active', 'archived']),
+  "temporalState": zod.enum(['current', 'expired', 'archived']),
+  "sourceKind": zod.string(),
+  "revision": zod.number().int(),
   "sourceConversationId": zod.string().nullable(),
   "sourceTurnId": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
-  "lastConfirmedAt": zod.coerce.date().nullable()
+  "lastConfirmedAt": zod.coerce.date().nullable(),
+  "expiresAt": zod.coerce.date().nullable()
 }),zod.null()])
 })
 
@@ -1235,10 +1328,15 @@ export const AssociateSecondBrainCandidateResponse = zod.object({
   "value": zod.string(),
   "confidence": zod.number(),
   "status": zod.enum(['active', 'archived']),
+  "temporalState": zod.enum(['current', 'expired', 'archived']),
+  "sourceKind": zod.string(),
+  "revision": zod.number().int(),
   "sourceConversationId": zod.string().nullable(),
   "sourceTurnId": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date(),
-  "lastConfirmedAt": zod.coerce.date().nullable()
+  "lastConfirmedAt": zod.coerce.date().nullable(),
+  "expiresAt": zod.coerce.date().nullable()
 }),zod.null()])
 })
 

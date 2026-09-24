@@ -640,6 +640,35 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
   /memories:
+    post:
+      operationId: createSecondBrainMemory
+      tags: [secretary]
+      summary: Save an explicit personal memory with an optional expiry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSecondBrainMemoryRequest"
+      responses:
+        "201":
+          description: Saved personal memory
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SecondBrainMemoryResponse"
+        "400":
+          description: Invalid memory input or expiry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     get:
       operationId: listSecondBrainMemories
       tags: [secretary]
@@ -736,6 +765,37 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Archived memory not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /memories/{memoryId}/history:
+    get:
+      operationId: listSecondBrainMemoryHistory
+      tags: [secretary]
+      summary: List the owner-scoped versions and temporal transitions for a memory
+      parameters:
+        - name: memoryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Current and historical memory versions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SecondBrainMemoryHistoryListResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Memory not found
           content:
             application/json:
               schema:
@@ -2155,17 +2215,108 @@ components:
         status:
           type: string
           enum: [active, archived]
+        temporalState:
+          type: string
+          enum: [current, expired, archived]
+        sourceKind:
+          type: string
+        revision:
+          type: integer
         sourceConversationId:
           type: ["string", "null"]
         sourceTurnId:
           type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
         updatedAt:
           type: string
           format: date-time
         lastConfirmedAt:
           type: ["string", "null"]
           format: date-time
-      required: [id, kind, key, value, confidence, status, sourceConversationId, sourceTurnId, updatedAt, lastConfirmedAt]
+        expiresAt:
+          type: ["string", "null"]
+          format: date-time
+      required: [id, kind, key, value, confidence, status, temporalState, sourceKind, revision, sourceConversationId, sourceTurnId, createdAt, updatedAt, lastConfirmedAt, expiresAt]
+    CreateSecondBrainMemoryRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum: [fact, preference]
+        key:
+          type: string
+          minLength: 1
+          maxLength: 160
+        value:
+          type: string
+          minLength: 1
+          maxLength: 320
+        expiresAt:
+          type: ["string", "null"]
+          format: date-time
+      required: [kind, key, value]
+    SecondBrainMemoryHistoryItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        memoryId:
+          type: string
+          format: uuid
+        revision:
+          type: integer
+        kind:
+          type: string
+          enum: [fact, preference, alias]
+        key:
+          type: string
+        value:
+          type: string
+        confidence:
+          type: number
+        temporalState:
+          type: string
+          enum: [current, historical, superseded, expired, archived, conflict]
+        sourceKind:
+          type: string
+        sourceConversationId:
+          type: ["string", "null"]
+        sourceTurnId:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        lastConfirmedAt:
+          type: ["string", "null"]
+          format: date-time
+        expiresAt:
+          type: ["string", "null"]
+          format: date-time
+        validFrom:
+          type: string
+          format: date-time
+        validTo:
+          type: ["string", "null"]
+          format: date-time
+        recordedAt:
+          type: string
+          format: date-time
+      required: [id, memoryId, revision, kind, key, value, confidence, temporalState, sourceKind, sourceConversationId, sourceTurnId, createdAt, updatedAt, lastConfirmedAt, expiresAt, validFrom, validTo, recordedAt]
+    SecondBrainMemoryHistoryListResponse:
+      type: object
+      properties:
+        versions:
+          type: array
+          items:
+            $ref: "#/components/schemas/SecondBrainMemoryHistoryItem"
+      required: [versions]
     SecondBrainMemoryListResponse:
       type: object
       properties:

@@ -7,6 +7,7 @@
  */
 import type { SecondBrainMemoryKind } from './secondBrainMemoryKind';
 import type { SecondBrainMemoryStatus } from './secondBrainMemoryStatus';
+import type { SecondBrainMemoryTemporalState } from './secondBrainMemoryTemporalState';
 
 export interface SecondBrainMemory {
   id: string;
@@ -15,11 +16,17 @@ export interface SecondBrainMemory {
   value: string;
   confidence: number;
   status: SecondBrainMemoryStatus;
+  temporalState: SecondBrainMemoryTemporalState;
+  sourceKind: string;
+  revision: number;
   /** @nullable */
   sourceConversationId: string | null;
   /** @nullable */
   sourceTurnId: string | null;
+  createdAt: Date;
   updatedAt: Date;
   /** @nullable */
   lastConfirmedAt: Date | null;
+  /** @nullable */
+  expiresAt: Date | null;
 }

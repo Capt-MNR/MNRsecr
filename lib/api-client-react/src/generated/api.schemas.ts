@@ -901,6 +901,15 @@ export const SecondBrainMemoryStatus = {
   archived: 'archived',
 } as const;
 
+export type SecondBrainMemoryTemporalState = typeof SecondBrainMemoryTemporalState[keyof typeof SecondBrainMemoryTemporalState];
+
+
+export const SecondBrainMemoryTemporalState = {
+  current: 'current',
+  expired: 'expired',
+  archived: 'archived',
+} as const;
+
 export interface SecondBrainMemory {
   id: string;
   kind: SecondBrainMemoryKind;
@@ -908,13 +917,94 @@ export interface SecondBrainMemory {
   value: string;
   confidence: number;
   status: SecondBrainMemoryStatus;
+  temporalState: SecondBrainMemoryTemporalState;
+  sourceKind: string;
+  revision: number;
   /** @nullable */
   sourceConversationId: string | null;
   /** @nullable */
   sourceTurnId: string | null;
+  createdAt: string;
   updatedAt: string;
   /** @nullable */
   lastConfirmedAt: string | null;
+  /** @nullable */
+  expiresAt: string | null;
+}
+
+export type CreateSecondBrainMemoryRequestKind = typeof CreateSecondBrainMemoryRequestKind[keyof typeof CreateSecondBrainMemoryRequestKind];
+
+
+export const CreateSecondBrainMemoryRequestKind = {
+  fact: 'fact',
+  preference: 'preference',
+} as const;
+
+export interface CreateSecondBrainMemoryRequest {
+  kind: CreateSecondBrainMemoryRequestKind;
+  /**
+     * @minLength 1
+     * @maxLength 160
+     */
+  key: string;
+  /**
+     * @minLength 1
+     * @maxLength 320
+     */
+  value: string;
+  /** @nullable */
+  expiresAt?: string | null;
+}
+
+export type SecondBrainMemoryHistoryItemKind = typeof SecondBrainMemoryHistoryItemKind[keyof typeof SecondBrainMemoryHistoryItemKind];
+
+
+export const SecondBrainMemoryHistoryItemKind = {
+  fact: 'fact',
+  preference: 'preference',
+  alias: 'alias',
+} as const;
+
+export type SecondBrainMemoryHistoryItemTemporalState = typeof SecondBrainMemoryHistoryItemTemporalState[keyof typeof SecondBrainMemoryHistoryItemTemporalState];
+
+
+export const SecondBrainMemoryHistoryItemTemporalState = {
+  current: 'current',
+  historical: 'historical',
+  superseded: 'superseded',
+  expired: 'expired',
+  archived: 'archived',
+  conflict: 'conflict',
+} as const;
+
+export interface SecondBrainMemoryHistoryItem {
+  id: string;
+  memoryId: string;
+  revision: number;
+  kind: SecondBrainMemoryHistoryItemKind;
+  key: string;
+  value: string;
+  confidence: number;
+  temporalState: SecondBrainMemoryHistoryItemTemporalState;
+  sourceKind: string;
+  /** @nullable */
+  sourceConversationId: string | null;
+  /** @nullable */
+  sourceTurnId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /** @nullable */
+  lastConfirmedAt: string | null;
+  /** @nullable */
+  expiresAt: string | null;
+  validFrom: string;
+  /** @nullable */
+  validTo: string | null;
+  recordedAt: string;
+}
+
+export interface SecondBrainMemoryHistoryListResponse {
+  versions: SecondBrainMemoryHistoryItem[];
 }
 
 export interface SecondBrainMemoryListResponse {

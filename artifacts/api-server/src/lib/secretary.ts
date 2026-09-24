@@ -56,6 +56,7 @@ import {
   retrieveSecondBrain,
   secondBrainRecallMessage,
 } from "./second-brain";
+import { buildRecallPlan } from "./recall-plan";
 import { isBroadExpenseReportRequest } from "./expense-report";
 import {
   isExplicitCancellationRequest,
@@ -1293,14 +1294,25 @@ export class DeterministicAgentRuntime {
           turnId,
         });
       }
+      const recallPlan = secondBrainCommand.type === "recall"
+        ? buildRecallPlan(secondBrainCommand.query, { explicitMemoryRecall: true })
+        : null;
       const retrieval = secondBrainCommand.type === "recall"
         ? await retrieveSecondBrain(identity, secondBrainCommand.query, {
             mode: "explicit_recall",
             queryDomain: "memory_recall",
             requestId: turnId,
             conversationId,
+            temporalMode: recallPlan?.temporalMode ?? "current",
+            includeArchived: true,
           })
         : null;
+      if (retrieval && recallPlan) {
+        retrieval.trace.recallPlan = {
+          sources: recallPlan.sources,
+          selection: recallPlan.selection,
+        };
+      }
       const governedRetrieval = retrieval
         ? applySecondBrainPolicy(retrieval.memories, retrieval.trace)
         : null;

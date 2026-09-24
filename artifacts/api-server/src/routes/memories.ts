@@ -2,18 +2,53 @@ import { Router, type IRouter } from "express";
 import {
   ListSecondBrainMemoriesResponse,
   ListSecondBrainMemoriesQueryParams,
+  CreateSecondBrainMemoryBody,
+  CreateSecondBrainMemoryResponse,
   ArchiveSecondBrainMemoryParams,
   ArchiveSecondBrainMemoryResponse,
+  ListSecondBrainMemoryHistoryResponse,
 } from "@workspace/api-zod";
 import { requestId, requireIdentity, sendRouteError } from "./route-context";
 import {
   archiveSecondBrainMemory,
+  listSecondBrainMemoryHistory,
   listSecondBrainMemories,
   publicSecondBrainMemory,
+  rememberSecondBrain,
   restoreSecondBrainMemory,
 } from "../lib/second-brain";
 
 const router: IRouter = Router();
+
+router.post("/memories", async (req, res): Promise<void> => {
+  const identity = requireIdentity(req, res);
+  if (!identity) return;
+  const parsed = CreateSecondBrainMemoryBody.safeParse(req.body);
+  if (!parsed.success) {
+    sendRouteError(req, res, 400, "بيانات الذاكرة غير صالحة.", "INVALID_MEMORY_INPUT");
+    return;
+  }
+  const expiresAt = parsed.data.expiresAt ?? null;
+  if (expiresAt && expiresAt.getTime() <= Date.now()) {
+    sendRouteError(req, res, 400, "يجب أن يكون انتهاء الذاكرة في المستقبل.", "INVALID_MEMORY_EXPIRY");
+    return;
+  }
+  try {
+    const memory = await rememberSecondBrain(identity, {
+      memoryKind: parsed.data.kind,
+      key: parsed.data.key.trim(),
+      value: parsed.data.value,
+      expiresAt,
+      sourceKind: "api_user_entry",
+    });
+    res.status(201).json(CreateSecondBrainMemoryResponse.parse({
+      memory: publicSecondBrainMemory(memory),
+    }));
+  } catch (error) {
+    req.log.error({ error, requestId: requestId(req) }, "Second Brain memory create failed");
+    sendRouteError(req, res, 500, "تعذر حفظ الذاكرة الشخصية.", "SECOND_BRAIN_CREATE_FAILED");
+  }
+});
 
 router.get("/memories", async (req, res): Promise<void> => {
   const identity = requireIdentity(req, res);
@@ -77,6 +112,27 @@ router.post("/memories/:memoryId/restore", async (req, res): Promise<void> => {
   } catch (error) {
     req.log.error({ error, requestId: requestId(req), memoryId: parsed.data.memoryId }, "Second Brain memory restore failed");
     sendRouteError(req, res, 500, "تعذر استرجاع الذاكرة الشخصية.", "SECOND_BRAIN_RESTORE_FAILED");
+  }
+});
+
+router.get("/memories/:memoryId/history", async (req, res): Promise<void> => {
+  const identity = requireIdentity(req, res);
+  if (!identity) return;
+  const parsed = ArchiveSecondBrainMemoryParams.safeParse(req.params);
+  if (!parsed.success) {
+    sendRouteError(req, res, 400, "معرّف الذاكرة غير صالح.", "INVALID_MEMORY_ID");
+    return;
+  }
+  try {
+    const versions = await listSecondBrainMemoryHistory(identity, parsed.data.memoryId);
+    if (!versions) {
+      sendRouteError(req, res, 404, "الذاكرة غير موجودة.", "SECOND_BRAIN_MEMORY_NOT_FOUND");
+      return;
+    }
+    res.json(ListSecondBrainMemoryHistoryResponse.parse({ versions }));
+  } catch (error) {
+    req.log.error({ error, requestId: requestId(req), memoryId: parsed.data.memoryId }, "Second Brain memory history failed");
+    sendRouteError(req, res, 500, "تعذر تحميل تاريخ الذاكرة الشخصية.", "SECOND_BRAIN_HISTORY_FAILED");
   }
 });
 

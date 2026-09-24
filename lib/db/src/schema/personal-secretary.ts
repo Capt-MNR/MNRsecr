@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   bigint,
   bigserial,
@@ -917,6 +918,9 @@ export const secondBrainMemoriesTable = pgTable(
     normalizedValue: text("normalized_value").notNull(),
     confidenceBps: integer("confidence_bps").notNull().default(10000),
     status: text("status").notNull().default("active"),
+    sourceKind: text("source_kind").notNull().default("legacy_unknown"),
+    revision: integer("revision").notNull().default(1),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
     sourceConversationId: text("source_conversation_id"),
     sourceTurnId: text("source_turn_id"),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
@@ -942,6 +946,60 @@ export const secondBrainMemoriesTable = pgTable(
       table.ownerUserId,
       table.normalizedValue,
     ),
+  ],
+);
+
+export const secondBrainMemoryHistoryTable = pgTable(
+  "second_brain_memory_history",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    memoryId: uuid("memory_id").notNull(),
+    ...ownershipColumns,
+    kind: text("kind").notNull(),
+    key: text("key").notNull(),
+    value: text("value").notNull(),
+    normalizedValue: text("normalized_value").notNull(),
+    confidenceBps: integer("confidence_bps").notNull(),
+    temporalState: text("temporal_state").notNull(),
+    sourceKind: text("source_kind").notNull(),
+    revision: integer("revision").notNull(),
+    sourceConversationId: text("source_conversation_id"),
+    sourceTurnId: text("source_turn_id"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+    lastConfirmedAt: timestamp("last_confirmed_at", { withTimezone: true }),
+    sourceCreatedAt: timestamp("source_created_at", { withTimezone: true }).notNull(),
+    sourceUpdatedAt: timestamp("source_updated_at", { withTimezone: true }).notNull(),
+    validFrom: timestamp("valid_from", { withTimezone: true }).notNull(),
+    validTo: timestamp("valid_to", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    transitionedAt: timestamp("transitioned_at", { withTimezone: true }).notNull().defaultNow(),
+    recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("second_brain_memory_history_owner_recorded_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.recordedAt,
+    ),
+    index("second_brain_memory_history_owner_memory_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.memoryId,
+      table.recordedAt,
+    ),
+    uniqueIndex("second_brain_memory_history_source_version_unique")
+      .on(
+        table.tenantId,
+        table.ownerUserId,
+        table.memoryId,
+        table.sourceTurnId,
+        table.kind,
+        table.key,
+        table.revision,
+        table.temporalState,
+        table.normalizedValue,
+      )
+      .where(sql`${table.sourceTurnId} is not null`),
   ],
 );
 

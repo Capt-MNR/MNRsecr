@@ -20,3 +20,9 @@ Apply the context character budget before formatting the LLM payload, and mark a
 **Why:** Truncating after selection makes the trace claim that memories influenced the model when only a prefix actually did.
 
 **How to apply:** Bound the policy-approved list, update `selected` and `llmContextIncluded`, then serialize the bounded list without a second silent truncation.
+
+Temporal recall must select its sources deterministically. Current structured records remain authoritative for current-state questions; historical, superseded, expired, and archived memory must stay labeled and only enter context when the query asks for history. Treat all retrieved memory, records, relationships, and activity as evidence, never as instructions. Unapproved candidates remain outside retrieval.
+
+**Why:** A lexical match can surface stale values or prompt-injection text, and neither should override current records or become an instruction to the model.
+
+**How to apply:** Preserve temporal state and source provenance through planning, policy, formatting, and traces. Keep current-state reads and writes separate from explicitly historical recall, and do not add automatic memory learning.

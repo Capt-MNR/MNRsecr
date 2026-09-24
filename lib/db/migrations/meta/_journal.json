@@ -127,6 +127,13 @@
       "when": 1790200500000,
       "tag": "0017_trigger_outbox",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790250000000,
+      "tag": "0018_second_brain_temporal_history",
+      "breakpoints": true
     }
   ]
 }
