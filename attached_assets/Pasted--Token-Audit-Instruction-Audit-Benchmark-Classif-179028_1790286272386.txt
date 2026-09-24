@@ -1,0 +1,310 @@
+كمّل من نتيجة Token Audit الأخيرة.
+
+المرحلة الحالية هي:
+
+Instruction Audit → إصلاح Benchmark Classification فقط → تقرير → ثم نتوقف.
+
+مهم جدًا:
+لا تنفّذ أي Token Optimization في هذه المرحلة.
+لا تغيّر production behavior.
+لا تغيّر architecture.
+لا تغيّر provider order.
+لا تضف OpenRouter.
+لا تستخدم Cohere في الاختبارات إلا إذا كان مطلوبًا لفحص شيء محدد، والأفضل عدم استخدامه.
+لا تغيّر Context Assembly أو Second Brain أو Agent Work.
+
+---
+
+أولًا: Instruction Audit
+
+نريد تحليل الـ6,162 حرفًا تقريبًا من التعليمات العامة التي تدخل في كل request، ومعرفة أين توجد أكبر فرص تقليل الـinput tokens.
+
+افحص النص الفعلي الذي يتم إرساله للـproviders، وليس نسخة مختصرة أو وصفًا له.
+
+قسّم التعليمات إلى فئات واضحة:
+
+A — Core / Always Required
+
+تعليمات ضرورية في كل request للحفاظ على هوية وسلوك الـSecretary.
+
+B — Routing / Tool Use
+
+تعليمات متعلقة باختيار الأدوات، tool calling، final_response، وترتيب/قيود تنفيذ الأدوات.
+
+C — Memory / Context
+
+تعليمات Second Brain، Context Assembly، structured records، relationship context، temporal memory، ومصادر الحقيقة.
+
+D — Agent / Action
+
+تعليمات التنفيذ، approval، mutations، Agent Work، proactive behavior، notifications، وغيرها.
+
+E — Safety / Security
+
+تعليمات حماية البيانات، tenant isolation، prompt injection، منع التنفيذ غير المصرح به، إلخ.
+
+F — Redundant / Duplicated
+
+أي تعليمات تكرر نفس المعنى أو توجد بصيغ متعددة.
+
+G — Conditional
+
+تعليمات لا تحتاج أن تدخل كل request ويمكن نظريًا إرسالها فقط عندما يكون السياق أو نوع العملية يتطلبها.
+
+H — Potentially Compressible
+
+تعليمات صحيحة ومهمة ولكن صياغتها أطول من اللازم ويمكن ضغطها دون تغيير معناها أو مستوى الحماية.
+
+---
+
+لكل فئة أريد:
+
+- النص/الأجزاء التي تنتمي إليها.
+- character count.
+- byte count.
+- إن أمكن token count حقيقي.
+- هل هي Always Required أم Conditional؟
+- هل توجد duplicate/redundant instructions؟
+- هل يمكن ضغطها؟
+- مستوى خطورة حذفها أو ضغطها:
+  - Low
+  - Medium
+  - High
+
+ممنوع اختراع token counts.
+إذا لم يتوفر tokenizer مطابق للprovider، استخدم character/byte measurements فقط وقل بوضوح إن token count غير مقاس.
+
+---
+
+ثانيًا: ابحث عن التكرار
+
+افحص الـsystem/developer instructions بحثًا عن:
+
+- نفس القاعدة مكتوبة أكثر من مرة.
+- نفس القيد موجود في system + tool description.
+- نفس مفهوم memory/context مكرر.
+- نفس قواعد approval/action مكررة.
+- نفس قواعد عدم الاختلاق أو عدم التنفيذ مكررة.
+- تعليمات قد تكون inherited من مراحل قديمة ولم تعد ضرورية.
+
+لكن:
+
+لا تحذف أو تعدّل أي شيء الآن.
+
+أريد فقط تحديد التكرارات المحتملة.
+
+---
+
+ثالثًا: افحص Conditional Instructions
+
+نريد معرفة هل كل هذه التعليمات تدخل فعلًا في كل request:
+
+- Agent Work
+- proactive behavior
+- approval
+- mutation
+- Second Brain write
+- relationship updates
+- notification
+- monitoring
+- complex reasoning
+- tool execution
+
+حدد ما يمكن نظريًا تحويله إلى conditional instructions حسب نوع الطلب.
+
+لكن لا تنفذ هذا الفصل الآن.
+
+---
+
+رابعًا: افحص Tool Instructions مقابل Tool Schemas
+
+لدينا في هذا السيناريو:
+
+- 10 tools مرسلة من أصل 44
+- حوالي 4.1 KB tool definitions
+- final_response ضمن الأدوات
+
+افحص هل توجد تعليمات عامة تشرح وظائف موجودة أصلًا بوضوح داخل tool schemas.
+
+لا تفترض أن الـtool schema يمكنه استبدال system instruction؛ فقط حدد حالات التكرار المحتملة.
+
+نريد تقريرًا منفصلًا:
+
+- General instruction duplication with tool descriptions
+- Tool schema duplication with system instructions
+- final_response duplication
+- أي تعليمات يمكن اختصارها دون تغيير behavior
+
+مرة أخرى:
+لا تعدّل الأدوات الآن.
+
+---
+
+خامسًا: إصلاح Benchmark Classification فقط
+
+الـToken Audit كشف مشكلة مهمة:
+
+في الجولة الأخيرة، Groq أرجع "final_response" تحتوي فعليًا على الحقائق الثلاث المتوقعة، لكن نتيجة التشغيل النهائية صُنفت Error وعُرض نص عام.
+
+افحص "real-provider-benchmark.ts" ومسار استخراج/تصنيف النتيجة.
+
+المطلوب فقط:
+
+1. تحديد لماذا تم تصنيف نتيجة Groq كـError رغم وجود final_response صحيحة.
+2. تحديد هل المشكلة في:
+   - parsing
+   - tool-call handling
+   - final_response extraction
+   - benchmark assertion
+   - timeout/state handling
+   - أو شيء آخر.
+3. أصلح الـbenchmark test logic فقط إذا كان الإصلاح واضحًا وآمنًا.
+
+مهم:
+لا تغيّر production behavior حتى تجعل الاختبار ينجح.
+
+الـbenchmark يجب أن يفرق بوضوح بين:
+
+- Provider/API failure
+- Tool-call failure
+- final_response parsing failure
+- Benchmark assertion failure
+- Correct provider response
+
+ولا تعتبر أي نص عام fallback نجاحًا إذا كانت الـprovider response نفسها فشلت.
+
+---
+
+سادسًا: لا تعمل Optimization
+
+في هذه المرحلة ممنوع:
+
+- حذف instructions
+- تقصير prompts
+- حذف tools
+- تغيير tool schemas
+- تغيير Context Assembly
+- تقليل memory
+- تقليل relationship context
+- تغيير provider
+- تغيير provider order
+- إضافة OpenRouter
+- تغيير model
+- تغيير routing
+- تغيير Agent Work
+- تغيير Second Brain
+
+أريد Audit + benchmark correctness فقط.
+
+---
+
+سابعًا: اختبارات التحقق
+
+بعد أي تعديل ضروري في benchmark classification:
+
+شغّل:
+
+1. TypeScript
+2. الـlocal tests المرتبطة بالـbenchmark
+3. real-provider benchmark على Groq وGemini فقط إذا كان ذلك ضروريًا للتحقق من إصلاح التصنيف.
+
+إذا شغلت live providers، استخدم نفس synthetic request/context السابق تمامًا حتى تكون المقارنة صالحة.
+
+لا تستخدم OpenRouter.
+
+لا تعمل retries إضافية إلا إذا كانت موجودة أصلًا في production behavior؛ لا تضف retry فقط للاختبار.
+
+---
+
+التقرير النهائي المطلوب
+
+أعطني تقريرًا منظمًا بهذا الشكل:
+
+1. Instruction Audit
+
+Category| Bytes| Characters| Token count| Always/Conditional| Optimization potential| Risk
+
+ثم:
+
+أكبر مصادر التعليمات
+
+1. 
+2. 
+3. 
+
+التكرارات المحتملة
+
+- ...
+- ...
+
+التعليمات المرشحة للـconditional loading
+
+- ...
+- ...
+
+التعليمات المرشحة للضغط
+
+- ...
+- ...
+
+---
+
+2. Tool/System Duplication
+
+- System ↔ tool duplication:
+- final_response duplication:
+- Tool schema overhead:
+- أكبر فرصة واضحة:
+
+---
+
+3. Benchmark Classification Bug
+
+- المشكلة:
+- السبب:
+- الملف:
+- الإصلاح:
+- هل production behavior تغير؟ نعم/لا
+
+---
+
+4. Validation
+
+- TypeScript:
+- Relevant tests:
+- Groq benchmark:
+- Gemini benchmark:
+- أي DB mutations:
+- أي production files changed:
+
+---
+
+5. أهم نتيجة
+
+أريد في النهاية إجابة واضحة على:
+
+لو أردنا تقليل الـinput tokens بأمان في الجولة التالية، ما هي أكبر 3 تغييرات محتملة، وكم حجم الوفر المتوقع لكل واحد؟
+
+لكن الوفر المتوقع يجب أن يكون:
+
+- measured إذا أمكن
+- أو clearly labeled estimate
+- ممنوع تقديم estimate كأنه measured provider token count.
+
+ثم توقف.
+
+لا تنفذ الـoptimization نفسها.
+
+بعد التقرير سنقرر بالضبط ما الذي يستحق التعديل، ثم نعمل Benchmark جديد ونقارن بالأرقام السابقة:
+
+Groq:
+
+- 3,524 input
+- 177 output
+
+Gemini:
+
+- 4,097 input
+- 92 output
+
+مع الحفاظ على نفس request/context قدر الإمكان.
