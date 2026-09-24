@@ -32,12 +32,14 @@ import {
   GroqModelGateway,
   normalizeProviderUsage,
   Phase2AgentRuntime,
+  phase2Tools,
   type ConversationMessage,
   type GatewayCallContext,
   type GatewayResponse,
   type ModelGateway,
   type ProviderName,
 } from "../src/lib/phase2.ts";
+import { analyzeProviderInputPayload } from "./provider-input-audit.ts";
 import type { Identity } from "../src/lib/secretary.ts";
 
 type BenchmarkProvider = "groq" | "gemini" | "cohere";
@@ -73,6 +75,23 @@ type ContextAssembly = {
       data: Record<string, unknown>;
     }>;
   };
+};
+
+type ProviderUsageBreakdown = {
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+  cachedInputTokens: number | null;
+  toolUsePromptTokens: number | null;
+  thinkingTokens: number | null;
+  promptTokenDetails: Array<{ modality: string; tokens: number }>;
+};
+
+type ProviderResponseUsageAudit = {
+  provider: "groq" | "gemini";
+  callNumber: number | null;
+  status: number;
+  usage: ProviderUsageBreakdown | null;
 };
 
 const providers: Array<{
@@ -237,12 +256,86 @@ function normalizeArabic(text: string): string {
     .trim();
 }
 
+function objectRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function numericField(source: Record<string, unknown>, key: string): number | null {
+  const value = source[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function providerUsageBreakdown(provider: "groq" | "gemini", responseText: string): ProviderUsageBreakdown | null {
+  try {
+    const root = objectRecord(JSON.parse(responseText));
+    const usage = objectRecord(provider === "groq" ? root.usage : root.usageMetadata);
+    if (Object.keys(usage).length === 0) return null;
+
+    const promptDetails = provider === "groq"
+      ? objectRecord(usage.prompt_tokens_details)
+      : {};
+    const modalityDetails = provider === "gemini" && Array.isArray(usage.promptTokensDetails)
+      ? usage.promptTokensDetails
+      : [];
+
+    return provider === "groq"
+      ? {
+          inputTokens: numericField(usage, "prompt_tokens"),
+          outputTokens: numericField(usage, "completion_tokens"),
+          totalTokens: numericField(usage, "total_tokens"),
+          cachedInputTokens: numericField(promptDetails, "cached_tokens"),
+          toolUsePromptTokens: null,
+          thinkingTokens: numericField(objectRecord(usage.completion_tokens_details), "reasoning_tokens"),
+          promptTokenDetails: Object.entries(promptDetails)
+            .filter((entry): entry is [string, number] =>
+              typeof entry[1] === "number" && Number.isFinite(entry[1]))
+            .map(([modality, tokens]) => ({ modality, tokens })),
+        }
+      : {
+          inputTokens: numericField(usage, "promptTokenCount"),
+          outputTokens: numericField(usage, "candidatesTokenCount"),
+          totalTokens: numericField(usage, "totalTokenCount"),
+          cachedInputTokens: numericField(usage, "cachedContentTokenCount"),
+          toolUsePromptTokens: numericField(usage, "toolUsePromptTokenCount"),
+          thinkingTokens: numericField(usage, "thoughtsTokenCount"),
+          promptTokenDetails: modalityDetails.flatMap((entry) => {
+            const detail = objectRecord(entry);
+            const modality = detail.modality;
+            const tokens = detail.tokenCount;
+            return typeof modality === "string"
+              && typeof tokens === "number"
+              && Number.isFinite(tokens)
+              ? [{ modality, tokens }]
+              : [];
+          }),
+        };
+  } catch {
+    return null;
+  }
+}
+
 async function main(): Promise<void> {
   if (process.env.RUN_REAL_PROVIDER_BENCHMARK !== "1") {
     throw new Error("Live calls disabled. Set RUN_REAL_PROVIDER_BENCHMARK=1 to run the benchmark.");
   }
 
-  const missing = providers
+  const tokenInputAuditMode = process.env.RUN_REAL_PROVIDER_TOKEN_INPUT_AUDIT === "1";
+  const activeProviders = tokenInputAuditMode
+    ? providers.filter((provider) => provider.name === "groq" || provider.name === "gemini")
+    : providers;
+  if (
+    tokenInputAuditMode
+    && (
+      activeProviders.length !== 2
+      || activeProviders.some((provider) => provider.name === "cohere")
+    )
+  ) {
+    throw new Error("Token input audit is restricted to Groq and Gemini.");
+  }
+
+  const missing = activeProviders
     .filter((provider) => !process.env[provider.apiKeyName])
     .map((provider) => provider.name);
   if (missing.length > 0) {
@@ -259,6 +352,9 @@ async function main(): Promise<void> {
   const originalFetch = globalThis.fetch;
   const generations: ProviderGeneration[] = [];
   const httpAttempts: HttpAttempt[] = [];
+  const inputPayloadAudits: Array<Record<string, unknown>> = [];
+  const responseUsageAudits: ProviderResponseUsageAudit[] = [];
+  const responseUsageAuditPromises: Promise<void>[] = [];
   const results: Array<Record<string, unknown>> = [];
   const fingerprintsByProvider: Partial<Record<BenchmarkProvider, string>> = {};
   let referenceSerialization: string | undefined;
@@ -284,6 +380,23 @@ async function main(): Promise<void> {
       if (!provider) {
         throw new Error(`Benchmark blocked an unexpected external host: ${requestUrl.hostname}`);
       }
+      if (tokenInputAuditMode && provider === "cohere") {
+        throw new Error("Token input audit blocked Cohere before sending a request.");
+      }
+      const requestBody = typeof init?.body === "string" ? init.body : "";
+      if (tokenInputAuditMode && (provider === "groq" || provider === "gemini")) {
+        if (!requestBody) {
+          throw new Error(`${provider} input audit could not inspect a JSON request body.`);
+        }
+        inputPayloadAudits.push(analyzeProviderInputPayload(
+          provider,
+          requestUrl.pathname,
+          requestBody,
+          prompt,
+          phase2Tools.length,
+          scope.allowedToolNames.size,
+        ));
+      }
       const startedAt = performance.now();
       try {
         const response = await originalFetch(input, init);
@@ -295,6 +408,22 @@ async function main(): Promise<void> {
           status: response.status,
           elapsedMs: Math.round((performance.now() - startedAt) * 10) / 10,
         });
+        if (tokenInputAuditMode && (provider === "groq" || provider === "gemini")) {
+          const usageAudit: ProviderResponseUsageAudit = {
+            provider,
+            callNumber: activeGeneration?.provider === provider ? activeGeneration.callNumber : null,
+            status: response.status,
+            usage: null,
+          };
+          responseUsageAudits.push(usageAudit);
+          responseUsageAuditPromises.push(
+            response.clone().text()
+              .then((text) => {
+                usageAudit.usage = providerUsageBreakdown(provider, text);
+              })
+              .catch(() => undefined),
+          );
+        }
         return response;
       } catch (error) {
         httpAttempts.push({
@@ -310,7 +439,7 @@ async function main(): Promise<void> {
       }
     };
 
-    for (const providerConfig of providers) {
+    for (const providerConfig of activeProviders) {
       const inner = providerConfig.createGateway();
       let contextMismatch: string | undefined;
       const observedGateway: ModelGateway = {
@@ -396,6 +525,9 @@ async function main(): Promise<void> {
       } catch (error) {
         runError = errorCode(error);
       }
+      if (tokenInputAuditMode) {
+        await Promise.all(responseUsageAuditPromises);
+      }
 
       if (contextMismatch) {
         throw new Error(`${providerConfig.name}: ${contextMismatch}`);
@@ -460,11 +592,23 @@ async function main(): Promise<void> {
       prompt,
       contextFingerprint: fingerprintsByProvider.groq,
       allInitialContextsIdentical: new Set(Object.values(fingerprintsByProvider)).size === 1
-        && Object.keys(fingerprintsByProvider).length === providers.length,
+        && Object.keys(fingerprintsByProvider).length === activeProviders.length,
+      activeProviders: activeProviders.map((provider) => provider.name),
       contextRecords: ["commitment", "task", "reminder"],
       retries: "Network calls were observed, not simulated; a second request in the same logical call is reported as retry/model fallback.",
       cost: "No monetary charge was returned by these model response adapters; report N/A unless a provider rate card is separately applied.",
       results,
+      ...(tokenInputAuditMode
+        ? {
+            tokenInputAudit: {
+              providerPayloads: inputPayloadAudits,
+              providerResponseUsage: responseUsageAudits,
+              fullToolCatalogCount: phase2Tools.length,
+              scopedToolCount: scope.allowedToolNames.size,
+              tokenizerAvailability: "No model-specific tokenizer is installed locally; provider usage gives aggregate input tokens only. Per-component token counts are not measured.",
+            },
+          }
+        : {}),
       databaseCountsBefore: beforeRuns,
       databaseCountsAfter: afterRuns,
       openRouterRequests: httpAttempts.filter((attempt) => attempt.provider as string === "openrouter").length,
