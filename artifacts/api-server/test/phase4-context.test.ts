@@ -4,6 +4,8 @@ import { and, eq } from "drizzle-orm";
 import {
   activityEventEntitiesTable,
   activityEventsTable,
+  commitmentPeopleTable,
+  commitmentsTable,
   conversationMemoryTable,
   db,
   donationsTable,
@@ -17,8 +19,13 @@ import {
   obligationSettlementsTable,
   peopleTable,
   projectsTable,
+  reminderPeopleTable,
+  remindersTable,
   secretaryOperationsTable,
+  taskPeopleTable,
+  tasksTable,
 } from "@workspace/db";
+import { assembleContext } from "../src/lib/context-assembly.ts";
 import {
   emptyConversationState,
   loadConversationMemory,
@@ -43,6 +50,7 @@ import {
   settleObligation,
 } from "../src/lib/financial-graph.ts";
 import { Phase2AgentRuntime, type ModelGateway } from "../src/lib/phase2.ts";
+import { buildRecallPlan } from "../src/lib/recall-plan.ts";
 import { executeApprovedOperation, type Identity } from "../src/lib/secretary.ts";
 import { claimOperation } from "../src/lib/secretary-operations.ts";
 
@@ -69,6 +77,12 @@ const cleanupTables = [
   financialPartyProjectsTable,
   financialPartiesTable,
   expensesTable,
+  commitmentPeopleTable,
+  commitmentsTable,
+  reminderPeopleTable,
+  remindersTable,
+  taskPeopleTable,
+  tasksTable,
   peopleTable,
   projectsTable,
 ] as const;
@@ -254,6 +268,163 @@ test("relationship parser recognizes bounded deterministic reads and safe follow
     ),
     false,
   );
+});
+
+test("resolved person context includes linked commitments, tasks, and reminders as structured evidence", async () => {
+  await cleanup();
+  try {
+    const [person] = await db.insert(peopleTable).values({
+      tenantId: identity.tenantId,
+      ownerUserId: identity.userId,
+      name: "أحمد",
+      nameKey: "احمد",
+    }).returning();
+    const dueAt = new Date("2026-09-25T09:00:00.000Z");
+    const [directCommitment] = await db.insert(commitmentsTable).values({
+      tenantId: identity.tenantId,
+      ownerUserId: identity.userId,
+      title: "تسليم التقرير",
+      personId: person.id,
+      dueAt,
+      status: "open",
+    }).returning();
+    await db.insert(commitmentPeopleTable).values({
+      tenantId: identity.tenantId,
+      ownerUserId: identity.userId,
+      commitmentId: directCommitment.id,
+      personId: person.id,
+      relationship: "responsible",
+    });
+    const [relationshipCommitment] = await db.insert(commitmentsTable).values({
+      tenantId: identity.tenantId,
+      ownerUserId: identity.userId,
+      title: "مراجعة الميزانية",
+      dueAt,
+      status: "open",
+    }).returning();
+    await db.insert(commitmentPeopleTable).values({
+      tenantId: identity.tenantId,
+      ownerUserId: identity.userId,
+      commitmentId: relationshipCommitment.id,
+      personId: person.id,
+      relationship: "responsible",
+    });
+
+    const [task] = await db.insert(tasksTable).values({
+      tenantId: identity.tenantId,
+      ownerUserId: identity.userId,
+      title: "إرسال العرض",
+      dueAt,
+      status: "pending",
+    }).returning();
+    await db.insert(taskPeopleTable).values({
+      tenantId: identity.tenantId,
+      ownerUserId: identity.userId,
+      taskId: task.id,
+      personId: person.id,
+      relationship: "assignee",
+    });
+    const [completedTask] = await db.insert(tasksTable).values({
+      tenantId: identity.tenantId,
+      ownerUserId: identity.userId,
+      title: "مهمة منتهية",
+      status: "completed",
+    }).returning();
+    await db.insert(taskPeopleTable).values({
+      tenantId: identity.tenantId,
+      ownerUserId: identity.userId,
+      taskId: completedTask.id,
+      personId: person.id,
+      relationship: "assignee",
+    });
+
+    const [reminder] = await db.insert(remindersTable).values({
+      tenantId: identity.tenantId,
+      ownerUserId: identity.userId,
+      text: "مراجعة التقرير",
+      dueAt,
+      timezone: "Africa/Cairo",
+      status: "scheduled",
+    }).returning();
+    await db.insert(reminderPeopleTable).values({
+      tenantId: identity.tenantId,
+      ownerUserId: identity.userId,
+      reminderId: reminder.id,
+      personId: person.id,
+      relationship: "about",
+    });
+    const [completedReminder] = await db.insert(remindersTable).values({
+      tenantId: identity.tenantId,
+      ownerUserId: identity.userId,
+      text: "تذكير منتهٍ",
+      dueAt,
+      timezone: "Africa/Cairo",
+      status: "completed",
+    }).returning();
+    await db.insert(reminderPeopleTable).values({
+      tenantId: identity.tenantId,
+      ownerUserId: identity.userId,
+      reminderId: completedReminder.id,
+      personId: person.id,
+      relationship: "about",
+    });
+
+    const [foreignPerson] = await db.insert(peopleTable).values({
+      tenantId: otherIdentity.tenantId,
+      ownerUserId: otherIdentity.userId,
+      name: "أحمد",
+      nameKey: "احمد",
+    }).returning();
+    const [foreignCommitment] = await db.insert(commitmentsTable).values({
+      tenantId: otherIdentity.tenantId,
+      ownerUserId: otherIdentity.userId,
+      title: "سجل مستأجر آخر",
+      personId: foreignPerson.id,
+      dueAt,
+      status: "open",
+    }).returning();
+
+    const message = "أحمد كان المفروض يعمل إيه؟";
+    const plan = buildRecallPlan(message);
+    assert.ok(plan.sources.includes("structured_records"));
+    const relationshipResult = await retrieveRelationshipContext(
+      identity,
+      message,
+      emptyConversationState(),
+    );
+    assert.ok(relationshipResult);
+    const resolvedPerson = relationshipResult.context.resolvedEntities.find(
+      (entity) => entity.type === "person",
+    );
+    assert.equal(resolvedPerson?.id, person.id);
+
+    const assembly = assembleContext({
+      plan,
+      relationshipContext: relationshipResult.context,
+    });
+    assert.ok(assembly);
+    const structuredRecords = assembly.evidence.structuredRecords;
+    const recordIds = structuredRecords.map((evidence) => evidence.provenance.recordId);
+    assert.deepEqual(
+      recordIds.slice().sort(),
+      [directCommitment.id, relationshipCommitment.id, task.id, reminder.id].sort(),
+    );
+    assert.equal(recordIds.includes(foreignCommitment.id), false);
+    assert.equal(recordIds.includes(completedTask.id), false);
+    assert.equal(recordIds.includes(completedReminder.id), false);
+
+    const commitmentEvidence = structuredRecords.find(
+      (evidence) => evidence.provenance.recordId === directCommitment.id,
+    );
+    assert.equal(commitmentEvidence?.temporalState, "current");
+    assert.equal((commitmentEvidence?.data as Record<string, unknown>).title, "تسليم التقرير");
+    assert.equal(
+      structuredRecords.find((evidence) => evidence.provenance.recordId === task.id)?.temporalState,
+      "current",
+    );
+  } finally {
+    await cleanup();
+  }
 });
 
 test("financial context uses canonical directions, settlements, currencies, and tenant isolation", async () => {

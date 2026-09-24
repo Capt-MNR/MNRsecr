@@ -2,6 +2,7 @@ import { and, desc, eq, inArray, lt, or } from "drizzle-orm";
 import {
   activityEventEntitiesTable,
   activityEventsTable,
+  commitmentPeopleTable,
   commitmentsTable,
   db,
   expensesTable,
@@ -11,6 +12,10 @@ import {
   financialPaymentsTable,
   peopleTable,
   pool,
+  reminderPeopleTable,
+  remindersTable,
+  taskPeopleTable,
+  tasksTable,
   type FinancialParty,
 } from "@workspace/db";
 import type { ConversationEntity, ConversationState } from "./conversation-memory";
@@ -1072,6 +1077,106 @@ export async function retrieveRelationshipContext(
       ].slice(0, RELATIONSHIP_CONTEXT_LIMITS.maxRecords);
       context.truncated = expenseContext.records.length >= RELATIONSHIP_CONTEXT_LIMITS.maxRecords
         || commitments.length >= RELATIONSHIP_CONTEXT_LIMITS.maxRecords;
+    } else if (entity.type === "person") {
+      const [commitments, tasks, reminders] = await Promise.all([
+        db.select({
+          id: commitmentsTable.id,
+          title: commitmentsTable.title,
+          dueAt: commitmentsTable.dueAt,
+          status: commitmentsTable.status,
+          relationship: commitmentPeopleTable.relationship,
+        }).from(commitmentsTable)
+          .leftJoin(commitmentPeopleTable, and(
+            eq(commitmentPeopleTable.commitmentId, commitmentsTable.id),
+            eq(commitmentPeopleTable.tenantId, identity.tenantId),
+            eq(commitmentPeopleTable.ownerUserId, identity.userId),
+            eq((commitmentPeopleTable as any).personId, entity.id),
+          ))
+          .where(and(
+            eq(commitmentsTable.tenantId, identity.tenantId),
+            eq(commitmentsTable.ownerUserId, identity.userId),
+            eq(commitmentsTable.status, "open"),
+            or(
+              eq(commitmentsTable.personId, entity.id),
+              eq((commitmentPeopleTable as any).personId, entity.id),
+            ),
+          ))
+          .orderBy(desc(commitmentsTable.dueAt), desc(commitmentsTable.id))
+          .limit(RELATIONSHIP_CONTEXT_LIMITS.maxRecords + 1),
+        db.select({
+          id: tasksTable.id,
+          title: tasksTable.title,
+          dueAt: tasksTable.dueAt,
+          status: tasksTable.status,
+          relationship: taskPeopleTable.relationship,
+        }).from(taskPeopleTable)
+          .innerJoin(tasksTable, eq(taskPeopleTable.taskId, tasksTable.id))
+          .where(and(
+            eq(taskPeopleTable.tenantId, identity.tenantId),
+            eq(taskPeopleTable.ownerUserId, identity.userId),
+            eq(taskPeopleTable.personId, entity.id),
+            eq(tasksTable.tenantId, identity.tenantId),
+            eq(tasksTable.ownerUserId, identity.userId),
+            inArray(tasksTable.status, ["pending", "in_progress"]),
+          ))
+          .orderBy(desc(tasksTable.dueAt), desc(tasksTable.id))
+          .limit(RELATIONSHIP_CONTEXT_LIMITS.maxRecords + 1),
+        db.select({
+          id: remindersTable.id,
+          text: remindersTable.text,
+          dueAt: remindersTable.dueAt,
+          timezone: remindersTable.timezone,
+          status: remindersTable.status,
+          relationship: reminderPeopleTable.relationship,
+        }).from(reminderPeopleTable)
+          .innerJoin(remindersTable, eq(reminderPeopleTable.reminderId, remindersTable.id))
+          .where(and(
+            eq(reminderPeopleTable.tenantId, identity.tenantId),
+            eq(reminderPeopleTable.ownerUserId, identity.userId),
+            eq((reminderPeopleTable as any).personId, entity.id),
+            eq(remindersTable.tenantId, identity.tenantId),
+            eq(remindersTable.ownerUserId, identity.userId),
+            eq(remindersTable.status, "scheduled"),
+          ))
+          .orderBy(desc(remindersTable.dueAt), desc(remindersTable.id))
+          .limit(RELATIONSHIP_CONTEXT_LIMITS.maxRecords + 1),
+      ]);
+      const personRecords = [
+        ...commitments.map((commitment) => ({
+          type: "commitment",
+          id: commitment.id,
+          title: commitment.title,
+          dueAt: commitment.dueAt?.toISOString() ?? null,
+          status: commitment.status,
+          personId: entity.id,
+          personName: entity.name,
+          relationship: commitment.relationship,
+        })),
+        ...tasks.map((task) => ({
+          type: "task",
+          id: task.id,
+          title: task.title,
+          dueAt: task.dueAt?.toISOString() ?? null,
+          status: task.status,
+          personId: entity.id,
+          personName: entity.name,
+          relationship: task.relationship,
+        })),
+        ...reminders.map((reminder) => ({
+          type: "reminder",
+          id: reminder.id,
+          text: reminder.text,
+          dueAt: reminder.dueAt.toISOString(),
+          timezone: reminder.timezone,
+          status: reminder.status,
+          personId: entity.id,
+          personName: entity.name,
+          relationship: reminder.relationship,
+        })),
+      ];
+      context.relevantRecords = personRecords.slice(0, RELATIONSHIP_CONTEXT_LIMITS.maxRecords);
+      context.truncated = context.truncated
+        || personRecords.length > RELATIONSHIP_CONTEXT_LIMITS.maxRecords;
     }
     if (entity.type !== "financial_party") {
       const parties = await linkedParties(identity, entity);

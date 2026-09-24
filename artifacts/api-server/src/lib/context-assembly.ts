@@ -152,7 +152,8 @@ function isCandidate(value: Record<string, unknown>): boolean {
     || value.suggestion === true
     || status === "candidate"
     || status === "suggested"
-    || status === "pending";
+    // Pending is a valid active task status, not a candidate marker for typed task records.
+    || (status === "pending" && value.type !== "task");
 }
 
 function temporalState(value: unknown, fallback: ContextTemporalState): ContextTemporalState {
