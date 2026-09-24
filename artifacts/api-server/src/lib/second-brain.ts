@@ -1,4 +1,4 @@
-import { and, desc, eq, ilike, or } from "drizzle-orm";
+import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import {
   db,
   secondBrainMemoriesTable,
@@ -120,11 +120,18 @@ export type SecondBrainCandidateStatus =
   | "needs_context";
 
 export class SecondBrainCandidateReviewError extends Error {
-  readonly code = "SECOND_BRAIN_ALIAS_ASSOCIATION_REQUIRED";
+  readonly code:
+    | "SECOND_BRAIN_ALIAS_ASSOCIATION_REQUIRED"
+    | "SECOND_BRAIN_ALIAS_ASSOCIATION_INVALID"
+    | "SECOND_BRAIN_CANDIDATE_STATE_CONFLICT";
 
-  constructor() {
-    super("An alias candidate must be associated with a canonical entity before approval.");
+  constructor(
+    message = "An alias candidate must be associated with a canonical entity before approval.",
+    code: SecondBrainCandidateReviewError["code"] = "SECOND_BRAIN_ALIAS_ASSOCIATION_REQUIRED",
+  ) {
+    super(message);
     this.name = "SecondBrainCandidateReviewError";
+    this.code = code;
   }
 }
 
@@ -133,7 +140,8 @@ export class SecondBrainCandidateAssociationError extends Error {
     readonly code:
       | "SECOND_BRAIN_CANDIDATE_NOT_ASSOCIABLE"
       | "INVALID_MEMORY_CANDIDATE_ENTITY"
-      | "MEMORY_CANDIDATE_ENTITY_NOT_FOUND",
+      | "MEMORY_CANDIDATE_ENTITY_NOT_FOUND"
+      | "MEMORY_CANDIDATE_ENTITY_NAME_MISMATCH",
     message: string,
   ) {
     super(message);
@@ -261,6 +269,12 @@ export function parseSecondBrainCandidate(
 ): SecondBrainCandidateSuggestion | null {
   const text = message.trim();
   if (!text) return null;
+  if (
+    /[؟?]/u.test(text)
+    || /(?:^|\s)(?:ازاي|إزاي|ازاى|كيف|ليه|لماذا|ايه|إيه|how|what|why)\s*$/iu.test(text)
+  ) {
+    return null;
+  }
   const preference = text.match(
     /^(?:انا|أنا)\s+(?:بفضل|أفضل|بحب|أحب|ما\s+بحبش|مش\s+بحب)\s+(.+)$/iu,
   );
@@ -482,37 +496,53 @@ export async function createSecondBrainCandidate(
     turnId?: string | null;
   },
 ): Promise<SecondBrainCandidate> {
-  const [existing] = await db
-    .select()
-    .from(secondBrainCandidatesTable)
-    .where(and(
-      eq(secondBrainCandidatesTable.tenantId, identity.tenantId),
-      eq(secondBrainCandidatesTable.ownerUserId, identity.userId),
-      eq(secondBrainCandidatesTable.kind, input.memoryKind),
-      eq(secondBrainCandidatesTable.key, input.key),
-      eq(secondBrainCandidatesTable.status, "pending_review"),
-    ))
-    .limit(1);
-  if (existing) return existing;
+  return db.transaction(async (tx) => {
+    const lockKey = JSON.stringify([
+      identity.tenantId,
+      identity.userId,
+      "second-brain-candidate-create",
+      input.memoryKind,
+      input.key,
+    ]);
+    await tx.execute(sql`
+      select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))
+    `);
 
-  const [candidate] = await db
-    .insert(secondBrainCandidatesTable)
-    .values({
-      tenantId: identity.tenantId,
-      ownerUserId: identity.userId,
-      kind: input.memoryKind,
-      key: input.key,
-      value: compact(input.value),
-      normalizedValue: normalize(input.value),
-      confidenceBps: Math.max(0, Math.min(10000, Math.round(input.confidenceBps))),
-      status: "pending_review",
-      sourceConversationId: input.conversationId ?? null,
-      sourceTurnId: input.turnId ?? null,
-      metadata: input.metadata ?? {},
-    })
-    .returning();
-  if (!candidate) throw new Error("Second Brain candidate was not saved.");
-  return candidate;
+    const [existing] = await tx
+      .select()
+      .from(secondBrainCandidatesTable)
+      .where(and(
+        eq(secondBrainCandidatesTable.tenantId, identity.tenantId),
+        eq(secondBrainCandidatesTable.ownerUserId, identity.userId),
+        eq(secondBrainCandidatesTable.kind, input.memoryKind),
+        eq(secondBrainCandidatesTable.key, input.key),
+        eq(secondBrainCandidatesTable.status, "pending_review"),
+      ))
+      .limit(1);
+    if (existing) return existing;
+
+    const metadata = { ...(input.metadata ?? {}) };
+    // Association can only be established through the owner-scoped associate route.
+    delete metadata.entityId;
+    const [candidate] = await tx
+      .insert(secondBrainCandidatesTable)
+      .values({
+        tenantId: identity.tenantId,
+        ownerUserId: identity.userId,
+        kind: input.memoryKind,
+        key: input.key,
+        value: compact(input.value),
+        normalizedValue: normalize(input.value),
+        confidenceBps: Math.max(0, Math.min(10000, Math.round(input.confidenceBps))),
+        status: "pending_review",
+        sourceConversationId: input.conversationId ?? null,
+        sourceTurnId: input.turnId ?? null,
+        metadata,
+      })
+      .returning();
+    if (!candidate) throw new Error("Second Brain candidate was not saved.");
+    return candidate;
+  });
 }
 
 export async function listSecondBrainCandidates(
@@ -540,6 +570,16 @@ export async function associateSecondBrainCandidate(
   },
 ): Promise<SecondBrainCandidate | null> {
   return db.transaction(async (tx) => {
+    const lockKey = JSON.stringify([
+      identity.tenantId,
+      identity.userId,
+      "second-brain-candidate",
+      candidateId,
+    ]);
+    await tx.execute(sql`
+      select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))
+    `);
+
     const [candidate] = await tx
       .select()
       .from(secondBrainCandidatesTable)
@@ -566,7 +606,7 @@ export async function associateSecondBrainCandidate(
         ? projectsTable
         : financialPartiesTable;
     const [entity] = await tx
-      .select({ id: table.id })
+      .select({ id: table.id, name: table.name, nameKey: table.nameKey })
       .from(table)
       .where(and(
         eq(table.id, input.entityId),
@@ -578,6 +618,16 @@ export async function associateSecondBrainCandidate(
       throw new SecondBrainCandidateAssociationError(
         "MEMORY_CANDIDATE_ENTITY_NOT_FOUND",
         "The selected entity was not found in your workspace.",
+      );
+    }
+    const canonical = normalize(candidate.value);
+    if (
+      canonical !== normalize(entity.name)
+      && canonical !== normalize(entity.nameKey ?? "")
+    ) {
+      throw new SecondBrainCandidateAssociationError(
+        "MEMORY_CANDIDATE_ENTITY_NAME_MISMATCH",
+        "The selected entity does not match the candidate's canonical name.",
       );
     }
 
@@ -595,6 +645,7 @@ export async function associateSecondBrainCandidate(
         eq(secondBrainCandidatesTable.id, candidateId),
         eq(secondBrainCandidatesTable.tenantId, identity.tenantId),
         eq(secondBrainCandidatesTable.ownerUserId, identity.userId),
+        eq(secondBrainCandidatesTable.status, candidate.status),
       ))
       .returning();
     return updated ?? null;
@@ -610,6 +661,16 @@ export async function reviewSecondBrainCandidate(
   },
 ): Promise<{ candidate: SecondBrainCandidate; memory: SecondBrainMemory | null } | null> {
   return db.transaction(async (tx) => {
+    const lockKey = JSON.stringify([
+      identity.tenantId,
+      identity.userId,
+      "second-brain-candidate",
+      candidateId,
+    ]);
+    await tx.execute(sql`
+      select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))
+    `);
+
     const [candidate] = await tx
       .select()
       .from(secondBrainCandidatesTable)
@@ -622,6 +683,12 @@ export async function reviewSecondBrainCandidate(
     if (!candidate) return null;
 
     if (candidate.status === "approved") {
+      if (input.status !== "approved") {
+        throw new SecondBrainCandidateReviewError(
+          "An approved memory candidate cannot be changed to another review status.",
+          "SECOND_BRAIN_CANDIDATE_STATE_CONFLICT",
+        );
+      }
       const [memory] = candidate.promotedMemoryId
         ? await tx
           .select()
@@ -640,12 +707,45 @@ export async function reviewSecondBrainCandidate(
     }
 
     const now = new Date();
-    if (
-      input.status === "approved"
-      && candidate.kind === "alias"
-      && typeof candidate.metadata?.entityId !== "string"
-    ) {
-      throw new SecondBrainCandidateReviewError();
+    if (input.status === "approved" && candidate.kind === "alias") {
+      const entityType = candidate.metadata?.entityType;
+      const entityId = candidate.metadata?.entityId;
+      if (
+        (entityType !== "person" && entityType !== "project" && entityType !== "financial_party")
+        || typeof entityId !== "string"
+      ) {
+        throw new SecondBrainCandidateReviewError();
+      }
+      const table = entityType === "person"
+        ? peopleTable
+        : entityType === "project"
+          ? projectsTable
+          : financialPartiesTable;
+      const [entity] = await tx
+        .select({ id: table.id, name: table.name, nameKey: table.nameKey })
+        .from(table)
+        .where(and(
+          eq(table.id, entityId),
+          eq(table.tenantId, identity.tenantId),
+          eq(table.ownerUserId, identity.userId),
+        ))
+        .limit(1);
+      if (!entity) {
+        throw new SecondBrainCandidateReviewError(
+          "The alias candidate is not associated with an entity in your workspace.",
+          "SECOND_BRAIN_ALIAS_ASSOCIATION_INVALID",
+        );
+      }
+      const canonical = normalize(candidate.value);
+      if (
+        canonical !== normalize(entity.name)
+        && canonical !== normalize(entity.nameKey ?? "")
+      ) {
+        throw new SecondBrainCandidateReviewError(
+          "The associated entity does not match the alias candidate's canonical name.",
+          "SECOND_BRAIN_ALIAS_ASSOCIATION_INVALID",
+        );
+      }
     }
     if (input.status !== "approved") {
       const [updated] = await tx
@@ -660,8 +760,15 @@ export async function reviewSecondBrainCandidate(
           eq(secondBrainCandidatesTable.id, candidateId),
           eq(secondBrainCandidatesTable.tenantId, identity.tenantId),
           eq(secondBrainCandidatesTable.ownerUserId, identity.userId),
+          eq(secondBrainCandidatesTable.status, candidate.status),
         ))
         .returning();
+      if (!updated) {
+        throw new SecondBrainCandidateReviewError(
+          "The candidate changed during review. Reload it and try again.",
+          "SECOND_BRAIN_CANDIDATE_STATE_CONFLICT",
+        );
+      }
       return updated ? { candidate: updated, memory: null } : null;
     }
 
@@ -695,7 +802,7 @@ export async function reviewSecondBrainCandidate(
         set: {
           value: candidate.value,
           normalizedValue: candidate.normalizedValue,
-          confidenceBps: candidate.confidenceBps,
+          confidenceBps: 10000,
           status: "active",
           sourceConversationId: candidate.sourceConversationId,
           sourceTurnId: candidate.sourceTurnId,
@@ -724,9 +831,16 @@ export async function reviewSecondBrainCandidate(
         eq(secondBrainCandidatesTable.id, candidateId),
         eq(secondBrainCandidatesTable.tenantId, identity.tenantId),
         eq(secondBrainCandidatesTable.ownerUserId, identity.userId),
+        eq(secondBrainCandidatesTable.status, candidate.status),
       ))
       .returning();
-    return updated ? { candidate: updated, memory } : null;
+    if (!updated) {
+      throw new SecondBrainCandidateReviewError(
+        "The candidate changed during review. Reload it and try again.",
+        "SECOND_BRAIN_CANDIDATE_STATE_CONFLICT",
+      );
+    }
+    return { candidate: updated, memory };
   });
 }
 
@@ -1104,7 +1218,7 @@ export function publicSecondBrainCandidate(candidate: SecondBrainCandidate) {
 export async function listSecondBrainAliases(
   identity: Identity,
   entityType?: "person" | "project" | "financial_party",
-): Promise<Array<{ alias: string; canonical: string }>> {
+): Promise<Array<{ alias: string; canonical: string; entityId: string }>> {
   const rows = await db
     .select()
     .from(secondBrainMemoriesTable)
@@ -1121,13 +1235,15 @@ export async function listSecondBrainAliases(
     .filter((row) => {
       const rowEntityType = row.metadata?.entityType;
       return typeof row.metadata?.entityId === "string"
-        && (!entityType || !rowEntityType || rowEntityType === entityType);
+        && typeof rowEntityType === "string"
+        && (!entityType || rowEntityType === entityType);
     })
     .map((row) => ({
       alias: typeof row.metadata?.alias === "string"
         ? row.metadata.alias
         : row.key.replace(/^alias:/, ""),
       canonical: row.value,
+      entityId: row.metadata.entityId as string,
     }));
 }
 

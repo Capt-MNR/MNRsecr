@@ -1,5 +1,5 @@
-import { and, eq } from "drizzle-orm";
-import { conversationMemoryTable, db } from "@workspace/db";
+import { and, eq, sql } from "drizzle-orm";
+import { conversationMemoryTable, db, type ConversationMemory } from "@workspace/db";
 import type { Identity } from "./secretary";
 import { featureFlags } from "./feature-flags";
 
@@ -519,6 +519,32 @@ function ownershipWhere(identity: Identity, conversationId: string) {
   );
 }
 
+function snapshotFromRecord(
+  record: ConversationMemory | undefined,
+  conversationId: string,
+): ConversationMemorySnapshot {
+  if (!record) {
+    return {
+      conversationId,
+      recentTurns: [],
+      summary: null,
+      turnCount: 0,
+      state: emptyConversationState(),
+    };
+  }
+  const recentTurns = parseTurns(record.recentStateJson);
+  const summaryState = stateFromSummary(record.summary);
+  return {
+    conversationId,
+    recentTurns,
+    summary: stripStateMarker(record.summary),
+    turnCount: Number(record.turnCount),
+    state: record.summary?.includes(STATE_MARKER)
+      ? summaryState
+      : stateFromTurns(recentTurns),
+  };
+}
+
 function parseTurns(value: string): ConversationTurn[] {
   try {
     const parsed = JSON.parse(value);
@@ -561,26 +587,7 @@ export async function loadConversationMemory(
   const [record] = await db.select().from(conversationMemoryTable).where(
     ownershipWhere(identity, conversationId),
   ).limit(1);
-  if (!record) {
-    return {
-      conversationId,
-      recentTurns: [],
-      summary: null,
-      turnCount: 0,
-      state: emptyConversationState(),
-    };
-  }
-  const recentTurns = parseTurns(record.recentStateJson);
-  const summaryState = stateFromSummary(record.summary);
-  return {
-    conversationId,
-    recentTurns,
-    summary: stripStateMarker(record.summary),
-    turnCount: Number(record.turnCount),
-    state: record.summary?.includes(STATE_MARKER)
-      ? summaryState
-      : stateFromTurns(recentTurns),
-  };
+  return snapshotFromRecord(record, conversationId);
 }
 
 export async function saveConversationTurn(
@@ -588,62 +595,80 @@ export async function saveConversationTurn(
   snapshot: ConversationMemorySnapshot,
   turn: Omit<ConversationTurn, "createdAt">,
 ): Promise<ConversationMemorySnapshot> {
-  const createdAt = new Date().toISOString();
-  const expandedTurns = [
-    ...snapshot.recentTurns,
-    {
-      ...turn,
-      turnId: turn.turnId ?? crypto.randomUUID(),
-      action: compactActionForMemory(turn.action),
-      createdAt,
-    },
-  ];
-  const nextState = normalizeState(
-    turn.action?.conversationState
-      ?? snapshot.state
-      ?? stateFromTurns(expandedTurns),
-  );
-  const turnCount = snapshot.turnCount + 1;
-  const shouldSummarize = expandedTurns.length > RECENT_CONVERSATION_TURNS
-    || turnCount >= SUMMARY_TRIGGER_TURNS;
-  const turnsToCompress = shouldSummarize
-    ? expandedTurns.slice(0, Math.max(0, expandedTurns.length - RECENT_CONVERSATION_TURNS))
-    : [];
-  const next: ConversationMemorySnapshot = {
-    conversationId: snapshot.conversationId,
-    recentTurns: expandedTurns.slice(-RECENT_CONVERSATION_TURNS),
-    summary: (() => {
-      const summary = appendSummary(stripStateMarker(snapshot.summary), turnsToCompress);
-      return summary
-        ? `${summary}${STATE_MARKER}${JSON.stringify(nextState)}`
-        : STATE_MARKER + JSON.stringify(nextState);
-    })(),
-    turnCount,
-    state: nextState,
-  };
+  return db.transaction(async (tx) => {
+    const lockKey = JSON.stringify([
+      identity.tenantId,
+      identity.userId,
+      "conversation-memory",
+      snapshot.conversationId,
+    ]);
+    await tx.execute(sql`
+      select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))
+    `);
 
-  await db.insert(conversationMemoryTable).values({
-    tenantId: identity.tenantId,
-    ownerUserId: identity.userId,
-    conversationId: next.conversationId,
-    recentStateJson: JSON.stringify(next.recentTurns),
-    summary: next.summary,
-    turnCount: next.turnCount,
-    updatedAt: new Date(),
-  }).onConflictDoUpdate({
-    target: [
-      conversationMemoryTable.tenantId,
-      conversationMemoryTable.ownerUserId,
-      conversationMemoryTable.conversationId,
-    ],
-    set: {
+    // Re-read after acquiring the per-conversation lock so stale caller snapshots
+    // cannot overwrite turns or summaries committed by another request.
+    const [record] = await tx.select().from(conversationMemoryTable).where(
+      ownershipWhere(identity, snapshot.conversationId),
+    ).limit(1);
+    const current = snapshotFromRecord(record, snapshot.conversationId);
+    const createdAt = new Date().toISOString();
+    const expandedTurns = [
+      ...current.recentTurns,
+      {
+        ...turn,
+        turnId: turn.turnId ?? crypto.randomUUID(),
+        action: compactActionForMemory(turn.action),
+        createdAt,
+      },
+    ];
+    const nextState = normalizeState(
+      turn.action?.conversationState
+        ?? current.state
+        ?? stateFromTurns(expandedTurns),
+    );
+    const turnCount = current.turnCount + 1;
+    const shouldSummarize = expandedTurns.length > RECENT_CONVERSATION_TURNS
+      || turnCount >= SUMMARY_TRIGGER_TURNS;
+    const turnsToCompress = shouldSummarize
+      ? expandedTurns.slice(0, Math.max(0, expandedTurns.length - RECENT_CONVERSATION_TURNS))
+      : [];
+    const next: ConversationMemorySnapshot = {
+      conversationId: snapshot.conversationId,
+      recentTurns: expandedTurns.slice(-RECENT_CONVERSATION_TURNS),
+      summary: (() => {
+        const summary = appendSummary(current.summary, turnsToCompress);
+        return summary
+          ? `${summary}${STATE_MARKER}${JSON.stringify(nextState)}`
+          : STATE_MARKER + JSON.stringify(nextState);
+      })(),
+      turnCount,
+      state: nextState,
+    };
+
+    await tx.insert(conversationMemoryTable).values({
+      tenantId: identity.tenantId,
+      ownerUserId: identity.userId,
+      conversationId: next.conversationId,
       recentStateJson: JSON.stringify(next.recentTurns),
       summary: next.summary,
       turnCount: next.turnCount,
       updatedAt: new Date(),
-    },
+    }).onConflictDoUpdate({
+      target: [
+        conversationMemoryTable.tenantId,
+        conversationMemoryTable.ownerUserId,
+        conversationMemoryTable.conversationId,
+      ],
+      set: {
+        recentStateJson: JSON.stringify(next.recentTurns),
+        summary: next.summary,
+        turnCount: next.turnCount,
+        updatedAt: new Date(),
+      },
+    });
+    return next;
   });
-  return next;
 }
 
 export function conversationContextMessages(

@@ -15,13 +15,16 @@ import {
   createSecondBrainCandidate,
   applySecondBrainContextBudget,
   applySecondBrainPolicy,
+  classifySecondBrainQuery,
   emptyRetrievalTrace,
   rememberSecondBrain,
   retrieveSecondBrain,
   searchSecondBrain,
+  shouldSearchSecondBrain,
   associateSecondBrainCandidate,
   reviewSecondBrainCandidate,
   SecondBrainCandidateAssociationError,
+  SecondBrainCandidateReviewError,
 } from "../src/lib/second-brain.ts";
 import type { SecondBrainMemory } from "@workspace/db";
 import { Phase2AgentRuntime, type ModelGateway } from "../src/lib/phase2.ts";
@@ -218,6 +221,11 @@ test("parses explicit remember, inferred preference candidates, and recall comma
       suggestionType: "preference",
     },
   });
+  const preferenceQuestion = "أنا بحب أتعامل مع الموضوع ده إزاي؟";
+  assert.equal(parseSecondBrainCandidate(preferenceQuestion), null);
+  assert.equal(parseSecondBrainCandidate("أنا بحب أتعامل مع الموضوع ده إزاي"), null);
+  assert.equal(shouldSearchSecondBrain(preferenceQuestion), true);
+  assert.equal(classifySecondBrainQuery(preferenceQuestion), "preference");
   assert.deepEqual(parseSecondBrainCommand("افتكر إن اسم ميدو هو محمد أحمد"), {
     type: "remember",
     memoryKind: "fact",
@@ -417,16 +425,35 @@ test("associates alias candidates only with same-tenant entities before approval
     name: "محمد أحمد",
     nameKey: "محمد احمد",
   }).returning();
+  const [duplicateNamedPerson] = await db.insert(peopleTable).values({
+    tenantId: identity.tenantId,
+    ownerUserId: identity.userId,
+    name: "محمد أحمد",
+    nameKey: "محمد احمد",
+  }).returning();
+  const [differentPerson] = await db.insert(peopleTable).values({
+    tenantId: identity.tenantId,
+    ownerUserId: identity.userId,
+    name: "ليلى",
+    nameKey: "ليلى",
+  }).returning();
   const alias = await createSecondBrainCandidate(identity, {
     memoryKind: "alias",
     key: "alias:ميدو",
     value: "محمد أحمد",
     confidenceBps: 8000,
+    metadata: { entityType: "person", entityId: person.id },
   });
+  assert.equal(alias.metadata?.entityId, undefined);
   await assert.rejects(
     () => associateSecondBrainCandidate(identity, alias.id, { entityType: "person", entityId: otherPerson.id }),
     (error: unknown) => error instanceof SecondBrainCandidateAssociationError
       && error.code === "MEMORY_CANDIDATE_ENTITY_NOT_FOUND",
+  );
+  await assert.rejects(
+    () => associateSecondBrainCandidate(identity, alias.id, { entityType: "person", entityId: differentPerson.id }),
+    (error: unknown) => error instanceof SecondBrainCandidateAssociationError
+      && error.code === "MEMORY_CANDIDATE_ENTITY_NAME_MISMATCH",
   );
   const associated = await associateSecondBrainCandidate(identity, alias.id, {
     entityType: "person",
@@ -437,6 +464,9 @@ test("associates alias candidates only with same-tenant entities before approval
   const approved = await reviewSecondBrainCandidate(identity, alias.id, { status: "approved" });
   assert.equal(approved?.candidate.status, "approved");
   assert.equal(approved?.memory?.metadata?.entityId, person.id);
+  const aliasResolution = await resolveEntity(identity, "person", "ميدو");
+  assert.equal(aliasResolution.selected?.id, person.id);
+  assert.notEqual(aliasResolution.selected?.id, duplicateNamedPerson.id);
 
   const fact = await createSecondBrainCandidate(identity, {
     memoryKind: "fact",
@@ -449,5 +479,81 @@ test("associates alias candidates only with same-tenant entities before approval
     (error: unknown) => error instanceof SecondBrainCandidateAssociationError
       && error.code === "SECOND_BRAIN_CANDIDATE_NOT_ASSOCIABLE",
   );
+  await cleanup();
+});
+
+test("serializes duplicate candidate creation by owner and key", async () => {
+  await cleanup();
+  const input = {
+    memoryKind: "preference" as const,
+    key: "preference:reply-style",
+    value: "أفضل الردود المختصرة",
+    confidenceBps: 7000,
+  };
+  const [first, second] = await Promise.all([
+    createSecondBrainCandidate(identity, input),
+    createSecondBrainCandidate(identity, input),
+  ]);
+  assert.equal(first.id, second.id);
+  const rows = await db.select().from(secondBrainCandidatesTable).where(and(
+    eq(secondBrainCandidatesTable.tenantId, identity.tenantId),
+    eq(secondBrainCandidatesTable.ownerUserId, identity.userId),
+    eq(secondBrainCandidatesTable.kind, input.memoryKind),
+    eq(secondBrainCandidatesTable.key, input.key),
+    eq(secondBrainCandidatesTable.status, "pending_review"),
+  ));
+  assert.equal(rows.length, 1);
+  await cleanup();
+});
+
+test("candidate review is serialized and an approved memory cannot be demoted", async () => {
+  await cleanup();
+  const candidate = await createSecondBrainCandidate(identity, {
+    memoryKind: "fact",
+    key: "note:concurrent-review",
+    value: "حقيقة مراجعة متزامنة",
+    confidenceBps: 7000,
+  });
+  await Promise.allSettled([
+    reviewSecondBrainCandidate(identity, candidate.id, { status: "approved" }),
+    reviewSecondBrainCandidate(identity, candidate.id, { status: "rejected" }),
+  ]);
+  const [reviewed] = await db.select().from(secondBrainCandidatesTable).where(and(
+    eq(secondBrainCandidatesTable.id, candidate.id),
+    eq(secondBrainCandidatesTable.tenantId, identity.tenantId),
+    eq(secondBrainCandidatesTable.ownerUserId, identity.userId),
+  ));
+  assert.equal(reviewed.status, "approved");
+  assert.ok(reviewed.promotedMemoryId);
+  const [memory] = await db.select().from(secondBrainMemoriesTable).where(and(
+    eq(secondBrainMemoriesTable.id, reviewed.promotedMemoryId!),
+    eq(secondBrainMemoriesTable.tenantId, identity.tenantId),
+    eq(secondBrainMemoriesTable.ownerUserId, identity.userId),
+  ));
+  assert.equal(memory.status, "active");
+  await assert.rejects(
+    () => reviewSecondBrainCandidate(identity, candidate.id, { status: "rejected" }),
+    (error: unknown) => error instanceof SecondBrainCandidateReviewError
+      && error.code === "SECOND_BRAIN_CANDIDATE_STATE_CONFLICT",
+  );
+  await cleanup();
+});
+
+test("approved candidate confidence stays explicit even when replacing an existing memory", async () => {
+  await cleanup();
+  await rememberSecondBrain(identity, {
+    memoryKind: "preference",
+    key: "preference:reply-style",
+    value: "تفضيل قديم",
+  });
+  const candidate = await createSecondBrainCandidate(identity, {
+    memoryKind: "preference",
+    key: "preference:reply-style",
+    value: "تفضيل تمت مراجعته",
+    confidenceBps: 7000,
+  });
+  const promoted = await reviewSecondBrainCandidate(identity, candidate.id, { status: "approved" });
+  assert.equal(promoted?.memory?.value, "تفضيل تمت مراجعته");
+  assert.equal(promoted?.memory?.confidenceBps, 10000);
   await cleanup();
 });

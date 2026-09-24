@@ -562,7 +562,38 @@ test("conversation turns retain input provenance without storing raw media", asy
   await cleanup();
 });
 
-test("relative expense approval applies its delta to the latest saved amount atomically", async () => {
+test("concurrent conversation turns merge against the latest persisted snapshot", async () => {
+  await cleanup();
+  const conversationId = `phase4-concurrent-turns-${Date.now()}`;
+  const staleSnapshot = await loadConversationMemory(identity, conversationId);
+  await Promise.all([
+    saveConversationTurn(identity, staleSnapshot, {
+      turnId: "concurrent-turn-one",
+      userMessage: "الرسالة الأولى",
+      assistantMessage: "رد أول",
+    }),
+    saveConversationTurn(identity, staleSnapshot, {
+      turnId: "concurrent-turn-two",
+      userMessage: "الرسالة الثانية",
+      assistantMessage: "رد ثان",
+    }),
+    saveConversationTurn(identity, staleSnapshot, {
+      turnId: "concurrent-turn-three",
+      userMessage: "الرسالة الثالثة",
+      assistantMessage: "رد ثالث",
+    }),
+  ]);
+
+  const saved = await loadConversationMemory(identity, conversationId);
+  assert.equal(saved.turnCount, 3);
+  assert.deepEqual(
+    new Set(saved.recentTurns.map((turn) => turn.turnId)),
+    new Set(["concurrent-turn-one", "concurrent-turn-two", "concurrent-turn-three"]),
+  );
+  await cleanup();
+});
+
+test("relative expense approval rejects stale versions and changed currencies", async () => {
   await cleanup();
   const seeded = await seedGraph();
   const gateway: ModelGateway = {
@@ -608,13 +639,16 @@ test("relative expense approval applies its delta to the latest saved amount ato
   ));
   const claimed = await claimOperation(identity, String(operationId));
   assert.equal(claimed.kind, "claimed");
-  await executeApprovedOperation(identity, claimed.operation);
+  await assert.rejects(
+    executeApprovedOperation(identity, claimed.operation),
+    /Record changed after this edit was opened/i,
+  );
   const [updated] = await db.select().from(expensesTable).where(and(
     eq(expensesTable.tenantId, identity.tenantId),
     eq(expensesTable.ownerUserId, identity.userId),
     eq(expensesTable.id, seeded.expense.id),
   ));
-  assert.equal(updated.amountMinor, 17_000);
+  assert.equal(updated.amountMinor, 15_000);
 
   const secondConversationId = `phase4-relative-currency-${Date.now()}`;
   const secondSnapshot = await loadConversationMemory(identity, secondConversationId);
@@ -661,7 +695,7 @@ test("relative expense approval applies its delta to the latest saved amount ato
     eq(expensesTable.ownerUserId, identity.userId),
     eq(expensesTable.id, updated.id),
   ));
-  assert.equal(currencyChanged.amountMinor, 17_000);
+  assert.equal(currencyChanged.amountMinor, 15_000);
   assert.equal(currencyChanged.currency, "USD");
   await cleanup();
 });

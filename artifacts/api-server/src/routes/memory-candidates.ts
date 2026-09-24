@@ -96,7 +96,8 @@ router.post("/memory-candidates/:candidateId/review", async (req, res): Promise<
     }));
   } catch (error) {
     if (error instanceof SecondBrainCandidateReviewError) {
-      sendRouteError(req, res, 400, error.message, error.code);
+      const status = error.code === "SECOND_BRAIN_CANDIDATE_STATE_CONFLICT" ? 409 : 400;
+      sendRouteError(req, res, status, error.message, error.code);
       return;
     }
     req.log.error({

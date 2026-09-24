@@ -169,7 +169,9 @@ async function addSecondBrainAliases(
       normalizeEntityText(candidate.nameKey ?? ""),
     ]);
     const matchingAliases = aliases
-      .filter((item) => candidateNames.has(normalizeEntityText(item.canonical)))
+      .filter((item) =>
+        item.entityId === candidate.id
+        && candidateNames.has(normalizeEntityText(item.canonical)))
       .map((item) => item.alias);
     return matchingAliases.length > 0
       ? { ...candidate, aliases: matchingAliases }
