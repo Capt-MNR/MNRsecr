@@ -1,0 +1,97 @@
+نفّذ الآن Token Input Audit فقط على نفس السيناريو المستخدم في "real-provider-benchmark.ts".
+
+الهدف:
+تحديد مصدر الـ3,523 input tokens التي سجلها Groq، والـ4,105 لدى Gemini، بدون تغيير production behavior.
+
+لا تغيّر:
+
+- Provider ordering
+- Context Assembly
+- Agent Work
+- memory behavior
+- API/schema
+- prompts أو tool definitions
+- routing logic
+
+ولا تضف Provider جديدًا ولا تستخدم OpenRouter.
+
+المطلوب:
+
+1. أعد بناء نفس request payload الذي يصل فعليًا لكل provider، قبل الإرسال مباشرة.
+
+2. اعمل breakdown واضح للـinput payload إلى:
+   
+   - system/developer instructions
+   - user messages
+   - conversation history
+   - Context Assembly evidence
+   - Second Brain / memory content
+   - structured records
+   - relationship context
+   - tool definitions/schemas
+   - final_response schema/tool
+   - أي provider-specific wrapper أو metadata يدخل في tokenized request.
+
+3. لكل جزء سجّل:
+   
+   - character count
+   - byte count
+   - عدد العناصر/الرسائل
+   - token count إذا كان tokenizer الحقيقي متاحًا.
+   
+   إذا لم يكن token count الحقيقي متاحًا، لا تقدّر وتعرض الرقم كأنه فعلي؛ افصل بين measured وestimated.
+
+4. أظهر أيضًا:
+   
+   - إجمالي character count
+   - إجمالي bytes
+   - إجمالي measured input tokens
+   - الفرق بين مجموع الأجزاء والرقم الذي سجله provider إن وُجد.
+
+5. قارن Groq وGemini:
+   
+   - ما الذي كان متطابقًا؟
+   - ما الذي أضافه كل provider؟
+   - لماذا اختلف input token count؟
+
+6. افحص خصوصًا حجم tool schemas.
+   نريد معرفة هل الأدوات الـ29/القائمة الحالية تدخل كلها في كل request، أم يوجد filtering/routing فعلي.
+   لا تغيّر filtering؛ فقط قِسه.
+
+7. افحص Context Assembly:
+   نريد معرفة حجم:
+   
+   - أحمد
+   - commitment
+   - task
+   - reminder
+   - temporal memory
+   - relationship evidence
+   - أي records أخرى دخلت السياق.
+
+8. لا تعمل optimization في هذه الخطوة.
+   هذه الجولة Audit فقط.
+   لا تحذف context ولا تقلل tools ولا تختصر prompts.
+
+9. شغّل benchmark أو test instrumentation على طلب واحد فقط لكل Groq وGemini إن أمكن، لتقليل استهلاك API.
+
+10. لا تستخدم Cohere أو OpenRouter في هذا الـaudit.
+
+في النهاية أعطني تقريرًا مختصرًا:
+
+- Groq measured input tokens:
+- Gemini measured input tokens:
+- Largest token contributors:
+- Tool schema cost:
+- Context Assembly cost:
+- Memory/Second Brain cost:
+- Conversation/system cost:
+- Provider-specific overhead:
+- Unexplained remainder:
+- هل يوجد obvious waste؟
+- ما هي أكبر 2–3 فرص optimization؟
+- files changed
+- tests/typecheck
+
+مهم:
+لا تنفذ أي optimization بعد الـaudit. أريد الأرقام أولًا، ثم سنقرر معًا ماذا نحذف أو نضغط.
