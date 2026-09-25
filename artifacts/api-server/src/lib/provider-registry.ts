@@ -1,7 +1,15 @@
-type ProviderProtocol = "gemini" | "openai-compatible" | "cohere";
+import {
+  directProviderRoute,
+  gatewayRoute,
+  type InferenceRoute,
+  type InferenceRouteKind,
+} from "./inference-routes";
+
+export type ProviderProtocol = "gemini" | "openai-compatible" | "cohere";
 
 export type ProviderDefinition = {
   name: string;
+  kind: InferenceRouteKind;
   protocol: ProviderProtocol;
   apiKeyEnv: string;
   modelEnv: string;
@@ -13,6 +21,7 @@ export type ProviderDefinition = {
 const builtInProviderDefinitions: ProviderDefinition[] = [
   {
     name: "gemini",
+    kind: "direct_provider",
     protocol: "gemini",
     apiKeyEnv: "GEMINI_API_KEY",
     modelEnv: "GEMINI_MODEL",
@@ -20,6 +29,7 @@ const builtInProviderDefinitions: ProviderDefinition[] = [
   },
   {
     name: "groq",
+    kind: "direct_provider",
     protocol: "openai-compatible",
     apiKeyEnv: "GROQ_API_KEY",
     modelEnv: "GROQ_MODEL",
@@ -28,6 +38,7 @@ const builtInProviderDefinitions: ProviderDefinition[] = [
   },
   {
     name: "mistral",
+    kind: "direct_provider",
     protocol: "openai-compatible",
     apiKeyEnv: "MISTRAL_API_KEY",
     modelEnv: "MISTRAL_MODEL",
@@ -36,6 +47,7 @@ const builtInProviderDefinitions: ProviderDefinition[] = [
   },
   {
     name: "cohere",
+    kind: "direct_provider",
     protocol: "cohere",
     apiKeyEnv: "COHERE_API_KEY",
     modelEnv: "COHERE_MODEL",
@@ -44,6 +56,7 @@ const builtInProviderDefinitions: ProviderDefinition[] = [
   },
   {
     name: "deepseek",
+    kind: "direct_provider",
     protocol: "openai-compatible",
     apiKeyEnv: "DEEPSEEK_API_KEY",
     modelEnv: "DEEPSEEK_MODEL",
@@ -53,6 +66,7 @@ const builtInProviderDefinitions: ProviderDefinition[] = [
   },
   {
     name: "qwen",
+    kind: "direct_provider",
     protocol: "openai-compatible",
     apiKeyEnv: "QWEN_API_KEY",
     modelEnv: "QWEN_MODEL",
@@ -62,6 +76,7 @@ const builtInProviderDefinitions: ProviderDefinition[] = [
   },
   {
     name: "openrouter",
+    kind: "gateway",
     protocol: "openai-compatible",
     apiKeyEnv: "OPENROUTER_API_KEY",
     modelEnv: "OPENROUTER_MODEL",
@@ -81,16 +96,32 @@ function validEnvironmentName(value: unknown): value is string {
   return typeof value === "string" && /^[A-Z][A-Z0-9_]{1,127}$/u.test(value);
 }
 
-function validProviderDefinition(value: unknown): value is ProviderDefinition {
+type ProviderDefinitionInput = Omit<ProviderDefinition, "kind"> & {
+  kind?: InferenceRouteKind;
+};
+
+function validProviderDefinition(value: unknown): value is ProviderDefinitionInput {
   if (!value || typeof value !== "object") return false;
   const item = value as Record<string, unknown>;
   if (!validIdentifier(item.name)) return false;
   if (item.protocol !== "openai-compatible") return false;
+  if (
+    item.kind !== undefined
+    && item.kind !== "direct_provider"
+    && item.kind !== "gateway"
+  ) return false;
   if (!validEnvironmentName(item.apiKeyEnv) || !validEnvironmentName(item.modelEnv)) return false;
   if (typeof item.defaultModel !== "string" || item.defaultModel.trim().length === 0) return false;
   if (item.apiUrlEnv !== undefined && !validEnvironmentName(item.apiUrlEnv)) return false;
   if (typeof item.defaultApiUrl !== "string" || !/^https:\/\//u.test(item.defaultApiUrl)) return false;
   return true;
+}
+
+function normalizeProviderDefinition(definition: ProviderDefinitionInput): ProviderDefinition {
+  return {
+    ...definition,
+    kind: definition.kind ?? (definition.name === "openrouter" ? "gateway" : "direct_provider"),
+  };
 }
 
 function configuredProviderDefinitions(): ProviderDefinition[] {
@@ -117,19 +148,39 @@ function configuredProviderDefinitions(): ProviderDefinition[] {
     if (names.has(definition.name)) throw new Error(`INVALID_AI_PROVIDER_CATALOG:duplicate:${definition.name}`);
     names.add(definition.name);
   }
-  return definitions.map((definition) => ({ ...definition }));
+  return definitions.map(normalizeProviderDefinition);
+}
+
+export function inferenceServiceDefinitions(): ProviderDefinition[] {
+  return configuredProviderDefinitions();
 }
 
 export function providerDefinitions(): ProviderDefinition[] {
-  return configuredProviderDefinitions();
+  return inferenceServiceDefinitions().filter((definition) => definition.kind === "direct_provider");
+}
+
+export function directProviderDefinitions(): ProviderDefinition[] {
+  return providerDefinitions();
+}
+
+export function gatewayDefinitions(): ProviderDefinition[] {
+  return inferenceServiceDefinitions().filter((definition) => definition.kind === "gateway");
 }
 
 export function defaultProviderOrder(): ProviderName[] {
   return providerDefinitions().map((definition) => definition.name);
 }
 
+export function defaultInferenceServiceOrder(): ProviderName[] {
+  return inferenceServiceDefinitions().map((definition) => definition.name);
+}
+
 export function isProviderName(value: string | undefined): value is ProviderName {
   return Boolean(value) && providerDefinitions().some((definition) => definition.name === value);
+}
+
+export function inferenceServiceIsKnown(value: string | undefined): value is ProviderName {
+  return Boolean(value) && inferenceServiceDefinitions().some((definition) => definition.name === value);
 }
 
 export function providerDefinition(provider: ProviderName): ProviderDefinition {
@@ -138,12 +189,27 @@ export function providerDefinition(provider: ProviderName): ProviderDefinition {
   return definition;
 }
 
+export function inferenceServiceDefinition(serviceName: ProviderName): ProviderDefinition {
+  const definition = inferenceServiceDefinitions().find((item) => item.name === serviceName);
+  if (!definition) throw new Error(`UNKNOWN_INFERENCE_SERVICE:${serviceName}`);
+  return definition;
+}
+
 export function providerIsConfigured(provider: ProviderName): boolean {
   return Boolean(process.env[providerDefinition(provider).apiKeyEnv]);
 }
 
+export function inferenceServiceIsConfigured(serviceName: ProviderName): boolean {
+  return Boolean(process.env[inferenceServiceDefinition(serviceName).apiKeyEnv]);
+}
+
 export function providerModel(provider: ProviderName): string {
   const definition = providerDefinition(provider);
+  return process.env[definition.modelEnv] ?? definition.defaultModel;
+}
+
+export function inferenceServiceModel(serviceName: ProviderName): string {
+  const definition = inferenceServiceDefinition(serviceName);
   return process.env[definition.modelEnv] ?? definition.defaultModel;
 }
 
@@ -152,4 +218,40 @@ export function providerApiUrl(provider: ProviderName): string | undefined {
   return definition.apiUrlEnv
     ? process.env[definition.apiUrlEnv] ?? definition.defaultApiUrl
     : definition.defaultApiUrl;
+}
+
+export function inferenceServiceApiUrl(serviceName: ProviderName): string | undefined {
+  const definition = inferenceServiceDefinition(serviceName);
+  return definition.apiUrlEnv
+    ? process.env[definition.apiUrlEnv] ?? definition.defaultApiUrl
+    : definition.defaultApiUrl;
+}
+
+export function inferenceRouteForService(
+  serviceName: ProviderName,
+  modelName = inferenceServiceModel(serviceName),
+): InferenceRoute {
+  const definition = inferenceServiceDefinition(serviceName);
+  return definition.kind === "gateway"
+    ? gatewayRoute(definition.name, modelName)
+    : directProviderRoute(definition.name, modelName);
+}
+
+export function routeIdForService(serviceName: ProviderName): string {
+  const definition = inferenceServiceDefinition(serviceName);
+  return definition.kind === "gateway"
+    ? `gateway:${definition.name}`
+    : `direct:${definition.name}`;
+}
+
+export function serviceNameForRouteId(routeId: string): ProviderName | undefined {
+  const separator = routeId.indexOf(":");
+  if (separator < 1) return undefined;
+  const kind = routeId.slice(0, separator);
+  const name = routeId.slice(separator + 1);
+  const definition = inferenceServiceDefinitions().find((item) => item.name === name);
+  if (!definition) return undefined;
+  if (kind === "direct" && definition.kind === "direct_provider") return name;
+  if (kind === "gateway" && definition.kind === "gateway") return name;
+  return undefined;
 }

@@ -420,6 +420,10 @@ test("controlled Groq → Gemini → Cohere failover preserves Ahmad's assembled
       result.action?.providerTrace?.providersAttempted,
       ["groq", "gemini", "cohere"],
     );
+    assert.deepEqual(
+      result.action?.providerTrace?.routesAttempted,
+      ["direct:groq", "direct:gemini", "direct:cohere"],
+    );
     assert.deepEqual(providerCalls.map((call) => call.outcome), ["FAIL", "FAIL", "SUCCESS"]);
     assert.ok(providerCalls[0]?.reason);
     assert.ok(providerCalls[1]?.reason);

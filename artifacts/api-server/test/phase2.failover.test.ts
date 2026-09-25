@@ -15,6 +15,7 @@ import {
   GroqModelGateway,
   MistralModelGateway,
   CohereModelGateway,
+  configuredRouteOrder,
   classifyToolScope,
   configuredProviderOrder,
   executeStructuredTool,
@@ -113,14 +114,22 @@ test("Gemini-only and Groq-only configurations complete through the same gateway
 
 test("provider order is configurable and defaults to Gemini before Groq when both keys exist", () => {
   const keys = [
+    "AI_PROVIDER_CATALOG",
     "AI_PROVIDER",
     "AI_PRIMARY_PROVIDER",
     "AI_FALLBACK_PROVIDER",
     "AI_SECONDARY_FALLBACK_PROVIDER",
+    "AI_ROUTE_ORDER",
+    "AI_PRIMARY_ROUTE",
+    "AI_FALLBACK_ROUTE",
+    "AI_SECONDARY_FALLBACK_ROUTE",
     "GEMINI_API_KEY",
     "GROQ_API_KEY",
     "MISTRAL_API_KEY",
     "COHERE_API_KEY",
+    "DEEPSEEK_API_KEY",
+    "QWEN_API_KEY",
+    "OPENROUTER_API_KEY",
   ] as const;
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   try {
@@ -128,6 +137,16 @@ test("provider order is configurable and defaults to Gemini before Groq when bot
     process.env.GROQ_API_KEY = "test-groq-key";
     process.env.MISTRAL_API_KEY = "test-mistral-key";
     process.env.COHERE_API_KEY = "test-cohere-key";
+    for (const key of [
+      "AI_PROVIDER_CATALOG",
+      "AI_ROUTE_ORDER",
+      "AI_PRIMARY_ROUTE",
+      "AI_FALLBACK_ROUTE",
+      "AI_SECONDARY_FALLBACK_ROUTE",
+      "DEEPSEEK_API_KEY",
+      "QWEN_API_KEY",
+      "OPENROUTER_API_KEY",
+    ] as const) delete process.env[key];
     delete process.env.AI_PROVIDER;
     delete process.env.AI_PRIMARY_PROVIDER;
     delete process.env.AI_FALLBACK_PROVIDER;
@@ -137,6 +156,28 @@ test("provider order is configurable and defaults to Gemini before Groq when bot
     process.env.AI_PRIMARY_PROVIDER = "groq";
     process.env.AI_FALLBACK_PROVIDER = "gemini";
     assert.deepEqual(configuredProviderOrder(), ["groq", "gemini", "mistral", "cohere"]);
+
+    process.env.OPENROUTER_API_KEY = "test-openrouter-key";
+    delete process.env.AI_PRIMARY_PROVIDER;
+    delete process.env.AI_FALLBACK_PROVIDER;
+    delete process.env.AI_SECONDARY_FALLBACK_PROVIDER;
+    assert.deepEqual(
+      configuredProviderOrder(),
+      ["gemini", "groq", "mistral", "cohere", "openrouter"],
+    );
+
+    process.env.AI_PRIMARY_PROVIDER = "gemini";
+    process.env.AI_PRIMARY_ROUTE = "direct:groq";
+    process.env.AI_FALLBACK_ROUTE = "gateway:openrouter";
+    process.env.AI_ROUTE_ORDER = "gateway:openrouter,direct:gemini,direct:groq";
+    assert.deepEqual(
+      configuredProviderOrder().slice(0, 3),
+      ["groq", "openrouter", "gemini"],
+    );
+    assert.deepEqual(
+      configuredRouteOrder().slice(0, 3),
+      ["direct:groq", "gateway:openrouter", "direct:gemini"],
+    );
   } finally {
     for (const key of keys) {
       if (previous[key] === undefined) delete process.env[key];

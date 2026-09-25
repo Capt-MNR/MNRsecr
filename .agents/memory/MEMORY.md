@@ -57,7 +57,7 @@
 - [Provider quota cooldowns](provider-quota-cooldowns.md) — quota responses without Retry-After still need an immediate circuit cooldown before the next secretary request.
 - [Agent Work migrations](agent-work-migrations.md) — invalid legacy Drizzle metadata requires reviewed additive schema changes until migration history is reconciled.
 - [Agent Work runner boundary](agent-work-runner-boundary.md) — background Work execution must enumerate durable tenant identities, claim leases, persist bounded evidence, and review unknown sources.
-- [Provider registry](provider-registry.md) — add or remove LLM providers through shared metadata and gateway protocols, not scattered routing branches.
+- [Provider registry](provider-registry.md) — namespaced route IDs separate direct Providers from Gateways; MNRsecr selects endpoints while Gateways own upstream routing.
 - [OpenRouter endpoint tool availability](openrouter-endpoint-tool-availability.md) — catalog-level tool support can outlive usable routes; check live endpoints and classify routing failures separately from model quality.
 - [Delegated action approvals](delegated-action-approval.md) — Agent Work actions must reserve the existing secretary operation and resume only after verified approval execution.
 - [Resolver shadow evaluation](resolver-shadow-evaluation.md) — measure entity candidates with seeded conversation state before allowing resolver output to influence orchestration.

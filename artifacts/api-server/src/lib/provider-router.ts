@@ -1,7 +1,7 @@
 import { featureFlags } from "./feature-flags";
 import {
-  defaultProviderOrder,
-  isProviderName,
+  defaultInferenceServiceOrder,
+  inferenceServiceIsKnown,
   type ProviderName,
 } from "./provider-registry";
 
@@ -18,8 +18,8 @@ function configuredOrder(): RoutedProvider[] {
   const configured = (process.env.PROVIDER_ROUTING_ORDER ?? "")
     .split(",")
     .map((value) => value.trim().toLowerCase())
-    .filter(isProviderName);
-  return configured.length > 0 ? configured : defaultProviderOrder();
+    .filter(inferenceServiceIsKnown);
+  return configured.length > 0 ? configured : defaultInferenceServiceOrder();
 }
 
 export function routeProvider(message: string, preferred?: RoutedProvider): ProviderRoute {

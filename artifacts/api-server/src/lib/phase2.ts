@@ -79,8 +79,25 @@ import { budgetContext } from "./context-budgeter";
 import { envFlag, featureFlags } from "./feature-flags";
 import { providerOrder } from "./provider-router";
 import {
-  defaultProviderOrder,
-  isProviderName,
+  directProviderRoute,
+  gatewayRoute,
+  routeHealthKey,
+  routeTargetId,
+  routeWithModel,
+  type InferenceRoute,
+  type InferenceRouteId,
+  type InferenceRouteKind,
+} from "./inference-routes";
+import {
+  defaultInferenceServiceOrder,
+  inferenceRouteForService,
+  inferenceServiceApiUrl,
+  inferenceServiceDefinition,
+  inferenceServiceIsConfigured,
+  inferenceServiceIsKnown,
+  inferenceServiceModel,
+  routeIdForService,
+  serviceNameForRouteId,
   providerApiUrl,
   providerDefinition,
   providerIsConfigured,
@@ -503,16 +520,19 @@ export type GatewayCallContext = {
   currentUserMessage?: string;
   metrics?: GatewayRequestMetrics;
   deadlineAt?: number;
+  route?: InferenceRoute;
 };
 
 export type GatewayRequestMetrics = {
   logicalLlmCalls: number;
   httpAttempts: number;
   httpAttemptsByProvider: Partial<Record<ProviderName, number>>;
+  httpAttemptsByRoute?: Partial<Record<InferenceRouteId, number>>;
   retryCount: number;
   providerFallbackAttempts: number;
   modelFallbackAttempts: number;
   requestBytesByProvider: Partial<Record<ProviderName, number>>;
+  requestBytesByRoute?: Partial<Record<InferenceRouteId, number>>;
   maxRequestBytes: number;
   systemPromptChars: number;
   toolDefinitionsChars: number;
@@ -523,6 +543,8 @@ export type GatewayRequestMetrics = {
   cachedTokens?: number;
   attempts: LlmUsageAttempt[];
 };
+
+export type LlmUsageFormat = "gemini" | "openai-compatible" | "cohere";
 
 export type NormalizedLlmUsage = {
   inputTokens: number | null;
@@ -554,6 +576,11 @@ export type LlmUsageAttempt = {
   requestId: string;
   conversationId: string | null;
   provider: ProviderName;
+  routeId?: InferenceRouteId;
+  routeKind?: InferenceRouteKind;
+  routeTargetId?: string;
+  modelId?: string;
+  usageFormat?: LlmUsageFormat;
   model: string;
   logicalCallNumber: number;
   attemptNumber: number;
@@ -684,8 +711,16 @@ function logLlmFailure(
 export interface ModelGateway {
   readonly provider: ProviderName;
   readonly modelName: string;
+  readonly routeKind?: InferenceRouteKind;
+  readonly usageFormat?: LlmUsageFormat;
+  readonly route?: InferenceRoute;
   generate(messages: ConversationMessage[], context: GatewayCallContext): Promise<GatewayResponse>;
-  getProviderForRequest?(requestId: string): { provider: ProviderName; model: string };
+  getProviderForRequest?(requestId: string): {
+    provider: ProviderName;
+    model: string;
+    routeId?: InferenceRouteId;
+    routeKind?: InferenceRouteKind;
+  };
   getTrace?(requestId: string): ProviderTrace;
   finishRequest?(requestId: string): void;
 }
@@ -695,16 +730,22 @@ export type ProviderTrace = {
   fallbackProvider?: ProviderName;
   selectedProvider?: ProviderName;
   providersAttempted: ProviderName[];
+  primaryRouteId?: InferenceRouteId;
+  fallbackRouteId?: InferenceRouteId;
+  selectedRouteId?: InferenceRouteId;
+  routesAttempted?: InferenceRouteId[];
   fallbackOccurred: boolean;
   fallbackReason?: string;
   toolCallsExecutedBeforeFailure?: number;
   logicalLlmCalls?: number;
   httpAttempts?: number;
   httpAttemptsByProvider?: Partial<Record<ProviderName, number>>;
+  httpAttemptsByRoute?: Partial<Record<InferenceRouteId, number>>;
   retryCount?: number;
   providerFallbackAttempts?: number;
   modelFallbackAttempts?: number;
   requestBytesByProvider?: Partial<Record<ProviderName, number>>;
+  requestBytesByRoute?: Partial<Record<InferenceRouteId, number>>;
   maxRequestBytes?: number;
   systemPromptChars?: number;
   toolDefinitionsChars?: number;
@@ -3614,10 +3655,12 @@ function createGatewayMetrics(): GatewayRequestMetrics {
     logicalLlmCalls: 0,
     httpAttempts: 0,
     httpAttemptsByProvider: {},
+    httpAttemptsByRoute: {},
     retryCount: 0,
     providerFallbackAttempts: 0,
     modelFallbackAttempts: 0,
     requestBytesByProvider: {},
+    requestBytesByRoute: {},
     maxRequestBytes: 0,
     systemPromptChars: 0,
     toolDefinitionsChars: 0,
@@ -3645,7 +3688,7 @@ function nestedValue(value: unknown, path: string[]): unknown {
   return current;
 }
 
-export function normalizeProviderUsage(provider: ProviderName, usage: unknown): NormalizedLlmUsage {
+export function normalizeLlmUsage(usageFormat: LlmUsageFormat, usage: unknown): NormalizedLlmUsage {
   if (!usage || typeof usage !== "object") {
     return {
       inputTokens: null,
@@ -3657,19 +3700,19 @@ export function normalizeProviderUsage(provider: ProviderName, usage: unknown): 
   }
 
   const value = usage as Record<string, unknown>;
-  const inputTokens = provider === "gemini"
+  const inputTokens = usageFormat === "gemini"
     ? finiteTokenCount(value.promptTokenCount)
     : finiteTokenCount(value.prompt_tokens)
       ?? finiteTokenCount(value.input_tokens)
       ?? finiteTokenCount(nestedValue(value, ["tokens", "input_tokens"]))
       ?? finiteTokenCount(nestedValue(value, ["billed_units", "input_tokens"]));
-  const outputTokens = provider === "gemini"
+  const outputTokens = usageFormat === "gemini"
     ? finiteTokenCount(value.candidatesTokenCount)
     : finiteTokenCount(value.completion_tokens)
       ?? finiteTokenCount(value.output_tokens)
       ?? finiteTokenCount(nestedValue(value, ["tokens", "output_tokens"]))
       ?? finiteTokenCount(nestedValue(value, ["billed_units", "output_tokens"]));
-  const directTotal = provider === "gemini"
+  const directTotal = usageFormat === "gemini"
     ? finiteTokenCount(value.totalTokenCount)
     : finiteTokenCount(value.total_tokens);
   const totalTokens = directTotal ?? (
@@ -3677,7 +3720,7 @@ export function normalizeProviderUsage(provider: ProviderName, usage: unknown): 
       ? inputTokens + outputTokens
       : null
   );
-  const cachedTokens = provider === "gemini"
+  const cachedTokens = usageFormat === "gemini"
     ? finiteTokenCount(value.cachedContentTokenCount)
     : finiteTokenCount(value.cached_tokens)
       ?? finiteTokenCount(nestedValue(value, ["prompt_tokens_details", "cached_tokens"]));
@@ -3689,6 +3732,15 @@ export function normalizeProviderUsage(provider: ProviderName, usage: unknown): 
     cachedTokens,
     completeness: knownParts === 3 ? "complete" : knownParts > 0 ? "partial" : "unavailable",
   };
+}
+
+export function normalizeProviderUsage(provider: ProviderName, usage: unknown): NormalizedLlmUsage {
+  const usageFormat: LlmUsageFormat = provider === "gemini"
+    ? "gemini"
+    : provider === "cohere"
+      ? "cohere"
+      : "openai-compatible";
+  return normalizeLlmUsage(usageFormat, usage);
 }
 
 function contextBreakdown(
@@ -3756,6 +3808,8 @@ function contextBreakdown(
 
 type LlmAttemptStart = {
   provider: ProviderName;
+  route: InferenceRoute;
+  usageFormat: LlmUsageFormat;
   model: string;
   attemptNumber: number;
   scope: ToolScope["name"] | null;
@@ -3773,6 +3827,8 @@ function beginLlmAttempt(
   provider: ProviderName,
   model: string,
   payload: {
+    route: InferenceRoute;
+    usageFormat: LlmUsageFormat;
     requestBytes: number;
     systemPromptChars: number;
     toolDefinitionsChars: number;
@@ -3790,6 +3846,8 @@ function beginLlmAttempt(
   if (!metrics) {
     return {
       provider,
+      route: payload.route,
+      usageFormat: payload.usageFormat,
       model,
       attemptNumber: 1,
       scope: context.toolScope?.name ?? null,
@@ -3814,7 +3872,11 @@ function beginLlmAttempt(
   metrics.httpAttempts += 1;
   if (payload.retry) metrics.retryCount += 1;
   metrics.httpAttemptsByProvider[provider] = (metrics.httpAttemptsByProvider[provider] ?? 0) + 1;
+  metrics.httpAttemptsByRoute ??= {};
+  metrics.httpAttemptsByRoute[payload.route.id] = (metrics.httpAttemptsByRoute[payload.route.id] ?? 0) + 1;
   metrics.requestBytesByProvider[provider] = (metrics.requestBytesByProvider[provider] ?? 0) + payload.requestBytes;
+  metrics.requestBytesByRoute ??= {};
+  metrics.requestBytesByRoute[payload.route.id] = (metrics.requestBytesByRoute[payload.route.id] ?? 0) + payload.requestBytes;
   metrics.maxRequestBytes = Math.max(metrics.maxRequestBytes, payload.requestBytes);
   metrics.systemPromptChars = Math.max(metrics.systemPromptChars, payload.systemPromptChars);
   metrics.toolDefinitionsChars = Math.max(metrics.toolDefinitionsChars, payload.toolDefinitionsChars);
@@ -3822,6 +3884,8 @@ function beginLlmAttempt(
   metrics.maxConversationChars = Math.max(metrics.maxConversationChars, payload.conversationChars);
   return {
     provider,
+    route: payload.route,
+    usageFormat: payload.usageFormat,
     model,
     attemptNumber: metrics.httpAttempts,
     scope: context.toolScope?.name ?? null,
@@ -3847,11 +3911,16 @@ function finishLlmAttempt(
 ): void {
   const metrics = context.metrics;
   if (!metrics) return;
-  const normalized = normalizeProviderUsage(attempt.provider, usage);
+  const normalized = normalizeLlmUsage(attempt.usageFormat, usage);
   const entry: LlmUsageAttempt = {
     requestId: context.requestId,
     conversationId: context.conversationId ?? null,
     provider: attempt.provider,
+    routeId: attempt.route.id,
+    routeKind: attempt.route.kind,
+    routeTargetId: routeTargetId(attempt.route),
+    modelId: attempt.route.model.id,
+    usageFormat: attempt.usageFormat,
     model: attempt.model,
     logicalCallNumber: context.callNumber,
     attemptNumber: attempt.attemptNumber,
@@ -3881,6 +3950,11 @@ function finishLlmAttempt(
     requestId: entry.requestId,
     conversationId: entry.conversationId,
     provider: entry.provider,
+    routeId: entry.routeId,
+    routeKind: entry.routeKind,
+    routeTargetId: entry.routeTargetId,
+    modelId: entry.modelId,
+    usageFormat: entry.usageFormat,
     model: entry.model,
     logicalCallNumber: entry.logicalCallNumber,
     attemptNumber: entry.attemptNumber,
@@ -4018,6 +4092,9 @@ function recordProviderRequest(
     toolNames?: string[];
     conversationChars: number;
     model?: string;
+    route?: InferenceRoute;
+    routeKind?: InferenceRouteKind;
+    usageFormat?: LlmUsageFormat;
     context?: LlmContextBreakdown;
     fallback?: boolean;
     retry?: boolean;
@@ -4025,8 +4102,19 @@ function recordProviderRequest(
     cacheRetry?: boolean;
   },
 ): LlmAttemptStart {
-  return beginLlmAttempt(context, provider, payload.model ?? provider, {
+  const model = payload.model ?? provider;
+  const route = routeWithModel(
+    payload.route
+      ?? context.route
+      ?? (payload.routeKind === "gateway"
+        ? gatewayRoute(provider, model)
+        : directProviderRoute(provider, model)),
+    model,
+  );
+  return beginLlmAttempt(context, provider, model, {
     ...payload,
+    route,
+    usageFormat: payload.usageFormat ?? "openai-compatible",
     toolNames: payload.toolNames ?? [],
     context: payload.context ?? contextBreakdown(
       [],
@@ -4235,6 +4323,8 @@ function toGeminiTools(scope?: ToolScope, finalResponseOnly = false) {
 
 export class GeminiModelGateway implements ModelGateway {
   readonly provider = "gemini" as const;
+  readonly routeKind = "direct_provider" as const;
+  readonly usageFormat = "gemini" as const;
   private readonly apiKey = process.env.GEMINI_API_KEY;
   private readonly model = GEMINI_MODEL;
   private activeModel = GEMINI_MODEL;
@@ -4435,6 +4525,8 @@ export class GeminiModelGateway implements ModelGateway {
           const requestBody = JSON.stringify(requestPayload);
             activeAttempt = recordProviderRequest(context, "gemini", {
               model,
+              routeKind: this.routeKind,
+              usageFormat: this.usageFormat,
             requestBytes: Buffer.byteLength(requestBody),
             systemPromptChars: systemText.length,
             toolDefinitionsChars: JSON.stringify(toolDefinitions).length,
@@ -4585,6 +4677,8 @@ export class GeminiModelGateway implements ModelGateway {
 
 export class GroqModelGateway implements ModelGateway {
   readonly provider = "groq" as const;
+  readonly routeKind = "direct_provider" as const;
+  readonly usageFormat = "openai-compatible" as const;
   private readonly apiKey = process.env.GROQ_API_KEY;
   readonly model = GROQ_MODEL;
 
@@ -4639,6 +4733,8 @@ export class GroqModelGateway implements ModelGateway {
     for (let attempt = 0; attempt < MAX_GROQ_HTTP_ATTEMPTS; attempt += 1) {
       const attemptMeasurement = recordProviderRequest(context, "groq", {
         model: this.model,
+        routeKind: this.routeKind,
+        usageFormat: this.usageFormat,
         requestBytes: Buffer.byteLength(requestBody),
         systemPromptChars: systemText.length,
         toolDefinitionsChars: JSON.stringify(tools).length,
@@ -4762,6 +4858,7 @@ export class GroqModelGateway implements ModelGateway {
 export class OpenAiCompatibleModelGateway implements ModelGateway {
   private readonly apiKey: string | undefined;
   readonly model: string;
+  readonly usageFormat = "openai-compatible" as const;
 
   constructor(
     readonly provider: ProviderName,
@@ -4769,6 +4866,7 @@ export class OpenAiCompatibleModelGateway implements ModelGateway {
     model: string,
     apiKey: string | undefined,
     private readonly apiKeyName: string,
+    readonly routeKind: InferenceRouteKind = "direct_provider",
   ) {
     this.model = model;
     this.apiKey = apiKey;
@@ -4821,6 +4919,8 @@ export class OpenAiCompatibleModelGateway implements ModelGateway {
     const systemText = instructions.text;
     const attemptMeasurement = recordProviderRequest(context, this.provider, {
       model: this.model,
+      routeKind: this.routeKind,
+      usageFormat: this.usageFormat,
       requestBytes: Buffer.byteLength(requestBody),
       systemPromptChars: systemText.length,
       toolDefinitionsChars: JSON.stringify(tools).length,
@@ -4976,13 +5076,14 @@ export class QwenModelGateway extends OpenAiCompatibleModelGateway {
 
 export class OpenRouterModelGateway extends OpenAiCompatibleModelGateway {
   constructor() {
-    const definition = providerDefinition("openrouter");
+    const definition = inferenceServiceDefinition("openrouter");
     super(
       "openrouter",
-      providerApiUrl("openrouter") ?? "",
-      providerModel("openrouter"),
+      inferenceServiceApiUrl("openrouter") ?? "",
+      inferenceServiceModel("openrouter"),
       process.env[definition.apiKeyEnv],
       definition.apiKeyEnv,
+      "gateway",
     );
   }
 }
@@ -4993,9 +5094,9 @@ type CircuitState = {
 };
 
 type RequestProviderState = {
-  fallbackProvider?: ProviderName;
-  selectedProvider?: ProviderName;
-  providerIndex?: number;
+  fallbackRouteId?: InferenceRouteId;
+  selectedRouteId?: InferenceRouteId;
+  routeIndex?: number;
   primaryError?: SecretaryError;
   expiresAt: number;
 };
@@ -5004,57 +5105,74 @@ const CIRCUIT_FAILURE_THRESHOLD = 2;
 const CIRCUIT_OPEN_MS = 15_000;
 const REQUEST_PROVIDER_STATE_TTL_MS = 5 * 60_000;
 
-export class FailoverModelGateway implements ModelGateway {
-  private readonly circuits = new Map<ProviderName, CircuitState>();
+export class MnrInferenceRouter implements ModelGateway {
+  private readonly circuits = new Map<string, CircuitState>();
   private readonly requests = new Map<string, RequestProviderState>();
   private readonly traces = new Map<string, ProviderTrace>();
   private readonly metrics = new Map<string, GatewayRequestMetrics>();
 
   constructor(
-    private readonly gateways: Partial<Record<ProviderName, ModelGateway>>,
-    private readonly order: ProviderName[],
+    private readonly gateways: Partial<Record<InferenceRouteId, ModelGateway>>,
+    private readonly order: InferenceRouteId[],
+    private readonly routes: Partial<Record<InferenceRouteId, InferenceRoute>> = {},
   ) {
-    if (order.length === 0) throw new Error("At least one LLM provider is required.");
+    if (order.length === 0) throw new Error("At least one inference route is required.");
   }
 
   get provider(): ProviderName {
-    return this.order[0];
+    return routeTargetId(this.routeFor(this.order[0]));
   }
 
   get modelName(): string {
     return this.gateways[this.order[0]]?.modelName ?? "unconfigured";
   }
 
-  private circuit(provider: ProviderName): CircuitState {
-    const current = this.circuits.get(provider);
+  private routeFor(routeId: InferenceRouteId): InferenceRoute {
+    const configured = this.routes[routeId] ?? this.gateways[routeId]?.route;
+    if (configured) return configured;
+    const serviceName = serviceNameForRouteId(routeId);
+    const modelName = this.gateways[routeId]?.modelName ?? "unconfigured";
+    if (serviceName) return inferenceRouteForService(serviceName, modelName);
+    const separator = routeId.indexOf(":");
+    const kind = routeId.slice(0, separator);
+    const targetId = separator > 0 ? routeId.slice(separator + 1) : routeId;
+    return kind === "gateway"
+      ? gatewayRoute(targetId, modelName)
+      : directProviderRoute(targetId, modelName);
+  }
+
+  private circuit(route: InferenceRoute): CircuitState {
+    const key = routeHealthKey(route);
+    const current = this.circuits.get(key);
     if (current) return current;
     const created = { consecutiveFailures: 0, openUntil: 0 };
-    this.circuits.set(provider, created);
+    this.circuits.set(key, created);
     return created;
   }
 
-  private isCircuitOpen(provider: ProviderName): boolean {
-    return this.circuit(provider).openUntil > Date.now();
+  private isCircuitOpen(route: InferenceRoute): boolean {
+    return this.circuit(route).openUntil > Date.now();
   }
 
-  private circuitRetryAfterSeconds(provider: ProviderName): number | undefined {
-    const remainingMs = this.circuit(provider).openUntil - Date.now();
+  private circuitRetryAfterSeconds(route: InferenceRoute): number | undefined {
+    const remainingMs = this.circuit(route).openUntil - Date.now();
     return remainingMs > 0 ? Math.ceil(remainingMs / 1000) : undefined;
   }
 
-  private markSuccess(provider: ProviderName): void {
-    this.circuits.set(provider, { consecutiveFailures: 0, openUntil: 0 });
+  private markSuccess(route: InferenceRoute): void {
+    this.circuits.set(routeHealthKey(route), { consecutiveFailures: 0, openUntil: 0 });
   }
 
-  private markTransientFailure(provider: ProviderName, error: SecretaryError): void {
-    const current = this.circuit(provider);
+  private markTransientFailure(route: InferenceRoute, error: SecretaryError): void {
+    const key = routeHealthKey(route);
+    const current = this.circuit(route);
     const consecutiveFailures = current.consecutiveFailures + 1;
     const providerCooldownMs = error.category === "provider_rate_limit" && error.retryAfterSeconds !== undefined
       ? Math.min(Math.max(error.retryAfterSeconds * 1000, CIRCUIT_OPEN_MS), MAX_CIRCUIT_COOLDOWN_MS)
       : error.category === "provider_rate_limit"
         ? CIRCUIT_OPEN_MS
       : undefined;
-    this.circuits.set(provider, {
+    this.circuits.set(key, {
       consecutiveFailures,
       openUntil: providerCooldownMs !== undefined
         ? Date.now() + providerCooldownMs
@@ -5068,9 +5186,14 @@ export class FailoverModelGateway implements ModelGateway {
     const current = this.traces.get(requestId);
     if (current) return current;
     const created: ProviderTrace = {
-      primaryProvider: this.order[0],
-      ...(this.order[1] ? { fallbackProvider: this.order[1] } : {}),
+      primaryProvider: routeTargetId(this.routeFor(this.order[0])),
+      primaryRouteId: this.order[0],
+      ...(this.order[1] ? {
+        fallbackProvider: routeTargetId(this.routeFor(this.order[1])),
+        fallbackRouteId: this.order[1],
+      } : {}),
       providersAttempted: [],
+      routesAttempted: [],
       fallbackOccurred: false,
     };
     this.traces.set(requestId, created);
@@ -5086,12 +5209,20 @@ export class FailoverModelGateway implements ModelGateway {
     return current;
   }
 
-  getProviderForRequest(requestId: string): { provider: ProviderName; model: string } {
-    const selected = this.requestState(requestId)?.selectedProvider ?? this.order[0];
+  getProviderForRequest(requestId: string): {
+    provider: ProviderName;
+    model: string;
+    routeId: InferenceRouteId;
+    routeKind: InferenceRouteKind;
+  } {
+    const selected = this.requestState(requestId)?.selectedRouteId ?? this.order[0];
     const gateway = this.gateways[selected];
+    const route = this.routeFor(selected);
     return {
-      provider: selected,
+      provider: gateway?.provider ?? routeTargetId(route),
       model: gateway?.modelName ?? "unconfigured",
+      routeId: selected,
+      routeKind: route.kind,
     };
   }
 
@@ -5104,10 +5235,12 @@ export class FailoverModelGateway implements ModelGateway {
         logicalLlmCalls: metrics.logicalLlmCalls,
         httpAttempts: metrics.httpAttempts,
         httpAttemptsByProvider: metrics.httpAttemptsByProvider,
+        httpAttemptsByRoute: metrics.httpAttemptsByRoute,
         retryCount: metrics.retryCount,
         providerFallbackAttempts: metrics.providerFallbackAttempts,
         modelFallbackAttempts: metrics.modelFallbackAttempts,
         requestBytesByProvider: metrics.requestBytesByProvider,
+        requestBytesByRoute: metrics.requestBytesByRoute,
         maxRequestBytes: metrics.maxRequestBytes,
         systemPromptChars: metrics.systemPromptChars,
         toolDefinitionsChars: metrics.toolDefinitionsChars,
@@ -5129,60 +5262,68 @@ export class FailoverModelGateway implements ModelGateway {
   async generate(messages: ConversationMessage[], context: GatewayCallContext): Promise<GatewayResponse> {
     if (context.metrics) this.metrics.set(context.requestId, context.metrics);
     const request = this.requestState(context.requestId);
-    const startIndex = request?.providerIndex ?? 0;
-    const preferredProviders = this.order.slice(startIndex);
+    const startIndex = request?.routeIndex ?? 0;
+    const preferredRoutes = this.order.slice(startIndex);
     const trace = this.trace(context.requestId);
-    const candidates = preferredProviders.filter((provider) => this.gateways[provider]);
-    const available = candidates.filter((provider) => !this.isCircuitOpen(provider));
-    const providersToTry = available;
-    if (providersToTry.length === 0) {
-      const cooldownProvider = candidates[0];
-      const retryAfterSeconds = cooldownProvider
-        ? this.circuitRetryAfterSeconds(cooldownProvider)
+    const candidates = preferredRoutes.filter((routeId) => this.gateways[routeId]);
+    const available = candidates.filter((routeId) => !this.isCircuitOpen(this.routeFor(routeId)));
+    const routesToTry = available;
+    if (routesToTry.length === 0) {
+      const cooldownRouteId = candidates[0];
+      const cooldownRoute = cooldownRouteId ? this.routeFor(cooldownRouteId) : undefined;
+      const retryAfterSeconds = cooldownRoute
+        ? this.circuitRetryAfterSeconds(cooldownRoute)
         : undefined;
       throw new SecretaryError("All configured LLM providers are in cooldown.", {
         status: 503,
         category: "provider_unavailable",
         code: "PROVIDER_COOLDOWN_ACTIVE",
         retryable: true,
-        provider: cooldownProvider,
+        provider: cooldownRoute ? routeTargetId(cooldownRoute) : undefined,
         ...(retryAfterSeconds !== undefined ? { retryAfterSeconds } : {}),
       });
     }
     let primaryError = request?.primaryError;
 
-    for (const [index, provider] of providersToTry.entries()) {
+    for (const [index, routeId] of routesToTry.entries()) {
+      const route = this.routeFor(routeId);
+      const provider = routeTargetId(route);
       if (context.deadlineAt !== undefined && Date.now() >= context.deadlineAt) {
         throw deadlineExceeded(provider);
       }
-      const gateway = this.gateways[provider];
+      const gateway = this.gateways[routeId];
       if (!gateway) continue;
-      if (provider !== this.order[0] && !trace.fallbackOccurred) {
+      if (routeId !== this.order[0] && !trace.fallbackOccurred) {
         trace.fallbackOccurred = true;
         trace.fallbackReason = "circuit_open";
         trace.toolCallsExecutedBeforeFailure = context.toolCallsExecuted;
         if (context.metrics) context.metrics.providerFallbackAttempts += 1;
         logger.warn({
           requestId: context.requestId,
-          primaryProvider: this.order[0],
+          primaryProvider: routeTargetId(this.routeFor(this.order[0])),
+          primaryRouteId: this.order[0],
           fallbackProvider: provider,
+          fallbackRouteId: routeId,
           fallback: true,
           fallbackReason: trace.fallbackReason,
           toolCallsExecutedBeforeFailure: context.toolCallsExecuted,
         }, "agent provider fallback");
       }
       trace.providersAttempted.push(provider);
+      trace.routesAttempted?.push(routeId);
       try {
         const response = await gateway.generate(messages, {
           ...context,
-          providerFallback: index > 0 || provider !== this.order[0],
+          route,
+          providerFallback: index > 0 || routeId !== this.order[0],
         });
-        this.markSuccess(provider);
+        this.markSuccess(route);
         trace.selectedProvider = provider;
+        trace.selectedRouteId = routeId;
         this.requests.set(context.requestId, {
-          ...(trace.fallbackOccurred ? { fallbackProvider: provider } : {}),
-          selectedProvider: provider,
-          providerIndex: this.order.indexOf(provider),
+          ...(trace.fallbackOccurred ? { fallbackRouteId: routeId } : {}),
+          selectedRouteId: routeId,
+          routeIndex: this.order.indexOf(routeId),
           expiresAt: Date.now() + REQUEST_PROVIDER_STATE_TTL_MS,
         });
         return response;
@@ -5194,25 +5335,30 @@ export class FailoverModelGateway implements ModelGateway {
           ? error
           : providerExceptionError(provider, error);
         if (!isTransientProviderFailure(classified)) throw classified;
-        this.markTransientFailure(provider, classified);
+        this.markTransientFailure(route, classified);
         trace.fallbackReason = classified.code;
         trace.toolCallsExecutedBeforeFailure = context.toolCallsExecuted;
         primaryError ??= classified;
 
-        const nextProvider = providersToTry[index + 1];
-        if (nextProvider) {
+        const nextRouteId = routesToTry[index + 1];
+        if (nextRouteId) {
+          const nextRoute = this.routeFor(nextRouteId);
           trace.fallbackOccurred = true;
+          trace.fallbackRouteId = nextRouteId;
+          trace.fallbackProvider = routeTargetId(nextRoute);
           if (context.metrics) context.metrics.providerFallbackAttempts += 1;
           this.requests.set(context.requestId, {
-            fallbackProvider: nextProvider,
-            providerIndex: this.order.indexOf(nextProvider),
-            ...(provider === this.order[0] ? { primaryError: classified } : {}),
+            fallbackRouteId: nextRouteId,
+            routeIndex: this.order.indexOf(nextRouteId),
+            ...(routeId === this.order[0] ? { primaryError: classified } : {}),
             expiresAt: Date.now() + REQUEST_PROVIDER_STATE_TTL_MS,
           });
           logger.warn({
             requestId: context.requestId,
-            primaryProvider: this.order[0],
-            fallbackProvider: nextProvider,
+            primaryProvider: routeTargetId(this.routeFor(this.order[0])),
+            primaryRouteId: this.order[0],
+            fallbackProvider: routeTargetId(nextRoute),
+            fallbackRouteId: nextRouteId,
             fallback: true,
             fallbackReason: classified.code,
             primaryError: classified.code,
@@ -5221,8 +5367,9 @@ export class FailoverModelGateway implements ModelGateway {
           continue;
         }
 
-        if (primaryError && provider !== this.order[0]) {
-          throw providerFailoverError(this.order[0], primaryError, provider, classified);
+        const primaryProvider = routeTargetId(this.routeFor(this.order[0]));
+        if (primaryError && routeId !== this.order[0]) {
+          throw providerFailoverError(primaryProvider, primaryError, provider, classified);
         }
         throw classified;
       }
@@ -5234,6 +5381,41 @@ export class FailoverModelGateway implements ModelGateway {
       code: "PROVIDER_NOT_CONFIGURED",
       retryable: false,
     });
+  }
+}
+
+function routeForLegacyEndpoint(
+  endpointName: ProviderName,
+  modelName: string,
+  configuredRoute?: InferenceRoute,
+): InferenceRoute {
+  if (configuredRoute) return routeWithModel(configuredRoute, modelName);
+  try {
+    return inferenceRouteForService(endpointName, modelName);
+  } catch {
+    return directProviderRoute(endpointName, modelName);
+  }
+}
+
+export class FailoverModelGateway extends MnrInferenceRouter {
+  constructor(
+    gateways: Partial<Record<ProviderName, ModelGateway>>,
+    order: ProviderName[],
+  ) {
+    const routeGateways: Partial<Record<InferenceRouteId, ModelGateway>> = {};
+    const routes: Partial<Record<InferenceRouteId, InferenceRoute>> = {};
+    const routeOrder = order.map((endpointName) => {
+      const gateway = gateways[endpointName];
+      const route = routeForLegacyEndpoint(
+        endpointName,
+        gateway?.modelName ?? "unconfigured",
+        gateway?.route,
+      );
+      routes[route.id] = route;
+      if (gateway) routeGateways[route.id] = gateway;
+      return route.id;
+    });
+    super(routeGateways, routeOrder, routes);
   }
 }
 
@@ -7233,6 +7415,8 @@ export class Phase2AgentRuntime {
 
 export class CohereModelGateway implements ModelGateway {
   readonly provider = "cohere" as const;
+  readonly routeKind = "direct_provider" as const;
+  readonly usageFormat = "cohere" as const;
   private readonly apiKey = process.env.COHERE_API_KEY;
   readonly model = COHERE_MODEL;
 
@@ -7289,6 +7473,8 @@ export class CohereModelGateway implements ModelGateway {
     const systemText = instructions.text;
     const attemptMeasurement = recordProviderRequest(context, "cohere", {
       model: this.model,
+      routeKind: this.routeKind,
+      usageFormat: this.usageFormat,
       requestBytes: Buffer.byteLength(requestBody),
       systemPromptChars: systemText.length,
       toolDefinitionsChars: JSON.stringify(tools).length,
@@ -7413,31 +7599,60 @@ export type ConfiguredProvider = ProviderName | "development" | "unavailable";
 
 function asProvider(value: string | undefined): ProviderName | undefined {
   const normalized = value?.trim().toLowerCase();
-  return isProviderName(normalized) ? normalized : undefined;
+  return inferenceServiceIsKnown(normalized) ? normalized : undefined;
+}
+
+function configuredRouteService(environmentName: string): ProviderName | undefined {
+  const raw = process.env[environmentName]?.trim().toLowerCase();
+  if (!raw) return undefined;
+  const serviceName = serviceNameForRouteId(raw)
+    ?? (inferenceServiceIsKnown(raw) ? raw : undefined);
+  if (!serviceName) throw new Error(`INVALID_${environmentName}:${raw}`);
+  return serviceName;
+}
+
+function configuredRouteOrderServices(): ProviderName[] | undefined {
+  const raw = process.env.AI_ROUTE_ORDER?.trim();
+  if (!raw) return undefined;
+  const services = raw.split(",").map((value) => {
+    const route = value.trim().toLowerCase();
+    const serviceName = serviceNameForRouteId(route)
+      ?? (inferenceServiceIsKnown(route) ? route : undefined);
+    if (!serviceName) throw new Error(`INVALID_AI_ROUTE_ORDER:${route}`);
+    return serviceName;
+  });
+  return services.filter((service, index) => services.indexOf(service) === index);
 }
 
 export function configuredProviderOrder(): ProviderName[] {
-  const fallbackPreference = featureFlags.providerRouting()
-    ? providerOrder()
-    : defaultProviderOrder();
-  const firstConfiguredByRouting = fallbackPreference.find(providerIsConfigured);
-  const originalDefaultProvider = defaultProviderOrder().find(providerIsConfigured);
-  const primary = asProvider(process.env.AI_PRIMARY_PROVIDER)
+  const routeOrder = configuredRouteOrderServices();
+  const fallbackPreference = routeOrder
+    ?? (featureFlags.providerRouting() ? providerOrder() : defaultInferenceServiceOrder());
+  const firstConfiguredByRouting = fallbackPreference.find(inferenceServiceIsConfigured);
+  const originalDefaultProvider = defaultInferenceServiceOrder().find(inferenceServiceIsConfigured);
+  const primary = configuredRouteService("AI_PRIMARY_ROUTE")
+    ?? asProvider(process.env.AI_PRIMARY_PROVIDER)
     ?? asProvider(process.env.AI_PROVIDER)
     ?? (featureFlags.providerRouting() ? firstConfiguredByRouting : originalDefaultProvider);
   const autoFallbacks = (featureFlags.providerRouting()
     ? fallbackPreference
-    : defaultProviderOrder())
+    : defaultInferenceServiceOrder())
     .filter((provider) => provider !== primary)
-    .filter(providerIsConfigured);
+    .filter(inferenceServiceIsConfigured);
   return [
     primary,
+    configuredRouteService("AI_FALLBACK_ROUTE"),
     asProvider(process.env.AI_FALLBACK_PROVIDER),
+    configuredRouteService("AI_SECONDARY_FALLBACK_ROUTE"),
     asProvider(process.env.AI_SECONDARY_FALLBACK_PROVIDER),
     ...autoFallbacks,
   ].filter(
     (provider, index, providers): provider is ProviderName => Boolean(provider) && providers.indexOf(provider) === index,
   );
+}
+
+export function configuredRouteOrder(): InferenceRouteId[] {
+  return configuredProviderOrder().map(routeIdForService);
 }
 
 export function configuredProvider(): ConfiguredProvider {
@@ -7450,30 +7665,44 @@ export function phase2Enabled(): boolean {
   return configuredProviderOrder().length > 0;
 }
 
-function createGateway(provider: ProviderName): ModelGateway {
-  const definition = providerDefinition(provider);
-  if (definition.protocol === "gemini") return new GeminiModelGateway();
-  if (definition.protocol === "cohere") return new CohereModelGateway();
-  if (provider === "groq") return new GroqModelGateway();
-  if (provider === "openrouter") return new OpenRouterModelGateway();
+function createGateway(serviceName: ProviderName): ModelGateway {
+  const definition = inferenceServiceDefinition(serviceName);
+  if (definition.kind === "direct_provider" && definition.protocol === "gemini") {
+    return new GeminiModelGateway();
+  }
+  if (definition.kind === "direct_provider" && definition.protocol === "cohere") {
+    return new CohereModelGateway();
+  }
+  if (definition.kind === "direct_provider" && serviceName === "groq") {
+    return new GroqModelGateway();
+  }
   if (definition.protocol === "openai-compatible") {
     return new OpenAiCompatibleModelGateway(
-      provider,
-      providerApiUrl(provider) ?? "",
-      providerModel(provider),
+      serviceName,
+      inferenceServiceApiUrl(serviceName) ?? "",
+      inferenceServiceModel(serviceName),
       process.env[definition.apiKeyEnv],
       definition.apiKeyEnv,
+      definition.kind,
     );
   }
-  throw new Error(`PROVIDER_GATEWAY_NOT_IMPLEMENTED:${provider}`);
+  throw new Error(`INFERENCE_ADAPTER_NOT_IMPLEMENTED:${serviceName}`);
 }
 
 function createConfiguredGateway(): ModelGateway {
   const order = configuredProviderOrder();
   const selectedOrder = order.length > 0 ? order : ["gemini" as const];
-  return new FailoverModelGateway(
-    Object.fromEntries(selectedOrder.map((provider) => [provider, createGateway(provider)])),
-    [...selectedOrder],
+  const routes = Object.fromEntries(selectedOrder.map((serviceName) => [
+    routeIdForService(serviceName),
+    inferenceRouteForService(serviceName),
+  ])) as Partial<Record<InferenceRouteId, InferenceRoute>>;
+  return new MnrInferenceRouter(
+    Object.fromEntries(selectedOrder.map((serviceName) => [
+      routeIdForService(serviceName),
+      createGateway(serviceName),
+    ])),
+    selectedOrder.map(routeIdForService),
+    routes,
   );
 }
 
