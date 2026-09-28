@@ -8,7 +8,10 @@ import {
   directProviderDefinitions,
   gatewayDefinitions,
   inferenceRouteForService,
+  inferenceServiceApiUrl,
+  inferenceServiceDefinition,
   inferenceServiceDefinitions,
+  inferenceServiceModel,
   providerDefinitions,
   routeIdForService,
 } from "../src/lib/provider-registry.ts";
@@ -17,6 +20,8 @@ import {
   MnrInferenceRouter,
   normalizeLlmUsage,
   normalizeProviderUsage,
+  OpenAiCompatibleModelGateway,
+  configuredRouteOrder,
   type GatewayCallContext,
   type GatewayResponse,
   type ModelGateway,
@@ -120,6 +125,123 @@ test("MNRsecr routes to an injected Gateway without selecting its upstream", asy
   ]);
   assert.equal(router.getProviderForRequest(context.requestId).routeKind, "gateway");
   assert.equal(router.getProviderForRequest(context.requestId).routeId, "gateway:new-gateway");
+});
+
+test("a registry-configured Gateway reuses the adapter contract without exposing its upstream", async () => {
+  const environmentKeys = [
+    "AI_PROVIDER_CATALOG",
+    "AI_ROUTE_ORDER",
+    "AI_PRIMARY_ROUTE",
+    "CUSTOM_RELAY_API_KEY",
+    "CUSTOM_RELAY_API_URL",
+    "CUSTOM_RELAY_MODEL",
+  ] as const;
+  const previousEnvironment = Object.fromEntries(
+    environmentKeys.map((key) => [key, process.env[key]]),
+  );
+  const previousFetch = globalThis.fetch;
+
+  try {
+    const relayUrl = "https://test-relay.invalid/v1/chat/completions";
+    process.env.AI_PROVIDER_CATALOG = JSON.stringify({
+      providers: [{
+        name: "test-relay",
+        kind: "gateway",
+        protocol: "openai-compatible",
+        apiKeyEnv: "CUSTOM_RELAY_API_KEY",
+        modelEnv: "CUSTOM_RELAY_MODEL",
+        defaultModel: "fixture-default-model",
+        apiUrlEnv: "CUSTOM_RELAY_API_URL",
+        defaultApiUrl: relayUrl,
+      }],
+    });
+    process.env.AI_ROUTE_ORDER = "gateway:test-relay";
+    process.env.AI_PRIMARY_ROUTE = "gateway:test-relay";
+    process.env.CUSTOM_RELAY_API_KEY = "fixture-only-not-a-real-key";
+    process.env.CUSTOM_RELAY_API_URL = relayUrl;
+    process.env.CUSTOM_RELAY_MODEL = "test-model";
+
+    const definition = inferenceServiceDefinition("test-relay");
+    const route = inferenceRouteForService("test-relay", inferenceServiceModel("test-relay"));
+    const gateway = new OpenAiCompatibleModelGateway(
+      definition.name,
+      inferenceServiceApiUrl("test-relay") ?? "",
+      inferenceServiceModel("test-relay"),
+      process.env[definition.apiKeyEnv],
+      definition.apiKeyEnv,
+      definition.kind,
+    );
+    const router = new MnrInferenceRouter(
+      { [route.id]: gateway },
+      [route.id],
+      { [route.id]: route },
+    );
+    assert.deepEqual(configuredRouteOrder(), ["gateway:test-relay"]);
+
+    let internalUpstream = "upstream-A";
+    const fetchObservations: Array<{
+      url: string;
+      model: string | undefined;
+      internalUpstream: string;
+    }> = [];
+    globalThis.fetch = async (input, init) => {
+      const body = typeof init?.body === "string" ? JSON.parse(init.body) as { model?: string } : {};
+      fetchObservations.push({
+        url: String(input),
+        model: body.model,
+        internalUpstream,
+      });
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: `fixture response from ${internalUpstream}` } }],
+        usage: { prompt_tokens: 4, completion_tokens: 2, total_tokens: 6 },
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+
+    const firstContext: GatewayCallContext = {
+      requestId: "test-relay-upstream-a",
+      callNumber: 1,
+      toolCallsExecuted: 0,
+    };
+    const firstResponse = await router.generate([], firstContext);
+    internalUpstream = "upstream-B";
+    const secondContext: GatewayCallContext = {
+      requestId: "test-relay-upstream-b",
+      callNumber: 1,
+      toolCallsExecuted: 0,
+    };
+    const secondResponse = await router.generate([], secondContext);
+
+    assert.equal(firstResponse.text, "fixture response from upstream-A");
+    assert.equal(secondResponse.text, "fixture response from upstream-B");
+    assert.deepEqual(fetchObservations, [
+      { url: relayUrl, model: "test-model", internalUpstream: "upstream-A" },
+      { url: relayUrl, model: "test-model", internalUpstream: "upstream-B" },
+    ]);
+    for (const requestId of [firstContext.requestId, secondContext.requestId]) {
+      const trace = router.getTrace(requestId);
+      assert.equal(trace.primaryRouteId, "gateway:test-relay");
+      assert.equal(trace.selectedRouteId, "gateway:test-relay");
+      assert.deepEqual(trace.routesAttempted, ["gateway:test-relay"]);
+      assert.deepEqual(trace.providersAttempted, ["test-relay"]);
+      assert.equal(trace.routesAttempted?.some((id) => id.includes("upstream-")), false);
+      assert.deepEqual(router.getProviderForRequest(requestId), {
+        provider: "test-relay",
+        model: "test-model",
+        routeId: "gateway:test-relay",
+        routeKind: "gateway",
+      });
+    }
+  } finally {
+    globalThis.fetch = previousFetch;
+    for (const key of environmentKeys) {
+      const value = previousEnvironment[key];
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
 });
 
 test("usage normalization is selected by protocol format, not provider identity", () => {

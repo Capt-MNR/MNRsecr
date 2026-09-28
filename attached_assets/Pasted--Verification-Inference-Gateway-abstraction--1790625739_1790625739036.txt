@@ -1,0 +1,162 @@
+نفّذ الآن Verification معماري محدود على الـInference Gateway abstraction التي تم تنفيذها للتو.
+
+الهدف
+
+إثبات أن إضافة Gateway جديد مستقبلًا — مثل AnyRouter — يمكن أن تتم من خلال الـregistry/adapter/configuration فقط، بدون تعديل:
+
+- Agent core
+- ModelGateway interface التي يستخدمها Agent
+- Memory / Second Brain
+- Context Assembly
+- Tools
+- Approval logic
+- Agent Work
+- Proactive Engine
+- MNRsecr routing algorithm نفسه، إلا إذا كان هناك نقص حقيقي في الـabstraction
+
+مهم
+
+لا تضف AnyRouter إلى production.
+لا تستخدم API key حقيقي.
+لا تغيّر production provider order.
+لا تغيّر الـfallback الحالي.
+لا تنفذ أي live provider request.
+
+استخدم Gateway تجريبيًا/fixture فقط.
+
+Verification
+
+أنشئ test fixture لـGateway افتراضي مثل:
+
+"gateway:test-relay"
+
+بحيث:
+
+1. يتم تسجيله بنفس abstraction المستخدمة لـOpenRouter.
+2. يستخدم نفس الـGateway adapter contract.
+3. يستطيع استقبال model identifier مستقل.
+4. يستطيع إرجاع response بالصيغة التي يتوقعها ModelGateway.
+5. يظهر في route selection كـ"gateway:test-relay".
+6. يحتفظ route identity منفصلة عن provider identity.
+7. لا يحتاج أي تعديل داخل Agent core.
+
+أهم اختبار
+
+بعد إضافة الـfixture، تحقق من أن الملفات الخاصة بالـAgent والـcore routing لا تحتاج تعديلًا لإضافة Gateway جديد.
+
+إذا اضطررت لتعديل core logic، لا تعتبر ذلك نجاحًا تلقائيًا.
+
+حدد:
+
+- لماذا abstraction الحالية غير كافية؟
+- ما أقل تعديل مطلوب؟
+- هل يمكن حل المشكلة في Gateway/registry layer بدل core؟
+
+Provider داخل Gateway
+
+اختبر أيضًا أن MNRsecr لا يحتاج معرفة الـupstream provider الداخلي.
+
+مثال:
+
+MNRsecr:
+"gateway:test-relay"
+model:
+"test-model"
+
+والـfixture داخليًا يمكنه تمثيل:
+
+"upstream-A"
+
+لكن هذا الـupstream لا يظهر كقرار routing صادر من MNRsecr.
+
+اختبر أن تغيير الـupstream داخل الـfixture لا يغير MNRsecr route identity.
+
+Extensibility Matrix
+
+اختبر/وثّق هذه الحالات:
+
+العملية| هل تحتاج تعديل Agent core؟
+إضافة Direct Provider| يجب أن تكون No
+إضافة Gateway| يجب أن تكون No
+تغيير Model| يجب أن تكون No
+تغيير upstream داخل Gateway| يجب أن تكون No
+إزالة Gateway| يجب أن تكون No
+إضافة Adapter لبروتوكول جديد| قد تحتاج Adapter فقط
+
+Protocol limitation
+
+تحقق أيضًا من أن limitation الحالية:
+
+"AI_PROVIDER_CATALOG" → OpenAI-compatible
+
+هي limitation للـadapter/catalog implementation فقط، وليست hard-coded architectural assumption بأن كل Provider/Gateway يجب أن يكون OpenAI-compatible.
+
+إذا كانت hard-coded في الـcore، أصلحها بأقل تغيير ممكن.
+
+Regression
+
+شغّل:
+
+- Typecheck
+- Build
+- gateway/direct route tests
+- failover tests
+- provider tracking/token normalization tests
+- relevant existing tests
+
+لا تصلح failures القديمة غير المتعلقة بهذا الـverification.
+
+لكن صنّف النتائج بوضوح إلى:
+
+1. Regression caused by this change
+2. Existing baseline failure
+3. Stale test assumption
+4. Newly discovered architectural issue
+
+لا توسّع النطاق
+
+لا تنفذ الآن:
+
+- Model capability registry كامل
+- quota engine
+- cost optimizer
+- health scoring
+- AnyRouter production integration
+- OpenRouter live calls
+- provider purchasing/configuration
+
+هذه مراحل لاحقة.
+
+التقرير النهائي
+
+أعطني:
+
+A. Verification Result
+
+PASS / PASS WITH LIMITATION / FAIL
+
+B. Extensibility
+
+كيف تتم إضافة Gateway جديد فعليًا؟
+
+C. Core Independence
+
+هل احتجت تعديل Agent core؟ وأي ملفات؟
+
+D. Routing Boundary
+
+أين ينتهي MNRsecr routing وأين يبدأ Gateway routing؟
+
+E. Protocol Boundary
+
+هل OpenAI-compatible مجرد Adapter أم assumption معماري؟
+
+F. Tests
+
+النتائج وتصنيف أي failures.
+
+G. Recommendation
+
+هل الـInference Gateway abstraction أصبحت جاهزة للمرحلة التالية، أم تحتاج تعديلًا قبل أن نضيف Providers/Gateways أكثر؟
+
+لا تغيّر production behavior إلا إذا وجدت مشكلة معمارية ضرورية لتحقيق هذه الشروط.
