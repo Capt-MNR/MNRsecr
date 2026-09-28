@@ -60,6 +60,7 @@
 - [Provider registry](provider-registry.md) — namespaced route IDs separate direct Providers from Gateways; MNRsecr selects endpoints while Gateways own upstream routing.
 - [OpenRouter endpoint tool availability](openrouter-endpoint-tool-availability.md) — catalog-level tool support can outlive usable routes; check live endpoints and classify routing failures separately from model quality.
 - [Delegated action approvals](delegated-action-approval.md) — Agent Work actions must reserve the existing secretary operation and resume only after verified approval execution.
+- [External action identity and uncertainty](external-action-identity.md) — keep Work, run, operation, and action IDs distinct; reconcile uncertain provider outcomes before retrying.
 - [Resolver shadow evaluation](resolver-shadow-evaluation.md) — measure entity candidates with seeded conversation state before allowing resolver output to influence orchestration.
 - [Real authentication boundary](real-auth-boundary.md) — tenant ownership comes from database-backed sessions or durable worker rows; development identity is explicitly gated and never used in production.
 - [Arabic expense parsing](arabic-expense-parsing.md) — colloquial thousand/half-thousand amounts must not be mistaken for recipient entities.
