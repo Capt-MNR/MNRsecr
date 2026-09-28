@@ -1,45 +1,13 @@
 import { createHash } from "node:crypto";
-import type { ExternalActionIdentity } from "./types";
+import type { ExternalActionIdentity } from "./external-action";
+import { hashExternalActionPayload } from "./external-action";
 
-export type ExternalActionStepKind =
-  | "create_spreadsheet"
-  | "write_values"
-  | "update_values"
-  | "verify_values";
-
-export type GoogleSheetsCell = string | number | boolean | null;
-
-export type GoogleSheetsValueRange = {
-  range: string;
-  values: GoogleSheetsCell[][];
-};
-
-export type GoogleSheetsWorkAction = {
-  type: "google_sheets_create_populate";
-  spreadsheetTitle: string;
-  sheetTitle: string;
-  initialValues: GoogleSheetsCell[][];
-  updates: GoogleSheetsValueRange[];
-  actionId: string;
-  sourceOperationId: string;
-};
-
-export type ExternalActionStep = {
-  actionId: ExternalActionIdentity["actionId"];
-  workId: ExternalActionIdentity["workId"];
-  runId: ExternalActionIdentity["runId"];
-  operationId: ExternalActionIdentity["operationId"];
-  idempotencyKey: ExternalActionIdentity["idempotencyKey"];
-  kind: ExternalActionStepKind;
-  range?: string;
-  values?: GoogleSheetsCell[][];
-};
-
-export function createExternalActionId(input: {
+export function createExternalActionStepId(input: {
   tenantId: string;
   ownerUserId: string;
   workId: string;
   runId: string;
+  actionId: string;
   stepKey: string;
   actionVersion: string;
 }): string {
@@ -48,10 +16,11 @@ export function createExternalActionId(input: {
     input.ownerUserId,
     input.workId,
     input.runId,
+    input.actionId,
     input.stepKey,
     input.actionVersion,
   ].join(":");
-  return `act_${createHash("sha256").update(material).digest("hex").slice(0, 48)}`;
+  return `step_${createHash("sha256").update(material).digest("hex").slice(0, 48)}`;
 }
 
 export function createExternalActionIdempotencyKey(input: {
@@ -59,14 +28,14 @@ export function createExternalActionIdempotencyKey(input: {
   ownerUserId: string;
   workId: string;
   runId: string;
-  actionId: string;
+  stepId: string;
 }): string {
   const material = [
     input.tenantId,
     input.ownerUserId,
     input.workId,
     input.runId,
-    input.actionId,
+    input.stepId,
   ].join(":");
   return `agent-action:${createHash("sha256").update(material).digest("hex")}`;
 }
@@ -76,26 +45,28 @@ export function createExternalActionIdentity(input: {
   ownerUserId: string;
   workId: string;
   runId: string;
-  operationId: string;
+  approvalOperationId: string;
+  actionId: string;
   stepKey: string;
   actionVersion: string;
 }): ExternalActionIdentity {
-  const actionId = createExternalActionId(input);
+  const stepId = createExternalActionStepId(input);
   return {
-    actionId,
+    actionId: input.actionId,
+    stepId,
     workId: input.workId,
     runId: input.runId,
-    operationId: input.operationId,
+    approvalOperationId: input.approvalOperationId,
     idempotencyKey: createExternalActionIdempotencyKey({
       tenantId: input.tenantId,
       ownerUserId: input.ownerUserId,
       workId: input.workId,
       runId: input.runId,
-      actionId,
+      stepId,
     }),
   };
 }
 
 export function hashExternalActionValue(value: unknown): string {
-  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+  return hashExternalActionPayload(value);
 }

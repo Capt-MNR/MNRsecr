@@ -17,13 +17,7 @@ import type {
 } from "./contracts";
 import { evaluationFromPlan } from "./contracts";
 import { createRunIdempotencyKey } from "./contract";
-import {
-  formatGoogleSheetsActionPreview,
-  GOOGLE_SHEETS_APPROVAL_TOOL,
-  makeGoogleSheetsApprovalArgs,
-  storedGoogleSheetsWorkActionSchema,
-} from "./google-sheets-action";
-import { hashExternalActionValue } from "./action-contract";
+import { externalActionConnectorForProvider } from "./external-action-registry";
 import type {
   AgentWorkAdapters,
   AgentWorkRecord,
@@ -267,29 +261,27 @@ async function buildActionPlan(
   }
 
   const workSource = asRecord(work.source);
-  if (source.type === "google_sheets" || workSource.type === "google_sheets") {
-    const actionResult = storedGoogleSheetsWorkActionSchema.safeParse(work.action);
-    if (work.kind !== "external_action" || !actionResult.success) {
+  const provider = typeof source.type === "string" ? source.type : workSource.type;
+  const externalActionConnector = externalActionConnectorForProvider(
+    typeof provider === "string" ? provider : null,
+  );
+  if (externalActionConnector) {
+    if (work.kind !== "external_action") {
       return {
         plan: {
           status: "needs_review",
           workStatus: "needs_review",
           nextRunAt: null,
-          verification: {
-            kind: "external_action_invalid",
-            source: "google_sheets",
-            safe: false,
-          },
-          error: "AGENT_WORK_GOOGLE_SHEETS_ACTION_INVALID",
-          notificationTitle: "مراجعة مطلوبة: إجراء Google Sheets",
-          notificationBody: "توقفت المتابعة لأن إعداد إجراء الجدول لم يجتز التحقق.",
+          verification: { kind: "external_action_invalid", provider, safe: false },
+          error: "AGENT_WORK_EXTERNAL_ACTION_INVALID",
+          notificationTitle: "مراجعة مطلوبة: إجراء خارجي",
+          notificationBody: "توقفت المتابعة لأن إعداد الإجراء الخارجي غير صالح.",
           notify: true,
         },
-        evidence: { sourceType: "google_sheets", status: "needs_review", safe: false },
+        evidence: { provider, status: "needs_review", safe: false },
       };
     }
 
-    const action = actionResult.data;
     const previousEvents = await adapters.storage.listEvents(identity, work.id, 100);
     const hasExternalAttempt = previousEvents.some((event) =>
       event.eventType === "external_action_step_started"
@@ -302,35 +294,39 @@ async function buildActionPlan(
           status: "needs_review",
           workStatus: "needs_review",
           nextRunAt: null,
-          verification: {
-            kind: "external_action_already_attempted",
-            source: "google_sheets",
-            actionId: action.actionId,
-            safe: false,
-          },
+          verification: { kind: "external_action_already_attempted", provider, safe: false },
           error: "AGENT_WORK_EXTERNAL_ACTION_ALREADY_ATTEMPTED",
-          notificationTitle: "مراجعة مطلوبة: Google Sheets",
-          notificationBody:
-            "توجد محاولة سابقة لهذا الإجراء. لم أبدأ محاولة أخرى حتى لا أكرر إنشاء الجدول أو الكتابة.",
+          notificationTitle: "مراجعة مطلوبة: إجراء خارجي",
+          notificationBody: "توجد محاولة سابقة لهذا الإجراء؛ لم أبدأ محاولة أخرى.",
           notify: true,
         },
-        evidence: {
-          sourceType: "google_sheets",
-          actionId: action.actionId,
-          status: "needs_review",
-          reason: "previous_external_attempt",
-        },
+        evidence: { provider, status: "needs_review", reason: "previous_external_attempt" },
       };
     }
 
-    const actionHash = hashExternalActionValue(action);
-    const operationArgs = makeGoogleSheetsApprovalArgs({
-      identity,
-      work,
-      run: { id: runId, workId: work.id },
-      operationId: "pending",
-      action,
-    });
+    let prepared;
+    try {
+      prepared = externalActionConnector.prepareApproval({
+        identity,
+        work,
+        runId,
+      });
+    } catch {
+      return {
+        plan: {
+          status: "needs_review",
+          workStatus: "needs_review",
+          nextRunAt: null,
+          verification: { kind: "external_action_invalid", provider, safe: false },
+          error: "AGENT_WORK_EXTERNAL_ACTION_INVALID",
+          notificationTitle: "مراجعة مطلوبة: إجراء خارجي",
+          notificationBody: "توقفت المتابعة لأن إعداد الإجراء لم يجتز التحقق.",
+          notify: true,
+        },
+        evidence: { provider, status: "needs_review", safe: false },
+      };
+    }
+
     const pending = await createPendingOperation(identity, {
       conversationId: typeof workSource.conversationId === "string" ? workSource.conversationId : null,
       sourceTurnId: typeof workSource.sourceTurnId === "string"
@@ -342,20 +338,12 @@ async function buildActionPlan(
         workId: work.id,
         runId,
         attempt: 1,
-        actionKind: "google_sheets_create_populate",
-        actionVersion: action.actionId,
+        actionKind: prepared.idempotencyActionKind,
+        actionVersion: prepared.idempotencyActionVersion,
       }),
-      toolName: GOOGLE_SHEETS_APPROVAL_TOOL,
-      args: operationArgs as unknown as Record<string, unknown>,
-      display: displayForOperation(GOOGLE_SHEETS_APPROVAL_TOOL, {
-        ...operationArgs,
-        spreadsheetTitle: action.spreadsheetTitle,
-        sheetTitle: action.sheetTitle,
-        initialRows: action.initialValues.length,
-        initialColumns: Math.max(...action.initialValues.map((row) => row.length)),
-        updateRanges: action.updates.map((update) => update.range),
-        previewText: formatGoogleSheetsActionPreview(action),
-      }),
+      toolName: externalActionConnector.approvalToolName,
+      args: prepared.args,
+      display: prepared.display,
     });
     if (pending.status !== "pending") {
       return {
@@ -365,27 +353,25 @@ async function buildActionPlan(
           nextRunAt: null,
           verification: {
             kind: "external_action_approval_unavailable",
-            source: "google_sheets",
-            operationId: pending.operationId,
+            provider,
+            approvalOperationId: pending.operationId,
             operationStatus: pending.status,
             safe: false,
           },
-          error: "AGENT_WORK_GOOGLE_SHEETS_APPROVAL_NOT_PENDING",
-          notificationTitle: "مراجعة مطلوبة: إجراء Google Sheets",
-          notificationBody: "تعذر تجهيز موافقة جديدة لهذا الإجراء؛ لم يتم الاتصال بـ Google Sheets.",
+          error: "AGENT_WORK_EXTERNAL_ACTION_APPROVAL_NOT_PENDING",
+          notificationTitle: "مراجعة مطلوبة: إجراء خارجي",
+          notificationBody: "تعذر تجهيز موافقة جديدة؛ لم يتم الاتصال بالمزود.",
           notify: true,
         },
         evidence: {
-          sourceType: "google_sheets",
-          actionId: action.actionId,
-          operationId: pending.operationId,
+          ...prepared.evidence,
+          approvalOperationId: pending.operationId,
           operationStatus: pending.status,
           status: "needs_review",
         },
       };
     }
 
-    const steps = operationArgs.steps;
     return {
       plan: {
         status: "needs_review",
@@ -393,38 +379,28 @@ async function buildActionPlan(
         nextRunAt: null,
         verification: {
           kind: "external_action_approval",
-          source: "google_sheets",
-          actionId: action.actionId,
+          provider,
+          actionId: prepared.actionId,
           approvalOperationId: pending.operationId,
-          action: GOOGLE_SHEETS_APPROVAL_TOOL,
           state: "approval_requested",
         },
-        notificationTitle: `موافقة مطلوبة: ${action.spreadsheetTitle}`,
-        notificationBody:
-          `جهزت إنشاء جدول «${action.spreadsheetTitle}» وكتابة ${action.initialValues.length} صفًا${action.updates.length ? ` مع ${action.updates.length} تعديل إضافي` : ""}. لم أتصل بـ Google Sheets؛ راجع التفاصيل ووافق على الإجراء.`,
+        notificationTitle: prepared.notificationTitle,
+        notificationBody: prepared.notificationBody,
         notificationData: {
-          source: "google_sheets",
+          ...prepared.notificationData,
+          provider,
           workId: work.id,
-          operationId: pending.operationId,
-          actionId: action.actionId,
-          spreadsheetTitle: action.spreadsheetTitle,
-          deepLink: `/main?workId=${encodeURIComponent(work.id)}`,
+          approvalOperationId: pending.operationId,
         },
         notify: true,
         approvalOperationId: pending.operationId,
-        approvalAction: GOOGLE_SHEETS_APPROVAL_TOOL,
+        approvalAction: externalActionConnector.approvalToolName,
       },
       evidence: {
-        sourceType: "google_sheets",
-        actionType: action.type,
-        actionId: action.actionId,
-        sourceOperationId: action.sourceOperationId,
-        sourceHash: actionHash,
+        ...prepared.evidence,
+        provider,
         actionDecision: "approval_requested",
-        operationId: pending.operationId,
-        stepCount: Array.isArray(steps) ? steps.length : 0,
-        rows: action.initialValues.length,
-        updateCount: action.updates.length,
+        approvalOperationId: pending.operationId,
         status: "needs_review",
       },
     };

@@ -1,5 +1,5 @@
 import { ReplitConnectors } from "@replit/connectors-sdk";
-import type { GoogleSheetsCell } from "./agent-work/action-contract";
+import type { GoogleSheetsCell } from "./agent-work/google-sheets-contract";
 
 export type GoogleSheetsClient = {
   createSpreadsheet(input: {

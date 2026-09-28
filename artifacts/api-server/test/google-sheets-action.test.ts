@@ -27,7 +27,7 @@ import {
 import type { PendingOperation } from "../src/lib/secretary-operations.ts";
 import { displayForOperation } from "../src/lib/secretary-operations.ts";
 import { agentWorkAdapters } from "../src/lib/agent-work/factory.ts";
-import type { GoogleSheetsCell } from "../src/lib/agent-work/action-contract.ts";
+import type { GoogleSheetsCell } from "../src/lib/agent-work/google-sheets-contract.ts";
 
 type Fixture = {
   identity: AgentWorkIdentity;
@@ -127,7 +127,7 @@ function makeFixture(): Fixture {
     ],
     updates: [{ range: "B2", values: [["done"]] }],
     actionId: randomUUID(),
-    sourceOperationId: randomUUID(),
+    setupApprovalOperationId: randomUUID(),
   });
   const work = {
     id: workId,
@@ -147,7 +147,6 @@ function makeFixture(): Fixture {
     identity,
     work,
     run: { id: runId, workId },
-    operationId,
     action,
   });
   const operation = {
@@ -218,6 +217,20 @@ function makeFixture(): Fixture {
   };
 }
 
+test("legacy setup approval metadata is normalized when stored Work is read", () => {
+  const fixture = makeFixture();
+  const storedAction = fixture.work.action;
+  const { setupApprovalOperationId, ...actionWithoutCanonicalId } = storedAction;
+  const legacyAction = {
+    ...actionWithoutCanonicalId,
+    sourceOperationId: setupApprovalOperationId,
+  };
+  const normalized = storedGoogleSheetsWorkActionSchema.parse(legacyAction);
+
+  assert.equal(normalized.setupApprovalOperationId, setupApprovalOperationId);
+  assert.ok(!("sourceOperationId" in normalized));
+});
+
 test("Google Sheets action is separately approved, read back, and completes one-shot Work", async () => {
   const fixture = makeFixture();
   const setupDisplay = displayForOperation("create_agent_work", {
@@ -232,14 +245,10 @@ test("Google Sheets action is separately approved, read back, and completes one-
     },
   });
   assert.ok(setupDisplay.details.some((detail) => detail.includes("Mona")));
-  const executionDisplay = displayForOperation("google_sheets_execute", {
-    spreadsheetTitle: "Weekly plan",
-    sheetTitle: "Plan",
-    initialRows: 2,
-    initialColumns: 2,
-    updateRanges: ["B2"],
-    previewText: '{"initialValues":[["Owner","Status"],["Mona","pending"]]}',
-  });
+  const executionDisplay = displayForOperation(
+    "google_sheets_execute",
+    fixture.operation.args,
+  );
   assert.ok(executionDisplay.details.some((detail) => detail.includes("Mona")));
 
   const result = await executeGoogleSheetsApproval({
@@ -280,6 +289,51 @@ test("Google Sheets action is separately approved, read back, and completes one-
     fixture.operation.args,
   );
   assert.equal(recovery.state, "verified");
+});
+
+test("approval content hash is checked before any provider request", async () => {
+  const fixture = makeFixture();
+  const operation = {
+    ...fixture.operation,
+    args: {
+      ...fixture.operation.args,
+      approvedActionHash: "0".repeat(64),
+    },
+  } as PendingOperation;
+
+  await assert.rejects(
+    () => executeGoogleSheetsApproval({
+      identity: fixture.identity,
+      operation,
+      storage: fixture.storage,
+      client: fixture.client,
+    }),
+    /GOOGLE_SHEETS_APPROVED_CONTENT_HASH_MISMATCH/u,
+  );
+  assert.ok(Object.values(fixture.client.calls).every((count) => count === 0));
+});
+
+test("approval step plan is checked before any provider request", async () => {
+  const fixture = makeFixture();
+  const originalSteps = fixture.operation.args.steps as Array<Record<string, unknown>>;
+  const alteredSteps = originalSteps.map((step, index) => index === 0
+    ? { ...step, stepId: `step_${"a".repeat(48)}` }
+    : step);
+  const operation = {
+    ...fixture.operation,
+    args: { ...fixture.operation.args, steps: alteredSteps },
+  } as PendingOperation;
+
+  await assert.rejects(
+    () => executeGoogleSheetsApproval({
+      identity: fixture.identity,
+      operation,
+      storage: fixture.storage,
+      client: fixture.client,
+    }),
+    /GOOGLE_SHEETS_ACTION_PLAN_MISMATCH/u,
+  );
+  assert.ok(Object.values(fixture.client.calls).every((count) => count === 0));
 });
 
 test("ambiguous spreadsheet creation is recorded as unknown and never replayed", async () => {
@@ -345,8 +399,9 @@ test("recovery treats a started step without a receipt as unknown", () => {
     actorId: null,
     summary: "Started",
     metadata: {
-      operationId: fixture.operation.operationId,
+      approvalOperationId: fixture.operation.operationId,
       actionId: firstStep.actionId,
+      stepId: firstStep.stepId,
       actionState: "started",
     },
     dedupeKey: null,

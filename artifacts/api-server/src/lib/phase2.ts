@@ -154,9 +154,10 @@ import {
 import { runWithIdempotencyLock } from "./idempotency-lock";
 import { agentWorkRuntime } from "./agent-work/runtime";
 import {
-  googleSheetsWorkActionInputSchema,
-  storedGoogleSheetsWorkActionSchema,
-} from "./agent-work/google-sheets-action";
+  externalActionConnectorForProvider,
+  externalActionToolGuidance,
+  registeredExternalActionProviders,
+} from "./agent-work/external-action-registry";
 import type { AgentWorkKind } from "./agent-work/types";
 import {
   countOpenTasks,
@@ -1455,7 +1456,7 @@ export const phase2Tools: ToolDefinition[] = [
     title: { type: "STRING" },
     dueAt: { type: "STRING" },
   }, ["title"]),
-  tool("create_agent_work", "Create Agent Work only after the user clearly asks for ongoing work or a one-time external action. Google Sheets creation is a one-time workflow: its creation approval only sets up the Work; a second approval is required before any Google Sheets request. Do not invent external access or actions.", {
+  tool("create_agent_work", "Create Agent Work only after the user clearly asks for ongoing work or a one-time external action. An external action's setup approval only saves the Work; a separate approval is required before contacting its provider. Do not invent external access or actions.", {
     kind: {
       type: "STRING",
       enum: ["monitor", "reminder", "recurring_task", "external_action", "research", "workflow"],
@@ -1464,13 +1465,20 @@ export const phase2Tools: ToolDefinition[] = [
     description: { type: "STRING" },
     sourceType: {
       type: "STRING",
-      enum: ["clock", "heartbeat", "internal_records", "github_repository", "google_sheets", "user_defined"],
-      description: "Use github_repository only for the supported read-only repository monitor; use google_sheets only with action.type google_sheets_create_populate and an explicit bounded values matrix; use internal_records only with an allowlisted tenant-scoped condition.",
+      enum: [
+        "clock",
+        "heartbeat",
+        "internal_records",
+        "github_repository",
+        ...registeredExternalActionProviders().map((provider) => provider.provider),
+        "user_defined",
+      ],
+      description: `Use only registered external action providers and provide their declared action fields. ${externalActionToolGuidance()}`,
     },
     condition: { type: "OBJECT" },
     action: {
       type: "OBJECT",
-      description: "For sourceType google_sheets, use {type:'google_sheets_create_populate',spreadsheetTitle,sheetTitle,initialValues:[['header'],['value']],updates:[{range:'B2',values:[['replacement']]}]}. Values are written as RAW. Use one-time external_action only, without condition or recurrence. No Google request is made until a separate action approval.",
+      description: `External provider actions are one-time external_action Work and require a second approval before provider contact. ${externalActionToolGuidance()}`,
     },
     schedule: { type: "OBJECT" },
     nextRunAt: { type: "STRING", description: "Optional ISO timestamp for the first run." },
@@ -3359,29 +3367,28 @@ async function executeTool(
       const condition = objectArg("condition");
       const requestedAction = objectArg("action");
       let storedAction: Record<string, unknown> = requestedAction;
-      const isGoogleSheetsAction = sourceType === "google_sheets";
-      if (isGoogleSheetsAction) {
+      const externalActionConnector = externalActionConnectorForProvider(sourceType);
+      if (externalActionConnector) {
         if (kindValue !== "external_action") {
-          return { ok: false, error: "Google Sheets actions must use the external_action work kind." };
+          return { ok: false, error: "External provider actions must use the external_action Work kind." };
         }
         if (!options.approvedOperationId) {
-          return { ok: false, error: "Google Sheets Work setup requires explicit approval." };
+          return { ok: false, error: "External provider Work setup requires explicit approval." };
         }
         if (Object.keys(schedule).length > 0 || Object.keys(condition).length > 0) {
-          return { ok: false, error: "Google Sheets actions are one-time Work and cannot include a recurring schedule or condition." };
+          return { ok: false, error: "External provider actions are one-time Work and cannot include a recurring schedule or condition." };
         }
-        const parsedAction = googleSheetsWorkActionInputSchema.safeParse(requestedAction);
-        if (!parsedAction.success) {
+        const storedExternalAction = externalActionConnector.validateSetupAction(
+          requestedAction,
+          options.approvedOperationId,
+        );
+        if (!storedExternalAction) {
           return {
             ok: false,
-            error: "Google Sheets action must include a valid title, sheet name, bounded initial values, and non-overlapping update ranges.",
+            error: "External provider action did not pass its validation rules.",
           };
         }
-        storedAction = storedGoogleSheetsWorkActionSchema.parse({
-          ...parsedAction.data,
-          actionId: crypto.randomUUID(),
-          sourceOperationId: options.approvedOperationId,
-        });
+        storedAction = storedExternalAction;
       }
       const work = await agentWorkRuntime.createWork({
         identity,
@@ -3396,8 +3403,8 @@ async function executeTool(
         condition,
         action: storedAction,
         schedule,
-        status: isGoogleSheetsAction ? "active" : undefined,
-        nextRunAt: isGoogleSheetsAction ? nextRunAt ?? new Date() : nextRunAt,
+        status: externalActionConnector ? "active" : undefined,
+        nextRunAt: externalActionConnector ? nextRunAt ?? new Date() : nextRunAt,
         transactionExecutor: db,
       });
       result = { ok: true, agentWork: work, created: true };
@@ -3594,7 +3601,7 @@ const personMutationGuidance = `إرشادات إنشاء الأشخاص عند 
 - استخدم create_person فقط عندما يطلب المستخدم صراحة إضافة أو إنشاء شخص. الاسم وحده ليس طلب إنشاء. إذا قال المستخدم إن الشخص موجود بالفعل فلا تنشئه؛ استخدم find_person عند الحاجة، واطلب التوضيح إذا لم تكن هناك عملية واضحة بدل تسجيل مصروف.
 `;
 
-const agentWorkGuidance = `عند طلب متابعة مستمرة أو إجراء خارجي لمرة واحدة، استخدم create_agent_work بعد التحقق من الطلب. لمراقبة repository عام على GitHub استخدم github_repository مع owner وrepository وmetric وoperator وthreshold، ولا تستخدم URL من المستخدم كمصدر مباشر. لإنشاء جدول Google Sheets وكتابة بياناته استخدم kind=external_action وsourceType=google_sheets وaction من نوع google_sheets_create_populate، مع initialValues وupdates محددة. اترك condition وschedule فارغين لهذا الإجراء لمرة واحدة. الموافقة الأولى تحفظ العمل فقط؛ لا ترسل أي طلب إلى Google Sheets قبل موافقة ثانية على تفاصيل الإجراء.`;
+const agentWorkGuidance = `عند طلب متابعة مستمرة أو إجراء خارجي لمرة واحدة، استخدم create_agent_work بعد التحقق من الطلب. لمراقبة repository عام على GitHub استخدم github_repository مع owner وrepository وmetric وoperator وthreshold، ولا تستخدم URL من المستخدم كمصدر مباشر. اترك condition وschedule فارغين لإجراء external_action لمرة واحدة، ولا تتصل بأي مزود قبل موافقة مستقلة على تفاصيل الإجراء. ${externalActionToolGuidance()}`;
 
 const reminderGuidance = `عند طلب تذكير أو موعد بيوم نسبي مثل "بكرة" دون ساعة دقيقة، اسأل عن الوقت بشكل اختياري. اقبل ساعة مثل "5 مساءً" أو "أي وقت" واستخدم 09:00 بتوقيت Africa/Cairo. لا تنفّذ التذكير قبل اكتمال dueAt.`;
 

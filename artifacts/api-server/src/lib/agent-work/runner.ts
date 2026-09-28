@@ -12,7 +12,7 @@ import {
   recordAgentWorkActionApproved,
   recordAgentWorkActionRejected,
 } from "./delegated-actions";
-import { googleSheetsUnknownResult } from "./google-sheets-action";
+import { externalActionStatusFromResult } from "./external-action";
 import {
   getOperation,
 } from "../secretary-operations";
@@ -59,19 +59,22 @@ async function findLatestActionEvent(
   workId: string,
 ): Promise<{
   operationId: string;
-  conditionHash: string;
+  conditionHash: string | null;
   status: string;
   operation: NonNullable<Awaited<ReturnType<typeof getOperation>>>;
 } | null> {
   const events = await adapters.storage.listEvents(identity, workId, 30);
   const event = events.find((item) => item.eventType === "approval_requested");
   const metadata = asRecord(event?.metadata);
-  if (typeof metadata.operationId !== "string" || typeof metadata.conditionHash !== "string") return null;
-  const operation = await getOperation(identity, metadata.operationId);
+  const operationId = typeof metadata.approvalOperationId === "string"
+    ? metadata.approvalOperationId
+    : metadata.operationId;
+  if (typeof operationId !== "string") return null;
+  const operation = await getOperation(identity, operationId);
   return operation
     ? {
         operationId: operation.operationId,
-        conditionHash: metadata.conditionHash,
+        conditionHash: typeof metadata.conditionHash === "string" ? metadata.conditionHash : null,
         status: operation.status,
         operation,
       }
@@ -85,14 +88,14 @@ async function reconcileWaitingApproval(
 ): Promise<boolean> {
   if (work.status !== "waiting") return false;
   const action = asRecord(work.action);
-  const isGoogleSheetsAction = action.type === "google_sheets_create_populate";
-  if (!isGoogleSheetsAction && action.type !== "create_task" && action.toolName !== "create_task") {
+  const isExternalAction = work.kind === "external_action";
+  if (!isExternalAction && action.type !== "create_task" && action.toolName !== "create_task") {
     return false;
   }
   const latestAction = await findLatestActionEvent(adapters, identity, work.id);
   if (!latestAction) return false;
   const operation = latestAction.operation;
-  if (isGoogleSheetsAction && googleSheetsUnknownResult(operation)) {
+  if (isExternalAction && externalActionStatusFromResult(operation) === "unknown_result") {
     await recordAgentWorkActionRejected(identity, operation, "unknown_result", adapters);
     return true;
   }
@@ -109,24 +112,25 @@ async function reconcileWaitingApproval(
     );
     return true;
   }
-  if (isGoogleSheetsAction && operation.status === "executing") {
+  if (isExternalAction && operation.status === "executing") {
     const events = await adapters.storage.listEvents(identity, work.id, 100);
     const operationEvents = events.filter((event) =>
-      asRecord(event.metadata).operationId === operation.operationId);
-    const terminalActionIds = new Set(
+      asRecord(event.metadata).approvalOperationId === operation.operationId
+      || asRecord(event.metadata).operationId === operation.operationId);
+    const terminalStepIds = new Set(
       operationEvents
         .filter((event) => [
           "external_action_step_verified",
           "external_action_step_failed",
           "external_action_unknown_result",
         ].includes(event.eventType))
-        .map((event) => asRecord(event.metadata).actionId)
-        .filter((actionId): actionId is string => typeof actionId === "string"),
+        .map((event) => asRecord(event.metadata).stepId ?? asRecord(event.metadata).actionId)
+        .filter((stepId): stepId is string => typeof stepId === "string"),
     );
     const staleUnconfirmedStart = operationEvents.find((event) =>
       event.eventType === "external_action_step_started"
-      && typeof asRecord(event.metadata).actionId === "string"
-      && !terminalActionIds.has(String(asRecord(event.metadata).actionId))
+      && typeof (asRecord(event.metadata).stepId ?? asRecord(event.metadata).actionId) === "string"
+      && !terminalStepIds.has(String(asRecord(event.metadata).stepId ?? asRecord(event.metadata).actionId))
       && Date.now() - event.createdAt.getTime() >= 60_000);
     const hasUnknownReceipt = operationEvents.some((event) =>
       event.eventType === "external_action_unknown_result");
@@ -261,11 +265,11 @@ export class AgentWorkRunner {
             runId: run.id,
             eventType: "approval_requested",
             actorType: "agent",
-            summary: plan.approvalAction === "google_sheets_execute"
-              ? "جهز الوكيل إجراء Google Sheets وطلب موافقتك قبل الاتصال بالخدمة."
+            summary: plan.approvalAction && plan.approvalAction !== "create_task"
+              ? "جهز الوكيل إجراءً خارجيًا وطلب موافقتك قبل الاتصال بالمزود."
               : "تحقق الشرط وطلب الوكيل موافقتك على إنشاء المهمة.",
             metadata: {
-              operationId: plan.approvalOperationId,
+              approvalOperationId: plan.approvalOperationId,
               action: plan.approvalAction ?? "create_task",
               conditionHash: typeof execution.evidence.sourceHash === "string"
                 ? execution.evidence.sourceHash

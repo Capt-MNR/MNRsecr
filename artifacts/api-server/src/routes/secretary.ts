@@ -17,10 +17,8 @@ import {
   recordAgentWorkActionApproved,
   recordAgentWorkActionRejected,
 } from "../lib/agent-work/delegated-actions";
-import {
-  googleSheetsUnknownResult,
-  isGoogleSheetsActionOperation,
-} from "../lib/agent-work/google-sheets-action";
+import { externalActionStatusFromResult } from "../lib/agent-work/external-action";
+import { isExternalActionOperation } from "../lib/agent-work/external-action-registry";
 import { executeStructuredTool } from "../lib/phase2";
 import {
   claimOperation,
@@ -528,7 +526,9 @@ router.post("/approvals/:operationId/approve", async (req, res): Promise<void> =
           }, "Completed approval turn reconciliation failed");
         }
       }
-      const uncertainResult = googleSheetsUnknownResult(claim.operation);
+      const uncertainResult = externalActionStatusFromResult(claim.operation) === "unknown_result"
+        ? claim.operation.result ?? null
+        : null;
       if (uncertainResult) {
         try {
           await recordAgentWorkActionRejected(identity, claim.operation, "unknown_result");
@@ -536,7 +536,7 @@ router.post("/approvals/:operationId/approve", async (req, res): Promise<void> =
           req.log.warn({
             operationId,
             error: error instanceof Error ? error.message : "AGENT_WORK_ACTION_RECONCILIATION_FAILED",
-          }, "Uncertain Google Sheets action reconciliation failed");
+          }, "Uncertain external action reconciliation failed");
         }
         try {
           await saveApprovedOperationTurn(identity, claim.operation, uncertainResult);
@@ -547,7 +547,7 @@ router.post("/approvals/:operationId/approve", async (req, res): Promise<void> =
           }, "Uncertain approval turn reconciliation failed");
         }
       } else if (
-        isGoogleSheetsActionOperation(claim.operation)
+        isExternalActionOperation(claim.operation)
         && claim.operation.status === "failed"
       ) {
         try {
@@ -556,7 +556,7 @@ router.post("/approvals/:operationId/approve", async (req, res): Promise<void> =
           req.log.warn({
             operationId,
             error: error instanceof Error ? error.message : "AGENT_WORK_ACTION_RECONCILIATION_FAILED",
-          }, "Failed Google Sheets action reconciliation failed");
+          }, "Failed external action reconciliation failed");
         }
       }
       res.json(operationResultResponse(claim.operation));
@@ -591,7 +591,7 @@ router.post("/approvals/:operationId/approve", async (req, res): Promise<void> =
       return;
     }
 
-    if (googleSheetsUnknownResult({ ...claim.operation, result })) {
+    if (externalActionStatusFromResult({ ...claim.operation, result }) === "unknown_result") {
       const progress = await recordOperationProgress(identity, operationId, result);
       try {
         await recordAgentWorkActionRejected(identity, progress, "unknown_result");
@@ -599,7 +599,7 @@ router.post("/approvals/:operationId/approve", async (req, res): Promise<void> =
         req.log.warn({
           operationId,
           error: error instanceof Error ? error.message : "AGENT_WORK_ACTION_RECONCILIATION_FAILED",
-        }, "Uncertain Google Sheets action reconciliation failed");
+        }, "Uncertain external action reconciliation failed");
       }
       try {
         await saveApprovedOperationTurn(identity, progress, result);

@@ -1,6 +1,8 @@
 import { agentWorkAdapters } from "./factory";
 import type { AgentWorkIdentity } from "./types";
 import type { OperationExecutionResult, PendingOperation } from "../secretary-operations";
+import { externalActionStatusFromResult } from "./external-action";
+import { isExternalActionOperation } from "./external-action-registry";
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -12,8 +14,12 @@ function agentWorkContext(operation: PendingOperation): {
   workId: string;
   runId: string;
 } | null {
-  const workId = typeof operation.args.agentWorkId === "string" ? operation.args.agentWorkId : null;
-  const runId = typeof operation.args.agentWorkRunId === "string" ? operation.args.agentWorkRunId : null;
+  const workId = typeof operation.args.workId === "string"
+    ? operation.args.workId
+    : typeof operation.args.agentWorkId === "string" ? operation.args.agentWorkId : null;
+  const runId = typeof operation.args.runId === "string"
+    ? operation.args.runId
+    : typeof operation.args.agentWorkRunId === "string" ? operation.args.agentWorkRunId : null;
   return workId && runId ? { workId, runId } : null;
 }
 
@@ -50,26 +56,26 @@ export async function recordAgentWorkActionApproved(
   const context = agentWorkContext(operation);
   if (!context) return;
   const action = asRecord(result.action);
-  if (operation.toolName === "google_sheets_execute") {
-    const verification = asRecord(action.verification);
-    if (action.type !== "google_sheets_workflow_verified" || verification.state !== "verified") {
-      throw new Error("GOOGLE_SHEETS_ACTION_RESULT_NOT_VERIFIED");
+  if (externalActionStatusFromResult(result) === "verified") {
+    const externalAction = asRecord(action.externalAction);
+    const verification = asRecord(externalAction.verification);
+    if (externalAction.status !== "verified" || verification.state !== "verified") {
+      throw new Error("EXTERNAL_ACTION_RESULT_NOT_VERIFIED");
     }
-    const spreadsheetId = typeof action.spreadsheetId === "string" ? action.spreadsheetId : null;
-    const spreadsheetUrl = typeof action.spreadsheetUrl === "string" ? action.spreadsheetUrl : null;
+    const provider = typeof externalAction.provider === "string" ? externalAction.provider : "external";
+    const providerReference = asRecord(externalAction.providerReference);
     await adapters.storage.storeEvidenceSnapshot({
       identity,
       workId: context.workId,
       runId: context.runId,
       retentionClass: "standard",
       snapshot: {
-        sourceType: "google_sheets",
-        actionType: "google_sheets_create_populate",
+        provider,
+        actionType: typeof externalAction.actionType === "string" ? externalAction.actionType : "external_action",
         actionState: "executed_and_verified",
-        operationId: operation.operationId,
-        actionId: typeof action.actionId === "string" ? action.actionId : null,
-        spreadsheetId,
-        spreadsheetUrl,
+        approvalOperationId: operation.operationId,
+        actionId: typeof externalAction.actionId === "string" ? externalAction.actionId : null,
+        providerReference,
         verificationState: "verified",
         verifiedAt: new Date().toISOString(),
       },
@@ -80,13 +86,13 @@ export async function recordAgentWorkActionApproved(
       runId: context.runId,
       eventType: "action_executed",
       actorType: "agent",
-      summary: "تم إنشاء جدول Google Sheets وكتابة البيانات بعد موافقتك.",
+      summary: "تم تنفيذ الإجراء الخارجي والتحقق منه بعد موافقتك.",
       metadata: {
-        operationId: operation.operationId,
-        actionType: "google_sheets_create_populate",
-        actionId: typeof action.actionId === "string" ? action.actionId : null,
-        spreadsheetId,
-        spreadsheetUrl,
+        approvalOperationId: operation.operationId,
+        provider,
+        actionType: typeof externalAction.actionType === "string" ? externalAction.actionType : "external_action",
+        actionId: typeof externalAction.actionId === "string" ? externalAction.actionId : null,
+        providerReference,
         verification,
       },
       dedupeKey: `agent-work-action-executed:${operation.operationId}`,
@@ -96,7 +102,7 @@ export async function recordAgentWorkActionApproved(
       identity,
       context.workId,
       "completed",
-      "تم تنفيذ إجراء Google Sheets والتحقق منه بعد الموافقة.",
+      "تم تنفيذ الإجراء الخارجي والتحقق منه بعد الموافقة.",
       true,
     );
     const verifiedEvent = await adapters.storage.addEvent({
@@ -105,11 +111,12 @@ export async function recordAgentWorkActionApproved(
       runId: context.runId,
       eventType: "action_verified",
       actorType: "system",
-      summary: "تم التحقق من جدول Google Sheets بقراءة القيم بعد كتابتها.",
+      summary: "تم التحقق من نتيجة الإجراء الخارجي.",
       metadata: {
-        operationId: operation.operationId,
-        actionId: typeof action.actionId === "string" ? action.actionId : null,
-        spreadsheetId,
+        approvalOperationId: operation.operationId,
+        provider,
+        actionId: typeof externalAction.actionId === "string" ? externalAction.actionId : null,
+        providerReference,
         verification,
       },
       dedupeKey: `agent-work-action-verified:${operation.operationId}`,
@@ -117,14 +124,14 @@ export async function recordAgentWorkActionApproved(
     const delivery = await adapters.notification.notify({
       identity,
       eventId: verifiedEvent.id,
-      title: "تم إنشاء جدول Google Sheets",
-      body: "تم إنشاء الجدول وكتابة البيانات والتحقق منها بعد موافقتك.",
+      title: "اكتمل الإجراء الخارجي",
+      body: "اكتمل الإجراء الخارجي وتم التحقق من نتيجته بعد موافقتك.",
       data: {
         workId: context.workId,
-        operationId: operation.operationId,
-        action: "google_sheets_create_populate",
-        spreadsheetId,
-        spreadsheetUrl,
+        approvalOperationId: operation.operationId,
+        action: typeof externalAction.actionType === "string" ? externalAction.actionType : operation.toolName,
+        provider,
+        providerReference,
         deepLink: `/main?workId=${encodeURIComponent(context.workId)}`,
       },
       dedupeKey: `agent-work-action-notification:${operation.operationId}`,
@@ -135,7 +142,7 @@ export async function recordAgentWorkActionApproved(
       runId: context.runId,
       eventType: "notification_delivery",
       actorType: "system",
-      summary: delivery.status === "accepted" ? "تم إرسال نتيجة إجراء Google Sheets." : "تعذر إرسال نتيجة إجراء Google Sheets.",
+      summary: delivery.status === "accepted" ? "تم إرسال نتيجة الإجراء الخارجي." : "تعذر إرسال نتيجة الإجراء الخارجي.",
       metadata: { status: delivery.status, driver: delivery.driver },
       dedupeKey: `agent-work-action-delivery:${operation.operationId}`,
     });
@@ -219,9 +226,9 @@ export async function recordAgentWorkActionRejected(
 ): Promise<void> {
   const context = agentWorkContext(operation);
   if (!context) return;
-  const isGoogleSheetsAction = operation.toolName === "google_sheets_execute"
-    || asRecord(operation.args).agentWorkSource === "google_sheets";
-  const nextStatus = isGoogleSheetsAction
+  const isExternalAction = isExternalActionOperation(operation);
+  const provider = typeof operation.args.provider === "string" ? operation.args.provider : "external";
+  const nextStatus = isExternalAction
     ? reason === "rejected" || reason === "expired"
       ? "cancelled"
       : "needs_review"
@@ -234,12 +241,12 @@ export async function recordAgentWorkActionRejected(
     runId: context.runId,
     retentionClass: "standard",
     snapshot: {
-      sourceType: isGoogleSheetsAction ? "google_sheets" : "github_repository",
+      provider: isExternalAction ? provider : "github_repository",
       actionType: operation.toolName,
       actionState: reason === "unknown_result" ? "unknown_result" : "not_executed",
-      operationId: operation.operationId,
+      approvalOperationId: operation.operationId,
       reason,
-      automaticRetry: isGoogleSheetsAction ? false : undefined,
+      automaticRetry: isExternalAction && reason === "unknown_result" ? false : undefined,
     },
   });
   await adapters.storage.addEvent({
@@ -255,23 +262,23 @@ export async function recordAgentWorkActionRejected(
           : "action_failed",
     actorType: "system",
     summary: reason === "unknown_result"
-      ? "نتيجة إجراء Google Sheets غير مؤكدة؛ أوقفت المتابعة ولم أعد المحاولة."
-      : isGoogleSheetsAction
+      ? "نتيجة الإجراء الخارجي غير مؤكدة؛ أوقفت المتابعة ولم أعد المحاولة."
+      : isExternalAction
         ? reason === "rejected"
-          ? "لم تتم الموافقة على إجراء Google Sheets؛ لم يبدأ الاتصال بالخدمة."
+          ? "لم تتم الموافقة على الإجراء الخارجي؛ لم يبدأ الاتصال بالمزود."
           : reason === "expired"
-            ? "انتهت صلاحية موافقة Google Sheets؛ لم يبدأ الاتصال بالخدمة."
-            : "تعذر تنفيذ إجراء Google Sheets بصورة مؤكدة."
+            ? "انتهت صلاحية الموافقة؛ لم يبدأ الاتصال بالمزود."
+            : "تعذر تنفيذ الإجراء الخارجي بصورة مؤكدة."
         : reason === "rejected"
           ? "لم تتم الموافقة، لذلك لم تُنشأ المهمة."
           : reason === "expired"
             ? "انتهت صلاحية الموافقة، لذلك لم تُنشأ المهمة."
             : "فشل تنفيذ الإجراء، ولم تُعتبر المهمة منشأة.",
     metadata: {
-      operationId: operation.operationId,
+      approvalOperationId: operation.operationId,
       actionType: operation.toolName,
       reason,
-      ...(isGoogleSheetsAction ? { automaticRetry: false } : {}),
+      ...(isExternalAction && reason === "unknown_result" ? { automaticRetry: false } : {}),
     },
     dedupeKey: `agent-work-action-${reason}:${operation.operationId}`,
   });
@@ -281,7 +288,7 @@ export async function recordAgentWorkActionRejected(
     context.workId,
     nextStatus,
     `حالة موافقة الإجراء: ${reason}.`,
-    isGoogleSheetsAction,
+    isExternalAction,
   );
   if (reason === "expired" || reason === "unknown_result") {
     const notificationEvent = await adapters.storage.addEvent({
@@ -292,22 +299,22 @@ export async function recordAgentWorkActionRejected(
       actorType: "system",
       summary: reason === "expired"
         ? "انتهت صلاحية الموافقة ولم تُنفذ المهمة."
-        : "تعذر تأكيد نتيجة Google Sheets؛ أوقفت أي إعادة للمحاولة.",
-      metadata: { operationId: operation.operationId, actionType: operation.toolName },
+        : "تعذر تأكيد نتيجة الإجراء الخارجي؛ أوقفت أي إعادة للمحاولة.",
+      metadata: { approvalOperationId: operation.operationId, actionType: operation.toolName, provider },
       dedupeKey: `agent-work-action-state-notification:${operation.operationId}:${reason}`,
     });
     if (notificationEvent.created !== false) {
       const delivery = await adapters.notification.notify({
         identity,
         eventId: notificationEvent.id,
-        title: reason === "expired" ? "انتهت صلاحية الموافقة" : "نتيجة Google Sheets غير مؤكدة",
+        title: reason === "expired" ? "انتهت صلاحية الموافقة" : "نتيجة الإجراء الخارجي غير مؤكدة",
         body: reason === "expired"
           ? "انتهت صلاحية الموافقة، لذلك لم تُنشأ المهمة. يمكنك متابعة العمل بعد تحقق الشرط مرة أخرى."
-          : "قد يكون طلب Google Sheets قد نُفذ؛ راجع الجدول قبل أي إجراء جديد.",
+          : "قد يكون طلب المزود قد نُفذ؛ تحقق من النتيجة قبل بدء إجراء جديد.",
         data: {
           workId: context.workId,
-          operationId: operation.operationId,
-          action: isGoogleSheetsAction ? "google_sheets_create_populate" : operation.toolName,
+          approvalOperationId: operation.operationId,
+          action: isExternalAction ? operation.args.actionType ?? operation.toolName : operation.toolName,
           deepLink: `/main?workId=${encodeURIComponent(context.workId)}`,
         },
         dedupeKey: `agent-work-action-state-delivery:${operation.operationId}:${reason}`,

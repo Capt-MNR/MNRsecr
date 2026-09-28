@@ -9,11 +9,9 @@ import {
 import type { Identity } from "./secretary";
 import { persistedApprovalArgs } from "./approval-schemas";
 import {
-  formatGoogleSheetsActionPreview,
-  GOOGLE_SHEETS_APPROVAL_TOOL,
-  googleSheetsWorkActionInputSchema,
-  recoverGoogleSheetsOperation,
-} from "./agent-work/google-sheets-action";
+  externalActionConnectorForProvider,
+  externalActionConnectorForTool,
+} from "./agent-work/external-action-registry";
 
 export type OperationStatus =
   | "pending"
@@ -130,6 +128,8 @@ export function displayForOperation(
     : undefined;
   const currency = stringArg("currency") ?? stringArg("expectedCurrency") ?? "EGP";
   const description = stringArg("description") ?? stringArg("text") ?? stringArg("title");
+  const externalActionConnector = externalActionConnectorForTool(toolName);
+  if (externalActionConnector) return externalActionConnector.approvalDisplay(args);
 
   switch (toolName) {
     case "record_expense":
@@ -179,57 +179,14 @@ export function displayForOperation(
       const repository = typeof condition.owner === "string" && typeof condition.repository === "string"
         ? `${condition.owner}/${condition.repository}`
         : undefined;
-      if (sourceType === "google_sheets") {
-        const initialValues = Array.isArray(action.initialValues) ? action.initialValues : [];
-        const updates = Array.isArray(action.updates) ? action.updates : [];
-        const parsedAction = googleSheetsWorkActionInputSchema.safeParse(action);
-        return {
-          title: "إعداد إجراء Google Sheets",
-          details: [
-            workTitle,
-            "هذه الموافقة تحفظ إعداد العمل فقط؛ لن يتم الاتصال بـ Google Sheets قبل موافقة ثانية.",
-            ...(typeof action.spreadsheetTitle === "string"
-              ? [`اسم الجدول: ${action.spreadsheetTitle}`]
-              : []),
-            ...(typeof action.sheetTitle === "string" ? [`اسم الورقة: ${action.sheetTitle}`] : []),
-            `البيانات الأولية: ${initialValues.length} صف`,
-            ...(updates.length
-              ? [`التعديلات بعد الكتابة الأولية: ${updates.map((update) => {
-                  const record = update && typeof update === "object"
-                    ? update as Record<string, unknown>
-                    : {};
-                  return typeof record.range === "string" ? record.range : "نطاق غير محدد";
-                }).join("، ")}`]
-              : []),
-            ...(parsedAction.success
-              ? [`معاينة القيم: ${formatGoogleSheetsActionPreview(parsedAction.data)}`]
-              : []),
-          ],
-        };
-      }
+      const externalActionConnector = externalActionConnectorForProvider(sourceType);
+      if (externalActionConnector) return externalActionConnector.setupApprovalDisplay(workTitle, action);
       return {
         title: "إضافة متابعة للوكيل",
         details: [
           workTitle,
           ...(sourceType === "github_repository" && repository ? [`مصدر GitHub: ${repository}`] : []),
           ...(stringArg("description") ? [`التفاصيل: ${stringArg("description")}`] : []),
-        ],
-      };
-    }
-    case "google_sheets_execute": {
-      const updateRanges = Array.isArray(args.updateRanges)
-        ? args.updateRanges.filter((range): range is string => typeof range === "string")
-        : [];
-      return {
-        title: "إنشاء وكتابة بيانات في Google Sheets",
-        details: [
-          ...(stringArg("spreadsheetTitle") ? [`اسم الجدول: ${stringArg("spreadsheetTitle")}`] : []),
-          ...(stringArg("sheetTitle") ? [`اسم الورقة: ${stringArg("sheetTitle")}`] : []),
-          ...(typeof args.initialRows === "number" ? [`البيانات الأولية: ${args.initialRows} صف`] : []),
-          ...(typeof args.initialColumns === "number" ? [`عدد الأعمدة الأولية: ${args.initialColumns}`] : []),
-          ...(updateRanges.length ? [`نطاقات التعديل: ${updateRanges.join("، ")}`] : []),
-          ...(stringArg("previewText") ? [`معاينة القيم: ${stringArg("previewText")}`] : []),
-          "سيتم الكتابة بالقيم كما هي، ثم قراءة النطاق للتحقق من النتيجة.",
         ],
       };
     }
@@ -368,10 +325,17 @@ async function reconcileExecutingOperation(
     }
 
     const currentOperation = toOperation(row);
-    if (row.toolName === GOOGLE_SHEETS_APPROVAL_TOOL) {
-      const workId = currentOperation.args.agentWorkId;
+    const externalActionConnector = externalActionConnectorForTool(row.toolName);
+    if (externalActionConnector) {
+      const workId = typeof currentOperation.args.workId === "string"
+        ? currentOperation.args.workId
+        : currentOperation.args.agentWorkId;
       if (typeof workId !== "string") {
-        const uncertain = recoverGoogleSheetsOperation([], row.id, currentOperation.args);
+        const uncertain = externalActionConnector.recoverOperation({
+          events: [],
+          approvalOperationId: row.id,
+          operationArgs: currentOperation.args,
+        });
         const [updated] = await tx.update(secretaryOperationsTable)
           .set({
             resultJson: JSON.stringify(
@@ -394,11 +358,11 @@ async function reconcileExecutingOperation(
         ))
         .orderBy(desc(agentWorkEventsTable.createdAt))
         .limit(100);
-      const recovery = recoverGoogleSheetsOperation(
-        actionEvents,
-        row.id,
-        currentOperation.args,
-      );
+      const recovery = externalActionConnector.recoverOperation({
+        events: actionEvents,
+        approvalOperationId: row.id,
+        operationArgs: currentOperation.args,
+      });
       if (recovery.state === "verified") {
         const [completed] = await tx.update(secretaryOperationsTable)
           .set({
