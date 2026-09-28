@@ -1,0 +1,472 @@
+Audit: إيه اللي MNRsecr محتاجه عشان يبقى Agent ينفذ فعلًا؟
+1. الـAction Architecture — 🔴 أساسي
+نحتاج abstraction موحدة:
+User Request
+    ↓
+Agent Understand
+    ↓
+Action Plan
+    ↓
+Action Execution Layer
+    ↓
+Connector / Runtime
+    ↓
+Observation
+    ↓
+Verification
+    ↓
+Evidence
+والـAgent ما يعرفش تفاصيل التنفيذ.
+مثلاً:
+send_message
+create_spreadsheet
+read_email
+open_app
+tap
+type
+search_web
+upload_file
+كلها capabilities، والتنفيذ يحصل تحتها.
+المطلوب Audit:
+هل عندنا abstraction مناسبة أصلًا؟
+هل Tools الحالية ممكن تكون foundation؟
+هل Action وTool محتاجين separation؟
+هل الـAction لها lifecycle وID؟
+هل كل Action قابلة للتتبع والـretry والـverification؟
+2. Messaging — 🔴
+دي من أول الحاجات اللي لازم تدخل production capability.
+نحتاج:
+Read
+قراءة رسالة
+معرفة sender
+معرفة conversation
+معرفة timestamp
+attachment metadata
+unread state
+Write
+compose
+send
+reply
+forward
+attachment
+Safety
+READ → ممكن بدون approval
+DRAFT → بدون approval
+SEND → approval حسب policy
+DELETE → approval
+والـAgent لازم يعرف هل الرسالة اتبعت فعلًا، مش يكتفي بأنه ضغط زر.
+نقطة مهمة
+WhatsApp مثلًا ممكن يتعامل معاه من API في بعض السيناريوهات، أو من Android UI في سيناريوهات أخرى. لذلك الـcapability لازم تكون مستقلة عن طريقة التنفيذ.
+3. Android Execution Runtime — 🔴
+دي أكبر قطعة ناقصة.
+نحتاج طبقة على الموبايل قادرة على:
+open_app
+close_app
+read_screen
+get_ui_tree
+screenshot
+tap
+long_press
+swipe
+scroll
+type_text
+clear_text
+back
+home
+recent_apps
+wait
+share
+launch_url
+Android AccessibilityService يوفر جزءًا كبيرًا من هذه القدرات فعلًا، بما فيها قراءة UI، gestures، typing، والتنقل. �
+GitHub
+لكن لازم نعملها Execution Runtime خاص بـMNRsecr، مش نخلي الـLLM يبعث أوامر Android مباشرة.
+4. Observation System — 🔴
+دي أهم من الـtap نفسه.
+بعد كل Action محتاجين نعرف:
+إيه اللي حصل؟
+مثلاً:
+tap(send_button)
+        ↓
+observe()
+        ↓
+message_status = sent
+والـObservation ممكن تكون:
+Accessibility tree
+screenshot
+app/package
+visible text
+UI state
+API response
+ونحتاج Observation IDs / freshness حتى ما نستخدمش screenshot قديم لتنفيذ action جديد.
+وده pattern مستخدم في أنظمة Android-agent الحديثة لأن stale UI ممكن يؤدي لضغطات خاطئة. �
+GitHub
+5. Verification — 🔴
+لازم قاعدة ثابتة:
+Action executed ≠ Action succeeded
+مثلاً:
+send_message
+مش معناها:
+tap() succeeded
+بل:
+tap
+↓
+observe
+↓
+verify message appears as sent
+↓
+success
+ولو verification فشل:
+retry / recover / ask user
+وده يتكامل مباشرة مع Agent Work وEvidence الموجودين عندنا.
+6. Approval & Safety — 🔴
+نحتاج Risk Policy وليس مجرد requiresApproval=true.
+مثلاً:
+Action
+Default
+Read message
+Allow
+Search web
+Allow
+Open app
+Allow
+Create sheet
+Allow
+Draft message
+Allow
+Send message
+Ask
+Send email
+Ask
+Delete file
+Ask
+Post publicly
+Ask
+Purchase
+Strong Ask
+Money transfer
+Strong Ask
+Password/OTP
+Never capture
+والـapproval لازم يكون atomic وقابل للربط بالـoperationId.
+وده يتوافق مع الـapproval infrastructure الموجودة عندنا بدل اختراع نظام ثاني.
+7. Secrets / Credentials — 🔴
+دي لازم تتصمم قبل integrations.
+الـAgent قد يحتاج:
+OAuth tokens
+session credentials
+API keys
+connected accounts
+لكن:
+LLM لا يرى secrets الخام.
+والـAction تقول:
+use_connected_account("Google")
+مش:
+api_key = "..."
+8. Connectors / Integrations — 🔴
+نعمل interface:
+Connector
+ ├── Messaging
+ ├── Email
+ ├── Calendar
+ ├── Sheets
+ ├── Files
+ ├── Storage
+ └── Web
+كل Connector يعلن capabilities.
+مثلاً:
+GoogleSheets
+  create_sheet
+  read_range
+  write_range
+  append_rows
+  update_cells
+وبكده نقدر نضيف Microsoft Excel لاحقًا بدون تعديل Agent.
+9. Sheets — 🔴
+دي لازم تكون واحدة من أول integrations.
+المطلوب:
+create spreadsheet
+create sheet
+read cells
+write cells
+append rows
+update cells
+formulas
+formatting الأساسية
+filtering/sorting
+export/share
+verify changes
+والـAgent يقدر يعمل:
+"اعمل شيت بمصاريف سبتمبر وحط الإجمالي في الآخر."
+وينفذها فعلًا.
+10. Email — 🟠
+search
+read
+summarize
+draft
+reply
+send
+attachments
+labels/folders
+11. Calendar / Tasks — 🟠
+read calendar
+create event
+modify
+cancel
+reminders
+recurring events
+وده هيتكامل جدًا مع الـProactive Engine.
+12. Files — 🟠
+Agent لازم يتعامل مع artifacts:
+create
+read
+edit
+rename
+move
+upload
+download
+share
+convert
+ويكون فيه Evidence للملف الناتج.
+13. Web Execution — 🟠
+مش مجرد Web Search.
+نحتاج:
+navigate
+observe
+click
+type
+scroll
+extract
+download
+upload
+لكن:
+API > deep link > deterministic connector > browser automation
+بالترتيب، كلما أمكن.
+14. Mobile/Web Action Planner — 🟠
+دي طبقة مهمة.
+لو المستخدم قال:
+"ابعت لمحمد الصورة اللي صورتها النهاردة."
+الـAgent لازم يقدر يحولها إلى:
+resolve_contact(Mohamed)
+↓
+resolve_latest_photo(today)
+↓
+prepare_message
+↓
+request_approval
+↓
+open/send
+↓
+verify
+مش مجرد استدعاء Tool واحدة.
+15. Recovery Engine — 🔴
+لأن العالم الخارجي messy.
+ممكن:
+التطبيق يقفل
+UI يتغير
+network يفصل
+button مش موجود
+login انتهى
+permission تظهر
+action timeout
+app يرجع screen مختلفة
+نحتاج:
+Action failed
+↓
+Observe
+↓
+Classify
+↓
+Recover
+↓
+Retry safely
+↓
+Verify
+مع idempotency عشان ما يبعتش نفس الرسالة مرتين.
+16. Agent Work Worker / Crash Recovery — 🔴
+وده عندنا أصلًا كجزء ناقص.
+لازم الـExternal Action يعيش حتى لو API process مات.
+Work
+ ├── state
+ ├── lease
+ ├── checkpoint
+ ├── current_action
+ ├── attempt
+ ├── observation
+ ├── evidence
+ └── recovery
+والـmobile runtime يعرف يرجع يكمل.
+17. Evidence — 🔴
+كل عملية خارجية مهمة لازم نقدر نثبت نتيجتها.
+مثلاً:
+Action:
+send_message
+
+Evidence:
+recipient = Mohamed
+status = sent
+timestamp = ...
+message_id = ...
+أو:
+create_spreadsheet
+
+Evidence:
+file_id = ...
+sheet = Expenses
+rows_written = 37
+verified = true
+وده جزء قوي جدًا عندنا لأن Agent Work/Evidence موجودين بالفعل.
+18. Permissions / Device State — 🔴
+لازم نعرف:
+Accessibility enabled؟
+Notification permission؟
+app installed؟
+app logged in؟
+screen locked؟
+device available؟
+network available؟
+required connector connected؟
+مش نخلي الـAgent يكتشف ده بعد ما يبدأ المهمة.
+19. Security Boundaries — 🔴
+خصوصًا لأننا بنتكلم عن Agent يتحكم في الموبايل.
+نحتاج deny boundaries واضحة للـAgent:
+Banking
+Password managers
+OTP
+payment confirmation
+system security settings
+destructive actions
+مش معناها إننا ممنوعين دائمًا؛ معناها إن الـruntime ما يتعاملش مع كل UI بنفس الثقة.
+حتى Android agents الحالية تصطدم بقيود مثل FLAG_SECURE والشاشات المقفولة وبعض التطبيقات التي لا تعرض UI قابلًا للأتمتة. �
+GitHub
+20. Action Observability — 🟠
+نحتاج dashboard/logging:
+Operation
+Action
+Connector
+Target
+Started
+Completed
+Duration
+Attempts
+Result
+Evidence
+Failure
+وده هيساعدنا جدًا في معرفة:
+هل Agent فشل في الفهم؟
+ولا التخطيط؟
+ولا التنفيذ؟
+ولا التطبيق نفسه؟
+21. Token Optimization للـExecution — 🟠
+ودي مهمة جدًا بالنسبة لنا.
+مش كل tap يحتاج LLM.
+مثلاً:
+open_app
+tap known element
+back
+wait
+ممكن deterministic.
+والـLLM يدخل فقط لما نحتاج:
+فهم الشاشة
+اتخاذ قرار
+recovery
+ambiguity
+وده ممكن يقلل استهلاك التوكينات بصورة ضخمة مقارنة بـLLM loop لكل حركة.
+22. Model Capability Registry — 🟠
+بعد ما بنينا Provider/Gateway abstraction، نحتاج:
+Model
+ ├── tools
+ ├── structured_output
+ ├── vision
+ ├── audio
+ ├── reasoning
+ ├── context_limit
+ ├── streaming
+ └── cost/latency metadata
+علشان Execution Planner يقدر يقول:
+محتاج vision.
+بدل ما يعرف اسم Gemini أو GPT.
+23. Testing / Evaluation — 🔴
+لازم نبني مجموعة مهام حقيقية:
+Messaging
+read
+draft
+approve/send
+verify
+Sheets
+create
+populate
+modify
+verify
+Android
+open
+navigate
+type
+screenshot
+recover
+Web
+search
+extract
+form
+Failure
+app closed
+network loss
+stale screen
+duplicate action
+permission denied
+ونقيس:
+Success / False Success / Duplicate Action / Recovery / Tokens / Latency
+24. Product UX
+وأنا شايف دي مهمة جدًا.
+المستخدم مش لازم يعرف إن فيه Android Accessibility أو Connector أو Action Runtime.
+هو يقول:
+"ابعت لمحمد إن الاجتماع اتأجل لبكرة."
+ويشوف:
+هتبعت لمحمد: "الاجتماع اتأجل لبكرة."
+[إرسال] [إلغاء]
+وبعد التنفيذ:
+✓ اتبعت لمحمد.
+ده هو الـUX.
+النتيجة
+بعد الـAudit، أنا شايف عندنا 5 طبقات أساسية لازم نطلع بيها:
+                MNRsecr Agent
+                      │
+              ┌───────▼───────┐
+              │ Action Planner │
+              └───────┬───────┘
+                      │
+              ┌───────▼────────┐
+              │ Action Runtime  │
+              └───────┬────────┘
+                      │
+        ┌─────────────┼──────────────┐
+        │             │              │
+   Connectors     Android         Web
+   APIs           Runtime        Runtime
+        │             │              │
+        └─────────────┼──────────────┘
+                      │
+               Observe / Verify
+                      │
+                Evidence / Work
+ترتيب التنفيذ اللي أقترحه
+Phase 1 — Architecture Audit
+Audit الـTools الحالية.
+Audit Agent Work.
+Audit Android app.
+تحديد ما يمكن إعادة استخدامه.
+تصميم Action contract.
+Phase 2 — أول Vertical Slice
+Messaging:
+Read → Understand → Draft → Approval → Send → Verify → Evidence
+Phase 3
+Sheets:
+Create → Populate → Modify → Verify → Evidence
+Phase 4
+Android Runtime:
+Accessibility + intents + observation + safety.
+Phase 5
+Web Runtime.
+Phase 6
+Email / Calendar / Files / باقي integrations.
+Phase 7
+Recovery + learning + optimization + capability-aware model selection.
