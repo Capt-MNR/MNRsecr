@@ -7,4 +7,4 @@ Treat inference targets as namespaced routes: direct providers use `direct:<id>`
 
 **Why:** OpenRouter is a routing Gateway, not a direct model provider. Treating both as the same provider identity blurs who owns fallback decisions and makes provider-specific usage logic leak into shared orchestration.
 
-**How to apply:** Register route kind through the shared service catalog; preserve the Agent-facing request contract and provider-neutral context, approval, and tool identity. Add an adapter only for a distinct wire protocol, and do not assert Gateway capabilities or upstream policy without verified metadata.
+**How to apply:** Register route kind through the shared service catalog; preserve the Agent-facing request contract and provider-neutral context, approval, and tool identity. The custom catalog currently accepts OpenAI-compatible services only; adding a protocol should extend catalog validation and adapter construction, never the MNRsecr route algorithm. Do not assert Gateway capabilities or upstream policy without verified metadata.

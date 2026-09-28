@@ -69,7 +69,31 @@ test("the route registry separates direct providers and Gateways without assumin
   }
 });
 
-test("MNRsecr routes to an injected Gateway without selecting its upstream", async () => {
+test("a new wire protocol is rejected at the custom catalog boundary", () => {
+  const previousCatalog = process.env.AI_PROVIDER_CATALOG;
+  try {
+    process.env.AI_PROVIDER_CATALOG = JSON.stringify({
+      providers: [{
+        name: "native-relay",
+        kind: "gateway",
+        protocol: "vendor-native",
+        apiKeyEnv: "NATIVE_RELAY_API_KEY",
+        modelEnv: "NATIVE_RELAY_MODEL",
+        defaultModel: "fixture-model",
+        defaultApiUrl: "https://native-relay.invalid/generate",
+      }],
+    });
+    assert.throws(
+      () => inferenceServiceDefinitions(),
+      /INVALID_AI_PROVIDER_CATALOG:expected_openai_compatible_providers/u,
+    );
+  } finally {
+    if (previousCatalog === undefined) delete process.env.AI_PROVIDER_CATALOG;
+    else process.env.AI_PROVIDER_CATALOG = previousCatalog;
+  }
+});
+
+test("MNRsecr routes to an injected Gateway without upstream or protocol routing knowledge", async () => {
   const directRoute = directProviderRoute("new-provider", "provider-model");
   const relayRoute = gatewayRoute("new-gateway", "vendor-z/model-y");
   const messages = [] as const;
@@ -132,6 +156,13 @@ test("a registry-configured Gateway reuses the adapter contract without exposing
     "AI_PROVIDER_CATALOG",
     "AI_ROUTE_ORDER",
     "AI_PRIMARY_ROUTE",
+    "AI_FALLBACK_ROUTE",
+    "AI_SECONDARY_FALLBACK_ROUTE",
+    "AI_PROVIDER",
+    "AI_PRIMARY_PROVIDER",
+    "AI_FALLBACK_PROVIDER",
+    "AI_SECONDARY_FALLBACK_PROVIDER",
+    "PROVIDER_ROUTING_ORDER",
     "CUSTOM_RELAY_API_KEY",
     "CUSTOM_RELAY_API_URL",
     "CUSTOM_RELAY_MODEL",
@@ -157,6 +188,15 @@ test("a registry-configured Gateway reuses the adapter contract without exposing
     });
     process.env.AI_ROUTE_ORDER = "gateway:test-relay";
     process.env.AI_PRIMARY_ROUTE = "gateway:test-relay";
+    for (const key of [
+      "AI_FALLBACK_ROUTE",
+      "AI_SECONDARY_FALLBACK_ROUTE",
+      "AI_PROVIDER",
+      "AI_PRIMARY_PROVIDER",
+      "AI_FALLBACK_PROVIDER",
+      "AI_SECONDARY_FALLBACK_PROVIDER",
+      "PROVIDER_ROUTING_ORDER",
+    ] as const) delete process.env[key];
     process.env.CUSTOM_RELAY_API_KEY = "fixture-only-not-a-real-key";
     process.env.CUSTOM_RELAY_API_URL = relayUrl;
     process.env.CUSTOM_RELAY_MODEL = "test-model";
@@ -192,7 +232,7 @@ test("a registry-configured Gateway reuses the adapter contract without exposing
         internalUpstream,
       });
       return new Response(JSON.stringify({
-        choices: [{ message: { content: `fixture response from ${internalUpstream}` } }],
+        choices: [{ message: { content: "fixture reply" } }],
         usage: { prompt_tokens: 4, completion_tokens: 2, total_tokens: 6 },
       }), {
         status: 200,
@@ -214,8 +254,8 @@ test("a registry-configured Gateway reuses the adapter contract without exposing
     };
     const secondResponse = await router.generate([], secondContext);
 
-    assert.equal(firstResponse.text, "fixture response from upstream-A");
-    assert.equal(secondResponse.text, "fixture response from upstream-B");
+    assert.equal(firstResponse.text, "fixture reply");
+    assert.equal(secondResponse.text, "fixture reply");
     assert.deepEqual(fetchObservations, [
       { url: relayUrl, model: "test-model", internalUpstream: "upstream-A" },
       { url: relayUrl, model: "test-model", internalUpstream: "upstream-B" },
