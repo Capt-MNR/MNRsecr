@@ -5,7 +5,7 @@ const transitions: Record<AgentWorkStatus, readonly AgentWorkStatus[]> = {
   draft: ["active", "cancelled"],
   active: ["paused", "waiting", "needs_review", "completed", "failed", "cancelled"],
   paused: ["active", "cancelled"],
-  waiting: ["active", "paused", "needs_review", "cancelled"],
+  waiting: ["active", "paused", "needs_review", "completed", "cancelled"],
   needs_review: ["active", "paused", "completed", "cancelled"],
   completed: [],
   failed: ["active", "cancelled"],

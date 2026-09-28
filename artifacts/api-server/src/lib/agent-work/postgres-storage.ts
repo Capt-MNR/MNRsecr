@@ -253,12 +253,16 @@ export class PostgresAgentWorkStorageAdapter implements StorageAdapter {
     actorType: "user" | "agent" | "system";
     actorId?: string | null;
     reason?: string;
+    nextRunAt?: Date | null;
   }): Promise<AgentWorkRecord> {
     transitionWork(input.from, input.to);
     return db.transaction(async (tx) => {
       const [row] = await tx.update(agentWorksTable)
         .set({
           status: input.to,
+          ...(Object.prototype.hasOwnProperty.call(input, "nextRunAt")
+            ? { nextRunAt: input.nextRunAt ?? null }
+            : {}),
           updatedAt: new Date(),
           rowVersion: sql`${agentWorksTable.rowVersion} + 1`,
         })
@@ -277,7 +281,13 @@ export class PostgresAgentWorkStorageAdapter implements StorageAdapter {
         actorType: input.actorType,
         actorId: input.actorId ?? null,
         summary: input.reason ?? `تغيرت حالة العمل إلى ${input.to}.`,
-        metadata: { from: input.from, to: input.to },
+        metadata: {
+          from: input.from,
+          to: input.to,
+          ...(Object.prototype.hasOwnProperty.call(input, "nextRunAt")
+            ? { nextRunAt: input.nextRunAt?.toISOString() ?? null }
+            : {}),
+        },
       });
       return mapWork(row);
     });

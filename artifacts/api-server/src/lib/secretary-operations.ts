@@ -1,5 +1,6 @@
 import { and, desc, eq, gt, isNull, lte, or, sql } from "drizzle-orm";
 import {
+  agentWorkEventsTable,
   activityEventsTable,
   db,
   secretaryOperationsTable,
@@ -7,6 +8,12 @@ import {
 } from "@workspace/db";
 import type { Identity } from "./secretary";
 import { persistedApprovalArgs } from "./approval-schemas";
+import {
+  formatGoogleSheetsActionPreview,
+  GOOGLE_SHEETS_APPROVAL_TOOL,
+  googleSheetsWorkActionInputSchema,
+  recoverGoogleSheetsOperation,
+} from "./agent-work/google-sheets-action";
 
 export type OperationStatus =
   | "pending"
@@ -166,15 +173,63 @@ export function displayForOperation(
       const condition = args.condition && typeof args.condition === "object" && !Array.isArray(args.condition)
         ? args.condition as Record<string, unknown>
         : {};
+      const action = args.action && typeof args.action === "object" && !Array.isArray(args.action)
+        ? args.action as Record<string, unknown>
+        : {};
       const repository = typeof condition.owner === "string" && typeof condition.repository === "string"
         ? `${condition.owner}/${condition.repository}`
         : undefined;
+      if (sourceType === "google_sheets") {
+        const initialValues = Array.isArray(action.initialValues) ? action.initialValues : [];
+        const updates = Array.isArray(action.updates) ? action.updates : [];
+        const parsedAction = googleSheetsWorkActionInputSchema.safeParse(action);
+        return {
+          title: "إعداد إجراء Google Sheets",
+          details: [
+            workTitle,
+            "هذه الموافقة تحفظ إعداد العمل فقط؛ لن يتم الاتصال بـ Google Sheets قبل موافقة ثانية.",
+            ...(typeof action.spreadsheetTitle === "string"
+              ? [`اسم الجدول: ${action.spreadsheetTitle}`]
+              : []),
+            ...(typeof action.sheetTitle === "string" ? [`اسم الورقة: ${action.sheetTitle}`] : []),
+            `البيانات الأولية: ${initialValues.length} صف`,
+            ...(updates.length
+              ? [`التعديلات بعد الكتابة الأولية: ${updates.map((update) => {
+                  const record = update && typeof update === "object"
+                    ? update as Record<string, unknown>
+                    : {};
+                  return typeof record.range === "string" ? record.range : "نطاق غير محدد";
+                }).join("، ")}`]
+              : []),
+            ...(parsedAction.success
+              ? [`معاينة القيم: ${formatGoogleSheetsActionPreview(parsedAction.data)}`]
+              : []),
+          ],
+        };
+      }
       return {
         title: "إضافة متابعة للوكيل",
         details: [
           workTitle,
           ...(sourceType === "github_repository" && repository ? [`مصدر GitHub: ${repository}`] : []),
           ...(stringArg("description") ? [`التفاصيل: ${stringArg("description")}`] : []),
+        ],
+      };
+    }
+    case "google_sheets_execute": {
+      const updateRanges = Array.isArray(args.updateRanges)
+        ? args.updateRanges.filter((range): range is string => typeof range === "string")
+        : [];
+      return {
+        title: "إنشاء وكتابة بيانات في Google Sheets",
+        details: [
+          ...(stringArg("spreadsheetTitle") ? [`اسم الجدول: ${stringArg("spreadsheetTitle")}`] : []),
+          ...(stringArg("sheetTitle") ? [`اسم الورقة: ${stringArg("sheetTitle")}`] : []),
+          ...(typeof args.initialRows === "number" ? [`البيانات الأولية: ${args.initialRows} صف`] : []),
+          ...(typeof args.initialColumns === "number" ? [`عدد الأعمدة الأولية: ${args.initialColumns}`] : []),
+          ...(updateRanges.length ? [`نطاقات التعديل: ${updateRanges.join("، ")}`] : []),
+          ...(stringArg("previewText") ? [`معاينة القيم: ${stringArg("previewText")}`] : []),
+          "سيتم الكتابة بالقيم كما هي، ثم قراءة النطاق للتحقق من النتيجة.",
         ],
       };
     }
@@ -313,6 +368,96 @@ async function reconcileExecutingOperation(
     }
 
     const currentOperation = toOperation(row);
+    if (row.toolName === GOOGLE_SHEETS_APPROVAL_TOOL) {
+      const workId = currentOperation.args.agentWorkId;
+      if (typeof workId !== "string") {
+        const uncertain = recoverGoogleSheetsOperation([], row.id, currentOperation.args);
+        const [updated] = await tx.update(secretaryOperationsTable)
+          .set({
+            resultJson: JSON.stringify(
+              uncertain.state === "unknown_result" ? uncertain.result : null,
+            ),
+            updatedAt: new Date(),
+          })
+          .where(and(
+            scopedOperation(identity, operation.operationId),
+            eq(secretaryOperationsTable.status, "executing"),
+          ))
+          .returning();
+        return toOperation(updated ?? row);
+      }
+      const actionEvents = await tx.select().from(agentWorkEventsTable)
+        .where(and(
+          eq(agentWorkEventsTable.tenantId, identity.tenantId),
+          eq(agentWorkEventsTable.ownerUserId, identity.userId),
+          eq(agentWorkEventsTable.workId, workId),
+        ))
+        .orderBy(desc(agentWorkEventsTable.createdAt))
+        .limit(100);
+      const recovery = recoverGoogleSheetsOperation(
+        actionEvents,
+        row.id,
+        currentOperation.args,
+      );
+      if (recovery.state === "verified") {
+        const [completed] = await tx.update(secretaryOperationsTable)
+          .set({
+            status: "completed",
+            resultJson: JSON.stringify(recovery.result),
+            completedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(and(
+            scopedOperation(identity, operation.operationId),
+            eq(secretaryOperationsTable.status, "executing"),
+          ))
+          .returning();
+        return toOperation(completed ?? row);
+      }
+      if (recovery.state === "unknown_result") {
+        const [uncertain] = await tx.update(secretaryOperationsTable)
+          .set({
+            resultJson: JSON.stringify(recovery.result),
+            updatedAt: new Date(),
+          })
+          .where(and(
+            scopedOperation(identity, operation.operationId),
+            eq(secretaryOperationsTable.status, "executing"),
+          ))
+          .returning();
+        return toOperation(uncertain ?? row);
+      }
+      if (recovery.state === "failed") {
+        const [failed] = await tx.update(secretaryOperationsTable)
+          .set({
+            status: "failed",
+            errorJson: JSON.stringify({ message: recovery.reason }),
+            completedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(and(
+            scopedOperation(identity, operation.operationId),
+            eq(secretaryOperationsTable.status, "executing"),
+          ))
+          .returning();
+        return toOperation(failed ?? row);
+      }
+      const [reset] = await tx.update(secretaryOperationsTable)
+        .set({
+          status: "pending",
+          resultJson: null,
+          approvedAt: null,
+          claimedAt: null,
+          updatedAt: new Date(),
+        })
+        .where(and(
+          scopedOperation(identity, operation.operationId),
+          eq(secretaryOperationsTable.status, "executing"),
+        ))
+        .returning();
+      return toOperation(reset ?? row);
+    }
+
     const [event] = await tx.select().from(activityEventsTable)
       .where(and(
         eq(activityEventsTable.tenantId, identity.tenantId),
@@ -520,5 +665,26 @@ export async function failOperation(
   if (failed) return toOperation(failed);
   const operation = await getOperation(identity, operationId);
   if (!operation) throw new Error("Operation disappeared during execution.");
+  return operation;
+}
+
+export async function recordOperationProgress(
+  identity: Identity,
+  operationId: string,
+  result: OperationExecutionResult,
+): Promise<PendingOperation> {
+  const [updated] = await db.update(secretaryOperationsTable)
+    .set({
+      resultJson: JSON.stringify(result),
+      updatedAt: new Date(),
+    })
+    .where(and(
+      scopedOperation(identity, operationId),
+      eq(secretaryOperationsTable.status, "executing"),
+    ))
+    .returning();
+  if (updated) return toOperation(updated);
+  const operation = await getOperation(identity, operationId);
+  if (!operation) throw new Error("Operation disappeared while recording progress.");
   return operation;
 }

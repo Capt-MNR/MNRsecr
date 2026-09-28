@@ -17,6 +17,10 @@ import {
   recordAgentWorkActionApproved,
   recordAgentWorkActionRejected,
 } from "../lib/agent-work/delegated-actions";
+import {
+  googleSheetsUnknownResult,
+  isGoogleSheetsActionOperation,
+} from "../lib/agent-work/google-sheets-action";
 import { executeStructuredTool } from "../lib/phase2";
 import {
   claimOperation,
@@ -24,6 +28,7 @@ import {
   completeOperationWithExecutor,
   failOperation,
   getOperation,
+  recordOperationProgress,
   rejectOperation,
   type OperationExecutionResult,
   type PendingOperation,
@@ -523,6 +528,37 @@ router.post("/approvals/:operationId/approve", async (req, res): Promise<void> =
           }, "Completed approval turn reconciliation failed");
         }
       }
+      const uncertainResult = googleSheetsUnknownResult(claim.operation);
+      if (uncertainResult) {
+        try {
+          await recordAgentWorkActionRejected(identity, claim.operation, "unknown_result");
+        } catch (error) {
+          req.log.warn({
+            operationId,
+            error: error instanceof Error ? error.message : "AGENT_WORK_ACTION_RECONCILIATION_FAILED",
+          }, "Uncertain Google Sheets action reconciliation failed");
+        }
+        try {
+          await saveApprovedOperationTurn(identity, claim.operation, uncertainResult);
+        } catch (error) {
+          req.log.warn({
+            operationId,
+            error: error instanceof Error ? error.message : "APPROVAL_RECONCILIATION_FAILED",
+          }, "Uncertain approval turn reconciliation failed");
+        }
+      } else if (
+        isGoogleSheetsActionOperation(claim.operation)
+        && claim.operation.status === "failed"
+      ) {
+        try {
+          await recordAgentWorkActionRejected(identity, claim.operation, "failed");
+        } catch (error) {
+          req.log.warn({
+            operationId,
+            error: error instanceof Error ? error.message : "AGENT_WORK_ACTION_RECONCILIATION_FAILED",
+          }, "Failed Google Sheets action reconciliation failed");
+        }
+      }
       res.json(operationResultResponse(claim.operation));
       return;
     }
@@ -552,6 +588,28 @@ router.post("/approvals/:operationId/approve", async (req, res): Promise<void> =
         requestId: requestId(req),
         retryable: false,
       });
+      return;
+    }
+
+    if (googleSheetsUnknownResult({ ...claim.operation, result })) {
+      const progress = await recordOperationProgress(identity, operationId, result);
+      try {
+        await recordAgentWorkActionRejected(identity, progress, "unknown_result");
+      } catch (error) {
+        req.log.warn({
+          operationId,
+          error: error instanceof Error ? error.message : "AGENT_WORK_ACTION_RECONCILIATION_FAILED",
+        }, "Uncertain Google Sheets action reconciliation failed");
+      }
+      try {
+        await saveApprovedOperationTurn(identity, progress, result);
+      } catch (error) {
+        req.log.warn({
+          operationId,
+          error: error instanceof Error ? error.message : "APPROVAL_RECONCILIATION_FAILED",
+        }, "Uncertain approval turn save failed");
+      }
+      res.status(202).json(operationResultResponse(progress));
       return;
     }
 

@@ -174,6 +174,20 @@ export type AgentWorkEvidenceRecord = {
   createdAt: Date;
 };
 
+export type ExternalActionStatus =
+  | "started"
+  | "verified"
+  | "failed"
+  | "unknown_result";
+
+export type ExternalActionIdentity = {
+  actionId: string;
+  workId: string;
+  runId: string;
+  operationId: string;
+  idempotencyKey: string;
+};
+
 export type CreateAgentWorkInput = {
   identity: AgentWorkIdentity;
   kind: AgentWorkKind;
@@ -197,6 +211,7 @@ export type AgentWorkStatusChange = {
   actorType: "user" | "agent" | "system";
   actorId?: string | null;
   reason?: string;
+  nextRunAt?: Date | null;
 };
 
 export type ClaimAgentWorkRunInput = {

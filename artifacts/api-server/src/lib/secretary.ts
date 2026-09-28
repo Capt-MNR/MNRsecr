@@ -42,6 +42,11 @@ import {
 } from "./secretary-operations";
 import { persistedApprovalArgs } from "./approval-schemas";
 import { annotateApprovalAction, approvalMessage } from "./secretary-confirmation";
+import { agentWorkAdapters } from "./agent-work/factory";
+import {
+  executeGoogleSheetsApproval,
+  GOOGLE_SHEETS_APPROVAL_TOOL,
+} from "./agent-work/google-sheets-action";
 import {
   loadConversationMemory,
   saveConversationTurn,
@@ -1754,6 +1759,17 @@ export async function executeApprovedOperation(
   identity: Identity,
   operation: PendingOperation,
 ): Promise<OperationExecutionResult> {
+  if (operation.toolName === GOOGLE_SHEETS_APPROVAL_TOOL) {
+    const result = await executeGoogleSheetsApproval({
+      identity,
+      operation,
+      storage: agentWorkAdapters.storage,
+    });
+    if (result.action?.type === "google_sheets_action_failed") {
+      throw new Error("GOOGLE_SHEETS_ACTION_FAILED");
+    }
+    return result;
+  }
   const conversationId = operation.conversationId ?? randomUUID();
   const buildResult = (toolResult: Record<string, unknown>): OperationExecutionResult => {
     const verification = mutationVerification(toolResult);

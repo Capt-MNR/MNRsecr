@@ -60,6 +60,7 @@ export class AgentWorkRuntime {
     from: AgentWorkStatus;
     to: AgentWorkStatus;
     reason?: string;
+    nextRunAt?: Date | null;
   }): Promise<AgentWorkRecord> {
     assertEnabled();
     return this.adapters.storage.changeWorkStatus({
