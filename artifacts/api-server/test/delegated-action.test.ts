@@ -16,6 +16,10 @@ import {
 } from "../src/lib/agent-work/delegated-actions.ts";
 import type { AgentWorkAdapters } from "../src/lib/agent-work/types.ts";
 
+function approvalOperationIdFromEvent(event: { metadata: Record<string, unknown> }) {
+  return event.metadata.approvalOperationId ?? event.metadata.operationId;
+}
+
 test("delegated GitHub condition requests one approval, executes create_task, verifies, and retriggers after clear", async () => {
   process.env.NODE_ENV = "production";
   process.env.AGENT_WORK_ENABLED = "true";
@@ -103,7 +107,7 @@ test("delegated GitHub condition requests one approval, executes create_task, ve
 
     const requestedEvent = (await storage.listEvents(identity, work.id, 20))
       .find((event) => event.eventType === "approval_requested");
-    const operationId = requestedEvent?.metadata.operationId;
+    const operationId = requestedEvent ? approvalOperationIdFromEvent(requestedEvent) : undefined;
     assert.equal(typeof operationId, "string");
     const operation = await getOperation(identity, operationId as string);
     assert.equal(operation?.status, "pending");
@@ -152,7 +156,12 @@ test("delegated GitHub condition requests one approval, executes create_task, ve
     const secondApproval = (await storage.listEvents(identity, work.id, 60))
       .filter((event) => event.eventType === "approval_requested");
     assert.equal(secondApproval.length, 2);
-    const secondOperationId = secondApproval.find((event) => event.metadata.operationId !== operationId)?.metadata.operationId;
+    const secondApprovalEvent = secondApproval.find(
+      (event) => approvalOperationIdFromEvent(event) !== operationId,
+    );
+    const secondOperationId = secondApprovalEvent
+      ? approvalOperationIdFromEvent(secondApprovalEvent)
+      : undefined;
     assert.equal(typeof secondOperationId, "string");
     const secondOperation = await getOperation(identity, secondOperationId as string);
     assert.equal(secondOperation?.status, "pending");
@@ -244,7 +253,7 @@ test("expired delegated approval resumes monitoring without executing or request
     await runner.tick(now);
     const requestedEvent = (await storage.listEvents(identity, work.id, 20))
       .find((event) => event.eventType === "approval_requested");
-    const operationId = requestedEvent?.metadata.operationId;
+    const operationId = requestedEvent ? approvalOperationIdFromEvent(requestedEvent) : undefined;
     assert.equal(typeof operationId, "string");
     await db.update(secretaryOperationsTable)
       .set({ expiresAt: new Date(0) })

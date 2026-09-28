@@ -1,9 +1,14 @@
 import type { PendingOperation } from "../secretary-operations";
 import type { ExternalActionConnector } from "./external-action";
+import { fakeEmailExternalActionConnector } from "./fake-email-action";
 import { googleSheetsExternalActionConnector } from "./google-sheets-action";
 
 const connectors: readonly ExternalActionConnector[] = [
   googleSheetsExternalActionConnector,
+  ...(process.env.NODE_ENV === "test"
+    && process.env.AGENT_WORK_TEST_FAKE_EMAIL_CONNECTOR === "true"
+    ? [fakeEmailExternalActionConnector]
+    : []),
 ];
 
 export function externalActionConnectorForProvider(
