@@ -261,6 +261,17 @@ export interface AuthSessionResponse {
   refreshExpiresAt: string;
 }
 
+export interface GmailEmailAccountResponse {
+  configured: boolean;
+  connected: boolean;
+  /** @nullable */
+  emailAddress: string | null;
+}
+
+export interface GmailOAuthConnectResponse {
+  authorizationUrl: string;
+}
+
 export type ErrorResponseCategory = typeof ErrorResponseCategory[keyof typeof ErrorResponseCategory];
 
 
@@ -1671,6 +1682,21 @@ export type RefreshSessionBody = {
 
 export type GetCurrentUser200 = {
   user: AuthUser;
+};
+
+export type CompleteGmailEmailOAuthParams = {
+/**
+ * @maxLength 4096
+ */
+code?: string;
+/**
+ * @maxLength 128
+ */
+state?: string;
+/**
+ * @maxLength 128
+ */
+error?: string;
 };
 
 export type ListTypedRelationshipsParams = {

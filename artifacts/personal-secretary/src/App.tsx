@@ -11,6 +11,7 @@ import FinancialDetail from '@/pages/financial-detail';
 import LearningSignals from '@/pages/learning-signals';
 import Memories from '@/pages/memories';
 import Works from '@/pages/works';
+import EmailSettings from '@/pages/email';
 import {
   Route,
   Switch,
@@ -29,6 +30,7 @@ function Router() {
     <RoutedErrorBoundary>
       <Switch>
         <Route path="/" component={Home} />
+        <Route path="/email" component={EmailSettings} />
          <Route path="/records" component={Records} />
           <Route path="/people/:id" component={() => <EntityDetail entityType="person" />} />
           <Route path="/projects/:id" component={() => <EntityDetail entityType="project" />} />
@@ -69,7 +71,7 @@ function App() {
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
           <div className="relative">
-            <button className="fixed left-4 top-4 z-50 rounded-lg border bg-background/90 px-3 py-1.5 text-xs text-muted-foreground shadow-sm" onClick={() => { void logout().finally(() => setUser(null)); }}>
+            <button className="fixed left-4 top-4 z-50 rounded-lg border bg-background/90 px-3 py-1.5 text-xs text-muted-foreground shadow-sm" onClick={() => { void logout().finally(() => { queryClient.clear(); setUser(null); }); }}>
               تسجيل الخروج
             </button>
             <Router />

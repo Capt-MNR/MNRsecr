@@ -107,6 +107,50 @@ export const LogoutResponse = zod.void()
 
 
 /**
+ * @summary Get the current user's Gmail connection status
+ */
+export const GetGmailEmailAccountResponse = zod.object({
+  "configured": zod.boolean(),
+  "connected": zod.boolean(),
+  "emailAddress": zod.string().email().nullable()
+})
+
+
+/**
+ * @summary Remove the current user's Gmail connection
+ */
+export const DisconnectGmailEmailAccountResponse = zod.void()
+
+
+/**
+ * @summary Start Gmail OAuth for the current user
+ */
+export const ConnectGmailEmailAccountResponse = zod.object({
+  "authorizationUrl": zod.string().url()
+})
+
+
+/**
+ * @summary Complete the one-time Gmail OAuth callback
+ */
+export const completeGmailEmailOAuthQueryCodeMax = 4096;
+
+export const completeGmailEmailOAuthQueryStateMax = 128;
+
+export const completeGmailEmailOAuthQueryErrorMax = 128;
+
+
+
+export const CompleteGmailEmailOAuthQueryParams = zod.object({
+  "code": zod.coerce.string().max(completeGmailEmailOAuthQueryCodeMax).optional(),
+  "state": zod.coerce.string().max(completeGmailEmailOAuthQueryStateMax).optional(),
+  "error": zod.coerce.string().max(completeGmailEmailOAuthQueryErrorMax).optional()
+})
+
+export const CompleteGmailEmailOAuthResponse = zod.void()
+
+
+/**
  * @summary Register a mobile push token
  */
 export const registerMobilePushTokenBodyTokenMin = 8;

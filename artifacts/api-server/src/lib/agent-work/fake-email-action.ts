@@ -11,6 +11,13 @@ import {
 } from "./external-action";
 import { appendExternalActionEvent } from "./external-action-events";
 import { createExternalActionIdentity, hashExternalActionValue } from "./action-contract";
+import {
+  EmailProviderError,
+  stableEmailMessageId,
+  type EmailProviderAdapter,
+  type EmailProviderReference,
+  type EmailProviderVerification,
+} from "./email-provider";
 import type {
   AgentWorkEventRecord,
   AgentWorkIdentity,
@@ -23,7 +30,7 @@ export const EMAIL_APPROVAL_TOOL = "email_send";
 const emailActionContentSchema = z.object({
   type: z.literal("send_email"),
   recipient: z.string().trim().email().max(320),
-  subject: z.string().trim().min(1).max(200),
+  subject: z.string().trim().min(1).max(200).refine((value) => !/[\r\n\0]/u.test(value)),
   body: z.string().min(1).max(20_000),
   attachmentRef: z.string().trim().min(1).max(500).optional(),
 }).strict();
@@ -74,7 +81,7 @@ class FakeEmailTransportError extends Error {
   constructor(
     readonly code: string,
     readonly outcome: "rejected" | "unknown_result",
-    readonly providerReference?: Record<string, unknown>,
+    readonly providerReference?: EmailProviderReference,
   ) {
     super(code);
     this.name = "FakeEmailTransportError";
@@ -116,6 +123,75 @@ export const fakeEmailTransportForTests = {
       );
     }
     return { messageId: message.messageId };
+  },
+};
+
+const fakeEmailProviderAdapter: EmailProviderAdapter = {
+  async send(input) {
+    try {
+      const accepted = await fakeEmailTransportForTests.send({
+        recipient: input.recipient,
+        subject: input.subject,
+        body: input.body,
+        ...(input.attachmentRef ? { attachmentRef: input.attachmentRef } : {}),
+        idempotencyKey: input.idempotencyKey,
+      });
+      return {
+        messageId: accepted.messageId,
+        stableMessageId: input.stableMessageId,
+      };
+    } catch (error) {
+      if (error instanceof FakeEmailTransportError) {
+        throw new EmailProviderError(error.code, error.outcome, error.providerReference);
+      }
+      throw new EmailProviderError("EMAIL_TRANSPORT_OUTCOME_UNKNOWN", "unknown_result", {
+        stableMessageId: input.stableMessageId,
+      });
+    }
+  },
+  async verify(input): Promise<EmailProviderVerification> {
+    if (fakeEmailTransportForTests.outcome === "accepted_ack_lost") {
+      return {
+        state: "unknown_result",
+        method: "fake_provider_message_lookup",
+        reason: "ACKNOWLEDGEMENT_LOST",
+        providerReference: input.providerReference,
+      };
+    }
+    const message = [...fakeEmailTransportForTests.messages.values()]
+      .find((item) => item.messageId === input.providerReference?.messageId);
+    if (!message
+      || message.idempotencyKey !== input.idempotencyKey
+      || message.recipient !== input.recipient
+      || message.subject !== input.subject) {
+      return {
+        state: "unknown_result",
+        method: "fake_provider_message_lookup",
+        reason: "MESSAGE_NOT_CONFIRMED",
+        providerReference: input.providerReference,
+      };
+    }
+    return {
+      state: "verified",
+      method: "fake_provider_acceptance",
+      providerReference: input.providerReference,
+    };
+  },
+  async reconcile(input): Promise<EmailProviderVerification> {
+    if (fakeEmailTransportForTests.outcome === "accepted_ack_lost") {
+      return {
+        state: "unknown_result",
+        method: "fake_sent_search",
+        reason: "ACKNOWLEDGEMENT_LOST",
+        providerReference: input.providerReference,
+      };
+    }
+    return {
+      state: "unknown_result",
+      method: "fake_sent_search",
+      reason: "NO_MATCH",
+      providerReference: input.providerReference,
+    };
   },
 };
 
@@ -210,10 +286,10 @@ function resultFor(input: {
   return {
     conversationId: input.conversationId ?? `agent-work:${input.args.workId}`,
     assistantMessage: input.status === "verified"
-      ? "تم التحقق من قبول الرسالة بواسطة ناقل البريد الوهمي."
+      ? "تم التحقق من قبول رسالة البريد بواسطة الموفّر."
       : input.status === "unknown_result"
         ? "نتيجة إرسال البريد غير مؤكدة؛ لم تتم إعادة المحاولة، والعمل يحتاج إلى مراجعة."
-        : "رفض ناقل البريد الوهمي الرسالة؛ لم يتم تسجيلها كمرسلة.",
+        : "تعذر إرسال رسالة البريد؛ لم تُسجل كمرسلة.",
     action: {
       type: `email_action_${input.status}`,
       actionState: input.status,
@@ -224,8 +300,8 @@ function resultFor(input: {
       stepId: step.stepId,
       externalAction,
     },
-    provider: "email-test",
-    model: "deterministic-fake-connector",
+    provider: "email",
+    model: "external-email-connector",
   };
 }
 
@@ -406,6 +482,7 @@ function verifiedResult(
   args: EmailApprovalArgs,
   providerReference: Record<string, unknown>,
   eventId: string,
+  verification: Record<string, unknown>,
 ): OperationExecutionResult {
   return resultFor({
     operationId: operation.operationId,
@@ -413,11 +490,7 @@ function verifiedResult(
     args,
     status: "verified",
     providerReference,
-    verification: {
-      state: "verified",
-      method: "fake_provider_acceptance",
-      ...providerReference,
-    },
+    verification,
     evidenceReference: eventId,
   });
 }
@@ -429,6 +502,9 @@ function errorResult(
   code: string,
   providerReference?: Record<string, unknown>,
   eventId?: string,
+  outcome: "rejected" | "failed" | "unknown_result" = status === "unknown_result"
+    ? "unknown_result"
+    : "rejected",
 ): OperationExecutionResult {
   return resultFor({
     operationId: operation.operationId,
@@ -443,7 +519,7 @@ function errorResult(
     ...(eventId ? { evidenceReference: eventId } : {}),
     error: {
       code,
-      outcome: status === "unknown_result" ? "unknown_result" : "rejected",
+      outcome,
     },
   });
 }
@@ -452,6 +528,8 @@ async function executeEmailApproval(input: {
   identity: AgentWorkIdentity;
   operation: PendingOperation;
   storage: ExternalActionExecutionContext["storage"];
+  providerAdapter: EmailProviderAdapter;
+  supportsAttachmentRef: boolean;
 }): Promise<ExternalActionConnectorResult<OperationExecutionResult>> {
   const args = argsForOperation(input.operation);
   const work = await input.storage.getWork(input.identity, args.workId);
@@ -484,13 +562,74 @@ async function executeEmailApproval(input: {
   if (approvedActionHash(storedAction, expectedPlan) !== args.approvedActionHash) {
     throw new Error("EXTERNAL_ACTION_APPROVED_CONTENT_HASH_MISMATCH");
   }
+  if (storedAction.attachmentRef && !input.supportsAttachmentRef) {
+    throw new Error("EMAIL_ATTACHMENT_UNSUPPORTED");
+  }
 
   const events = await input.storage.listEvents(input.identity, work.id, 100);
-  const prior = connectorResultForRecovery(recoverEmailOperation({
+  const recovery = recoverEmailOperation({
     events,
     approvalOperationId: input.operation.operationId,
     operationArgs: input.operation.args,
-  }));
+  });
+  if (recovery.state === "unknown_result") {
+    const step = expectedPlan[0]!;
+    const priorExternalAction = asRecord(asRecord(recovery.result.action).externalAction);
+    const priorReference = asRecord(priorExternalAction.providerReference) as EmailProviderReference;
+    let reconciled: EmailProviderVerification | null = null;
+    try {
+      reconciled = await input.providerAdapter.reconcile({
+        identity: input.identity,
+        recipient: storedAction.recipient,
+        subject: storedAction.subject,
+        idempotencyKey: step.idempotencyKey,
+        stableMessageId: stableEmailMessageId(step.stepId),
+        providerReference: priorReference,
+      });
+    } catch {
+      // A failed read never permits a resend.
+    }
+    if (reconciled?.state === "verified") {
+      const providerReference = {
+        ...priorReference,
+        ...asRecord(reconciled.providerReference),
+      };
+      const verification = { state: "verified", method: reconciled.method };
+      const event = await persistEmailEvent({
+        ...input,
+        workId: work.id,
+        runId: run.id,
+        approvalOperationId: input.operation.operationId,
+        actionId: storedAction.actionId,
+        step,
+        eventType: "external_action_step_verified",
+        summary: "أكد فحص الموفّر إرسال الرسالة سابقًا.",
+        metadata: {
+          actionState: "verified",
+          approvedActionHash: args.approvedActionHash,
+          providerReference,
+          verification,
+          reconciledFromUnknownResult: true,
+        },
+      });
+      const executionResult = verifiedResult(
+        input.operation,
+        args,
+        providerReference,
+        event.id,
+        verification,
+      );
+      return makeExternalActionResult({
+        status: "verified",
+        executionResult,
+        providerReference,
+        verification,
+        evidenceReference: event.id,
+      });
+    }
+    return connectorResultForRecovery(recovery)!;
+  }
+  const prior = connectorResultForRecovery(recovery);
   if (prior) return prior;
 
   const step = expectedPlan[0]!;
@@ -509,28 +648,88 @@ async function executeEmailApproval(input: {
     },
   });
 
-  let providerReference: Record<string, unknown> | undefined;
+  const stableMessageId = stableEmailMessageId(step.stepId);
+  let providerReference: EmailProviderReference | undefined;
+  let status: "verified" | "failed" | "unknown_result" = "unknown_result";
+  let code = "EMAIL_PROVIDER_VERIFICATION_UNCONFIRMED";
+  let outcome: "rejected" | "failed" | "unknown_result" = "unknown_result";
+  let verification: Record<string, unknown> = {
+    state: "unknown_result",
+    reason: code,
+  };
+  const verificationInput = () => ({
+    identity: input.identity,
+    recipient: storedAction.recipient,
+    subject: storedAction.subject,
+    idempotencyKey: step.idempotencyKey,
+    stableMessageId,
+    ...(providerReference ? { providerReference } : {}),
+  });
+  const mergeVerification = (result: EmailProviderVerification) => {
+    if (result.providerReference) {
+      providerReference = { ...providerReference, ...result.providerReference };
+    }
+    verification = {
+      state: result.state,
+      method: result.method,
+      ...(result.reason ? { reason: result.reason } : {}),
+    };
+  };
+
   try {
-    const accepted = await fakeEmailTransportForTests.send({
-      recipient: storedAction.recipient,
-      subject: storedAction.subject,
-      body: storedAction.body,
-      ...(storedAction.attachmentRef ? { attachmentRef: storedAction.attachmentRef } : {}),
-      idempotencyKey: step.idempotencyKey,
-    });
-    providerReference = { messageId: accepted.messageId };
+    providerReference = await input.providerAdapter.send({
+        identity: input.identity,
+        recipient: storedAction.recipient,
+        subject: storedAction.subject,
+        body: storedAction.body,
+        ...(storedAction.attachmentRef ? { attachmentRef: storedAction.attachmentRef } : {}),
+        idempotencyKey: step.idempotencyKey,
+        stableMessageId,
+      });
+    const checked = await input.providerAdapter.verify(verificationInput());
+    mergeVerification(checked);
+    if (checked.state === "verified") {
+      status = "verified";
+      code = "";
+      outcome = "failed";
+    } else {
+      const reconciled = await input.providerAdapter.reconcile(verificationInput());
+      mergeVerification(reconciled);
+      status = reconciled.state === "verified" ? "verified" : "unknown_result";
+      if (status === "verified") {
+        code = "";
+        outcome = "failed";
+      }
+    }
   } catch (error) {
-    const outcome = error instanceof FakeEmailTransportError
-      ? error.outcome
-      : "unknown_result";
-    const code = error instanceof FakeEmailTransportError
+    outcome = error instanceof EmailProviderError ? error.outcome : "unknown_result";
+    code = error instanceof EmailProviderError
       ? error.code
       : "EMAIL_TRANSPORT_OUTCOME_UNKNOWN";
-    providerReference = error instanceof FakeEmailTransportError
-      ? error.providerReference
-      : undefined;
-    const status = outcome === "rejected" ? "failed" : "unknown_result";
-    const verification = { state: status, reason: code };
+    if (error instanceof EmailProviderError) {
+      if (error.providerReference) {
+        providerReference = { ...providerReference, ...error.providerReference };
+      }
+    }
+    status = outcome === "unknown_result" ? "unknown_result" : "failed";
+    verification = { state: status, reason: code };
+
+    if (status === "unknown_result") {
+      try {
+        const reconciled = await input.providerAdapter.reconcile(verificationInput());
+        mergeVerification(reconciled);
+        if (reconciled.state === "verified") {
+          status = "verified";
+          code = "";
+          outcome = "failed";
+        }
+      } catch {
+        // Uncertain provider outcomes stay unresolved; never send again here.
+      }
+    }
+  }
+
+  if (status === "verified") {
     const event = await persistEmailEvent({
       ...input,
       workId: work.id,
@@ -538,53 +737,31 @@ async function executeEmailApproval(input: {
       approvalOperationId: input.operation.operationId,
       actionId: storedAction.actionId,
       step,
-      eventType: status === "failed"
-        ? "external_action_step_failed"
-        : "external_action_unknown_result",
-      summary: status === "unknown_result"
-        ? "نتيجة إرسال البريد غير مؤكدة؛ لن تتم إعادة المحاولة تلقائيًا."
-        : "رفض ناقل البريد الوهمي الرسالة.",
+      eventType: "external_action_step_verified",
+      summary: "أكد الموفّر قبول رسالة البريد.",
       metadata: {
-        actionState: status,
+        actionState: "verified",
         approvedActionHash: args.approvedActionHash,
-        ...(providerReference ? { providerReference } : {}),
+      providerReference: providerReference ?? { stableMessageId },
         verification,
-        error: {
-          code,
-          outcome,
-          retryable: false,
-          reviewRequired: true,
-        },
       },
     });
-    const executionResult = errorResult(
+    const executionResult = verifiedResult(
       input.operation,
       args,
-      status,
-      code,
-      providerReference,
+      providerReference ?? { stableMessageId },
       event.id,
+      verification,
     );
     return makeExternalActionResult({
-      status,
+      status: "verified",
       executionResult,
-      ...(providerReference ? { providerReference } : {}),
+      providerReference: providerReference ?? { stableMessageId },
       verification,
       evidenceReference: event.id,
-      error: {
-        code,
-        outcome,
-        retryable: false,
-        reviewRequired: true,
-      },
     });
   }
 
-  const verification = {
-    state: "verified",
-    method: "fake_provider_acceptance",
-    ...providerReference,
-  };
   const event = await persistEmailEvent({
     ...input,
     workId: work.id,
@@ -592,103 +769,138 @@ async function executeEmailApproval(input: {
     approvalOperationId: input.operation.operationId,
     actionId: storedAction.actionId,
     step,
-    eventType: "external_action_step_verified",
-    summary: "تحقق قبول ناقل البريد الوهمي للرسالة.",
+    eventType: status === "failed"
+      ? "external_action_step_failed"
+      : "external_action_unknown_result",
+    summary: status === "unknown_result"
+      ? "نتيجة إرسال البريد غير مؤكدة؛ لن تتم إعادة المحاولة تلقائيًا."
+      : "لم يقبل الموفّر إرسال رسالة البريد.",
     metadata: {
-      actionState: "verified",
+      actionState: status,
       approvedActionHash: args.approvedActionHash,
       providerReference,
       verification,
+      error: {
+        code,
+        outcome,
+        retryable: false,
+        reviewRequired: true,
+      },
     },
   });
-  const executionResult = verifiedResult(
+  const executionResult = errorResult(
     input.operation,
     args,
-    providerReference!,
+    status,
+    code,
+    providerReference,
     event.id,
+    outcome,
   );
   return makeExternalActionResult({
-    status: "verified",
+    status,
     executionResult,
     providerReference,
     verification,
     evidenceReference: event.id,
+    error: {
+      code,
+      outcome,
+      retryable: false,
+      reviewRequired: true,
+    },
   });
 }
 
-export const fakeEmailExternalActionConnector: ExternalActionConnector = {
-  provider: "email",
-  actionType: "send_email",
-  approvalToolName: EMAIL_APPROVAL_TOOL,
-  toolGuidance:
-    "Email is available only as a test-gated fake connector in this environment. Use action.type send_email with recipient, subject, body and optional attachmentRef. The action is separately approved before its simulated send.",
-  validateSetupAction(action, setupApprovalOperationId) {
-    const parsed = emailActionContentSchema.safeParse(action);
-    if (!parsed.success) return null;
-    const stored = storedEmailActionSchema.safeParse({
-      ...parsed.data,
-      actionId: randomUUID(),
-      setupApprovalOperationId,
-    });
-    return stored.success ? stored.data : null;
-  },
-  setupApprovalDisplay(workTitle, action) {
-    const parsed = storedEmailActionSchema.safeParse(action);
-    return parsed.success
-      ? { ...emailApprovalDisplay(parsed.data), title: `حفظ إجراء البريد: ${workTitle}` }
-      : { title: "حفظ إجراء بريد", details: ["تعذر قراءة تفاصيل الرسالة."] };
-  },
-  prepareApproval({ identity, work, runId }) {
-    const action = storedEmailActionSchema.parse(work.action);
-    const plan = actionPlan({ identity, workId: work.id, runId, action });
-    const args = approvalArgsSchema.parse({
-      workId: work.id,
-      runId,
-      actionId: action.actionId,
-      setupApprovalOperationId: action.setupApprovalOperationId,
-      provider: "email",
-      actionType: "send_email",
-      action,
-      approvedActionHash: approvedActionHash(action, plan),
-      plan,
-    });
-    return {
-      actionId: action.actionId,
-      actionType: action.type,
-      idempotencyActionKind: action.type,
-      idempotencyActionVersion: "email-v1",
-      args: args as unknown as Record<string, unknown>,
-      display: emailApprovalDisplay(action),
-      notificationTitle: "موافقة مطلوبة على إرسال بريد",
-      notificationBody: "جهزت رسالة بريد للمراجعة؛ لم يبدأ أي إرسال. راجع المحتوى ووافق على الإجراء.",
-      notificationData: {
-        source: this.provider,
+export function createEmailExternalActionConnector(input: {
+  providerAdapter: EmailProviderAdapter;
+  supportsAttachmentRef: boolean;
+  toolGuidance: string;
+}): ExternalActionConnector {
+  return {
+    provider: "email",
+    actionType: "send_email",
+    approvalToolName: EMAIL_APPROVAL_TOOL,
+    toolGuidance: input.toolGuidance,
+    validateSetupAction(action, setupApprovalOperationId) {
+      const parsed = emailActionContentSchema.safeParse(action);
+      if (!parsed.success || (!input.supportsAttachmentRef && parsed.data.attachmentRef)) return null;
+      const stored = storedEmailActionSchema.safeParse({
+        ...parsed.data,
+        actionId: randomUUID(),
+        setupApprovalOperationId,
+      });
+      return stored.success ? stored.data : null;
+    },
+    setupApprovalDisplay(workTitle, action) {
+      const parsed = storedEmailActionSchema.safeParse(action);
+      return parsed.success
+        ? { ...emailApprovalDisplay(parsed.data), title: `حفظ إجراء البريد: ${workTitle}` }
+        : { title: "حفظ إجراء بريد", details: ["تعذر قراءة تفاصيل الرسالة."] };
+    },
+    prepareApproval({ identity, work, runId }) {
+      const action = storedEmailActionSchema.parse(work.action);
+      const plan = actionPlan({ identity, workId: work.id, runId, action });
+      const args = approvalArgsSchema.parse({
         workId: work.id,
-        actionId: action.actionId,
-        deepLink: `/main?workId=${encodeURIComponent(work.id)}`,
-      },
-      evidence: {
-        provider: this.provider,
-        actionType: action.type,
+        runId,
         actionId: action.actionId,
         setupApprovalOperationId: action.setupApprovalOperationId,
-        approvedActionHash: args.approvedActionHash,
-        recipientCount: 1,
-        subjectLength: action.subject.length,
-        bodyLength: action.body.length,
-        hasAttachmentReference: Boolean(action.attachmentRef),
-        status: "approval_requested",
-      },
-    };
-  },
-  approvalDisplay(args) {
-    const parsed = approvalArgsSchema.safeParse(args);
-    return parsed.success
-      ? emailApprovalDisplay(parsed.data.action)
-      : { title: "موافقة مطلوبة على إرسال بريد", details: ["تعذر قراءة تفاصيل الرسالة؛ لن يبدأ الإرسال."] };
-  },
-  executeApproved(input) {
-    return executeEmailApproval(input);
-  },
-  recoverOperation: recoverEmailOperation,
-};
+        provider: "email",
+        actionType: "send_email",
+        action,
+        approvedActionHash: approvedActionHash(action, plan),
+        plan,
+      });
+      return {
+        actionId: action.actionId,
+        actionType: action.type,
+        idempotencyActionKind: action.type,
+        idempotencyActionVersion: "email-v1",
+        args: args as unknown as Record<string, unknown>,
+        display: emailApprovalDisplay(action),
+        notificationTitle: "موافقة مطلوبة على إرسال بريد",
+        notificationBody: "جهزت رسالة بريد للمراجعة؛ لم يبدأ أي إرسال. راجع المحتوى ووافق على الإجراء.",
+        notificationData: {
+          source: this.provider,
+          workId: work.id,
+          actionId: action.actionId,
+          deepLink: `/main?workId=${encodeURIComponent(work.id)}`,
+        },
+        evidence: {
+          provider: this.provider,
+          actionType: action.type,
+          actionId: action.actionId,
+          setupApprovalOperationId: action.setupApprovalOperationId,
+          approvedActionHash: args.approvedActionHash,
+          recipientCount: 1,
+          subjectLength: action.subject.length,
+          bodyLength: action.body.length,
+          hasAttachmentReference: Boolean(action.attachmentRef),
+          status: "approval_requested",
+        },
+      };
+    },
+    approvalDisplay(args) {
+      const parsed = approvalArgsSchema.safeParse(args);
+      return parsed.success
+        ? emailApprovalDisplay(parsed.data.action)
+        : { title: "موافقة مطلوبة على إرسال بريد", details: ["تعذر قراءة تفاصيل الرسالة؛ لن يبدأ الإرسال."] };
+    },
+    executeApproved(executionInput) {
+      return executeEmailApproval({
+        ...executionInput,
+        providerAdapter: input.providerAdapter,
+        supportsAttachmentRef: input.supportsAttachmentRef,
+      });
+    },
+    recoverOperation: recoverEmailOperation,
+  };
+}
+
+export const fakeEmailExternalActionConnector = createEmailExternalActionConnector({
+  providerAdapter: fakeEmailProviderAdapter,
+  supportsAttachmentRef: true,
+  toolGuidance:
+    "Email is available only as a test-gated fake connector in this environment. Use action.type send_email with recipient, subject, body and optional attachmentRef. The action is separately approved before its simulated send.",
+});

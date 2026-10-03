@@ -26,6 +26,8 @@ tags:
     description: Explicit account-scoped secretary preferences and temporary context suppression
   - name: auth
     description: Database-backed user sessions
+  - name: email
+    description: Per-user email provider connection operations
 paths:
   /auth/signup:
     post:
@@ -85,6 +87,74 @@ paths:
       summary: Revoke the current session
       responses:
         "204": { description: Session revoked }
+  /email/gmail/account:
+    get:
+      operationId: getGmailEmailAccount
+      tags: [email]
+      summary: Get the current user's Gmail connection status
+      responses:
+        "200":
+          description: Gmail connection status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GmailEmailAccountResponse" }
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    delete:
+      operationId: disconnectGmailEmailAccount
+      tags: [email]
+      summary: Remove the current user's Gmail connection
+      responses:
+        "204": { description: Gmail connection removed }
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /email/gmail/connect:
+    post:
+      operationId: connectGmailEmailAccount
+      tags: [email]
+      summary: Start Gmail OAuth for the current user
+      responses:
+        "200":
+          description: Google authorization URL
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GmailOAuthConnectResponse" }
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "503":
+          description: Gmail OAuth is not configured or is disabled
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /email/gmail/oauth/callback:
+    get:
+      operationId: completeGmailEmailOAuth
+      tags: [email]
+      summary: Complete the one-time Gmail OAuth callback
+      parameters:
+        - name: code
+          in: query
+          required: false
+          schema: { type: string, maxLength: 4096 }
+        - name: state
+          in: query
+          required: false
+          schema: { type: string, maxLength: 128 }
+        - name: error
+          in: query
+          required: false
+          schema: { type: string, maxLength: 128 }
+      responses:
+        "303": { description: Redirect to the email connection status page }
   /push-tokens:
     post:
       operationId: registerMobilePushToken
@@ -1673,6 +1743,18 @@ components:
         accessExpiresAt: { type: string, format: date-time }
         refreshExpiresAt: { type: string, format: date-time }
       required: [user, accessExpiresAt, refreshExpiresAt]
+    GmailEmailAccountResponse:
+      type: object
+      properties:
+        configured: { type: boolean }
+        connected: { type: boolean }
+        emailAddress: { type: ["string", "null"], format: email }
+      required: [configured, connected, emailAddress]
+    GmailOAuthConnectResponse:
+      type: object
+      properties:
+        authorizationUrl: { type: string, format: uri }
+      required: [authorizationUrl]
     ErrorResponse:
       type: object
       properties:

@@ -134,6 +134,13 @@
       "when": 1790250000000,
       "tag": "0018_second_brain_temporal_history",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1791058200000,
+      "tag": "0019_email_connections",
+      "breakpoints": true
     }
   ]
 }

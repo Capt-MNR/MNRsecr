@@ -12,10 +12,12 @@ import memoryCandidatesRouter from "./memory-candidates";
 import agentWorkRouter from "./agent-work";
 import authRouter from "./auth";
 import proactivePreferencesRouter from "./proactive-preferences";
+import emailRouter from "./email";
 
 const router: IRouter = Router();
 
 router.use(authRouter);
+router.use(emailRouter);
 router.use(proactivePreferencesRouter);
 router.use(healthRouter);
 router.use(secretaryRouter);
