@@ -248,13 +248,26 @@ test("approval expiry and user cancellation fixtures never claim or execute a pe
 test("post-mutation verification failure fixture reports uncertainty without creating a retry", async () => {
   const testIdentity = identity("verification-failure");
   await cleanup(testIdentity);
+  const operation = await createPendingOperation(testIdentity, {
+    conversationId: "verification-failure-conversation",
+    sourceTurnId: "brain-verification-failure",
+    idempotencyKey: "brain-verification-failure",
+    toolName: "record_expense",
+    args: {
+      amountMinor: 75000,
+      currency: "EGP",
+      description: "verification failure fixture",
+    },
+  });
+  const claim = await claimOperation(testIdentity, operation.operationId);
+  assert.equal(claim.kind, "claimed");
   const result = await executeStructuredTool(testIdentity, "record_expense", {
     amountMinor: 75000,
     currency: "EGP",
     description: "verification failure fixture",
   }, {
     requestId: "brain-verification-failure",
-    approvedOperationId: "brain-verification-operation",
+    approvedOperationId: operation.operationId,
     verificationResolver: async () => ({
       state: "failed",
       checks: ["fixture_authoritative_read_failed"],

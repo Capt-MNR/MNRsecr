@@ -146,11 +146,24 @@ function strategyFor(
   semanticParse: SemanticParse | null | undefined,
   relationshipContext: RelationshipContextResult | null | undefined,
   hasConversationContext: boolean,
+  state: BrainDecisionState,
 ): BrainDecisionEnvelope["strategy"] {
   if (relationshipContext?.response?.kind === "clarification") {
     return {
       level: "L0",
       reason: "authoritative_context_requires_clarification",
+      llmAllowed: false,
+      deterministicExecution: false,
+    };
+  }
+  if (
+    state === "clarification"
+    && semanticParse?.intent === "record_expense"
+    && Boolean(semanticParse.amount)
+  ) {
+    return {
+      level: "L1",
+      reason: "expense_entity_resolution_requires_clarification",
       llmAllowed: false,
       deterministicExecution: false,
     };
@@ -224,6 +237,7 @@ function riskFor(
   intent: string,
   semanticParse: SemanticParse | null | undefined,
   relationshipContext: RelationshipContextResult | null | undefined,
+  state: BrainDecisionState,
 ): BrainDecisionEnvelope["risk"] {
   const incompleteExpense = intent === "record_expense" && !semanticParse?.amount;
   const unknownAction = intent === "unknown";
@@ -242,27 +256,30 @@ function riskFor(
       "create_project",
     ].includes(intent) || Boolean(semanticParse?.hasWriteLanguage))
   );
+  const pendingWrite = write && state !== "clarification";
   const ambiguity = Boolean(semanticParse?.ambiguous)
     || Boolean(relationshipContext?.context.uncertainties.length);
   const financial = intent.includes("expense") || /financial|debt|obligation|payment/.test(intent);
   const factors = [
-    ...(write ? ["state_mutation"] : []),
+    ...(pendingWrite ? ["state_mutation"] : []),
     ...(financial ? ["financial_data"] : []),
     ...(ambiguity ? ["unresolved_context"] : []),
   ];
   return {
-    level: financial && ambiguity ? "high" : write ? "medium" : "low",
+    level: financial && ambiguity ? "high" : pendingWrite ? "medium" : "low",
     factors,
-    requiresApproval: write,
+    requiresApproval: pendingWrite,
   };
 }
 
 export function createBrainDecisionEnvelope(input: BrainInput): BrainDecisionEnvelope {
   const semanticParse = input.semanticParse ?? null;
   const relationshipContext = input.relationshipContext ?? null;
+  const state = input.state
+    ?? (relationshipContext?.response?.kind === "clarification" ? "clarification" : "understanding");
   const intent = intentFrom(semanticParse, relationshipContext);
-  const strategy = strategyFor(semanticParse, relationshipContext, input.hasConversationContext ?? false);
-  const risk = riskFor(intent.name, semanticParse, relationshipContext);
+  const strategy = strategyFor(semanticParse, relationshipContext, input.hasConversationContext ?? false, state);
+  const risk = riskFor(intent.name, semanticParse, relationshipContext, state);
   const relationshipUsed = Boolean(relationshipContext);
   const retrievalUsed = Boolean(input.secondBrainTrace?.triggered);
   const ambiguity = [
@@ -271,8 +288,6 @@ export function createBrainDecisionEnvelope(input: BrainInput): BrainDecisionEnv
   ];
   const hasTemporalMention = Boolean(semanticParse?.dateTime)
     || /اليوم|امبارح|أمس|بكره|بكرة|بعد بكره|الأسبوع|الشهر|today|tomorrow|yesterday/i.test(input.message);
-  const state = input.state
-    ?? (relationshipContext?.response?.kind === "clarification" ? "clarification" : "understanding");
   const verification = {
     state: state === "failed"
       ? "failed" as const

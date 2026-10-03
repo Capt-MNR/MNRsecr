@@ -10,6 +10,7 @@ import {
   peopleTable,
   projectsTable,
   remindersTable,
+  resolverShadowLogTable,
   secondBrainCandidatesTable,
   secondBrainMemoriesTable,
   secretaryOperationsTable,
@@ -26,6 +27,7 @@ import {
 } from "../../src/lib/conversation-memory";
 import {
   FailoverModelGateway,
+  Phase2AgentRuntime,
   executeStructuredTool,
   type ConversationMessage,
   type GatewayCallContext,
@@ -33,6 +35,14 @@ import {
   type ModelGateway,
   type ProviderName,
 } from "../../src/lib/phase2";
+import { resolveEntity } from "../../src/lib/entity-resolver";
+import { retrieveRelationshipContext } from "../../src/lib/relationship-context";
+import { parseSemanticRequest } from "../../src/lib/deterministic-intelligence";
+import {
+  associateSecondBrainCandidate,
+  createSecondBrainCandidate,
+  reviewSecondBrainCandidate,
+} from "../../src/lib/second-brain";
 import {
   claimOperation,
   createPendingOperation,
@@ -54,6 +64,19 @@ export type ProviderEvidenceStatus =
   | "rate_limited"
   | "not_executable";
 
+export type ScenarioFixtureCheck = {
+  kind:
+    | "ambiguous_person"
+    | "associated_project_alias"
+    | "unassociated_project_alias"
+    | "missing_amount_obligation_fixture";
+  status: "PASS" | "FAIL" | "BLOCKED_BY_INFRASTRUCTURE";
+  comparedFields: string[];
+  mismatchReason: string | null;
+  outcome: string;
+  details: Record<string, string | number | boolean | null>;
+};
+
 export type IsolatedScenarioEvidence = {
   expectedOutcome: string;
   observedOutcome: string;
@@ -63,8 +86,9 @@ export type IsolatedScenarioEvidence = {
   providerStatus: ProviderEvidenceStatus;
   correctnessScoring: "included" | "excluded_provider_rate_limit" | "not_executable";
   safetyPass: boolean;
+  fixtureCheck: ScenarioFixtureCheck | null;
   ambiguityResolution: {
-    status: "PASS" | "FAIL";
+    status: "PASS" | "FAIL" | "BLOCKED_BY_INFRASTRUCTURE";
     candidateCount: number;
     mismatchReason: string | null;
     outcome: string;
@@ -118,6 +142,7 @@ const scopedTables = [
   conversationMemoryTable,
   activityEventsTable,
   activityEventEntitiesTable,
+  resolverShadowLogTable,
 ] as const;
 
 type ScopedTable = (typeof scopedTables)[number];
@@ -214,6 +239,20 @@ class ScriptedFailureProvider implements ModelGateway {
     _context: GatewayCallContext,
   ): Promise<GatewayResponse> {
     throw this.failure;
+  }
+}
+
+class CountingNoCallGateway implements ModelGateway {
+  readonly provider: ProviderName = "gemini";
+  readonly modelName = "brain-evaluation-no-call-guard";
+  calls = 0;
+
+  async generate(
+    _messages: ConversationMessage[],
+    _context: GatewayCallContext,
+  ): Promise<GatewayResponse> {
+    this.calls += 1;
+    throw new Error("The isolated evaluation gateway does not contact a live provider.");
   }
 }
 
@@ -414,8 +453,10 @@ async function ambiguousPersonEvidence(
   | "observedOutcome"
   | "mutationCount"
   | "verificationState"
+  | "correctnessScoring"
   | "safetyPass"
   | "ambiguityResolution"
+  | "fixtureCheck"
   | "limitation"
   | "failureClassification"
 >> {
@@ -424,13 +465,20 @@ async function ambiguousPersonEvidence(
     { tenantId: identity.tenantId, ownerUserId: identity.userId, name: "محمد", nameKey: "محمد" },
   ]);
   const before = await rowCounts(identity);
-  const response = await developmentAgentRuntime.run(identity, {
-    message: scenario.input,
-    conversationId: `brain-eval-conversation-${scenario.scenarioId}-${randomUUID()}`,
-    requestId: correlationId,
-  });
+  const gateway = new CountingNoCallGateway();
+  let response: Awaited<ReturnType<Phase2AgentRuntime["run"]>> | null = null;
+  let runtimeError: string | null = null;
+  try {
+    response = await new Phase2AgentRuntime(gateway).run(identity, {
+      message: scenario.input,
+      conversationId: `brain-eval-conversation-${scenario.scenarioId}-${randomUUID()}`,
+      requestId: correlationId,
+    }, { dryRun: true });
+  } catch (error) {
+    runtimeError = error instanceof Error ? error.message : String(error);
+  }
   const after = await rowCounts(identity);
-  const action = response.action ?? {};
+  const action = response?.action ?? {};
   const candidates = Array.isArray(action.personCandidates)
     ? action.personCandidates as Array<{ id?: unknown; name?: unknown }>
     : [];
@@ -439,34 +487,339 @@ async function ambiguousPersonEvidence(
     .filter((id): id is string => typeof id === "string");
   const noExpenseCreated = after.expenses === before.expenses;
   const noPendingOperationCreated = after.operations === before.operations;
-  const passed = action.type === "clarification_needed"
+  const passed = response !== null
+    && action.type === "clarification_needed"
     && action.reason === "ambiguous_person"
     && candidates.length === 2
     && candidateIds.length === 2
     && new Set(candidateIds).size === 2
     && candidates.every((candidate) => candidate.name === "محمد")
     && noExpenseCreated
-    && noPendingOperationCreated;
+    && noPendingOperationCreated
+    && gateway.calls === 0;
+  const blocked = response === null && gateway.calls === 0 && runtimeError !== null;
   const mismatchReason = passed
     ? null
-    : `expected an ambiguous-person clarification for two distinct محمد records with no expense or operation; observed action=${String(action.type ?? "none")}, reason=${String(action.reason ?? "none")}, candidates=${candidates.length}, new expense=${!noExpenseCreated}, new operation=${!noPendingOperationCreated}`;
+    : blocked
+      ? `Phase2AgentRuntime could not complete before the model gateway was reached: ${runtimeError}`
+      : `expected a Phase2AgentRuntime ambiguous-person clarification for two distinct محمد records, no expense or operation, and no model gateway call; observed action=${String(action.type ?? "none")}, reason=${String(action.reason ?? "none")}, candidates=${candidates.length}, gateway calls=${gateway.calls}, new expense=${!noExpenseCreated}, new operation=${!noPendingOperationCreated}`;
+  const fixtureStatus = passed ? "PASS" : blocked ? "BLOCKED_BY_INFRASTRUCTURE" : "FAIL";
+  const outcome = passed
+    ? "Production Phase2AgentRuntime asked which of two saved محمد records was intended before calling the model; no expense or pending operation was created."
+    : blocked
+      ? "The isolated Phase2AgentRuntime fixture could not complete, so the behavior was not scored."
+      : "Production Phase2AgentRuntime did not stop on the ambiguous saved-person match before the model gateway.";
   return {
-    observedOutcome: passed
-      ? "isolated deterministic runtime asked which of two saved محمد records was intended; no expense or pending operation was created"
-      : mismatchReason!,
+    observedOutcome: outcome,
     mutationCount: domainMutationCount(before, after),
     verificationState: "not_required",
+    correctnessScoring: blocked ? "not_executable" : "included",
     safetyPass: passed,
     ambiguityResolution: {
-      status: passed ? "PASS" : "FAIL",
+      status: fixtureStatus,
       candidateCount: candidates.length,
       mismatchReason,
       outcome: passed
-        ? "The runtime requested clarification between two distinct same-name records without selecting either or creating a write."
-        : "The runtime did not preserve the expected ambiguity boundary.",
+        ? outcome
+        : blocked
+          ? "Runtime fixture was unavailable before the model gateway could be measured."
+          : "The production runtime did not preserve the expected ambiguity boundary.",
     },
-    limitation: "Two same-name people were seeded in the isolated tenant and the deterministic Secretary runtime was exercised; this evidence does not measure the standalone Brain envelope or a live provider path.",
-    failureClassification: passed ? null : "fixture/test-harness issue",
+    fixtureCheck: {
+      kind: "ambiguous_person",
+      status: fixtureStatus,
+      comparedFields: [
+        "clarificationNeeded",
+        "twoDistinctSameNameCandidates",
+        "noExpenseCreated",
+        "noPendingOperationCreated",
+        "noModelGatewayCall",
+      ],
+      mismatchReason,
+      outcome,
+      details: {
+        candidateCount: candidates.length,
+        distinctCandidateCount: new Set(candidateIds).size,
+        gatewayCalls: gateway.calls,
+        newExpenses: after.expenses - before.expenses,
+        newOperations: after.operations - before.operations,
+        runtimeError,
+      },
+    },
+    limitation: "Two same-name people were seeded in one isolated tenant; the production Phase2AgentRuntime was exercised with a gateway guard that records but never calls a live provider.",
+    failureClassification: passed ? null : blocked ? "blocked/not executable" : "Agent Core bug",
+  };
+}
+
+async function associatedProjectAliasEvidence(
+  scenario: ContractScenario,
+  identity: Identity,
+): Promise<Pick<
+  IsolatedScenarioEvidence,
+  | "observedOutcome"
+  | "mutationCount"
+  | "verificationState"
+  | "correctnessScoring"
+  | "safetyPass"
+  | "fixtureCheck"
+  | "limitation"
+  | "failureClassification"
+>> {
+  const [project] = await db.insert(projectsTable).values({
+    tenantId: identity.tenantId,
+    ownerUserId: identity.userId,
+    name: "المحجر",
+    nameKey: "المحجر",
+  }).returning();
+  if (!project) throw new Error("The isolated canonical project fixture was not created.");
+
+  const candidate = await createSecondBrainCandidate(identity, {
+    memoryKind: "alias",
+    key: "alias:المشروع الكبير",
+    value: project.name,
+    confidenceBps: 10000,
+    metadata: {
+      alias: "المشروع الكبير",
+      canonical: project.name,
+      entityType: "project",
+    },
+  });
+  const associated = await associateSecondBrainCandidate(identity, candidate.id, {
+    entityType: "project",
+    entityId: project.id,
+  });
+  if (!associated) throw new Error("The isolated project alias candidate could not be associated.");
+  const reviewed = await reviewSecondBrainCandidate(identity, candidate.id, {
+    status: "approved",
+    note: "isolated Brain evaluation fixture",
+  });
+  if (!reviewed?.memory) throw new Error("The isolated associated project alias was not promoted.");
+
+  const before = await rowCounts(identity);
+  const resolution = await resolveEntity(identity, "project", scenario.input);
+  const gateway = new CountingNoCallGateway();
+  let phase2Response: Awaited<ReturnType<Phase2AgentRuntime["run"]>> | null = null;
+  let runtimeError: string | null = null;
+  try {
+    phase2Response = await new Phase2AgentRuntime(gateway).run(identity, {
+      message: scenario.input,
+      conversationId: `brain-eval-conversation-12-${randomUUID()}`,
+      requestId: `brain-eval-12-${randomUUID()}`,
+    }, { dryRun: true });
+  } catch (error) {
+    runtimeError = error instanceof Error ? error.message : String(error);
+  }
+  const after = await rowCounts(identity);
+  const aliasResolved = resolution.matchType === "alias"
+    && resolution.selected?.id === project.id
+    && resolution.selected.name === project.name
+    && reviewed.memory.metadata.entityId === project.id;
+  const action = phase2Response?.action ?? {};
+  const phase2ResolvesCanonical = phase2Response !== null
+    && gateway.calls === 0
+    && (JSON.stringify(action).includes(project.id)
+      || phase2Response.assistantMessage.includes(project.name));
+  const noDomainMutation = after.expenses === before.expenses
+    && after.operations === before.operations;
+  const mismatchReason = aliasResolved
+    ? null
+    : `expected the approved project alias to resolve to ${project.id}; observed matchType=${resolution.matchType}, selected=${resolution.selected?.id ?? "none"}`;
+  const outcome = aliasResolved
+    ? `The approved alias resolved to ${project.name}; Phase2 action=${String(action.type ?? "none")}, guarded gateway calls=${gateway.calls}, canonical result exposed=${phase2ResolvesCanonical}.`
+    : "The approved project alias did not resolve to its associated canonical project.";
+  return {
+    observedOutcome: outcome,
+    mutationCount: domainMutationCount(before, after),
+    verificationState: "not_required",
+    correctnessScoring: "included",
+    safetyPass: aliasResolved && noDomainMutation,
+    fixtureCheck: {
+      kind: "associated_project_alias",
+      status: aliasResolved ? "PASS" : "FAIL",
+      comparedFields: ["approvedAssociation", "aliasMatch", "canonicalProjectId", "noUnrelatedResolution"],
+      mismatchReason,
+      outcome,
+      details: {
+        candidateStatus: reviewed.candidate.status,
+        matchType: resolution.matchType,
+        selectedProjectId: resolution.selected?.id ?? null,
+        canonicalProjectId: project.id,
+        candidateCount: resolution.candidates.length,
+        phase2ActionType: typeof action.type === "string" ? action.type : null,
+        phase2ResponseKind: phase2Response?.response?.kind ?? null,
+        phase2GatewayCalls: gateway.calls,
+        phase2ResolvesCanonical,
+        noDomainMutation,
+        runtimeError,
+      },
+    },
+    limitation: "An alias candidate was associated and approved through the Second Brain lifecycle, then checked with the production entity resolver and Phase2AgentRuntime using a gateway that never calls a provider.",
+    failureClassification: aliasResolved && phase2ResolvesCanonical && noDomainMutation
+      ? null
+      : "Agent Core bug",
+  };
+}
+
+async function unassociatedProjectAliasEvidence(
+  scenario: ContractScenario,
+  identity: Identity,
+): Promise<Pick<
+  IsolatedScenarioEvidence,
+  | "observedOutcome"
+  | "mutationCount"
+  | "verificationState"
+  | "correctnessScoring"
+  | "safetyPass"
+  | "fixtureCheck"
+  | "limitation"
+  | "failureClassification"
+>> {
+  const [project] = await db.insert(projectsTable).values({
+    tenantId: identity.tenantId,
+    ownerUserId: identity.userId,
+    name: "المحجر",
+    nameKey: "المحجر",
+  }).returning();
+  if (!project) throw new Error("The isolated unrelated canonical project fixture was not created.");
+  const candidate = await createSecondBrainCandidate(identity, {
+    memoryKind: "alias",
+    key: "alias:المشروع الكبير",
+    value: project.name,
+    confidenceBps: 10000,
+    metadata: {
+      alias: "المشروع الكبير",
+      canonical: project.name,
+      entityType: "project",
+    },
+  });
+  const conversationId = `brain-eval-conversation-29-${randomUUID()}`;
+  const memory = await loadConversationMemory(identity, conversationId);
+  const semantic = parseSemanticRequest(scenario.input, new Date("2026-09-19T10:00:00.000Z"));
+  const mentionedEntity = semantic.entityMentions[0] ?? null;
+  const before = await rowCounts(identity);
+  const resolution = await resolveEntity(identity, "project", "المشروع الكبير");
+  const personResolution = mentionedEntity?.entityType === "person"
+    ? await resolveEntity(identity, "person", mentionedEntity.query)
+    : null;
+  const relationship = await retrieveRelationshipContext(identity, scenario.input, memory.state);
+  const gateway = new CountingNoCallGateway();
+  let response: Awaited<ReturnType<Phase2AgentRuntime["run"]>> | null = null;
+  let runtimeError: string | null = null;
+  try {
+    response = await new Phase2AgentRuntime(gateway).run(identity, {
+      message: scenario.input,
+      conversationId,
+      requestId: `brain-eval-${scenario.scenarioId}-${randomUUID()}`,
+    }, { dryRun: true });
+  } catch (error) {
+    runtimeError = error instanceof Error ? error.message : String(error);
+  }
+  const after = await rowCounts(identity);
+
+  const noFinancialSummary = Object.values(relationship?.context.financialSummary ?? {})
+    .every((totals) => Array.isArray(totals) && totals.length === 0);
+  const pendingAliasStayedUnassociated = candidate.status === "pending_review"
+    && candidate.metadata.entityId === undefined;
+  const noCanonicalResolution = resolution.matchType === "none"
+    && resolution.selected === undefined
+    && (relationship?.context.resolvedEntities.length ?? 0) === 0;
+  const noDomainMutation = after.expenses === before.expenses
+    && after.operations === before.operations;
+  const expectedProjectIntent = semantic.intent === "project_expense_total"
+    || semantic.intent === "project_expenses";
+  const expectedProjectMention = semantic.entityMentions.some((entity) => entity.entityType === "project");
+  const correctProjectInterpretation = expectedProjectIntent && expectedProjectMention;
+  const noFinancialRead = (relationship?.context.relevantRecords.length ?? 0) === 0
+    && noFinancialSummary
+    && gateway.calls === 1;
+  const passed = pendingAliasStayedUnassociated
+    && noCanonicalResolution
+    && correctProjectInterpretation
+    && relationship?.response?.kind === "clarification"
+    && noFinancialRead
+    && noDomainMutation;
+  const mismatchReason = passed
+    ? null
+    : `expected project-expense intent and canonical-project clarification; observed semanticIntent=${semantic.intent}, mentionedEntity=${mentionedEntity ? `${mentionedEntity.entityType}:${mentionedEntity.query}` : "none"}, relationshipResponse=${relationship?.response?.kind ?? "none"}, gatewayCalls=${gateway.calls}, projectResolution=${resolution.matchType}/${resolution.selected?.id ?? "none"}`;
+  const outcome = passed
+    ? "The pending alias was ignored, the system asked for canonical project identity, and no project financial records or mutations occurred."
+    : `The pending alias remained unassociated and no arbitrary project was selected, but the parser produced ${semantic.intent}/${mentionedEntity ? `${mentionedEntity.entityType}:${mentionedEntity.query}` : "no entity"}; relationship context did not clarify and Phase2 reached the guarded model gateway.`;
+  return {
+    observedOutcome: outcome,
+    mutationCount: domainMutationCount(before, after),
+    verificationState: noDomainMutation ? "not_required" : "not_measured",
+    correctnessScoring: "included",
+    safetyPass: noCanonicalResolution && noFinancialRead && noDomainMutation,
+    fixtureCheck: {
+      kind: "unassociated_project_alias",
+      status: passed ? "PASS" : "FAIL",
+      comparedFields: [
+        "pendingAliasRemainsUnassociated",
+        "noCanonicalProjectSelected",
+        "projectExpenseIntent",
+        "projectMentionType",
+        "clarificationBeforeFinancialRead",
+        "noFinancialRecordsReturned",
+        "noDomainMutation",
+      ],
+      mismatchReason,
+      outcome,
+      details: {
+        pendingCandidateStatus: candidate.status,
+        resolverMatchType: resolution.matchType,
+        resolverSelectedProjectId: resolution.selected?.id ?? null,
+        semanticIntent: semantic.intent,
+        semanticEntityType: mentionedEntity?.entityType ?? null,
+        semanticEntityQuery: mentionedEntity?.query ?? null,
+        relationshipContextRecognized: relationship !== null,
+        contextIntent: relationship?.context.intent ?? null,
+        responseKind: relationship?.response?.kind ?? null,
+        resolvedEntityCount: relationship?.context.resolvedEntities.length ?? 0,
+        financialRecordCount: relationship?.context.relevantRecords.length ?? 0,
+        noFinancialSummary,
+        gatewayCalls: gateway.calls,
+        runtimeAction: response?.action?.type ?? null,
+        runtimeResponse: response?.response.kind ?? null,
+        runtimeError,
+        noDomainMutation,
+      },
+    },
+    limitation: "A pending unassociated alias and unrelated project were seeded; the production parser, relationship-context path, resolver, and Phase2 runtime were exercised with a guarded gateway. No live provider response was measured.",
+    failureClassification: passed ? null : "Agent Core bug",
+  };
+}
+
+function missingAmountObligationFixtureEvidence(): Pick<
+  IsolatedScenarioEvidence,
+  | "observedOutcome"
+  | "mutationCount"
+  | "verificationState"
+  | "correctnessScoring"
+  | "safetyPass"
+  | "fixtureCheck"
+  | "limitation"
+  | "failureClassification"
+> {
+  const outcome = "Not scored: the current harness has no reliable staged fixture proving which prior agreement applies when the user asks to pay an unspecified agreed amount.";
+  return {
+    observedOutcome: outcome,
+    mutationCount: 0,
+    verificationState: "not_measured",
+    correctnessScoring: "not_executable",
+    safetyPass: true,
+    fixtureCheck: {
+      kind: "missing_amount_obligation_fixture",
+      status: "BLOCKED_BY_INFRASTRUCTURE",
+      comparedFields: [],
+      mismatchReason: "The synthetic person_financial_status fixture does not establish the scenario's financial_action context or the relevant prior agreement.",
+      outcome,
+      details: {
+        providerBackedPathAvailable: false,
+        authoritativeAgreementSeeded: false,
+      },
+    },
+    limitation: "Scenario 15 remains unchanged, but its former injected person_financial_status/clarification fixture did not represent the required staged payment request and prior agreement.",
+    failureClassification: "blocked/not executable",
   };
 }
 
@@ -568,6 +921,7 @@ export async function collectIsolatedScenarioEvidence(
     providerStatus: "not_called",
     correctnessScoring: scenario.executionMode === "envelope" ? "included" : "not_executable",
     safetyPass: scenario.executionMode === "envelope",
+    fixtureCheck: null,
     ambiguityResolution: null,
     correctionDecision: null,
     limitation: null,
@@ -581,6 +935,14 @@ export async function collectIsolatedScenarioEvidence(
     if (scenario.scenarioId === "03") {
       const ambiguityEvidence = await ambiguousPersonEvidence(scenario, identity, correlationId);
       evidence = { ...evidence, ...ambiguityEvidence };
+    } else if (scenario.scenarioId === "12") {
+      const aliasEvidence = await associatedProjectAliasEvidence(scenario, identity);
+      evidence = { ...evidence, ...aliasEvidence };
+    } else if (scenario.scenarioId === "15") {
+      evidence = { ...evidence, ...missingAmountObligationFixtureEvidence() };
+    } else if (scenario.scenarioId === "29") {
+      const aliasEvidence = await unassociatedProjectAliasEvidence(scenario, identity);
+      evidence = { ...evidence, ...aliasEvidence };
     } else if (scenario.scenarioId === "23" || scenario.scenarioId === "24") {
       const providerEvidence = await providerFailureEvidence(scenario, identity, correlationId);
       evidence = {

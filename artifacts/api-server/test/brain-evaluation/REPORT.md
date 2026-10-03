@@ -1,32 +1,33 @@
 # Secretary Brain v1 evaluation
 
-Generated: 2026-10-03T21:20:18.521Z
+Generated: 2026-10-03T22:09:55.377Z
 Fixed evaluation clock: 2026-09-19T10:00:00.000Z
 
 ## Summary
 
 - Scenarios: 30
-- PASS: 9
-- FAIL: 12
-- Blocked: 8
+- PASS: 15
+- FAIL: 5
+- Blocked: 9
 - Not executable: 1
-- Executable envelope pass rate: 42.86% (21 scored scenarios)
+- Scored contract pass rate: 75% (20 scored scenarios)
 - Isolated fixture mutations: 1; all fixtures cleaned: true
-- Ambiguous-person runtime check: 1 PASS, 0 FAIL
+- Real-path fixture checks: 2 PASS, 1 FAIL, 1 blocked
+- Ambiguous-person runtime check: 1 PASS, 0 FAIL, 0 blocked
 - Live provider calls: no; token usage: N/A
 
 ## Failure classification
 
 | Classification | Scenarios |
 | --- | ---: |
-| Agent Core bug | 0 |
-| fixture/test-harness issue | 4 |
-| contract/evaluator mismatch | 5 |
+| Agent Core bug | 2 |
+| fixture/test-harness issue | 0 |
+| contract/evaluator mismatch | 0 |
 | expected behavior requires review | 3 |
 | external dependency | 4 |
-| blocked/not executable | 5 |
+| blocked/not executable | 6 |
 
-PASS/FAIL above is the deterministic envelope score only. Isolated runtime, correction, and safety checks are listed separately and do not change that score.
+PASS/FAIL uses the fixed contract and the correct observed path. Isolated runtime checks are scored only where the scenario contract has a usable fixture; the original envelope-only diagnostic remains available separately.
 
 ## Scenario results
 
@@ -34,33 +35,33 @@ PASS/FAIL above is the deterministic envelope score only. Isolated runtime, corr
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 01 | Simple expense | PASS | — | record_expense | L0 | — | deterministic envelope only; no provider or mutation was executed |
 | 02 | Missing amount | PASS | — | record_expense | L1 | — | deterministic envelope only; no provider or mutation was executed |
-| 03 | Ambiguous person | FAIL | fixture/test-harness issue | record_expense | L0 | PASS | intelligenceLevel observed=L0 expected=L1; approvalRequired observed=true expected=false |
+| 03 | Ambiguous person | PASS | — | record_expense | L1 | ambiguous_person:PASS | Production Phase2AgentRuntime asked which of two saved محمد records was intended before calling the model; no expense or pending operation was created. |
 | 04 | Clear transport expense | PASS | — | record_expense | L0 | — | deterministic envelope only; no provider or mutation was executed |
-| 05 | Financial question | FAIL | contract/evaluator mismatch | person_financial_status | L1 | — | primaryIntent observed=person_financial_status expected=financial_retrieval |
-| 06 | Last event involving a person | FAIL | contract/evaluator mismatch | recent_activity | L2 | — | primaryIntent observed=recent_activity expected=contextual_retrieval |
+| 05 | Financial question | PASS | — | person_financial_status | L1 | — | deterministic envelope only; no provider or mutation was executed |
+| 06 | Last event involving a person | PASS | — | recent_activity | L2 | — | deterministic envelope only; no provider or mutation was executed |
 | 07 | Explicit memory | PASS | — | explicit_memory_save | L0 | — | deterministic envelope only; no provider or mutation was executed |
 | 08 | Inferred preference | PASS | — | inferred_preference | L1 | — | deterministic envelope only; no provider or mutation was executed |
 | 09 | Explicit memory recall | PASS | — | explicit_memory_retrieval | L1 | — | deterministic envelope only; no provider or mutation was executed |
 | 10 | Unassociated alias | PASS | — | alias_candidate | L1 | — | deterministic envelope only; no provider or mutation was executed |
 | 11 | Explicit project alias without association | PASS | — | alias_candidate | L1 | — | deterministic envelope only; no provider or mutation was executed |
-| 12 | Associated alias | FAIL | fixture/test-harness issue | entity_context | L2 | — | primaryIntent observed=entity_context expected=project_reference; intelligenceLevel observed=L2 expected=L0 |
-| 13 | Project expense total | FAIL | contract/evaluator mismatch | project_expenses | L1 | — | primaryIntent observed=project_expenses expected=project_expense_total |
+| 12 | Associated alias | FAIL | Agent Core bug | unknown | L2 | associated_project_alias:PASS | primaryIntent observed=unknown expected=project_reference; intelligenceLevel observed=L2 expected=L0 |
+| 13 | Project expense total | PASS | — | project_expenses | L1 | — | deterministic envelope only; no provider or mutation was executed |
 | 14 | Memory conflicts with financial record | FAIL | expected behavior requires review | project_expenses | L3 | — | primaryIntent observed=project_expenses expected=memory_financial_conflict; intelligenceLevel observed=L3 expected=L2 |
-| 15 | Payment with missing agreed amount | FAIL | fixture/test-harness issue | person_financial_status | L0 | — | primaryIntent observed=person_financial_status expected=financial_action; intelligenceLevel observed=L0 expected=L2 |
-| 16 | Correction of amount | BLOCKED_BY_INFRASTRUCTURE | blocked/not executable | unknown | L2 | PASS | deterministic correction returned approval_required / update_expense; target=a7f0701d-d6b2-41f4-bec0-433b5f395e57; amountMinor=75000; duplicate expense=false |
-| 17 | Correction of person | BLOCKED_BY_INFRASTRUCTURE | external dependency | unknown | L2 | BLOCKED_BY_INFRASTRUCTURE | seeded prior expense and conversation; deterministic path returned help / no tool; target=none; Ahmed fixture=85248b1c-53a3-4992-9473-75ba0ab732f8; duplicate expense=false |
+| 15 | Payment with missing agreed amount | BLOCKED_BY_INFRASTRUCTURE | blocked/not executable | record_expense | L1 | missing_amount_obligation_fixture:BLOCKED_BY_INFRASTRUCTURE | The synthetic person_financial_status fixture does not establish the scenario's financial_action context or the relevant prior agreement. |
+| 16 | Correction of amount | BLOCKED_BY_INFRASTRUCTURE | blocked/not executable | unknown | L2 | PASS | deterministic correction returned approval_required / update_expense; target=59f37151-12a5-42a7-9973-920bd28bd73c; amountMinor=75000; duplicate expense=false |
+| 17 | Correction of person | BLOCKED_BY_INFRASTRUCTURE | external dependency | unknown | L2 | BLOCKED_BY_INFRASTRUCTURE | seeded prior expense and conversation; deterministic path returned help / no tool; target=none; Ahmed fixture=f5a3afe9-209e-49a6-b074-4e82c5780ae0; duplicate expense=false |
 | 18 | Correction of date | BLOCKED_BY_INFRASTRUCTURE | external dependency | unknown | L2 | BLOCKED_BY_INFRASTRUCTURE | seeded prior expense and conversation; deterministic path returned help / no tool; target=none; Ahmed fixture=not applicable; duplicate expense=false |
 | 19 | Plan obligations next week | FAIL | expected behavior requires review | unknown | L2 | — | primaryIntent observed=unknown expected=planning; intelligenceLevel observed=L2 expected=L3 |
 | 20 | Travel and obligations | FAIL | expected behavior requires review | schedule_read | L2 | — | primaryIntent observed=schedule_read expected=planning; intelligenceLevel observed=L2 expected=L3 |
-| 21 | Vague action | FAIL | contract/evaluator mismatch | unknown | L1 | — | primaryIntent observed=unknown expected=unclear_action |
+| 21 | Vague action | PASS | — | unknown | L1 | — | deterministic envelope only; no provider or mutation was executed |
 | 22 | Reminder tomorrow | PASS | — | create_reminder | L0 | — | deterministic envelope only; no provider or mutation was executed |
 | 23 | Provider failure during general question | BLOCKED_BY_INFRASTRUCTURE | external dependency | memory_recall | L2 | — | classified provider failure (PROVIDER_FAILOVER_FAILED); no mutation was attempted |
 | 24 | Provider failure during expense creation | BLOCKED_BY_INFRASTRUCTURE | external dependency | record_expense | L0 | — | classified provider failure (PROVIDER_FAILOVER_FAILED); no mutation was attempted |
 | 25 | Approval expired | BLOCKED_BY_INFRASTRUCTURE | blocked/not executable | unknown | L2 | — | operation state=expired; claim state=expired; no expense executed |
 | 26 | Verification failure after execution attempt | BLOCKED_BY_INFRASTRUCTURE | blocked/not executable | unknown | L2 | — | mutation attempted once; verification state=failed; no retry was attempted |
 | 27 | User changes mind | BLOCKED_BY_INFRASTRUCTURE | blocked/not executable | unknown | L2 | — | operation state=rejected; replay state=rejected; no expense executed |
-| 28 | Debt / relationship question | FAIL | contract/evaluator mismatch | person_financial_status | L2 | — | primaryIntent observed=person_financial_status expected=financial_relationship_retrieval |
-| 29 | Project alias without canonical association | FAIL | fixture/test-harness issue | project_expenses | L0 | — | primaryIntent observed=project_expenses expected=project_expense_total; intelligenceLevel observed=L0 expected=L1\|L2 |
+| 28 | Debt / relationship question | PASS | — | person_financial_status | L2 | — | deterministic envelope only; no provider or mutation was executed |
+| 29 | Project alias without canonical association | FAIL | Agent Core bug | person_expense_total | L1 | unassociated_project_alias:FAIL | expected project-expense intent and canonical-project clarification; observed semanticIntent=person_expense_total, mentionedEntity=person:المشروع الكبير, relationshipResponse=none, gatewayCalls=1, projectResolution=none/none |
 | 30 | Proactive obligation synthesis | NOT_EXECUTABLE | blocked/not executable | unknown | L2 | — | proactive obligation contract represented; scheduler and notification execution are not executable in this runner |
 
 ## Multi-turn correction fixture
@@ -79,14 +80,36 @@ Decision-stage results: 1 PASS, 0 FAIL, 2 blocked.
 
 ## Ambiguous-person runtime fixture
 
-- Scenario 03: **PASS** — The runtime requested clarification between two distinct same-name records without selecting either or creating a write.
-  - Two same-name people were seeded in the isolated tenant and the deterministic Secretary runtime was exercised; this evidence does not measure the standalone Brain envelope or a live provider path.
+- Scenario 03: **PASS** — Production Phase2AgentRuntime asked which of two saved محمد records was intended before calling the model; no expense or pending operation was created.
+  - Two same-name people were seeded in one isolated tenant; the production Phase2AgentRuntime was exercised with a gateway guard that records but never calls a live provider.
   - Same-name candidates observed: 2.
+  - Gateway guard calls: 0.
+
+## Real-path fixture checks
+
+- Scenario 03 (ambiguous_person): **PASS** — Production Phase2AgentRuntime asked which of two saved محمد records was intended before calling the model; no expense or pending operation was created.
+  - Compared: clarificationNeeded, twoDistinctSameNameCandidates, noExpenseCreated, noPendingOperationCreated, noModelGatewayCall.
+  - Raw envelope diagnostic: intelligenceLevel observed=L0 expected=L1; approvalRequired observed=true expected=false.
+- Scenario 12 (associated_project_alias): **PASS** — The approved alias resolved to المحجر; Phase2 action=none, guarded gateway calls=1, canonical result exposed=false.
+  - Compared: approvedAssociation, aliasMatch, canonicalProjectId, noUnrelatedResolution.
+  - Raw envelope diagnostic: primaryIntent observed=unknown expected=project_reference; intelligenceLevel observed=L2 expected=L0.
+- Scenario 15 (missing_amount_obligation_fixture): **BLOCKED_BY_INFRASTRUCTURE** — Not scored: the current harness has no reliable staged fixture proving which prior agreement applies when the user asks to pay an unspecified agreed amount.
+  - Compared: not scored.
+  - Limitation: The synthetic person_financial_status fixture does not establish the scenario's financial_action context or the relevant prior agreement..
+  - Raw envelope diagnostic: primaryIntent observed=record_expense expected=financial_action; intelligenceLevel observed=L1 expected=L2; risk observed=low expected=high; approvalRequired observed=false expected=true.
+- Scenario 29 (unassociated_project_alias): **FAIL** — The pending alias remained unassociated and no arbitrary project was selected, but the parser produced person_expense_total/person:المشروع الكبير; relationship context did not clarify and Phase2 reached the guarded model gateway.
+  - Compared: pendingAliasRemainsUnassociated, noCanonicalProjectSelected, projectExpenseIntent, projectMentionType, clarificationBeforeFinancialRead, noFinancialRecordsReturned, noDomainMutation.
+  - Limitation: expected project-expense intent and canonical-project clarification; observed semanticIntent=person_expense_total, mentionedEntity=person:المشروع الكبير, relationshipResponse=none, gatewayCalls=1, projectResolution=none/none.
+  - Raw envelope diagnostic: primaryIntent observed=person_expense_total expected=project_expense_total.
 
 ## Harness repairs and scope
 
 - The verification-failure fixture now creates and claims a real scoped operation with a database UUID before invoking the approved executor.
-- Scenario 03 now seeds two actual same-name people and executes the deterministic Secretary runtime instead of injecting a synthetic relationship clarification.
+- Scenario 03 now seeds two same-name people and exercises production Phase2AgentRuntime; an ambiguous resolver result stops before the model and produces a non-approval clarification.
+- Scenario 12 now creates, associates, approves, and resolves a real same-tenant project alias through the Second Brain lifecycle.
+- Scenario 15's synthetic person_financial_status fixture was removed; it is non-executable without a staged authoritative prior-agreement context.
+- Scenario 29 now uses a pending unassociated alias and production parser/resolver/Phase2 path; it exposes a real mismatch where the project is parsed as a person-expense request and falls through to the guarded model gateway.
+- The five exact implementation-label pairs are normalized only for comparison; the raw observed names remain unchanged.
 - Scenarios 16–18 now seed a prior expense and real saved conversation provenance; amount-correction decision evidence is separate from final approved persistence.
 - JSON and REPORT.md are generated from the same records and timestamp.
 - The fixed 30-scenario contract and expected outcomes were not edited.

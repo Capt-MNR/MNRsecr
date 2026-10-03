@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import type { RelationshipContextResult } from "../../src/lib/relationship-context";
 import {
   createBrainDecisionEnvelope,
+  type BrainDecisionState,
   type BrainDecisionEnvelope,
 } from "../../src/lib/brain-contract";
 import {
@@ -60,6 +61,14 @@ type ObservedOutcome = {
   };
 };
 
+type PassFailResult = {
+  pass: boolean | null;
+  mismatchReason: string | null;
+  comparedFields: string[];
+  normalizationsApplied: string[];
+  responsibleSubsystem: string | null;
+};
+
 type EvaluationRecord = {
   scenarioId: string;
   title: string;
@@ -80,14 +89,10 @@ type EvaluationRecord = {
     totalTokens: number | null;
     selectedStrategy: string | null;
     intelligenceLevel: string | null;
-    measurement: "deterministic_path_no_provider_call" | "not_executable";
+    measurement: "deterministic_path_no_provider_call" | "scripted_gateway_guard" | "not_executable";
   };
-  passFail: {
-    pass: boolean | null;
-    mismatchReason: string | null;
-    comparedFields: string[];
-    responsibleSubsystem: string | null;
-  };
+  passFail: PassFailResult;
+  envelopeDiagnostic: PassFailResult | null;
   failureClassification: string | null;
   expectedOutcome: string;
   observedOutcome: string;
@@ -97,6 +102,7 @@ type EvaluationRecord = {
   providerStatus: IsolatedScenarioEvidence["providerStatus"];
   correctnessScoring: IsolatedScenarioEvidence["correctnessScoring"];
   safetyPass: boolean;
+  fixtureCheck: IsolatedScenarioEvidence["fixtureCheck"];
   ambiguityResolution: IsolatedScenarioEvidence["ambiguityResolution"];
   correctionDecision: IsolatedScenarioEvidence["correctionDecision"];
   isolation: {
@@ -127,10 +133,10 @@ function failureClassificationFor(
   if (status === "PASS") return null;
   if (status === "FAIL") {
     const knownClassification: Record<string, string> = {
-      "03": "fixture/test-harness issue",
+      "03": "Agent Core bug",
       "05": "contract/evaluator mismatch",
       "06": "contract/evaluator mismatch",
-      "12": "fixture/test-harness issue",
+      "12": "contract/evaluator mismatch",
       "13": "contract/evaluator mismatch",
       "14": "expected behavior requires review",
       "15": "fixture/test-harness issue",
@@ -138,7 +144,7 @@ function failureClassificationFor(
       "20": "expected behavior requires review",
       "21": "contract/evaluator mismatch",
       "28": "contract/evaluator mismatch",
-      "29": "fixture/test-harness issue",
+      "29": "Agent Core bug",
     };
     return knownClassification[scenario.scenarioId] ?? "Agent Core bug";
   }
@@ -208,15 +214,6 @@ function relationshipFixture(scenario: ContractScenario): RelationshipContextRes
         },
         response: { kind: "answer", message: "bounded activity result" },
       };
-    case "12":
-      return {
-        context: {
-          ...base,
-          intent: "entity_context",
-          resolvedEntities: [resolvedEntity("project-quarry", "المحجر", "project", "alias")],
-        },
-        response: { kind: "answer", message: "canonical project resolved" },
-      };
     case "13":
       return {
         context: {
@@ -238,16 +235,6 @@ function relationshipFixture(scenario: ContractScenario): RelationshipContextRes
         },
         response: { kind: "answer", message: "record differs from memory" },
       };
-    case "15":
-      return {
-        context: {
-          ...base,
-          intent: "person_financial_status",
-          resolvedEntities: [resolvedEntity("person-mohamed", "محمد", "person")],
-          uncertainties: ["agreed_amount_unknown"],
-        },
-        response: { kind: "clarification", message: "ما المبلغ المتفق عليه؟" },
-      };
     case "28":
       return {
         context: {
@@ -257,15 +244,6 @@ function relationshipFixture(scenario: ContractScenario): RelationshipContextRes
           financialSummary: { EGP: [{ currency: "EGP", amountMinor: 250000, count: 4 }] },
         },
         response: { kind: "answer", message: "authoritative relationship result" },
-      };
-    case "29":
-      return {
-        context: {
-          ...base,
-          intent: "project_expenses",
-          uncertainties: ["project_alias_unassociated"],
-        },
-        response: { kind: "clarification", message: "أي مشروع تقصد؟" },
       };
     default:
       return null;
@@ -424,10 +402,28 @@ function compareEnvelope(
   const expected = scenario.expectation;
   const mismatches: string[] = [];
   const comparedFields: string[] = [];
+  const normalizationsApplied: string[] = [];
+  const intentEquivalences: readonly [string, string][] = [
+    ["financial_retrieval", "person_financial_status"],
+    ["contextual_retrieval", "recent_activity"],
+    ["project_expense_total", "project_expenses"],
+    ["unclear_action", "unknown"],
+    ["financial_relationship_retrieval", "person_financial_status"],
+  ];
   if (expected.primaryIntent !== "unspecified") {
     comparedFields.push("primaryIntent");
     if (observed.primaryIntent !== expected.primaryIntent) {
-      mismatches.push(`primaryIntent observed=${observed.primaryIntent} expected=${expected.primaryIntent}`);
+      const equivalent = intentEquivalences.some(([left, right]) =>
+        (expected.primaryIntent === left && observed.primaryIntent === right)
+        || (expected.primaryIntent === right && observed.primaryIntent === left),
+      );
+      if (equivalent) {
+        normalizationsApplied.push(
+          `primaryIntent ${observed.primaryIntent}->${expected.primaryIntent} (approved exact label pair)`,
+        );
+      } else {
+        mismatches.push(`primaryIntent observed=${observed.primaryIntent} expected=${expected.primaryIntent}`);
+      }
     }
   }
   if (expected.intelligenceLevels.length > 0) {
@@ -464,6 +460,7 @@ function compareEnvelope(
     pass: mismatches.length === 0,
     mismatchReason: mismatches.length > 0 ? mismatches.join("; ") : null,
     comparedFields,
+    normalizationsApplied,
     responsibleSubsystem: mismatches.length > 0
       ? "brain-contract.ts / deterministic-intelligence.ts"
       : null,
@@ -473,6 +470,7 @@ function compareEnvelope(
 export function evaluateScenario(
   scenario: ContractScenario,
   scope = createEvaluationRunScope(),
+  stateOverride?: BrainDecisionState,
 ): EvaluationRecord {
   const parse = parseSemanticRequest(scenario.input, FIXED_NOW);
   const relationshipContext = relationshipFixture(scenario);
@@ -483,7 +481,7 @@ export function evaluateScenario(
     semanticParse: parse,
     relationshipContext,
     hasConversationContext: Boolean(scenario.previousState) || scenario.context !== "none",
-    state: scenario.scenarioId === "27" ? "rejected" : undefined,
+    state: stateOverride ?? (scenario.scenarioId === "27" ? "rejected" : undefined),
   });
   const observed = {
     ...observedOutcome(scenario, parse, envelope),
@@ -525,8 +523,10 @@ export function evaluateScenario(
           pass: null,
           mismatchReason: null,
           comparedFields: [],
+          normalizationsApplied: [],
           responsibleSubsystem: null,
         },
+    envelopeDiagnostic: null,
     failureClassification: failureClassificationFor(scenario, status),
     expectedOutcome: scenario.expectation.expectedOutcome,
     observedOutcome: observed.actualOutcome,
@@ -536,6 +536,7 @@ export function evaluateScenario(
     providerStatus: "not_called",
     correctnessScoring: scenario.executionMode === "envelope" ? "included" : "not_executable",
     safetyPass: scenario.executionMode === "envelope",
+    fixtureCheck: null,
     ambiguityResolution: null,
     correctionDecision: null,
     isolation: {
@@ -556,10 +557,113 @@ export async function evaluateAllIsolated(): Promise<EvaluationRecord[]> {
   const scope = createEvaluationRunScope(runId);
   const records: EvaluationRecord[] = [];
   for (const scenario of evaluationContractV1) {
-    const record = evaluateScenario(scenario, scope);
+    const envelopeOnlyRecord = evaluateScenario(scenario, scope);
     const evidence = await collectIsolatedScenarioEvidence(scenario, runId);
+    const fixtureCheck = evidence.fixtureCheck;
+    const fixtureStatus: EvaluationStatus | null = fixtureCheck
+      ? fixtureCheck.status === "PASS"
+        ? "PASS"
+        : fixtureCheck.status === "FAIL"
+          ? "FAIL"
+          : "BLOCKED_BY_INFRASTRUCTURE"
+      : null;
+    const record = fixtureCheck?.kind === "ambiguous_person" && fixtureStatus === "PASS"
+      ? evaluateScenario(scenario, scope, "clarification")
+      : envelopeOnlyRecord;
+    const compareFixtureWithContract = fixtureCheck?.kind === "ambiguous_person"
+      || fixtureCheck?.kind === "associated_project_alias";
+    const status: EvaluationStatus = compareFixtureWithContract
+      ? fixtureStatus === "BLOCKED_BY_INFRASTRUCTURE"
+        ? "BLOCKED_BY_INFRASTRUCTURE"
+        : fixtureStatus === "FAIL" || record.status === "FAIL"
+          ? "FAIL"
+          : record.status
+      : fixtureStatus ?? record.status;
+    const fixturePassFail: PassFailResult | null = fixtureCheck
+      ? compareFixtureWithContract
+        ? {
+            pass: status === "PASS" ? true : status === "BLOCKED_BY_INFRASTRUCTURE" ? null : false,
+            mismatchReason: [
+              record.passFail.mismatchReason,
+              fixtureCheck.mismatchReason,
+            ].filter(Boolean).join("; ") || null,
+            comparedFields: [...record.passFail.comparedFields, ...fixtureCheck.comparedFields],
+            normalizationsApplied: record.passFail.normalizationsApplied,
+            responsibleSubsystem: fixtureCheck.kind === "ambiguous_person"
+              ? "Phase2AgentRuntime / entity resolver / Brain decision envelope"
+              : "Phase2AgentRuntime / Second Brain resolver / Brain decision envelope",
+          }
+        : {
+            pass: fixtureStatus === "PASS" ? true : fixtureStatus === "FAIL" ? false : null,
+            mismatchReason: fixtureCheck.mismatchReason,
+            comparedFields: fixtureCheck.comparedFields,
+            normalizationsApplied: [],
+            responsibleSubsystem: fixtureCheck.kind === "missing_amount_obligation_fixture"
+              ? "isolated evaluation fixture"
+              : fixtureCheck.kind === "unassociated_project_alias"
+                ? "deterministic-intelligence parser / Phase2 intent routing"
+                : "Second Brain entity resolver / relationship context",
+          }
+      : null;
+    const failureClassification = fixtureCheck
+      ? status === "PASS"
+        ? null
+        : fixtureStatus === "BLOCKED_BY_INFRASTRUCTURE"
+          ? evidence.failureClassification ?? "blocked/not executable"
+          : evidence.failureClassification ?? record.failureClassification ?? "Agent Core bug"
+      : evidence.failureClassification ?? record.failureClassification;
+    const observed = {
+      ...record.observed,
+      actualOutcome: evidence.observedOutcome,
+      ...(fixtureCheck?.kind === "ambiguous_person" && fixtureStatus === "PASS"
+        ? {
+            ambiguousEntities: ["person:محمد"],
+            requiredContext: ["which محمد"],
+            authoritativeSources: ["structured_records", "entity_graph"],
+            selectedStrategy: record.envelope?.strategy.reason ?? "expense_entity_resolution_requires_clarification",
+            intelligenceLevel: record.envelope?.strategy.level ?? "L1",
+            risk: record.envelope?.risk.level ?? "low",
+            decision: "ask which person",
+            action: "clarify entity",
+            approvalRequired: record.envelope?.risk.requiresApproval ?? false,
+            verificationPlan: ["do not create an operation before the user selects a person"],
+            provenance: [
+              ...record.observed.provenance,
+              "runtimePath=Phase2AgentRuntime",
+              `resolverCandidates=${String(fixtureCheck.details.candidateCount ?? 0)}`,
+              `modelGatewayCalls=${String(fixtureCheck.details.gatewayCalls ?? 0)}`,
+            ],
+          }
+        : fixtureCheck?.kind === "associated_project_alias"
+          ? {
+              provenance: [
+                ...record.observed.provenance,
+                "runtimePath=Phase2AgentRuntime",
+                `resolverMatch=${String(fixtureCheck.details.matchType ?? "none")}`,
+                `phase2Action=${String(fixtureCheck.details.phase2ActionType ?? "none")}`,
+                `modelGatewayCalls=${String(fixtureCheck.details.phase2GatewayCalls ?? 0)}`,
+                `canonicalProjectExposed=${String(fixtureCheck.details.phase2ResolvesCanonical ?? false)}`,
+              ],
+            }
+        : {}),
+    };
+    const guardedGatewayCalls = fixtureCheck
+      && ["ambiguous_person", "associated_project_alias", "unassociated_project_alias"].includes(fixtureCheck.kind)
+      ? Number(fixtureCheck.details.phase2GatewayCalls ?? fixtureCheck.details.gatewayCalls ?? 0)
+      : null;
     records.push({
       ...record,
+      instrumentation: guardedGatewayCalls === null
+        ? record.instrumentation
+        : {
+            ...record.instrumentation,
+            logicalLlmCalls: guardedGatewayCalls,
+            providerAttempts: 0,
+            measurement: guardedGatewayCalls > 0
+              ? "scripted_gateway_guard"
+              : "deterministic_path_no_provider_call",
+          },
+      status,
       limitation: evidence.limitation ?? record.limitation,
       expectedOutcome: evidence.expectedOutcome,
       observedOutcome: evidence.observedOutcome,
@@ -569,17 +673,19 @@ export async function evaluateAllIsolated(): Promise<EvaluationRecord[]> {
       providerStatus: evidence.providerStatus,
       correctnessScoring: evidence.correctnessScoring,
       safetyPass: evidence.safetyPass,
+      fixtureCheck,
       ambiguityResolution: evidence.ambiguityResolution,
       correctionDecision: evidence.correctionDecision,
-      failureClassification: evidence.failureClassification ?? record.failureClassification,
+      passFail: fixturePassFail ?? record.passFail,
+      envelopeDiagnostic: fixtureCheck ? envelopeOnlyRecord.passFail : record.envelopeDiagnostic,
+      failureClassification,
       isolation: {
         tenantId: evidence.fixtureTenantId,
         userId: evidence.fixtureUserId,
         cleanupCompleted: evidence.cleanupCompleted,
       },
       observed: {
-        ...record.observed,
-        actualOutcome: evidence.observedOutcome,
+        ...observed,
         correction: evidence.correctionDecision
           ? {
               previousState: `expense:${evidence.correctionDecision.previousExpenseId}`,
@@ -651,8 +757,19 @@ export async function writeEvaluationReport(
   const ambiguityResolutionSummary = {
     pass: records.filter((record) => record.ambiguityResolution?.status === "PASS").length,
     fail: records.filter((record) => record.ambiguityResolution?.status === "FAIL").length,
+    blockedByInfrastructure: records
+      .filter((record) => record.ambiguityResolution?.status === "BLOCKED_BY_INFRASTRUCTURE").length,
     scenarioIds: records
       .filter((record) => record.ambiguityResolution !== null)
+      .map((record) => record.scenarioId),
+  };
+  const fixtureCheckSummary = {
+    pass: records.filter((record) => record.fixtureCheck?.status === "PASS").length,
+    fail: records.filter((record) => record.fixtureCheck?.status === "FAIL").length,
+    blockedByInfrastructure: records
+      .filter((record) => record.fixtureCheck?.status === "BLOCKED_BY_INFRASTRUCTURE").length,
+    scenarioIds: records
+      .filter((record) => record.fixtureCheck !== null)
       .map((record) => record.scenarioId),
   };
   const generatedAt = new Date().toISOString();
@@ -670,6 +787,7 @@ export async function writeEvaluationReport(
     providerAttemptsMeasured: records.reduce((sum, record) => sum + (record.instrumentation.providerAttempts ?? 0), 0),
     mutationCountMeasured: records.reduce((sum, record) => sum + record.mutationCount, 0),
     failureClassificationCounts,
+    fixtureCheckSummary,
     providerRateLimitedScenarios: records
       .filter((record) => record.providerStatus === "rate_limited")
       .map((record) => record.scenarioId),
@@ -707,15 +825,20 @@ export async function writeEvaluationReport(
       cleanupRequired: true,
     },
     comparisonScope: [
-      "PASS/FAIL applies only to the deterministic envelope checks recorded in passFail.",
+      "PASS/FAIL is scored against the fixed contract; scenarios with an isolated runtime fixture use that real path, and other executable scenarios use the deterministic envelope.",
+      "Exact primary-intent label normalization is limited to the five listed pairs; raw labels and normalizationsApplied remain in the JSON.",
+      "For fixture-scored scenarios, envelopeDiagnostic preserves the envelope-only comparison that would otherwise be hidden by the actual path result.",
       "Provider, persisted-operation, verification-failure, and proactive scenarios remain separately classified unless the required runtime path is actually exercised.",
       "Safety fixture success is reported independently and never promotes a blocked contract scenario to PASS.",
-      "Scenario 03 includes a separate isolated runtime check with duplicate same-name records; its result does not replace the envelope-only score.",
       "Token counts are N/A when no live provider usage was collected.",
     ],
     harnessRepairs: [
       "The verification-failure fixture now creates and claims a real scoped operation with a database UUID before invoking the approved executor.",
-      "Scenario 03 now seeds two actual same-name people and executes the deterministic Secretary runtime instead of injecting a synthetic relationship clarification.",
+      "Scenario 03 now seeds two same-name people and exercises production Phase2AgentRuntime; an ambiguous resolver result stops before the model and produces a non-approval clarification.",
+      "Scenario 12 now creates, associates, approves, and resolves a real same-tenant project alias through the Second Brain lifecycle.",
+      "Scenario 15's synthetic person_financial_status fixture was removed; it is non-executable without a staged authoritative prior-agreement context.",
+      "Scenario 29 now uses a pending unassociated alias and production parser/resolver/Phase2 path; it exposes a real mismatch where the project is parsed as a person-expense request and falls through to the guarded model gateway.",
+      "The five exact implementation-label pairs are normalized only for comparison; the raw observed names remain unchanged.",
       "Scenarios 16–18 now seed a prior expense and real saved conversation provenance; amount-correction decision evidence is separate from final approved persistence.",
       "JSON and REPORT.md are generated from the same records and timestamp.",
     ],
@@ -736,9 +859,10 @@ export async function writeEvaluationReport(
     `- FAIL: ${summary.fail}`,
     `- Blocked: ${summary.blockedByInfrastructure}`,
     `- Not executable: ${summary.notExecutable}`,
-    `- Executable envelope pass rate: ${summary.contractPassRateAmongExecutable ?? "N/A"}% (${summary.executableScenarioCount} scored scenarios)`,
+    `- Scored contract pass rate: ${summary.contractPassRateAmongExecutable ?? "N/A"}% (${summary.executableScenarioCount} scored scenarios)`,
     `- Isolated fixture mutations: ${summary.mutationCountMeasured}; all fixtures cleaned: ${report.fixtureScope.cleanupCompleted}`,
-    `- Ambiguous-person runtime check: ${ambiguityResolutionSummary.pass} PASS, ${ambiguityResolutionSummary.fail} FAIL`,
+    `- Real-path fixture checks: ${fixtureCheckSummary.pass} PASS, ${fixtureCheckSummary.fail} FAIL, ${fixtureCheckSummary.blockedByInfrastructure} blocked`,
+    `- Ambiguous-person runtime check: ${ambiguityResolutionSummary.pass} PASS, ${ambiguityResolutionSummary.fail} FAIL, ${ambiguityResolutionSummary.blockedByInfrastructure} blocked`,
     `- Live provider calls: no; token usage: N/A`,
     "",
     "## Failure classification",
@@ -749,7 +873,7 @@ export async function writeEvaluationReport(
       `| ${classification} | ${failureClassificationCounts[classification]} |`,
     ),
     "",
-    "PASS/FAIL above is the deterministic envelope score only. Isolated runtime, correction, and safety checks are listed separately and do not change that score.",
+    "PASS/FAIL uses the fixed contract and the correct observed path. Isolated runtime checks are scored only where the scenario contract has a usable fixture; the original envelope-only diagnostic remains available separately.",
     "",
     "## Scenario results",
     "",
@@ -762,7 +886,11 @@ export async function writeEvaluationReport(
       markdownCell(record.failureClassification),
       markdownCell(record.observed.primaryIntent),
       markdownCell(record.observed.intelligenceLevel),
-      markdownCell(record.ambiguityResolution?.status ?? record.correctionDecision?.status),
+      markdownCell(
+        record.fixtureCheck
+          ? `${record.fixtureCheck.kind}:${record.fixtureCheck.status}`
+          : record.ambiguityResolution?.status ?? record.correctionDecision?.status,
+      ),
       markdownCell(record.passFail.mismatchReason ?? record.observedOutcome),
     ].join(" | ").replace(/^/, "| ").replace(/$/, " |")),
     "",
@@ -782,7 +910,17 @@ export async function writeEvaluationReport(
       `- Scenario ${record.scenarioId}: **${record.ambiguityResolution!.status}** — ${record.ambiguityResolution!.outcome}`,
       `  - ${record.limitation ?? "No additional limitation."}`,
       `  - Same-name candidates observed: ${record.ambiguityResolution!.candidateCount}.`,
+      `  - Gateway guard calls: ${String(record.fixtureCheck?.details.gatewayCalls ?? "not measured")}.`,
     ].join("\n")),
+    "",
+    "## Real-path fixture checks",
+    "",
+    ...records.filter((record) => record.fixtureCheck !== null).map((record) => [
+      `- Scenario ${record.scenarioId} (${record.fixtureCheck!.kind}): **${record.fixtureCheck!.status}** — ${record.fixtureCheck!.outcome}`,
+      `  - Compared: ${record.fixtureCheck!.comparedFields.join(", ") || "not scored"}.`,
+      record.fixtureCheck!.mismatchReason ? `  - Limitation: ${record.fixtureCheck!.mismatchReason}.` : "",
+      `  - Raw envelope diagnostic: ${record.envelopeDiagnostic?.mismatchReason ?? "none"}.`,
+    ].filter(Boolean).join("\n")),
     "",
     "## Harness repairs and scope",
     "",

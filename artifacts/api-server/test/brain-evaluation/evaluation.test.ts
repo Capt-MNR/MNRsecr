@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { evaluationContractV1 } from "./contract-v1";
-import { evaluateAll, evaluateScenario } from "./evaluator";
+import { evaluateAll, evaluateAllIsolated, evaluateScenario } from "./evaluator";
+import {
+  collectIsolatedScenarioEvidence,
+  createEvidenceRunId,
+} from "./isolated-evidence";
 
 test("Evaluation Contract v1 contains exactly the fixed scenarios 01–30", () => {
   assert.equal(evaluationContractV1.length, 30);
@@ -64,4 +68,91 @@ test("fixed clock makes temporal observations reproducible", () => {
   assert.equal(reminder.semanticParse?.dateTime?.hour, 17);
   assert.doesNotMatch(reminder.passFail.mismatchReason ?? "", /tomorrow at 17:00/);
   assert.equal(reminder.status, "PASS");
+});
+
+test("only the five approved primary-intent label pairs are normalized", () => {
+  const cases = [
+    ["05", "person_financial_status"],
+    ["06", "recent_activity"],
+    ["13", "project_expenses"],
+    ["21", "unknown"],
+    ["28", "person_financial_status"],
+  ] as const;
+  for (const [scenarioId, rawIntent] of cases) {
+    const scenario = evaluationContractV1.find((item) => item.scenarioId === scenarioId)!;
+    const record = evaluateScenario(scenario);
+    assert.equal(record.status, "PASS", scenarioId);
+    assert.equal(record.observed.primaryIntent, rawIntent, scenarioId);
+    assert.equal(record.passFail.normalizationsApplied.length, 1, scenarioId);
+  }
+});
+
+test("a completed expense clarification is L1 and has no pending approval", () => {
+  const scenario = evaluationContractV1.find((item) => item.scenarioId === "03")!;
+  const record = evaluateScenario(scenario, undefined, "clarification");
+  assert.equal(record.status, "PASS");
+  assert.equal(record.envelope?.strategy.level, "L1");
+  assert.equal(record.envelope?.risk.requiresApproval, false);
+  assert.equal(record.envelope?.verification.required, false);
+});
+
+test("production Phase2 stops an ambiguous named-person expense before the model gateway", async () => {
+  const scenario = evaluationContractV1.find((item) => item.scenarioId === "03")!;
+  const evidence = await collectIsolatedScenarioEvidence(scenario, createEvidenceRunId());
+  assert.equal(evidence.cleanupCompleted, true);
+  assert.equal(evidence.fixtureCheck?.status, "PASS", evidence.fixtureCheck?.mismatchReason ?? undefined);
+  assert.equal(evidence.fixtureCheck?.details.gatewayCalls, 0);
+  assert.equal(evidence.fixtureCheck?.details.newExpenses, 0);
+  assert.equal(evidence.fixtureCheck?.details.newOperations, 0);
+});
+
+test("project alias fixtures distinguish direct resolution from Phase2 routing", async () => {
+  const runId = createEvidenceRunId();
+  const scenario12 = evaluationContractV1.find((item) => item.scenarioId === "12")!;
+  const associated = await collectIsolatedScenarioEvidence(scenario12, runId);
+  assert.equal(associated.cleanupCompleted, true);
+  assert.equal(associated.fixtureCheck?.status, "PASS", associated.fixtureCheck?.mismatchReason ?? undefined);
+  assert.equal(associated.fixtureCheck?.details.matchType, "alias");
+  assert.equal(associated.fixtureCheck?.details.selectedProjectId, associated.fixtureCheck?.details.canonicalProjectId);
+  assert.equal(associated.fixtureCheck?.details.phase2GatewayCalls, 1);
+  assert.equal(associated.fixtureCheck?.details.phase2ResolvesCanonical, false);
+  assert.equal(associated.fixtureCheck?.details.noDomainMutation, true);
+  assert.equal(associated.failureClassification, "Agent Core bug");
+
+  const scenario15 = evaluationContractV1.find((item) => item.scenarioId === "15")!;
+  const missingAgreement = await collectIsolatedScenarioEvidence(scenario15, runId);
+  assert.equal(missingAgreement.fixtureCheck?.status, "BLOCKED_BY_INFRASTRUCTURE");
+  assert.equal(missingAgreement.correctnessScoring, "not_executable");
+
+  const scenario29 = evaluationContractV1.find((item) => item.scenarioId === "29")!;
+  const unassociated = await collectIsolatedScenarioEvidence(scenario29, runId);
+  assert.equal(unassociated.cleanupCompleted, true);
+  assert.equal(unassociated.fixtureCheck?.status, "FAIL");
+  assert.equal(unassociated.failureClassification, "Agent Core bug");
+  assert.equal(unassociated.fixtureCheck?.details.resolverMatchType, "none");
+  assert.equal(unassociated.fixtureCheck?.details.semanticIntent, "person_expense_total");
+  assert.equal(unassociated.fixtureCheck?.details.semanticEntityType, "person");
+  assert.equal(unassociated.fixtureCheck?.details.relationshipContextRecognized, false);
+  assert.equal(unassociated.fixtureCheck?.details.gatewayCalls, 1);
+  assert.equal(unassociated.fixtureCheck?.details.financialRecordCount, 0);
+  assert.equal(unassociated.fixtureCheck?.details.noDomainMutation, true);
+  assert.equal(unassociated.safetyPass, true);
+});
+
+test("an alias resolver PASS cannot override failed Brain contract fields", async () => {
+  const records = await evaluateAllIsolated();
+  const associatedAlias = records.find((record) => record.scenarioId === "12");
+  assert.ok(associatedAlias);
+  assert.equal(associatedAlias.fixtureCheck?.status, "PASS");
+  assert.equal(associatedAlias.status, "FAIL");
+  assert.equal(associatedAlias.passFail.pass, false);
+  assert.match(
+    associatedAlias.passFail.mismatchReason ?? "",
+    /primaryIntent observed=unknown expected=project_reference/,
+  );
+  assert.match(
+    associatedAlias.passFail.mismatchReason ?? "",
+    /intelligenceLevel observed=L2 expected=L0/,
+  );
+  assert.equal(associatedAlias.failureClassification, "Agent Core bug");
 });

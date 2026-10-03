@@ -6150,6 +6150,20 @@ async function deterministicPreflight(
     const projectMention = parsed.entityMentions.find((item) => item.entityType === "project");
     const person = personMention ? await resolve("person", personMention.query) : null;
     const project = projectMention ? await resolve("project", projectMention.query) : null;
+    if (person?.matchType === "ambiguous") {
+      return {
+        response: {
+          kind: "clarification",
+          message: `لقيت أكثر من شخص باسم «${person.query}». تقصد مين؟`,
+        },
+        action: {
+          type: "clarification_needed",
+          source: "deterministic_intelligence",
+          reason: "ambiguous_person",
+          personCandidates: person.candidates.map(({ id, name }) => ({ id, name })),
+        },
+      };
+    }
     if (person && !person.selected) return null;
     if (project && !project.selected) return null;
     const args: Record<string, unknown> = {
