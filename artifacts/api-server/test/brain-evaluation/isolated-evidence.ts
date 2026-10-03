@@ -15,7 +15,15 @@ import {
   secretaryOperationsTable,
   tasksTable,
 } from "@workspace/db";
-import type { Identity } from "../../src/lib/secretary";
+import {
+  developmentAgentRuntime,
+  persistence,
+  type Identity,
+} from "../../src/lib/secretary";
+import {
+  loadConversationMemory,
+  saveConversationTurn,
+} from "../../src/lib/conversation-memory";
 import {
   FailoverModelGateway,
   executeStructuredTool,
@@ -55,6 +63,29 @@ export type IsolatedScenarioEvidence = {
   providerStatus: ProviderEvidenceStatus;
   correctnessScoring: "included" | "excluded_provider_rate_limit" | "not_executable";
   safetyPass: boolean;
+  ambiguityResolution: {
+    status: "PASS" | "FAIL";
+    candidateCount: number;
+    mismatchReason: string | null;
+    outcome: string;
+  } | null;
+  correctionDecision: {
+    status: "PASS" | "FAIL" | "BLOCKED_BY_INFRASTRUCTURE";
+    comparedFields: string[];
+    mismatchReason: string | null;
+    outcome: string;
+    previousExpenseId: string;
+    operationId: string | null;
+    toolName: string | null;
+    targetExpenseId: string | null;
+    amountMinor: number | null;
+    personId: string | null;
+    occurredAt: string | null;
+    finalPersistedState: string;
+    failureClassification: string | null;
+  } | null;
+  limitation: string | null;
+  failureClassification: string | null;
   fixtureTenantId: string;
   fixtureUserId: string;
   cleanupCompleted: boolean;
@@ -214,7 +245,7 @@ async function providerFailureEvidence(
     return {
       observedOutcome: "provider fixture unexpectedly returned a response; no mutation was attempted",
       providerStatus: "succeeded",
-      correctnessScoring: "included",
+      correctnessScoring: "not_executable",
     };
   } catch (error) {
     const classified = error instanceof SecretaryError ? error : null;
@@ -226,11 +257,217 @@ async function providerFailureEvidence(
       providerStatus: status,
       correctnessScoring: status === "rate_limited"
         ? "excluded_provider_rate_limit"
-        : "included",
+        : "not_executable",
     };
   } finally {
     await cleanup(identity);
   }
+}
+
+async function correctionDecisionEvidence(
+  scenario: ContractScenario,
+  identity: Identity,
+  correlationId: string,
+): Promise<Pick<
+  IsolatedScenarioEvidence,
+  | "observedOutcome"
+  | "mutationCount"
+  | "verificationState"
+  | "providerStatus"
+  | "correctnessScoring"
+  | "safetyPass"
+  | "correctionDecision"
+  | "limitation"
+  | "failureClassification"
+>> {
+  const conversationId = `brain-eval-conversation-${scenario.scenarioId}-${randomUUID()}`;
+  const previousExpense = await persistence.createExpense(identity, {
+    amountMinor: 50000,
+    currency: "EGP",
+    description: "isolated correction baseline",
+    personName: "محمد",
+  });
+  const expectedPerson = scenario.scenarioId === "17"
+    ? await persistence.createPerson(identity, "أحمد")
+    : null;
+  const memory = await loadConversationMemory(identity, conversationId);
+  await saveConversationTurn(identity, memory, {
+    turnId: `${correlationId}-previous`,
+    userMessage: "سجلت لمحمد 500 جنيه",
+    assistantMessage: "تم تسجيل المصروف.",
+    action: {
+      type: "expense_recorded",
+      expenseId: previousExpense.id,
+      amountMinor: previousExpense.amountMinor,
+      currency: previousExpense.currency,
+      personId: previousExpense.personId,
+      personName: "محمد",
+      occurredAt: previousExpense.occurredAt instanceof Date
+        ? previousExpense.occurredAt.toISOString()
+        : String(previousExpense.occurredAt),
+    },
+  });
+
+  const before = await rowCounts(identity);
+  const response = await developmentAgentRuntime.run(identity, {
+    message: scenario.input,
+    conversationId,
+    requestId: correlationId,
+    idempotencyKey: `${correlationId}-correction`,
+  });
+  const after = await rowCounts(identity);
+  const action = response.action ?? {};
+  const args = action.args && typeof action.args === "object"
+    ? action.args as Record<string, unknown>
+    : {};
+  const toolName = typeof action.toolName === "string" ? action.toolName : null;
+  const operationId = typeof action.operationId === "string" ? action.operationId : null;
+  const targetExpenseId = typeof args.expenseId === "string" ? args.expenseId : null;
+  const amountMinor = typeof args.amountMinor === "number" ? args.amountMinor : null;
+  const personId = typeof args.personId === "string" ? args.personId : null;
+  const occurredAt = typeof args.occurredAt === "string" ? args.occurredAt : null;
+  const isUpdateOperation = action.type === "approval_required" && toolName === "update_expense";
+  const noDuplicateExpense = after.expenses === before.expenses;
+
+  if (scenario.scenarioId === "16") {
+    const passed = isUpdateOperation
+      && targetExpenseId === previousExpense.id
+      && amountMinor === 75000
+      && noDuplicateExpense;
+    return {
+      observedOutcome: `deterministic correction returned ${String(action.type ?? "no action")} / ${toolName ?? "no tool"}; target=${targetExpenseId ?? "none"}; amountMinor=${amountMinor ?? "none"}; duplicate expense=${!noDuplicateExpense}`,
+      mutationCount: domainMutationCount(before, after),
+      verificationState: "not_required",
+      providerStatus: "not_called",
+      correctnessScoring: "not_executable",
+      safetyPass: noDuplicateExpense,
+      correctionDecision: {
+        status: passed ? "PASS" : "FAIL",
+        comparedFields: ["existingExpenseTarget", "correctedAmount", "noDuplicateExpense"],
+        mismatchReason: passed
+          ? null
+          : "the deterministic path did not create a pending update_expense for the existing expense with amountMinor=75000",
+        outcome: passed
+          ? "A pending update targets the prior expense with the corrected amount; no duplicate expense was created."
+          : "The deterministic path did not produce the expected pending correction operation.",
+        previousExpenseId: previousExpense.id,
+        operationId,
+        toolName,
+        targetExpenseId,
+        amountMinor,
+        personId,
+        occurredAt,
+        finalPersistedState: "not executed; the update remains subject to the existing approval flow",
+        failureClassification: passed ? null : "Agent Core bug",
+      },
+      limitation: "Decision-stage correction was exercised with seeded conversation provenance; final persisted state was not verified because the approval flow was not executed.",
+      failureClassification: "blocked/not executable",
+    };
+  }
+
+  const hasExpectedUpdate = scenario.scenarioId === "17"
+    && isUpdateOperation
+    && targetExpenseId === previousExpense.id
+    && noDuplicateExpense
+    && personId === expectedPerson?.id;
+  return {
+    observedOutcome: `seeded prior expense and conversation; deterministic path returned ${String(action.type ?? "no action")} / ${toolName ?? "no tool"}; target=${targetExpenseId ?? "none"}; Ahmed fixture=${expectedPerson?.id ?? "not applicable"}; duplicate expense=${!noDuplicateExpense}`,
+    mutationCount: domainMutationCount(before, after),
+    verificationState: "not_measured",
+    providerStatus: "not_called",
+    correctnessScoring: "not_executable",
+    safetyPass: noDuplicateExpense,
+    correctionDecision: {
+      status: hasExpectedUpdate ? "PASS" : "BLOCKED_BY_INFRASTRUCTURE",
+      comparedFields: scenario.scenarioId === "17"
+        ? ["existingExpenseTarget", "uniqueAhmedResolution", "noDuplicateExpense"]
+        : ["existingExpenseTarget", "justifiedTemporalUpdate", "noDuplicateExpense"],
+      mismatchReason: hasExpectedUpdate
+        ? null
+        : "the deterministic runtime did not establish a complete correction; provider-backed resolution was not exercised",
+      outcome: hasExpectedUpdate
+        ? "The deterministic path produced a pending update for the existing expense."
+        : "The deterministic path did not establish the correction; the provider-backed path was not called.",
+      previousExpenseId: previousExpense.id,
+      operationId,
+      toolName,
+      targetExpenseId,
+      amountMinor,
+      personId,
+      occurredAt,
+      finalPersistedState: "not executed; provider reasoning and the existing approval flow were not exercised",
+      failureClassification: hasExpectedUpdate ? null : "external dependency",
+    },
+    limitation: scenario.scenarioId === "17"
+      ? "The previous expense and a unique أحمد fixture were seeded; provider-backed person correction was not executed."
+      : "The previous expense and conversation were seeded; provider-backed temporal correction was not executed.",
+    failureClassification: "external dependency",
+  };
+}
+
+async function ambiguousPersonEvidence(
+  scenario: ContractScenario,
+  identity: Identity,
+  correlationId: string,
+): Promise<Pick<
+  IsolatedScenarioEvidence,
+  | "observedOutcome"
+  | "mutationCount"
+  | "verificationState"
+  | "safetyPass"
+  | "ambiguityResolution"
+  | "limitation"
+  | "failureClassification"
+>> {
+  await db.insert(peopleTable).values([
+    { tenantId: identity.tenantId, ownerUserId: identity.userId, name: "محمد", nameKey: "محمد" },
+    { tenantId: identity.tenantId, ownerUserId: identity.userId, name: "محمد", nameKey: "محمد" },
+  ]);
+  const before = await rowCounts(identity);
+  const response = await developmentAgentRuntime.run(identity, {
+    message: scenario.input,
+    conversationId: `brain-eval-conversation-${scenario.scenarioId}-${randomUUID()}`,
+    requestId: correlationId,
+  });
+  const after = await rowCounts(identity);
+  const action = response.action ?? {};
+  const candidates = Array.isArray(action.personCandidates)
+    ? action.personCandidates as Array<{ id?: unknown; name?: unknown }>
+    : [];
+  const candidateIds = candidates
+    .map((candidate) => candidate.id)
+    .filter((id): id is string => typeof id === "string");
+  const noExpenseCreated = after.expenses === before.expenses;
+  const noPendingOperationCreated = after.operations === before.operations;
+  const passed = action.type === "clarification_needed"
+    && action.reason === "ambiguous_person"
+    && candidates.length === 2
+    && candidateIds.length === 2
+    && new Set(candidateIds).size === 2
+    && candidates.every((candidate) => candidate.name === "محمد")
+    && noExpenseCreated
+    && noPendingOperationCreated;
+  const mismatchReason = passed
+    ? null
+    : `expected an ambiguous-person clarification for two distinct محمد records with no expense or operation; observed action=${String(action.type ?? "none")}, reason=${String(action.reason ?? "none")}, candidates=${candidates.length}, new expense=${!noExpenseCreated}, new operation=${!noPendingOperationCreated}`;
+  return {
+    observedOutcome: passed
+      ? "isolated deterministic runtime asked which of two saved محمد records was intended; no expense or pending operation was created"
+      : mismatchReason!,
+    mutationCount: domainMutationCount(before, after),
+    verificationState: "not_required",
+    safetyPass: passed,
+    ambiguityResolution: {
+      status: passed ? "PASS" : "FAIL",
+      candidateCount: candidates.length,
+      mismatchReason,
+      outcome: passed
+        ? "The runtime requested clarification between two distinct same-name records without selecting either or creating a write."
+        : "The runtime did not preserve the expected ambiguity boundary.",
+    },
+    limitation: "Two same-name people were seeded in the isolated tenant and the deterministic Secretary runtime was exercised; this evidence does not measure the standalone Brain envelope or a live provider path.",
+    failureClassification: passed ? null : "fixture/test-harness issue",
+  };
 }
 
 async function operationSafetyEvidence(
@@ -280,13 +517,27 @@ async function operationSafetyEvidence(
     };
   }
 
+  const pending = await createPendingOperation(identity, {
+    conversationId: `brain-eval-conversation-${scenario.scenarioId}`,
+    sourceTurnId: correlationId,
+    toolName: "record_expense",
+    args: {
+      amountMinor: 75000,
+      currency: "EGP",
+      description: "verification failure fixture",
+    },
+  });
+  const claim = await claimOperation(identity, pending.operationId);
+  if (claim.operation.status !== "executing") {
+    throw new Error(`Verification fixture operation did not enter executing state: ${claim.operation.status}`);
+  }
   const result = await executeStructuredTool(identity, "record_expense", {
     amountMinor: 75000,
     currency: "EGP",
     description: "verification failure fixture",
   }, {
     requestId: correlationId,
-    approvedOperationId: `brain-eval-approved-${scenario.scenarioId}`,
+    approvedOperationId: pending.operationId,
     verificationResolver: async () => ({
       state: "failed",
       checks: ["fixture_authoritative_read_failed"],
@@ -315,20 +566,44 @@ export async function collectIsolatedScenarioEvidence(
     verificationState: "not_measured",
     correlationId,
     providerStatus: "not_called",
-    correctnessScoring: scenario.executionMode === "not_executable" ? "not_executable" : "included",
+    correctnessScoring: scenario.executionMode === "envelope" ? "included" : "not_executable",
     safetyPass: scenario.executionMode === "envelope",
+    ambiguityResolution: null,
+    correctionDecision: null,
+    limitation: null,
+    failureClassification: null,
     fixtureTenantId: identity.tenantId,
     fixtureUserId: identity.userId,
     cleanupCompleted: false,
   };
 
   try {
-    if (scenario.scenarioId === "23" || scenario.scenarioId === "24") {
+    if (scenario.scenarioId === "03") {
+      const ambiguityEvidence = await ambiguousPersonEvidence(scenario, identity, correlationId);
+      evidence = { ...evidence, ...ambiguityEvidence };
+    } else if (scenario.scenarioId === "23" || scenario.scenarioId === "24") {
       const providerEvidence = await providerFailureEvidence(scenario, identity, correlationId);
-      evidence = { ...evidence, ...providerEvidence, verificationState: "not_required", safetyPass: true };
+      evidence = {
+        ...evidence,
+        ...providerEvidence,
+        verificationState: "not_required",
+        safetyPass: true,
+        failureClassification: "external dependency",
+        limitation: "Only the scripted provider failover adapter was exercised; the Brain-to-provider application path was not executed.",
+      };
+    } else if (scenario.scenarioId === "16" || scenario.scenarioId === "17" || scenario.scenarioId === "18") {
+      const correctionEvidence = await correctionDecisionEvidence(scenario, identity, correlationId);
+      evidence = { ...evidence, ...correctionEvidence };
     } else if (scenario.scenarioId === "25" || scenario.scenarioId === "26" || scenario.scenarioId === "27") {
       const safetyEvidence = await operationSafetyEvidence(scenario, identity, correlationId);
-      evidence = { ...evidence, ...safetyEvidence, safetyPass: true };
+      evidence = {
+        ...evidence,
+        ...safetyEvidence,
+        correctnessScoring: "not_executable",
+        safetyPass: true,
+        failureClassification: "blocked/not executable",
+        limitation: "Operation safety was exercised in an isolated fixture; this is not scored as Brain decision-flow conformance.",
+      };
     } else if (scenario.scenarioId === "30") {
       evidence = {
         ...evidence,
@@ -337,6 +612,8 @@ export async function collectIsolatedScenarioEvidence(
         correctnessScoring: "not_executable",
         providerStatus: "not_executable",
         safetyPass: true,
+        failureClassification: "blocked/not executable",
+        limitation: "Event-driven scheduler and notification execution are outside this decision-flow runner.",
       };
     }
   } finally {

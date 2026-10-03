@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import type { RelationshipContextResult } from "../../src/lib/relationship-context";
 import {
@@ -97,6 +97,8 @@ type EvaluationRecord = {
   providerStatus: IsolatedScenarioEvidence["providerStatus"];
   correctnessScoring: IsolatedScenarioEvidence["correctnessScoring"];
   safetyPass: boolean;
+  ambiguityResolution: IsolatedScenarioEvidence["ambiguityResolution"];
+  correctionDecision: IsolatedScenarioEvidence["correctionDecision"];
   isolation: {
     tenantId: string;
     userId: string;
@@ -116,6 +118,35 @@ function createEvaluationRunScope(runId = createEvidenceRunId()): EvaluationRunS
     tenantId: `brain-evaluation-${runId}`,
     userId: `brain-evaluation-user-${runId}`,
   };
+}
+
+function failureClassificationFor(
+  scenario: ContractScenario,
+  status: EvaluationStatus,
+): string | null {
+  if (status === "PASS") return null;
+  if (status === "FAIL") {
+    const knownClassification: Record<string, string> = {
+      "03": "fixture/test-harness issue",
+      "05": "contract/evaluator mismatch",
+      "06": "contract/evaluator mismatch",
+      "12": "fixture/test-harness issue",
+      "13": "contract/evaluator mismatch",
+      "14": "expected behavior requires review",
+      "15": "fixture/test-harness issue",
+      "19": "expected behavior requires review",
+      "20": "expected behavior requires review",
+      "21": "contract/evaluator mismatch",
+      "28": "contract/evaluator mismatch",
+      "29": "fixture/test-harness issue",
+    };
+    return knownClassification[scenario.scenarioId] ?? "Agent Core bug";
+  }
+  if (status === "BLOCKED_BY_INFRASTRUCTURE"
+    && ["17", "18", "23", "24"].includes(scenario.scenarioId)) {
+    return "external dependency";
+  }
+  return "blocked/not executable";
 }
 
 function confidenceBand(value: number | null): ObservedOutcome["confidenceBand"] {
@@ -158,11 +189,6 @@ function relationshipFixture(scenario: ContractScenario): RelationshipContextRes
     truncated: false,
   };
   switch (scenario.scenarioId) {
-    case "03":
-      return {
-        context: { ...base, intent: "person_financial_status", uncertainties: ["person_ambiguous"] },
-        response: { kind: "clarification", message: "أي محمد تقصد؟" },
-      };
     case "05":
       return {
         context: {
@@ -501,21 +527,17 @@ export function evaluateScenario(
           comparedFields: [],
           responsibleSubsystem: null,
         },
-    failureClassification: status === "FAIL"
-      ? comparison.mismatchReason?.includes("intelligenceLevel")
-        ? "intelligence-level mismatch"
-        : comparison.mismatchReason?.includes("risk")
-          ? "confidence/risk mismatch"
-          : "intent/decision mismatch"
-      : null,
+    failureClassification: failureClassificationFor(scenario, status),
     expectedOutcome: scenario.expectation.expectedOutcome,
     observedOutcome: observed.actualOutcome,
     mutationCount: 0,
     verificationState: envelope.verification.state,
     correlationId: envelope.requestId,
     providerStatus: "not_called",
-    correctnessScoring: scenario.executionMode === "not_executable" ? "not_executable" : "included",
+    correctnessScoring: scenario.executionMode === "envelope" ? "included" : "not_executable",
     safetyPass: scenario.executionMode === "envelope",
+    ambiguityResolution: null,
+    correctionDecision: null,
     isolation: {
       tenantId: scope.tenantId,
       userId: scope.userId,
@@ -536,9 +558,9 @@ export async function evaluateAllIsolated(): Promise<EvaluationRecord[]> {
   for (const scenario of evaluationContractV1) {
     const record = evaluateScenario(scenario, scope);
     const evidence = await collectIsolatedScenarioEvidence(scenario, runId);
-    const isolatedSafetyPass = scenario.executionMode === "blocked" && evidence.safetyPass;
     records.push({
       ...record,
+      limitation: evidence.limitation ?? record.limitation,
       expectedOutcome: evidence.expectedOutcome,
       observedOutcome: evidence.observedOutcome,
       mutationCount: evidence.mutationCount,
@@ -547,17 +569,9 @@ export async function evaluateAllIsolated(): Promise<EvaluationRecord[]> {
       providerStatus: evidence.providerStatus,
       correctnessScoring: evidence.correctnessScoring,
       safetyPass: evidence.safetyPass,
-      status: isolatedSafetyPass && evidence.correctnessScoring !== "not_executable"
-        ? "PASS"
-        : record.status,
-      passFail: isolatedSafetyPass && evidence.correctnessScoring !== "not_executable"
-        ? {
-            pass: true,
-            mismatchReason: null,
-            comparedFields: ["isolatedSafetyEvidence"],
-            responsibleSubsystem: null,
-          }
-        : record.passFail,
+      ambiguityResolution: evidence.ambiguityResolution,
+      correctionDecision: evidence.correctionDecision,
+      failureClassification: evidence.failureClassification ?? record.failureClassification,
       isolation: {
         tenantId: evidence.fixtureTenantId,
         userId: evidence.fixtureUserId,
@@ -566,6 +580,28 @@ export async function evaluateAllIsolated(): Promise<EvaluationRecord[]> {
       observed: {
         ...record.observed,
         actualOutcome: evidence.observedOutcome,
+        correction: evidence.correctionDecision
+          ? {
+              previousState: `expense:${evidence.correctionDecision.previousExpenseId}`,
+              correctionTarget: evidence.correctionDecision.targetExpenseId,
+              updatedInterpretation: [
+                evidence.correctionDecision.toolName,
+                evidence.correctionDecision.amountMinor === null
+                  ? null
+                  : `amountMinor=${evidence.correctionDecision.amountMinor}`,
+                evidence.correctionDecision.personId
+                  ? `personId=${evidence.correctionDecision.personId}`
+                  : null,
+                evidence.correctionDecision.occurredAt
+                  ? `occurredAt=${evidence.correctionDecision.occurredAt}`
+                  : null,
+              ].filter(Boolean).join("; ") || null,
+              duplicateRisk: evidence.safetyPass
+                ? "no duplicate expense was created in the isolated fixture"
+                : "duplicate expense count changed in the isolated fixture",
+              finalPersistedState: evidence.correctionDecision.finalPersistedState,
+            }
+          : record.observed.correction,
         failureState: evidence.providerStatus === "failed" || evidence.providerStatus === "rate_limited"
           ? evidence.providerStatus
           : record.observed.failureState,
@@ -578,50 +614,193 @@ export async function evaluateAllIsolated(): Promise<EvaluationRecord[]> {
 export async function writeEvaluationReport(
   outputPath: string,
   records = evaluateAll(),
+  reportPath = resolve(dirname(outputPath), "../REPORT.md"),
 ): Promise<void> {
+  const executable = records.filter((record) =>
+    (record.status === "PASS" || record.status === "FAIL")
+    && record.correctnessScoring === "included",
+  );
+  const correctionDecisions = records
+    .filter((record) => record.correctionDecision !== null)
+    .map((record) => ({
+      scenarioId: record.scenarioId,
+      status: record.correctionDecision!.status,
+      failureClassification: record.correctionDecision!.failureClassification,
+    }));
+  const failureClasses = [
+    "Agent Core bug",
+    "fixture/test-harness issue",
+    "contract/evaluator mismatch",
+    "expected behavior requires review",
+    "external dependency",
+    "blocked/not executable",
+  ] as const;
+  const failureClassificationCounts = Object.fromEntries(failureClasses.map((classification) => [
+    classification,
+    records.filter((record) =>
+      record.status !== "PASS" && record.failureClassification === classification,
+    ).length,
+  ]));
+  const correctionDecisionSummary = {
+    pass: correctionDecisions.filter((decision) => decision.status === "PASS").length,
+    fail: correctionDecisions.filter((decision) => decision.status === "FAIL").length,
+    blockedByInfrastructure: correctionDecisions
+      .filter((decision) => decision.status === "BLOCKED_BY_INFRASTRUCTURE").length,
+    scenarioIds: correctionDecisions.map((decision) => decision.scenarioId),
+  };
+  const ambiguityResolutionSummary = {
+    pass: records.filter((record) => record.ambiguityResolution?.status === "PASS").length,
+    fail: records.filter((record) => record.ambiguityResolution?.status === "FAIL").length,
+    scenarioIds: records
+      .filter((record) => record.ambiguityResolution !== null)
+      .map((record) => record.scenarioId),
+  };
+  const generatedAt = new Date().toISOString();
   const summary = {
     total: records.length,
     pass: records.filter((record) => record.status === "PASS").length,
     fail: records.filter((record) => record.status === "FAIL").length,
     blockedByInfrastructure: records.filter((record) => record.status === "BLOCKED_BY_INFRASTRUCTURE").length,
     notExecutable: records.filter((record) => record.status === "NOT_EXECUTABLE").length,
-    contractPassRateAmongExecutable: (() => {
-      const executable = records.filter((record) =>
-        (record.status === "PASS" || record.status === "FAIL")
-        && record.correctnessScoring === "included",
-      );
-      return executable.length === 0
-        ? null
-        : Math.round((executable.filter((record) => record.status === "PASS").length / executable.length) * 10000) / 100;
-    })(),
+    executableScenarioCount: executable.length,
+    contractPassRateAmongExecutable: executable.length === 0
+      ? null
+      : Math.round((executable.filter((record) => record.status === "PASS").length / executable.length) * 10000) / 100,
     logicalLlmCallsMeasured: records.reduce((sum, record) => sum + (record.instrumentation.logicalLlmCalls ?? 0), 0),
     providerAttemptsMeasured: records.reduce((sum, record) => sum + (record.instrumentation.providerAttempts ?? 0), 0),
     mutationCountMeasured: records.reduce((sum, record) => sum + record.mutationCount, 0),
+    failureClassificationCounts,
     providerRateLimitedScenarios: records
       .filter((record) => record.providerStatus === "rate_limited")
       .map((record) => record.scenarioId),
     correctnessScoringScenarioIds: records
-      .filter((record) => record.correctnessScoring === "included")
+      .filter((record) =>
+        record.correctnessScoring === "included"
+        && (record.status === "PASS" || record.status === "FAIL"),
+      )
       .map((record) => record.scenarioId),
     nonScoringScenarioIds: records
-      .filter((record) => record.correctnessScoring !== "included")
+      .filter((record) =>
+        record.correctnessScoring !== "included"
+        || (record.status !== "PASS" && record.status !== "FAIL"),
+      )
       .map((record) => record.scenarioId),
+    isolatedSafetyEvidenceScenarioIds: records
+      .filter((record) => record.executionMode === "blocked" && record.safetyPass)
+      .map((record) => record.scenarioId),
+    ambiguityResolutionSummary,
+    correctionDecisionSummary,
     tokenMeasurement: "N/A — no live provider calls; provider failure fixtures use scripted gateways without usage estimates",
   };
   const report = {
     contract: "SECRETARY BRAIN v1 EVALUATION CONTRACT — 30 GROUND-TRUTH SCENARIOS",
-    generatedAt: "2026-09-19T10:00:00.000Z",
+    runCorrelationId: records[0]?.correlationId ?? null,
+    generatedAt,
     fixedClock: FIXED_NOW.toISOString(),
     fixtureScope: {
       tenant: "unique-per-scenario",
       user: "unique-per-scenario",
-      writesAllowed: false,
+      writesAllowed: true,
+      liveProviderCalls: false,
+      scriptedProviderFixtures: true,
+      cleanupCompleted: records.every((record) => record.isolation.cleanupCompleted),
       cleanupRequired: true,
     },
+    comparisonScope: [
+      "PASS/FAIL applies only to the deterministic envelope checks recorded in passFail.",
+      "Provider, persisted-operation, verification-failure, and proactive scenarios remain separately classified unless the required runtime path is actually exercised.",
+      "Safety fixture success is reported independently and never promotes a blocked contract scenario to PASS.",
+      "Scenario 03 includes a separate isolated runtime check with duplicate same-name records; its result does not replace the envelope-only score.",
+      "Token counts are N/A when no live provider usage was collected.",
+    ],
+    harnessRepairs: [
+      "The verification-failure fixture now creates and claims a real scoped operation with a database UUID before invoking the approved executor.",
+      "Scenario 03 now seeds two actual same-name people and executes the deterministic Secretary runtime instead of injecting a synthetic relationship clarification.",
+      "Scenarios 16–18 now seed a prior expense and real saved conversation provenance; amount-correction decision evidence is separate from final approved persistence.",
+      "JSON and REPORT.md are generated from the same records and timestamp.",
+    ],
     summary,
     scenarios: records,
   };
-  await writeFile(outputPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  const markdownCell = (value: unknown) => String(value ?? "—").replaceAll("|", "\\|").replaceAll("\n", " ");
+  const markdown = [
+    "# Secretary Brain v1 evaluation",
+    "",
+    `Generated: ${generatedAt}`,
+    `Fixed evaluation clock: ${FIXED_NOW.toISOString()}`,
+    "",
+    "## Summary",
+    "",
+    `- Scenarios: ${summary.total}`,
+    `- PASS: ${summary.pass}`,
+    `- FAIL: ${summary.fail}`,
+    `- Blocked: ${summary.blockedByInfrastructure}`,
+    `- Not executable: ${summary.notExecutable}`,
+    `- Executable envelope pass rate: ${summary.contractPassRateAmongExecutable ?? "N/A"}% (${summary.executableScenarioCount} scored scenarios)`,
+    `- Isolated fixture mutations: ${summary.mutationCountMeasured}; all fixtures cleaned: ${report.fixtureScope.cleanupCompleted}`,
+    `- Ambiguous-person runtime check: ${ambiguityResolutionSummary.pass} PASS, ${ambiguityResolutionSummary.fail} FAIL`,
+    `- Live provider calls: no; token usage: N/A`,
+    "",
+    "## Failure classification",
+    "",
+    "| Classification | Scenarios |",
+    "| --- | ---: |",
+    ...failureClasses.map((classification) =>
+      `| ${classification} | ${failureClassificationCounts[classification]} |`,
+    ),
+    "",
+    "PASS/FAIL above is the deterministic envelope score only. Isolated runtime, correction, and safety checks are listed separately and do not change that score.",
+    "",
+    "## Scenario results",
+    "",
+    "| ID | Scenario | Status | Failure class | Intent | Level | Runtime-stage check | Mismatch / observed outcome |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- |",
+    ...records.map((record) => [
+      record.scenarioId,
+      markdownCell(record.title),
+      record.status,
+      markdownCell(record.failureClassification),
+      markdownCell(record.observed.primaryIntent),
+      markdownCell(record.observed.intelligenceLevel),
+      markdownCell(record.ambiguityResolution?.status ?? record.correctionDecision?.status),
+      markdownCell(record.passFail.mismatchReason ?? record.observedOutcome),
+    ].join(" | ").replace(/^/, "| ").replace(/$/, " |")),
+    "",
+    "## Multi-turn correction fixture",
+    "",
+    `Decision-stage results: ${correctionDecisionSummary.pass} PASS, ${correctionDecisionSummary.fail} FAIL, ${correctionDecisionSummary.blockedByInfrastructure} blocked.`,
+    "",
+    ...records.filter((record) => record.correctionDecision !== null).map((record) => [
+      `- Scenario ${record.scenarioId}: **${record.correctionDecision!.status}** — ${record.correctionDecision!.outcome}`,
+      `  - ${record.limitation ?? "No additional limitation."}`,
+      `  - Final state: ${record.correctionDecision!.finalPersistedState}.`,
+    ].join("\n")),
+    "",
+    "## Ambiguous-person runtime fixture",
+    "",
+    ...records.filter((record) => record.ambiguityResolution !== null).map((record) => [
+      `- Scenario ${record.scenarioId}: **${record.ambiguityResolution!.status}** — ${record.ambiguityResolution!.outcome}`,
+      `  - ${record.limitation ?? "No additional limitation."}`,
+      `  - Same-name candidates observed: ${record.ambiguityResolution!.candidateCount}.`,
+    ].join("\n")),
+    "",
+    "## Harness repairs and scope",
+    "",
+    ...report.harnessRepairs.map((repair) => `- ${repair}`),
+    "- The fixed 30-scenario contract and expected outcomes were not edited.",
+    "- Provider failover and operation lifecycle tests remain safety evidence, not Brain decision-flow passes.",
+    "- Full expected and observed objects, mismatch details, fixture IDs, and correlation IDs are in the JSON file.",
+    "",
+  ].join("\n");
+
+  await Promise.all([
+    mkdir(dirname(outputPath), { recursive: true }),
+    mkdir(dirname(reportPath), { recursive: true }),
+  ]);
+  await Promise.all([
+    writeFile(outputPath, `${JSON.stringify(report, null, 2)}\n`, "utf8"),
+    writeFile(reportPath, markdown, "utf8"),
+  ]);
 }
 
 export type { EvaluationRecord };

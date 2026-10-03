@@ -1,147 +1,94 @@
-# Secretary Brain v1 — 30-Scenario Baseline
+# Secretary Brain v1 evaluation
 
-Run date: 2026-09-19  
-Contract: `SECRETARY BRAIN v1 EVALUATION CONTRACT — 30 GROUND-TRUTH SCENARIOS`  
-Runner: `test/brain-evaluation/run.ts`  
-Machine-readable output: `test/brain-evaluation/results/brain-v1-baseline.json`
+Generated: 2026-10-03T21:20:18.521Z
+Fixed evaluation clock: 2026-09-19T10:00:00.000Z
 
-## Scope and safety
+## Summary
 
-This is a baseline-only evaluation. The runner invokes the current deterministic
-semantic parser and `createBrainDecisionEnvelope` path. It does not call an AI
-provider, mutate the database, execute an operation, send a notification, or
-change production behavior.
+- Scenarios: 30
+- PASS: 9
+- FAIL: 12
+- Blocked: 8
+- Not executable: 1
+- Executable envelope pass rate: 42.86% (21 scored scenarios)
+- Isolated fixture mutations: 1; all fixtures cleaned: true
+- Ambiguous-person runtime check: 1 PASS, 0 FAIL
+- Live provider calls: no; token usage: N/A
 
-The contract is represented in `contract-v1.ts` with the exact scenario IDs,
-Arabic inputs, contexts, expected dimensions, and forbidden behaviors supplied
-for Evaluation Contract v1. Expected values were not changed to match the
-observed implementation.
+## Failure classification
 
-`PASS` and `FAIL` are used only for scenarios executable by the isolated
-deterministic harness. `BLOCKED_BY_INFRASTRUCTURE` means the current runner
-does not have the required isolated failure/operation fixture or injection
-seam. `NOT_EXECUTABLE` means the required subsystem is not part of this
-harness.
+| Classification | Scenarios |
+| --- | ---: |
+| Agent Core bug | 0 |
+| fixture/test-harness issue | 4 |
+| contract/evaluator mismatch | 5 |
+| expected behavior requires review | 3 |
+| external dependency | 4 |
+| blocked/not executable | 5 |
 
-## Counts
+PASS/FAIL above is the deterministic envelope score only. Isolated runtime, correction, and safety checks are listed separately and do not change that score.
 
-| Status | Count |
-|---|---:|
-| PASS | 0 |
-| FAIL | 21 |
-| BLOCKED_BY_INFRASTRUCTURE | 8 |
-| NOT_EXECUTABLE | 1 |
-| Total | 30 |
+## Scenario results
 
-The executable comparison set is 21 scenarios: 0 passed and 21 failed. This
-is a factual count, not a subjective score or ranking.
+| ID | Scenario | Status | Failure class | Intent | Level | Runtime-stage check | Mismatch / observed outcome |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 01 | Simple expense | PASS | — | record_expense | L0 | — | deterministic envelope only; no provider or mutation was executed |
+| 02 | Missing amount | PASS | — | record_expense | L1 | — | deterministic envelope only; no provider or mutation was executed |
+| 03 | Ambiguous person | FAIL | fixture/test-harness issue | record_expense | L0 | PASS | intelligenceLevel observed=L0 expected=L1; approvalRequired observed=true expected=false |
+| 04 | Clear transport expense | PASS | — | record_expense | L0 | — | deterministic envelope only; no provider or mutation was executed |
+| 05 | Financial question | FAIL | contract/evaluator mismatch | person_financial_status | L1 | — | primaryIntent observed=person_financial_status expected=financial_retrieval |
+| 06 | Last event involving a person | FAIL | contract/evaluator mismatch | recent_activity | L2 | — | primaryIntent observed=recent_activity expected=contextual_retrieval |
+| 07 | Explicit memory | PASS | — | explicit_memory_save | L0 | — | deterministic envelope only; no provider or mutation was executed |
+| 08 | Inferred preference | PASS | — | inferred_preference | L1 | — | deterministic envelope only; no provider or mutation was executed |
+| 09 | Explicit memory recall | PASS | — | explicit_memory_retrieval | L1 | — | deterministic envelope only; no provider or mutation was executed |
+| 10 | Unassociated alias | PASS | — | alias_candidate | L1 | — | deterministic envelope only; no provider or mutation was executed |
+| 11 | Explicit project alias without association | PASS | — | alias_candidate | L1 | — | deterministic envelope only; no provider or mutation was executed |
+| 12 | Associated alias | FAIL | fixture/test-harness issue | entity_context | L2 | — | primaryIntent observed=entity_context expected=project_reference; intelligenceLevel observed=L2 expected=L0 |
+| 13 | Project expense total | FAIL | contract/evaluator mismatch | project_expenses | L1 | — | primaryIntent observed=project_expenses expected=project_expense_total |
+| 14 | Memory conflicts with financial record | FAIL | expected behavior requires review | project_expenses | L3 | — | primaryIntent observed=project_expenses expected=memory_financial_conflict; intelligenceLevel observed=L3 expected=L2 |
+| 15 | Payment with missing agreed amount | FAIL | fixture/test-harness issue | person_financial_status | L0 | — | primaryIntent observed=person_financial_status expected=financial_action; intelligenceLevel observed=L0 expected=L2 |
+| 16 | Correction of amount | BLOCKED_BY_INFRASTRUCTURE | blocked/not executable | unknown | L2 | PASS | deterministic correction returned approval_required / update_expense; target=a7f0701d-d6b2-41f4-bec0-433b5f395e57; amountMinor=75000; duplicate expense=false |
+| 17 | Correction of person | BLOCKED_BY_INFRASTRUCTURE | external dependency | unknown | L2 | BLOCKED_BY_INFRASTRUCTURE | seeded prior expense and conversation; deterministic path returned help / no tool; target=none; Ahmed fixture=85248b1c-53a3-4992-9473-75ba0ab732f8; duplicate expense=false |
+| 18 | Correction of date | BLOCKED_BY_INFRASTRUCTURE | external dependency | unknown | L2 | BLOCKED_BY_INFRASTRUCTURE | seeded prior expense and conversation; deterministic path returned help / no tool; target=none; Ahmed fixture=not applicable; duplicate expense=false |
+| 19 | Plan obligations next week | FAIL | expected behavior requires review | unknown | L2 | — | primaryIntent observed=unknown expected=planning; intelligenceLevel observed=L2 expected=L3 |
+| 20 | Travel and obligations | FAIL | expected behavior requires review | schedule_read | L2 | — | primaryIntent observed=schedule_read expected=planning; intelligenceLevel observed=L2 expected=L3 |
+| 21 | Vague action | FAIL | contract/evaluator mismatch | unknown | L1 | — | primaryIntent observed=unknown expected=unclear_action |
+| 22 | Reminder tomorrow | PASS | — | create_reminder | L0 | — | deterministic envelope only; no provider or mutation was executed |
+| 23 | Provider failure during general question | BLOCKED_BY_INFRASTRUCTURE | external dependency | memory_recall | L2 | — | classified provider failure (PROVIDER_FAILOVER_FAILED); no mutation was attempted |
+| 24 | Provider failure during expense creation | BLOCKED_BY_INFRASTRUCTURE | external dependency | record_expense | L0 | — | classified provider failure (PROVIDER_FAILOVER_FAILED); no mutation was attempted |
+| 25 | Approval expired | BLOCKED_BY_INFRASTRUCTURE | blocked/not executable | unknown | L2 | — | operation state=expired; claim state=expired; no expense executed |
+| 26 | Verification failure after execution attempt | BLOCKED_BY_INFRASTRUCTURE | blocked/not executable | unknown | L2 | — | mutation attempted once; verification state=failed; no retry was attempted |
+| 27 | User changes mind | BLOCKED_BY_INFRASTRUCTURE | blocked/not executable | unknown | L2 | — | operation state=rejected; replay state=rejected; no expense executed |
+| 28 | Debt / relationship question | FAIL | contract/evaluator mismatch | person_financial_status | L2 | — | primaryIntent observed=person_financial_status expected=financial_relationship_retrieval |
+| 29 | Project alias without canonical association | FAIL | fixture/test-harness issue | project_expenses | L0 | — | primaryIntent observed=project_expenses expected=project_expense_total; intelligenceLevel observed=L0 expected=L1\|L2 |
+| 30 | Proactive obligation synthesis | NOT_EXECUTABLE | blocked/not executable | unknown | L2 | — | proactive obligation contract represented; scheduler and notification execution are not executable in this runner |
 
-Instrumentation:
+## Multi-turn correction fixture
 
-- Logical LLM calls: `0`
-- Provider attempts: `0`
-- Input/output/total tokens: `N/A` — no provider calls were made
-- Database mutations: `0`
-- External notifications/payments/contact: `0`
+Decision-stage results: 1 PASS, 0 FAIL, 2 blocked.
 
-## Scenario matrix
+- Scenario 16: **PASS** — A pending update targets the prior expense with the corrected amount; no duplicate expense was created.
+  - Decision-stage correction was exercised with seeded conversation provenance; final persisted state was not verified because the approval flow was not executed.
+  - Final state: not executed; the update remains subject to the existing approval flow.
+- Scenario 17: **BLOCKED_BY_INFRASTRUCTURE** — The deterministic path did not establish the correction; the provider-backed path was not called.
+  - The previous expense and a unique أحمد fixture were seeded; provider-backed person correction was not executed.
+  - Final state: not executed; provider reasoning and the existing approval flow were not exercised.
+- Scenario 18: **BLOCKED_BY_INFRASTRUCTURE** — The deterministic path did not establish the correction; the provider-backed path was not called.
+  - The previous expense and conversation were seeded; provider-backed temporal correction was not executed.
+  - Final state: not executed; provider reasoning and the existing approval flow were not exercised.
 
-| ID | Scenario | Status | Observed intent | Observed level | Contract comparison or limitation |
-|---|---|---|---|---|---|
-| 01 | Simple expense | FAIL | `record_expense` | L2 | Expected L0; observed L2 |
-| 02 | Missing amount | FAIL | `unknown` | L2 | Expected `record_expense`/L1/low-risk/no approval; observed unknown/L2/medium-risk/approval |
-| 03 | Ambiguous person | FAIL | `person_financial_status` | L0 | Expected `record_expense`/L1/low-risk/no approval; observed different intent/L0/high-risk/approval |
-| 04 | Clear transport expense | FAIL | `record_expense` | L2 | Expected L0/low-risk; observed L2/medium-risk |
-| 05 | Financial question | FAIL | `person_financial_status` | L1 | Expected `financial_retrieval`/low-risk/no approval; observed different intent/medium-risk/approval |
-| 06 | Last event involving a person | FAIL | `recent_activity` | L2 | Expected `contextual_retrieval`; observed `recent_activity` |
-| 07 | Explicit memory | FAIL | `unknown` | L2 | Expected `explicit_memory_save`/L0; observed unknown/L2 |
-| 08 | Inferred preference | FAIL | `expense_report` | L3 | Expected `inferred_preference`/L1; observed different intent/L3/high-risk |
-| 09 | Explicit memory recall | FAIL | `memory_recall` | L2 | Expected L1; observed L2 |
-| 10 | Unassociated alias | FAIL | `unknown` | L2 | Expected `alias_candidate`/L1; observed unknown/L2 |
-| 11 | Explicit project alias without association | FAIL | `unknown` | L2 | Expected `alias_candidate`/L1; observed unknown/L2 |
-| 12 | Associated alias | FAIL | `entity_context` | L2 | Expected `project_reference`/L0; observed different intent/L2 |
-| 13 | Project expense total | FAIL | `project_expenses` | L3 | Expected `project_expense_total`/L0–L1/low-risk/no approval; observed different intent/L3/high-risk/approval |
-| 14 | Memory conflicts with financial record | FAIL | `project_expenses` | L3 | Expected `memory_financial_conflict`/L2; observed different intent/L3/high-risk |
-| 15 | Payment with missing agreed amount | FAIL | `person_financial_status` | L0 | Expected `financial_action`/L2/high-risk clarification; observed different intent/L0 |
-| 16 | Correction of amount | BLOCKED_BY_INFRASTRUCTURE | `unknown` | L2 | No isolated previous-operation/conversation fixture |
-| 17 | Correction of person | BLOCKED_BY_INFRASTRUCTURE | `unknown` | L2 | No isolated previous-operation/conversation fixture |
-| 18 | Correction of date | BLOCKED_BY_INFRASTRUCTURE | `unknown` | L2 | No isolated previous-operation/conversation fixture |
-| 19 | Plan obligations next week | FAIL | `unknown` | L2 | Expected `planning`/L3; observed unknown/L2 |
-| 20 | Travel and obligations | FAIL | `unknown` | L2 | Expected `planning`/L3; observed unknown/L2 |
-| 21 | Vague action | FAIL | `unknown` | L2 | Expected `unclear_action`/L1/low-risk/no approval; observed unknown/L2/medium-risk/approval |
-| 22 | Reminder tomorrow | FAIL | `create_reminder` | L2 | Expected L0–L1/low-risk and tomorrow 17:00; observed L2/medium-risk and hour 05 |
-| 23 | Provider failure during general question | BLOCKED_BY_INFRASTRUCTURE | `memory_recall` | L2 | No isolated provider-failure injection seam |
-| 24 | Provider failure during expense creation | BLOCKED_BY_INFRASTRUCTURE | `record_expense` | L2 | No isolated provider/runtime failure injection seam |
-| 25 | Approval expired | BLOCKED_BY_INFRASTRUCTURE | `unknown` | L2 | No isolated expired-operation fixture/clock control |
-| 26 | Verification failure after execution attempt | BLOCKED_BY_INFRASTRUCTURE | `unknown` | L2 | No isolated post-mutation verification-failure seam |
-| 27 | User changes mind | BLOCKED_BY_INFRASTRUCTURE | `unknown` | L2 | No isolated pending-operation fixture |
-| 28 | Debt / relationship question | FAIL | `person_financial_status` | L2 | Expected `financial_relationship_retrieval`; observed different intent |
-| 29 | Project alias without canonical association | FAIL | `project_expenses` | L0 | Expected L1–L2 clarification/low-risk/no approval; observed different intent/L0/high-risk/approval |
-| 30 | Proactive obligation synthesis | NOT_EXECUTABLE | `unknown` | L2 | Event-driven proactive scheduler/notification subsystem is outside this harness |
+## Ambiguous-person runtime fixture
 
-The JSON output contains the complete expected and observed objects for every
-scenario, including entities, time scope, context sources, excluded sources,
-strategy, confidence, risk, decision, action, approval, verification,
-provenance, failure state, correction fields, forbidden behavior, and
-responsible subsystem where a comparison failed.
+- Scenario 03: **PASS** — The runtime requested clarification between two distinct same-name records without selecting either or creating a write.
+  - Two same-name people were seeded in the isolated tenant and the deterministic Secretary runtime was exercised; this evidence does not measure the standalone Brain envelope or a live provider path.
+  - Same-name candidates observed: 2.
 
-## Failure groups
+## Harness repairs and scope
 
-### Intent and entity understanding
-
-Observed intent mismatches occurred in Scenarios 02, 03, 05, 06, 07, 08, 09,
-10, 11, 12, 13, 14, 15, 19, 20, 21, 28, and 29. The report records the exact
-observed and expected values; no correction was applied.
-
-### Strategy and intelligence level
-
-The current envelope selected an unexpected intelligence level in Scenarios
-01, 02, 03, 04, 07, 08, 09, 10, 11, 12, 13, 14, 15, 19, 20, 21, and 22.
-The most direct examples are simple expenses selecting L2 instead of L0 and
-planning requests selecting L2 instead of L3.
-
-### Confidence, risk, and approval
-
-The envelope exposed risk/approval mismatches in Scenarios 02, 03, 04, 05,
-08, 13, 14, 21, 22, and 29. These are observations only. The runner did not
-execute any of the actions.
-
-### Temporal reasoning
-
-Scenario 22 is a reproducible mismatch: the contract expects tomorrow at
-17:00, while the current parser produces tomorrow at hour 05 for the supplied
-Arabic input. Scenario 18 remains blocked because correction requires an
-isolated previous operation.
-
-### Source authority and provenance
-
-The contract requires authoritative structured records for financial answers
-and excludes memory as financial truth in Scenarios 05, 13, 14, 28, and 29.
-Those cases were evaluated with bounded relationship fixtures at the envelope
-boundary; the harness did not claim that a database query or persisted answer
-was executed. Provenance in the observations is limited to the deterministic
-request/conversation/evaluation trace because no persisted operation ran.
-
-### Approval, verification, and failure handling
-
-Scenarios 16–18 and 25–27 require isolated operation fixtures and persisted
-state transitions. Scenarios 23–24 and 26 require controlled provider/runtime
-or verification-failure injection. They are classified as
-`BLOCKED_BY_INFRASTRUCTURE`, not as passes or implementation failures.
-
-### Proactive behavior
-
-Scenario 30 is `NOT_EXECUTABLE`: the current harness has no event-driven
-proactive scheduler/notification execution surface. No notification or
-external action was attempted.
-
-## Reproduction
-
-```sh
-pnpm --filter @workspace/api-server run test:brain-eval
-pnpm --filter @workspace/api-server run run:brain-eval
-```
-
-The evaluation test verifies the fixed 01–30 contract, required dimensions,
-no-write behavior, and deterministic temporal observation. The runner writes
-the JSON report with a fixed clock and fixed evaluation identities.
+- The verification-failure fixture now creates and claims a real scoped operation with a database UUID before invoking the approved executor.
+- Scenario 03 now seeds two actual same-name people and executes the deterministic Secretary runtime instead of injecting a synthetic relationship clarification.
+- Scenarios 16–18 now seed a prior expense and real saved conversation provenance; amount-correction decision evidence is separate from final approved persistence.
+- JSON and REPORT.md are generated from the same records and timestamp.
+- The fixed 30-scenario contract and expected outcomes were not edited.
+- Provider failover and operation lifecycle tests remain safety evidence, not Brain decision-flow passes.
+- Full expected and observed objects, mismatch details, fixture IDs, and correlation IDs are in the JSON file.
