@@ -8,6 +8,10 @@ import {
   makeExternalActionResult,
   sanitizeExternalActionEvidence,
 } from "../src/lib/agent-work/external-action";
+import {
+  createExternalActionRegistry,
+} from "../src/lib/agent-work/external-action-registry";
+import type { ExternalActionConnector } from "../src/lib/agent-work/external-action";
 
 const baseIdentity = {
   tenantId: "tenant-a",
@@ -18,6 +22,28 @@ const baseIdentity = {
   actionId: "action-a",
   actionVersion: "provider-v1",
 };
+
+function testConnector(
+  provider: string,
+  approvalToolName: string,
+): ExternalActionConnector {
+  return {
+    provider,
+    actionType: `${provider}_test_action`,
+    approvalToolName,
+    toolGuidance: "",
+    validateSetupAction: () => null,
+    setupApprovalDisplay: () => ({ title: "", details: [] }),
+    prepareApproval() {
+      throw new Error("TEST_CONNECTOR_METHOD_NOT_USED");
+    },
+    approvalDisplay: () => ({ title: "", details: [] }),
+    async executeApproved() {
+      throw new Error("TEST_CONNECTOR_METHOD_NOT_USED");
+    },
+    recoverOperation: () => ({ state: "safe_to_retry" }),
+  };
+}
 
 test("external action identity keeps approval, action, and step IDs distinct", () => {
   const first = createExternalActionIdentity({
@@ -102,4 +128,50 @@ test("external-action evidence removes sensitive payloads and credentials", () =
   assert.ok(!serialized.includes("private-token"));
   assert.ok(!serialized.includes("private-key"));
   assert.ok(!serialized.includes("private"));
+});
+
+test("external-action registry fails closed on unknown, conflicting, or mismatched provider identity", () => {
+  const email = testConnector("email", "email.approve");
+  const sheets = testConnector("google_sheets", "sheets.approve");
+  const registry = createExternalActionRegistry([email, sheets]);
+
+  assert.equal(registry.connectorForOperation({
+    toolName: "sheets.approve",
+    args: { provider: "unknown_provider" },
+  }), null);
+  assert.equal(registry.connectorForOperation({
+    toolName: "sheets.approve",
+    args: { provider: "email" },
+  }), null);
+  assert.equal(registry.connectorForOperation({
+    toolName: "email.approve",
+    args: { provider: "google_sheets", agentWorkSource: "email" },
+  }), null);
+  assert.equal(registry.connectorForOperation({
+    toolName: "sheets.approve",
+    args: { provider: null },
+  }), null);
+});
+
+test("external-action registry preserves tool-only lookup for legacy operations without provider metadata", () => {
+  const sheets = testConnector("google_sheets", "sheets.approve");
+  const registry = createExternalActionRegistry([sheets]);
+
+  assert.equal(registry.connectorForOperation({
+    toolName: "sheets.approve",
+    args: {},
+  }), sheets);
+});
+
+test("external-action registry rejects duplicate provider and approval-tool identities", () => {
+  const first = testConnector("email", "email.approve");
+
+  assert.throws(
+    () => createExternalActionRegistry([first, testConnector("email", "email.other")]),
+    /EXTERNAL_ACTION_CONNECTOR_PROVIDER_DUPLICATE/u,
+  );
+  assert.throws(
+    () => createExternalActionRegistry([first, testConnector("sheets", "email.approve")]),
+    /EXTERNAL_ACTION_CONNECTOR_APPROVAL_TOOL_DUPLICATE/u,
+  );
 });

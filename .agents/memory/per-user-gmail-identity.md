@@ -1,10 +1,10 @@
 ---
-name: Per-user Gmail identity
-description: Separate mailbox ownership and the current Gmail OAuth implementation direction.
+name: Deferred Gmail integration
+description: Per-user mailbox ownership requirements and the explicit deferral of live Gmail integration.
 ---
 
-Use one independently authenticated mailbox per app user. Gmail OAuth is the current implementation direction, but keep the Email connector/provider interface neutral so another provider does not change the approval lifecycle.
+Keep Gmail Live Integration deferred until the user explicitly resumes it. Do not apply its migration, configure OAuth, link a live account, or send/verify a real email in the meantime. When resumed, use one independently authenticated mailbox per app user and keep the Email connector/provider interface neutral.
 
-**Why:** The user requires a separate mailbox for each authenticated app user and has not explicitly selected Gmail over Outlook.
+**Why:** The user explicitly deferred Gmail Live Integration after confirming that the generic External Action architecture is proven through Google Sheets and Fake Email.
 
-**How to apply:** Bind OAuth state, connection lookup, and token use to the authenticated tenant and user. Never put credentials in action arguments, events, or evidence. Require separate approval for each email and never automatically resend an uncertain result.
+**How to apply:** Resume only in the order OAuth configuration → migration → live account linking → real send and verification. Bind OAuth state, connection lookup, and token use to the authenticated tenant and user. Never put credentials in action arguments, events, or evidence. Require separate approval for each email and never automatically resend an uncertain result.

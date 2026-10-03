@@ -21,7 +21,7 @@
 - [Bounded relationship context](bounded-relationship-context.md) — scoped financial context never falls back to global totals; preserve direction, explicit links, and currency-safe relative approvals.
 - [Isolated approval browser fixtures](approval-browser-fixtures.md) — run the API fixture with the repository-local scripts tsx binary and a unique tenant; never point browser verification at shared data.
 - [Conversation provenance](conversation-provenance.md) — link created expenses, tasks, and reminders to the originating conversation turn; keep manual records explicitly unlinked.
-- [Per-user Gmail identity](per-user-gmail-identity.md) — use a separate OAuth mailbox per authenticated app user while keeping Email provider-neutral; Gmail is the current path, not an explicit provider choice.
+- [Deferred Gmail integration](per-user-gmail-identity.md) — keep OAuth, migration, account linking, and real email verification deferred until explicitly resumed.
 - [Token baseline experiments](token-baseline-experiments.md) — measure real-provider token cost before optimization; context-budget flags are not safe to enable without repeated accuracy and retry checks.
 - [Optimistic record edits](optimistic-record-edits.md) — refresh-before-edit improves UX, but only an atomic row-version condition prevents stale approvals from overwriting newer changes.
 - [Reminder approval input contract](reminder-approval-input-contract.md) — normalize local reminder times and default the timezone before sending strict approval overrides.
@@ -61,7 +61,7 @@
 - [Provider registry](provider-registry.md) — namespaced route IDs separate direct Providers from Gateways; MNRsecr selects endpoints while Gateways own upstream routing.
 - [OpenRouter endpoint tool availability](openrouter-endpoint-tool-availability.md) — catalog-level tool support can outlive usable routes; check live endpoints and classify routing failures separately from model quality.
 - [Delegated action approvals](delegated-action-approval.md) — Agent Work actions must reserve the existing secretary operation and resume only after verified approval execution.
-- [External action identity and uncertainty](external-action-identity.md) — keep work, run, approval operation, action, and step IDs distinct; never replay uncertain provider outcomes.
+- [External action identity and uncertainty](external-action-identity.md) — preserve the proven lifecycle, reject provider/tool mismatches at registry dispatch, and never replay uncertain outcomes.
 - [Resolver shadow evaluation](resolver-shadow-evaluation.md) — measure entity candidates with seeded conversation state before allowing resolver output to influence orchestration.
 - [Real authentication boundary](real-auth-boundary.md) — tenant ownership comes from database-backed sessions or durable worker rows; development identity is explicitly gated and never used in production.
 - [Arabic expense parsing](arabic-expense-parsing.md) — colloquial thousand/half-thousand amounts must not be mistaken for recipient entities.
