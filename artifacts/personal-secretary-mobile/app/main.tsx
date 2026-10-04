@@ -77,6 +77,7 @@ export default function MainRoute() {
   const [chatContext, setChatContext] = useState<MobileRecordRow | null>(null);
   const [messages, setMessages] = useState<LocalMessage[]>([starterMessage]);
   const [conversationId, setConversationId] = useState<string | undefined>();
+  const [officeChatRequest, setOfficeChatRequest] = useState(0);
   const [draft, setDraft] = useState('');
   const [hydrated, setHydrated] = useState(false);
   const [busyOperationId, setBusyOperationId] = useState<string | null>(null);
@@ -299,6 +300,7 @@ export default function MainRoute() {
     setDrawerOpen(false);
   }
   function focusMainChat() {
+    setOfficeChatRequest((request) => request + 1);
     setSelectedRecord(null);
     setMainSection('office');
     setChatContext(null);
@@ -316,6 +318,7 @@ export default function MainRoute() {
     setChatContext(null);
   }
   function openConversation(origin: RecordOrigin) {
+    setOfficeChatRequest((request) => request + 1);
     if (origin.conversationId !== conversationId) {
       setConversationToLoad(origin.conversationId);
       setLoadedConversationId(null);
@@ -328,6 +331,7 @@ export default function MainRoute() {
   }
   function askSecretaryAboutRecord() {
     if (!selectedRecord) return;
+    setOfficeChatRequest((request) => request + 1);
     setDraft(`اسألني عن ${selectedRecord.title}`);
     setChatContext(selectedRecord);
     setSelectedRecord(null);
@@ -385,7 +389,7 @@ export default function MainRoute() {
               pointerEvents={selectedRecord ? 'none' : 'auto'}
               style={[{ flex: 1 }, selectedRecord && { opacity: 0 }]}
             >
-                {mainSection === 'office' && <MainOffice colors={colors} language={language} assistantPreferences={assistantPreferences} onOpenRecord={openRecord} onRetryInput={(attachment) => { if (attachment) void inputCapture.retryAttachment(attachment); }} retryingInput={inputCapture.state === 'processing'} onOpenRecords={() => openMainSection('records')} onOpenSection={openMainSection} onOpenFinancial={() => openMainSection('financial')} onOpenConversation={openConversationById} onFocusChat={focusMainChat} onAskSecretary={(value) => { setDraft(value); setInputReview(null); setTimeout(() => inputRef.current?.focus(), 0); }} messages={messages} draft={draft} onChangeDraft={setDraft} onSend={() => void sendMessage()} inputRef={inputRef} isSending={secretaryChat.isSending || conversationQuery.isFetching || inputCapture.state === 'processing'} onApprove={(approval, args) => void updateApproval(approval, 'completed', args)} onReject={(approval) => void updateApproval(approval, 'rejected')} busyOperationId={busyOperationId} recordOrigins={recordOrigins} chatContext={chatContext} recentConversations={recentConversations} conversationSearch={conversationSearch} onChangeConversationSearch={setConversationSearch} conversationsLoading={secretaryChat.conversationsQuery.isFetching} pendingApprovals={messages.flatMap((message) => (message.approvals ?? (message.approval ? [message.approval] : [])).filter((item) => item.status === 'pending'))} inputState={inputCapture.state} onToggleVoice={() => void inputCapture.toggleVoice()} onCaptureReceipt={() => void inputCapture.pickReceipt('camera')} onPickReceipt={() => void inputCapture.pickReceipt('library')} inputReview={inputReview} onChangeInputReview={updateInputReview} onClearInputReview={() => setInputReview(null)} />}
+                {mainSection === 'office' && <MainOffice colors={colors} language={language} assistantPreferences={assistantPreferences} onOpenRecord={openRecord} onRetryInput={(attachment) => { if (attachment) void inputCapture.retryAttachment(attachment); }} retryingInput={inputCapture.state === 'processing'} onOpenRecords={() => openMainSection('records')} onOpenSection={openMainSection} onOpenFinancial={() => openMainSection('financial')} onOpenConversation={openConversationById} openConversationRequest={officeChatRequest} onConversationRequestHandled={(request) => setOfficeChatRequest((current) => current === request ? 0 : current)} onFocusChat={focusMainChat} onAskSecretary={(value) => { setDraft(value); setInputReview(null); setTimeout(() => inputRef.current?.focus(), 0); }} messages={messages} draft={draft} onChangeDraft={setDraft} onSend={() => void sendMessage()} inputRef={inputRef} isSending={secretaryChat.isSending || conversationQuery.isFetching || inputCapture.state === 'processing'} onApprove={(approval, args) => void updateApproval(approval, 'completed', args)} onReject={(approval) => void updateApproval(approval, 'rejected')} busyOperationId={busyOperationId} recordOrigins={recordOrigins} chatContext={chatContext} recentConversations={recentConversations} conversationSearch={conversationSearch} onChangeConversationSearch={setConversationSearch} conversationsLoading={secretaryChat.conversationsQuery.isFetching} pendingApprovals={messages.flatMap((message) => (message.approvals ?? (message.approval ? [message.approval] : [])).filter((item) => item.status === 'pending'))} inputState={inputCapture.state} onToggleVoice={() => void inputCapture.toggleVoice()} onCaptureReceipt={() => void inputCapture.pickReceipt('camera')} onPickReceipt={() => void inputCapture.pickReceipt('library')} inputReview={inputReview} onChangeInputReview={updateInputReview} onClearInputReview={() => setInputReview(null)} />}
                 {mainSection === 'chat' && <ConversationHistoryView colors={colors} language={language} conversations={recentConversations} loading={secretaryChat.conversationsQuery.isFetching} onOpenConversation={openConversationById} onBack={() => openMainSection('office')} />}
                 {mainSection === 'records' && <RecordsView colors={colors} onOpenSection={openRecordSection} onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}
                 {mainSection === 'people' && <RecordsView colors={colors} onOpenSection={openRecordSection} title="الأشخاص" titleEn="People" subtitle="الأشخاص وعلاقاتهم بالسجلات والمشاريع" subtitleEn="People and their links to records and projects" sectionKeys={['people']} onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}

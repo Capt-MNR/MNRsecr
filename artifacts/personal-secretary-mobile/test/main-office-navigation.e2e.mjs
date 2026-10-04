@@ -308,6 +308,37 @@ try {
     );
     await waitForBrowserValue(
       browser.page,
+      `document.querySelector('[data-testid="office-feed"]') !== null`,
+      "Main Office activity feed",
+    );
+    const newestFirstRecordIds = [
+      `office-focus-reminder-${fixtureInfo.ids.reminder}`,
+      `office-focus-task-${fixtureInfo.ids.task}`,
+      `office-focus-expense-${fixtureInfo.ids.expense}`,
+    ];
+    await waitForBrowserValue(
+      browser.page,
+      `(() => {
+        const feed = document.querySelector('[data-testid="office-feed"]');
+        const ids = ${JSON.stringify(newestFirstRecordIds)};
+        const nodes = Array.from(feed?.querySelectorAll('[data-testid]') ?? []);
+        return ids.every((id) => nodes.some((node) => node.getAttribute('data-testid') === id));
+      })()`,
+      "real feed records",
+    );
+    const feedCardTops = await browser.page.evaluate(`(() => {
+      const feed = document.querySelector('[data-testid="office-feed"]');
+      const ids = ${JSON.stringify(newestFirstRecordIds)};
+      const nodes = Array.from(feed?.querySelectorAll('[data-testid]') ?? []);
+      return ids.map((id) => nodes.find((node) => node.getAttribute('data-testid') === id)?.getBoundingClientRect().top ?? null);
+    })()`);
+    assert.ok(
+      feedCardTops.every((top, index) => typeof top === "number" && (index === 0 || top > feedCardTops[index - 1])),
+      `Main feed should sort saved records newest first: ${JSON.stringify(feedCardTops)}`,
+    );
+    await browser.page.evaluate(`document.querySelector('[data-testid="office-feed-open-chat"]').click()`);
+    await waitForBrowserValue(
+      browser.page,
       `document.querySelector('[data-testid="main-message-input"]') !== null`,
       "Main Office message input",
     );
@@ -331,8 +362,8 @@ try {
     });
     await waitForBrowserValue(
       browser.page,
-      `document.querySelector('[data-testid="office-dashboard"]') !== null`,
-      "adaptive home focus surface",
+      `document.querySelector('[data-testid="office-feed"]') !== null`,
+      "newest-first Main activity feed",
     );
     if (process.env.CAPTURE_MAIN_OFFICE_SNAPSHOTS === "1") {
       for (const [width, height] of [[360, 780], [402, 874]]) {
@@ -352,6 +383,12 @@ try {
         );
       }
     }
+    await browser.page.evaluate(`document.querySelector('[data-testid="office-feed-open-chat"]').click()`);
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="main-message-input"]') !== null`,
+      "Main conversation before keyboard viewport",
+    );
     await browser.page.send("Emulation.setDeviceMetricsOverride", {
       width: 402,
       height: 550,
@@ -360,8 +397,8 @@ try {
     });
     await waitForBrowserValue(
       browser.page,
-      `document.querySelector('[data-testid="office-dashboard"]') === null`,
-      "compact home with the focus card cleared for the keyboard viewport",
+      `document.querySelector('[data-testid="main-message-input"]') !== null && document.querySelector('[data-testid="office-feed"]') === null`,
+      "Main conversation in the keyboard viewport",
     );
     const compactComposerFit = await browser.page.evaluate(`(() => {
       const input = document.querySelector('[data-testid="main-message-input"]');
@@ -378,8 +415,14 @@ try {
     });
     await waitForBrowserValue(
       browser.page,
-      `document.querySelector('[data-testid="office-dashboard"]') !== null`,
-      "adaptive focus restored after the compact viewport",
+      `document.querySelector('[data-testid="main-message-input"]') !== null`,
+      "Main conversation restored after the compact viewport",
+    );
+    await browser.page.evaluate(`document.querySelector('[data-testid="office-chat-close"]').click()`);
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="office-feed"]') !== null`,
+      "Main feed after closing the conversation",
     );
     await clickAndWaitForDetail(
       browser.page,
@@ -393,6 +436,12 @@ try {
     );
 
     const message = fixtureInfo.firstApprovalMessage;
+    await browser.page.evaluate(`document.querySelector('[data-testid="office-feed-open-chat"]').click()`);
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="main-message-input"]') !== null`,
+      "Main conversation before sending",
+    );
     await browser.page.evaluate(`(() => {
       const input = document.querySelector('[data-testid="main-message-input"]');
       if (!input) throw new Error("Main Office message input is missing");
@@ -484,6 +533,12 @@ try {
       "Office after leaving the Records surface",
     );
 
+    await browser.page.evaluate(`document.querySelector('[data-testid="office-feed-open-chat"]').click()`);
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="main-message-input"]') !== null`,
+      "Main conversation before opening approval provenance",
+    );
     await browser.page.evaluate(`document.querySelector('[data-testid="${recordLink}"]')?.click()`);
     await waitForBrowserValue(
       browser.page,

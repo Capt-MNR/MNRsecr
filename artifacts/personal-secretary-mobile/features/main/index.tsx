@@ -1395,6 +1395,8 @@ export function MainOffice({
   onOpenFinancial,
   assistantPreferences,
   onOpenConversation,
+  openConversationRequest,
+  onConversationRequestHandled,
   onFocusChat,
   onAskSecretary,
   pendingApprovals,
@@ -1433,6 +1435,8 @@ export function MainOffice({
   onOpenFinancial: () => void;
   assistantPreferences: AssistantPreferences;
   onOpenConversation: (conversationId: string) => void;
+  openConversationRequest: number;
+  onConversationRequestHandled: (request: number) => void;
   onFocusChat: (record?: MobileRecordRow) => void;
   onAskSecretary: (draft: string) => void;
   pendingApprovals: Approval[];
@@ -1460,7 +1464,7 @@ export function MainOffice({
   onClearInputReview?: () => void;
 }) {
   const isRtl = language === 'ar';
-  const { height: windowHeight } = useWindowDimensions();
+  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const compactHeight = windowHeight < 760;
   const todayQuery = useGetTodayContext({
@@ -1470,6 +1474,7 @@ export function MainOffice({
     },
   });
   const [financialExpanded, setFinancialExpanded] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const [pearlSheetPosition, setPearlSheetPosition] = useState(90);
   const [pearlSheetTab, setPearlSheetTab] = useState<'records' | 'context'>('records');
   const [pearlSheetOffset, setPearlSheetOffset] = useState(0);
@@ -1536,7 +1541,13 @@ export function MainOffice({
   }
 
   function focusAndExpandChat() {
+    setChatOpen(true);
     onFocusChat();
+  }
+
+  function askFromFeed(value: string) {
+    setChatOpen(true);
+    onAskSecretary(value);
   }
 
   function openPearlSheet(tab: 'records' | 'context') {
@@ -1597,12 +1608,13 @@ export function MainOffice({
   const latestEdits = context ? [
     ...context.recentExpenses.map((expense) => ({
       id: `expense-${expense.id}`,
+      sortAt: Date.parse(expense.occurredAt),
       record: {
         id: expense.id,
         recordType: 'expense',
         title: expense.description,
-        subtitle: [expense.personName ?? expense.projectName, recordDate(expense.occurredAt)].filter(Boolean).join(' · '),
-        trailing: money(expense.amountMinor, expense.currency),
+        subtitle: [expense.personName ?? expense.projectName, recordDate(expense.occurredAt, language)].filter(Boolean).join(' · '),
+        trailing: money(expense.amountMinor, expense.currency, language),
         origin: recordOrigins[expense.id] ?? null,
       } satisfies MobileRecordRow,
       icon: 'dollar-sign' as FeatherName,
@@ -1610,29 +1622,31 @@ export function MainOffice({
     })),
     ...context.pendingTasks.map((task) => ({
       id: `task-${task.id}`,
+      sortAt: task.dueAt ? Date.parse(task.dueAt) : Number.NEGATIVE_INFINITY,
       record: {
         id: task.id,
         recordType: 'task',
         title: task.title,
-        subtitle: task.dueAt ? recordDate(task.dueAt) : localized(language, 'مهمة مستمرة', 'Ongoing task'),
-        trailing: statusLabel(task.status),
+        subtitle: task.dueAt ? recordDate(task.dueAt, language) : localized(language, 'مهمة مستمرة', 'Ongoing task'),
+        trailing: statusLabel(task.status, language),
       } satisfies MobileRecordRow,
       icon: 'check-square' as FeatherName,
       meta: localized(language, 'مهمة محدثة', 'Task updated'),
     })),
     ...context.upcomingReminders.map((reminder) => ({
       id: `reminder-${reminder.id}`,
+      sortAt: Date.parse(reminder.dueAt),
       record: {
         id: reminder.id,
         recordType: 'reminder',
         title: reminder.text,
-        subtitle: recordDate(reminder.dueAt),
-        trailing: statusLabel(reminder.status),
+        subtitle: recordDate(reminder.dueAt, language),
+        trailing: statusLabel(reminder.status, language),
       } satisfies MobileRecordRow,
       icon: 'bell' as FeatherName,
       meta: localized(language, 'تذكير محدث', 'Reminder updated'),
     })),
-  ].slice(0, 5) : [];
+  ].sort((left, right) => right.sortAt - left.sortAt).slice(0, 12) : [];
   const pearlSheetRecords = latestEdits;
   const normalizedSearch = conversationSearch.trim().toLocaleLowerCase();
   const filteredLatestEdits = normalizedSearch
@@ -1753,6 +1767,20 @@ export function MainOffice({
     || Boolean(draft.trim())
     || Boolean(inputReview)
     || isSending;
+  const previousMessagesRef = useRef(messages);
+  useEffect(() => {
+    if (previousMessagesRef.current !== messages && messages.some((message) => message.id !== 'welcome')) {
+      setChatOpen(true);
+    }
+    previousMessagesRef.current = messages;
+  }, [messages]);
+  const handledConversationRequestRef = useRef(0);
+  useEffect(() => {
+    if (openConversationRequest <= handledConversationRequestRef.current) return;
+    handledConversationRequestRef.current = openConversationRequest;
+    setChatOpen(true);
+    onConversationRequestHandled(openConversationRequest);
+  }, [onConversationRequestHandled, openConversationRequest]);
 
   return (
     <View
@@ -1761,7 +1789,7 @@ export function MainOffice({
         styles.officeHome,
         {
           direction: isRtl ? 'rtl' : 'ltr',
-          paddingBottom: 130 + insets.bottom + pearlComposerLift,
+          paddingBottom: 130 + insets.bottom + (chatOpen ? pearlComposerLift : 0),
         },
       ]}
     >
@@ -1851,7 +1879,243 @@ export function MainOffice({
         </Pressable>
       </View>
 
-      {((!compactHeight && !hasActiveConversation) || pendingApprovals.length > 0 || todayQuery.isLoading || todayQuery.isError) && (
+      {pendingApprovals.length > 0 && (
+        <View
+          testID="office-pinned-approvals"
+          style={{
+            marginBottom: 7,
+            paddingHorizontal: 10,
+            paddingVertical: 8,
+            borderRadius: 17,
+            borderWidth: 1,
+            borderColor: colorWithAlpha(colors.accent, 0.58),
+            backgroundColor: colorWithAlpha(colors.accent, 0.1),
+          }}
+        >
+          <View style={{ flexDirection: isRtl ? 'row-reverse' : 'row', alignItems: 'center', gap: 7, marginBottom: 6 }}>
+            <Feather name="shield" size={14} color={colors.accent} />
+            <Text style={{ flex: 1, color: colors.foreground, fontSize: 11, fontWeight: '800', textAlign: isRtl ? 'right' : 'left' }}>
+              {localized(language, 'موافقات معلّقة', 'Pending approvals')}
+            </Text>
+            <Text style={{ color: colors.mutedForeground, fontSize: 10 }}>{pendingApprovals.length}</Text>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 7 }}>
+            {pendingApprovals.map((approval) => (
+              <Pressable
+                key={approval.operationId}
+                testID={`office-focus-approval-${approval.operationId}`}
+                accessibilityRole="button"
+                accessibilityLabel={`${localized(language, 'راجع الموافقة', 'Review approval')}: ${approval.title}`}
+                onPress={focusAndExpandChat}
+                style={({ pressed }) => ({
+                  width: Math.min(windowWidth - 70, 340),
+                  minHeight: 58,
+                  paddingHorizontal: 10,
+                  paddingVertical: 8,
+                  borderRadius: 13,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  backgroundColor: colors.card,
+                  flexDirection: isRtl ? 'row-reverse' : 'row',
+                  alignItems: 'center',
+                  gap: 9,
+                  opacity: pressed ? 0.7 : 1,
+                })}
+              >
+                <View style={{ flex: 1, minWidth: 0, alignItems: isRtl ? 'flex-end' : 'flex-start' }}>
+                  <Text numberOfLines={1} style={{ color: colors.foreground, fontSize: 12, fontWeight: '700', textAlign: isRtl ? 'right' : 'left' }}>
+                    {approval.title}
+                  </Text>
+                  <Text numberOfLines={1} style={{ marginTop: 3, color: colors.mutedForeground, fontSize: 10, textAlign: isRtl ? 'right' : 'left' }}>
+                    {approval.details[0] ?? localized(language, 'افتح المحادثة لمراجعة التفاصيل', 'Open the conversation to review details')}
+                  </Text>
+                </View>
+                <View style={{ minHeight: 30, paddingHorizontal: 9, borderRadius: 10, backgroundColor: colors.muted, flexDirection: isRtl ? 'row-reverse' : 'row', alignItems: 'center', gap: 3 }}>
+                  <Text style={{ color: colors.primary, fontSize: 10, fontWeight: '700' }}>{localized(language, 'مراجعة', 'Review')}</Text>
+                  <Feather name={isRtl ? 'chevron-left' : 'chevron-right'} size={13} color={colors.primary} />
+                </View>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
+      {!chatOpen && (
+        <ScrollView
+          testID="office-feed"
+          style={{ flex: 1, minHeight: 0 }}
+          contentContainerStyle={{ paddingTop: 3, paddingBottom: 20, gap: 10 }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <Pressable
+            testID="office-feed-open-chat"
+            accessibilityRole="button"
+            accessibilityLabel={localized(language, 'ابدأ محادثة مع السكرتير', 'Start a conversation with your secretary')}
+            onPress={focusAndExpandChat}
+            style={({ pressed }) => ({
+              minHeight: 62,
+              paddingHorizontal: 12,
+              paddingVertical: 10,
+              borderRadius: 17,
+              borderWidth: 1,
+              borderColor: colors.border,
+              backgroundColor: colors.card,
+              flexDirection: isRtl ? 'row-reverse' : 'row',
+              alignItems: 'center',
+              gap: 10,
+              opacity: pressed ? 0.72 : 1,
+            })}
+          >
+            <View style={{ width: 37, height: 37, borderRadius: 14, backgroundColor: colorWithAlpha(colors.primary, 0.13), alignItems: 'center', justifyContent: 'center' }}>
+              <Feather name="message-circle" size={17} color={colors.primary} />
+            </View>
+            <View style={{ flex: 1, minWidth: 0, alignItems: isRtl ? 'flex-end' : 'flex-start' }}>
+              <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: '700', textAlign: isRtl ? 'right' : 'left' }}>
+                {localized(language, 'اسأل سكرتيرك', 'Ask your secretary')}
+              </Text>
+              <Text style={{ marginTop: 3, color: colors.mutedForeground, fontSize: 10, textAlign: isRtl ? 'right' : 'left' }}>
+                {localized(language, 'محادثة خاصة، وقراراتك تظل بيدك', 'Private conversation; your decisions stay yours')}
+              </Text>
+            </View>
+            <Feather name={isRtl ? 'arrow-left' : 'arrow-right'} size={16} color={colors.primary} />
+          </Pressable>
+
+          <View style={{ marginTop: 3, flexDirection: isRtl ? 'row-reverse' : 'row', alignItems: 'center', gap: 8 }}>
+            <View style={{ flex: 1, alignItems: isRtl ? 'flex-end' : 'flex-start' }}>
+              <Text style={{ color: colors.foreground, fontSize: 16, fontWeight: '800', textAlign: isRtl ? 'right' : 'left' }}>
+                {localized(language, 'آخر التحديثات', 'Latest updates')}
+              </Text>
+              <Text style={{ marginTop: 2, color: colors.mutedForeground, fontSize: 10, textAlign: isRtl ? 'right' : 'left' }}>
+                {localized(language, 'سجلاتك مرتبة حسب التاريخ، من الأحدث إلى الأقدم', 'Your records, ordered by date from newest to oldest')}
+              </Text>
+            </View>
+            <Pressable
+              testID="office-open-activity"
+              accessibilityRole="button"
+              accessibilityLabel={localized(language, 'فتح كل النشاط', 'Open all activity')}
+              onPress={() => onOpenSection('activity')}
+              hitSlop={8}
+              style={({ pressed }) => ({ minHeight: 34, paddingHorizontal: 9, borderRadius: 10, backgroundColor: colors.muted, justifyContent: 'center', opacity: pressed ? 0.65 : 1 })}
+            >
+              <Text style={{ color: colors.primary, fontSize: 10, fontWeight: '700' }}>{localized(language, 'الكل', 'All')}</Text>
+            </Pressable>
+          </View>
+
+          {todayQuery.isLoading ? (
+            <View style={{ minHeight: 116, borderRadius: 16, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={{ color: colors.mutedForeground, fontSize: 11 }}>{localized(language, 'أقرأ سجلاتك…', 'Loading your records…')}</Text>
+            </View>
+          ) : todayQuery.isError ? (
+            <View style={{ padding: 14, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, gap: 9 }}>
+              <Text style={{ color: colors.mutedForeground, fontSize: 12, lineHeight: 19, textAlign: isRtl ? 'right' : 'left' }}>
+                {localized(language, 'تعذر تحميل التحديثات. حدّث الموجز للمحاولة مرة أخرى.', 'Updates could not be loaded. Refresh the brief and try again.')}
+              </Text>
+              <Pressable
+                testID="office-focus-retry"
+                accessibilityRole="button"
+                onPress={() => void todayQuery.refetch()}
+                style={({ pressed }) => ({ minHeight: 36, paddingHorizontal: 12, borderRadius: 11, backgroundColor: colors.primary, alignSelf: isRtl ? 'flex-end' : 'flex-start', justifyContent: 'center', opacity: pressed ? 0.7 : 1 })}
+              >
+                <Text style={{ color: colors.primaryForeground, fontSize: 11, fontWeight: '700' }}>{localized(language, 'تحديث', 'Retry')}</Text>
+              </Pressable>
+            </View>
+          ) : filteredLatestEdits.length > 0 ? (
+            filteredLatestEdits.map((edit) => (
+              <Pressable
+                key={edit.id}
+                testID={`office-focus-${edit.record.recordType}-${edit.record.id}`}
+                accessibilityRole="button"
+                accessibilityLabel={localized(language, `فتح ${edit.record.title}`, `Open ${edit.record.title}`)}
+                onPress={() => onOpenRecord(edit.record)}
+                style={({ pressed }) => ({
+                  paddingHorizontal: 12,
+                  paddingVertical: 11,
+                  borderRadius: 17,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  backgroundColor: colors.card,
+                  opacity: pressed ? 0.72 : 1,
+                  gap: 8,
+                })}
+              >
+                <View style={{ flexDirection: isRtl ? 'row-reverse' : 'row', alignItems: 'center', gap: 8 }}>
+                  <View style={{ width: 34, height: 34, borderRadius: 13, backgroundColor: colors.muted, alignItems: 'center', justifyContent: 'center' }}>
+                    <Feather name={edit.icon} size={15} color={colors.primary} />
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0, alignItems: isRtl ? 'flex-end' : 'flex-start' }}>
+                    <Text style={{ color: colors.foreground, fontSize: 11, fontWeight: '700', textAlign: isRtl ? 'right' : 'left' }}>
+                      {localized(language, 'سكرتيرك', 'Personal Secretary')}
+                    </Text>
+                    <Text numberOfLines={1} style={{ marginTop: 2, color: colors.mutedForeground, fontSize: 9, textAlign: isRtl ? 'right' : 'left' }}>
+                      {edit.meta}{edit.record.subtitle ? ` · ${edit.record.subtitle}` : ''}
+                    </Text>
+                  </View>
+                  {edit.record.trailing ? (
+                    <Text numberOfLines={1} style={{ maxWidth: 110, color: colors.primary, fontSize: 10, fontWeight: '700', textAlign: isRtl ? 'left' : 'right' }}>
+                      {edit.record.trailing}
+                    </Text>
+                  ) : null}
+                </View>
+                <Text style={{ color: colors.foreground, fontSize: 14, lineHeight: 21, fontWeight: '700', textAlign: isRtl ? 'right' : 'left' }}>
+                  {edit.record.title}
+                </Text>
+                <View style={{ paddingTop: 7, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, flexDirection: isRtl ? 'row-reverse' : 'row', alignItems: 'center', gap: 5 }}>
+                  <Feather name={isRtl ? 'arrow-up-left' : 'arrow-up-right'} size={12} color={colors.primary} />
+                  <Text style={{ color: colors.primary, fontSize: 10, fontWeight: '700' }}>{localized(language, 'فتح تفاصيل السجل', 'Open record details')}</Text>
+                </View>
+              </Pressable>
+            ))
+          ) : (
+            <View testID="office-feed-empty" style={{ minHeight: 134, padding: 17, borderRadius: 17, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' }}>
+              <View style={{ width: 38, height: 38, marginBottom: 9, borderRadius: 14, backgroundColor: colors.muted, alignItems: 'center', justifyContent: 'center' }}>
+                <Feather name="inbox" size={16} color={colors.primary} />
+              </View>
+              <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: '700', textAlign: 'center' }}>
+                {localized(language, 'لا توجد تحديثات محفوظة بعد', 'No saved updates yet')}
+              </Text>
+              <Text style={{ maxWidth: 270, marginTop: 5, color: colors.mutedForeground, fontSize: 10, lineHeight: 16, textAlign: 'center' }}>
+                {localized(language, 'ستظهر هنا مصروفاتك ومهامك وتذكيراتك الفعلية.', 'Your actual expenses, tasks, and reminders will appear here.')}
+              </Text>
+            </View>
+          )}
+
+          <View style={{ marginTop: 4, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, gap: 8 }}>
+            <Text style={{ color: colors.mutedForeground, fontSize: 10, fontWeight: '700', textAlign: isRtl ? 'right' : 'left' }}>
+              {localized(language, 'اسأل عن', 'Ask about')}
+            </Text>
+            {quickActions.slice(0, 3).map((action) => (
+              <Pressable
+                key={action.draft}
+                testID={`office-feed-quick-action-${action.icon}`}
+                accessibilityRole="button"
+                accessibilityLabel={localized(language, action.label, action.labelEn)}
+                onPress={() => askFromFeed(localized(language, action.draft, action.draftEn))}
+                style={({ pressed }) => ({ minHeight: 43, paddingHorizontal: 10, borderRadius: 13, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, flexDirection: isRtl ? 'row-reverse' : 'row', alignItems: 'center', gap: 8, opacity: pressed ? 0.65 : 1 })}
+              >
+                <Feather name={action.icon} size={14} color={colors.primary} />
+                <Text style={{ flex: 1, color: colors.foreground, fontSize: 11, fontWeight: '600', textAlign: isRtl ? 'right' : 'left' }}>
+                  {localized(language, action.label, action.labelEn)}
+                </Text>
+                <Feather name={isRtl ? 'chevron-left' : 'chevron-right'} size={14} color={colors.mutedForeground} />
+              </Pressable>
+            ))}
+          </View>
+          <View style={{ flexDirection: isRtl ? 'row-reverse' : 'row', justifyContent: 'space-between', gap: 8, paddingTop: 3 }}>
+            <Pressable testID="office-open-conversations" accessibilityRole="button" onPress={() => onOpenSection('chat')} style={({ pressed }) => ({ minHeight: 34, flexDirection: isRtl ? 'row-reverse' : 'row', alignItems: 'center', gap: 5, opacity: pressed ? 0.65 : 1 })}>
+              <Feather name="message-circle" size={13} color={colors.primary} />
+              <Text style={{ color: colors.primary, fontSize: 10, fontWeight: '700' }}>{localized(language, 'المحادثات', 'Conversations')}</Text>
+            </Pressable>
+            <Pressable testID="office-feed-open-records" accessibilityRole="button" onPress={onOpenRecords} style={({ pressed }) => ({ minHeight: 34, flexDirection: isRtl ? 'row-reverse' : 'row', alignItems: 'center', gap: 5, opacity: pressed ? 0.65 : 1 })}>
+              <Feather name="archive" size={13} color={colors.primary} />
+              <Text style={{ color: colors.primary, fontSize: 10, fontWeight: '700' }}>{localized(language, 'كل السجلات', 'All records')}</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
+      )}
+
+      {false && (
         <View
           testID="office-dashboard"
           style={{
@@ -1950,30 +2214,30 @@ export function MainOffice({
             </Pressable>
           ) : firstReminder ? (
             <Pressable
-              testID={`office-focus-reminder-${firstReminder.id}`}
+              testID={`office-focus-reminder-${firstReminder!.id}`}
               accessibilityRole="button"
-              onPress={() => openReminder(firstReminder)}
+              onPress={() => openReminder(firstReminder!)}
               hitSlop={5}
               style={({ pressed }) => ({ minHeight: 54, flexDirection: isRtl ? 'row-reverse' : 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, opacity: pressed ? 0.7 : 1 })}
             >
               <View style={{ flex: 1, minWidth: 0, alignItems: isRtl ? 'flex-end' : 'flex-start' }}>
-                <Text numberOfLines={2} style={{ color: colors.foreground, fontSize: 14, lineHeight: 20, fontWeight: '700', textAlign: isRtl ? 'right' : 'left' }}>{firstReminder.text}</Text>
-                <Text style={{ marginTop: 3, color: colors.mutedForeground, fontSize: 10, textAlign: isRtl ? 'right' : 'left' }}>{recordDate(firstReminder.dueAt, language)}</Text>
+                <Text numberOfLines={2} style={{ color: colors.foreground, fontSize: 14, lineHeight: 20, fontWeight: '700', textAlign: isRtl ? 'right' : 'left' }}>{firstReminder!.text}</Text>
+                <Text style={{ marginTop: 3, color: colors.mutedForeground, fontSize: 10, textAlign: isRtl ? 'right' : 'left' }}>{recordDate(firstReminder!.dueAt, language)}</Text>
               </View>
               <Feather name={isRtl ? 'chevron-left' : 'chevron-right'} size={16} color={colors.primary} />
             </Pressable>
           ) : firstTask ? (
             <Pressable
-              testID={`office-focus-task-${firstTask.id}`}
+              testID={`office-focus-task-${firstTask!.id}`}
               accessibilityRole="button"
-              onPress={() => openTask(firstTask)}
+              onPress={() => openTask(firstTask!)}
               hitSlop={5}
               style={({ pressed }) => ({ minHeight: 54, flexDirection: isRtl ? 'row-reverse' : 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, opacity: pressed ? 0.7 : 1 })}
             >
               <View style={{ flex: 1, minWidth: 0, alignItems: isRtl ? 'flex-end' : 'flex-start' }}>
-                <Text numberOfLines={2} style={{ color: colors.foreground, fontSize: 14, lineHeight: 20, fontWeight: '700', textAlign: isRtl ? 'right' : 'left' }}>{firstTask.title}</Text>
+                <Text numberOfLines={2} style={{ color: colors.foreground, fontSize: 14, lineHeight: 20, fontWeight: '700', textAlign: isRtl ? 'right' : 'left' }}>{firstTask!.title}</Text>
                 <Text style={{ marginTop: 3, color: colors.mutedForeground, fontSize: 10, textAlign: isRtl ? 'right' : 'left' }}>
-                  {firstTask.dueAt ? recordDate(firstTask.dueAt, language) : localized(language, 'مهمة مفتوحة', 'Open task')}
+                  {firstTask!.dueAt ? recordDate(firstTask!.dueAt, language) : localized(language, 'مهمة مفتوحة', 'Open task')}
                 </Text>
               </View>
               <Feather name={isRtl ? 'chevron-left' : 'chevron-right'} size={16} color={colors.primary} />
@@ -2043,39 +2307,53 @@ export function MainOffice({
         </View>
       )}
 
-      <CentralSecretaryChat
-        colors={colors}
-        messages={messages}
-        draft={draft}
-        onChangeDraft={onChangeDraft}
-        onSend={onSend}
-        onQuickPrompt={onAskSecretary}
-        quickPrompts={quickActions.slice(0, 3).map((action) => ({
-          label: localized(language, action.label, action.labelEn),
-          value: localized(language, action.draft, action.draftEn),
-        }))}
-        onFocusChat={focusAndExpandChat}
-         expanded
-        isSending={isSending}
-        onApprove={onApprove}
-        onReject={onReject}
-        busyOperationId={busyOperationId}
-        onOpenRecord={onOpenRecord}
-        onRetryInput={onRetryInput}
-        retryingInput={retryingInput}
-        context={chatContext}
-        smartSignal={smartSignal}
-        inputState={inputState}
-        onToggleVoice={onToggleVoice}
-        onCaptureReceipt={onCaptureReceipt}
-        onPickReceipt={onPickReceipt}
-        inputReview={inputReview}
-        onChangeInputReview={onChangeInputReview}
-        onClearInputReview={onClearInputReview}
-        onOpenPearlSheet={openPearlSheet}
-        sheetLift={pearlComposerLift}
-        showPromptRail={!compactHeight && !hasActiveConversation}
-      />
+      {chatOpen && (
+        <View style={{ flex: 1, minHeight: 0 }}>
+          <Pressable
+            testID="office-chat-close"
+            accessibilityRole="button"
+            accessibilityLabel={localized(language, 'العودة إلى الموجز', 'Back to the feed')}
+            onPress={() => setChatOpen(false)}
+            style={({ pressed }) => ({ minHeight: 37, paddingHorizontal: 4, flexDirection: isRtl ? 'row-reverse' : 'row', alignItems: 'center', gap: 6, opacity: pressed ? 0.65 : 1 })}
+          >
+            <Feather name={isRtl ? 'arrow-right' : 'arrow-left'} size={15} color={colors.primary} />
+            <Text style={{ color: colors.primary, fontSize: 11, fontWeight: '700' }}>{localized(language, 'الموجز', 'Feed')}</Text>
+          </Pressable>
+          <CentralSecretaryChat
+            colors={colors}
+            messages={messages}
+            draft={draft}
+            onChangeDraft={onChangeDraft}
+            onSend={onSend}
+            onQuickPrompt={onAskSecretary}
+            quickPrompts={quickActions.slice(0, 3).map((action) => ({
+              label: localized(language, action.label, action.labelEn),
+              value: localized(language, action.draft, action.draftEn),
+            }))}
+            onFocusChat={focusAndExpandChat}
+            expanded
+            isSending={isSending}
+            onApprove={onApprove}
+            onReject={onReject}
+            busyOperationId={busyOperationId}
+            onOpenRecord={onOpenRecord}
+            onRetryInput={onRetryInput}
+            retryingInput={retryingInput}
+            context={chatContext}
+            smartSignal={smartSignal}
+            inputState={inputState}
+            onToggleVoice={onToggleVoice}
+            onCaptureReceipt={onCaptureReceipt}
+            onPickReceipt={onPickReceipt}
+            inputReview={inputReview}
+            onChangeInputReview={onChangeInputReview}
+            onClearInputReview={onClearInputReview}
+            onOpenPearlSheet={openPearlSheet}
+            sheetLift={pearlComposerLift}
+            showPromptRail={!compactHeight && !hasActiveConversation}
+          />
+        </View>
+      )}
 
       <View
         testID="pearl-record-sheet"

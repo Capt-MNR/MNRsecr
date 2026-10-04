@@ -282,26 +282,18 @@ export default function QuickRoute() {
   const reversedMessages = [...messages].reverse();
   const isFreshConversation = messages.length === 1 && messages[0]?.id === starterMessage.id;
   const quickIntro = (
-    <View>
-        <View style={[styles.quickHero, { backgroundColor: colorWithAlpha(colors.card, 0.84), borderColor: colors.border }]}>
-        <View style={[styles.quickHeroTop, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
-          <View style={[styles.quickHeroMark, { backgroundColor: colorWithAlpha(colors.primary, 0.14), borderColor: colorWithAlpha(colors.primary, 0.22) }]}>
-            <Feather name="message-circle" size={22} color={colors.primary} />
-          </View>
-          <View style={[styles.quickHeroCopy, { alignItems: isRtl ? 'flex-end' : 'flex-start' }]}>
-            <Text style={[styles.quickHeroEyebrow, { color: colors.primary, textAlign: isRtl ? 'right' : 'left' }]}>{localized(language, 'المساعد السريع', 'QUICK SECRETARY')}</Text>
-            <Text style={[styles.quickHeroTitle, { color: colors.foreground, textAlign: isRtl ? 'right' : 'left' }]}>{localized(language, 'السكرتير الشخصي', 'Personal Secretary')}</Text>
-          </View>
-        </View>
-        <Text style={[styles.quickHeroText, { color: colors.mutedForeground, textAlign: isRtl ? 'right' : 'left' }]}>{localized(language, 'اكتب أو تكلّم أو أرفق فاتورة؛ وأراجع معك ما يحتاج موافقة.', 'Type, speak, or attach a receipt; I’ll flag actions that need your approval.')}</Text>
-        <View style={[styles.quickHeroStatus, { borderTopColor: colors.border, flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
-          <View style={[styles.quickHeroStatusDot, { backgroundColor: colors.accent }]} />
-          <Text style={[styles.quickHeroStatusText, { color: colors.mutedForeground, textAlign: isRtl ? 'right' : 'left' }]}>{localized(language, 'جاهز لطلب سريع', 'Ready for a quick request')}</Text>
-          <Text style={[styles.quickHeroStatusMode, { color: colors.mutedForeground }]}>Quick</Text>
-        </View>
+    <View style={styles.quickWelcome}>
+      <View style={[styles.quickWelcomeMark, { backgroundColor: colorWithAlpha(colors.primary, 0.12) }]}>
+        <Feather name="message-circle" size={21} color={colors.primary} />
       </View>
+      <Text style={[styles.quickWelcomeTitle, { color: colors.foreground, textAlign: isRtl ? 'right' : 'left' }]}>
+        {localized(language, 'أقدر أساعدك في إيه؟', 'What can I help you with?')}
+      </Text>
+      <Text style={[styles.quickWelcomeText, { color: colors.mutedForeground, textAlign: isRtl ? 'right' : 'left' }]}>
+        {localized(language, 'اسأل عن يومك، سجّل مصروفًا، أو اضبط تذكيرًا.', 'Ask about your day, log an expense, or set a reminder.')}
+      </Text>
       <View style={styles.suggestionsBlock}>
-        <Text style={[styles.suggestionsLabel, { color: colors.mutedForeground, textAlign: isRtl ? 'right' : 'left' }]}>{localized(language, 'ابدأ من هنا', 'Start here')}</Text>
+        <Text style={[styles.suggestionsLabel, { color: colors.mutedForeground, textAlign: isRtl ? 'right' : 'left' }]}>{localized(language, 'جرّب طلبًا سريعًا', 'Try a quick request')}</Text>
         <View style={styles.suggestions}>
           {visibleSuggestions.map((suggestion, index) => (
             <Pressable
@@ -310,7 +302,7 @@ export default function QuickRoute() {
               onPress={() => { setDraft(suggestion); inputRef.current?.focus(); }}
               style={({ pressed }) => [
                 styles.suggestionChip,
-                { borderColor: colors.border, backgroundColor: colorWithAlpha(colors.card, 0.86), opacity: pressed ? 0.65 : 1, flexDirection: isRtl ? 'row-reverse' : 'row' },
+                { borderColor: colors.border, backgroundColor: colorWithAlpha(colors.card, 0.64), opacity: pressed ? 0.65 : 1, flexDirection: isRtl ? 'row-reverse' : 'row' },
               ]}
             >
               <View style={[styles.suggestionIcon, { backgroundColor: colors.muted }]}>
@@ -340,17 +332,18 @@ export default function QuickRoute() {
       />
       <View style={[styles.header, { paddingTop: topInset + 8, borderBottomColor: colorWithAlpha(colors.border, 0.72) }]}>
         <View style={[styles.headerTop, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
-          <View style={[styles.brandBlock, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
-            <View style={[styles.brandMark, { backgroundColor: colors.primary }]}><Feather name="message-circle" size={18} color={colors.primaryForeground} /></View>
-            <View style={[styles.brandCopy, { alignItems: isRtl ? 'flex-end' : 'flex-start' }]}>
-              <Text style={[styles.brandEyebrow, { color: colors.mutedForeground, textAlign: isRtl ? 'right' : 'left' }]}>{localized(language, 'وصول سريع', 'QUICK ACCESS')}</Text>
-              <Text style={[styles.brandName, { color: colors.foreground, textAlign: isRtl ? 'right' : 'left' }]}>{localized(language, 'السكرتير السريع', 'Quick Chat')}</Text>
-              <View style={[styles.availability, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}><View style={[styles.statusDot, { backgroundColor: colors.accent }]} /><Text style={[styles.availabilityText, { color: colors.mutedForeground, textAlign: isRtl ? 'right' : 'left' }]}>{localized(language, 'فتحت السكرتير بسرعة', 'Fast access to your secretary')}</Text></View>
-            </View>
-          </View>
           <Pressable testID="quick-open-main" accessibilityRole="button" accessibilityLabel={localized(language, 'فتح البرنامج الكامل', 'Open Main workspace')} onPress={() => openMain()} style={({ pressed }) => [styles.iconButton, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}>
             <Feather name="grid" size={17} color={colors.foreground} />
           </Pressable>
+          <View style={[styles.quickHeaderTitle, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
+            <View style={[styles.quickHeaderMark, { backgroundColor: colors.primary }]}>
+              <Feather name="message-circle" size={15} color={colors.primaryForeground} />
+            </View>
+            <Text style={[styles.brandName, { color: colors.foreground, textAlign: isRtl ? 'right' : 'left' }]}>
+              {localized(language, 'محادثة سريعة', 'Quick Chat')}
+            </Text>
+          </View>
+          <View style={styles.headerSideBalance} />
         </View>
       </View>
       {!hydrated ? <View style={styles.loadingState}><ActivityIndicator color={colors.primary} /></View> : (
@@ -359,7 +352,7 @@ export default function QuickRoute() {
              inverted={!isFreshConversation}
              data={isFreshConversation ? messages : reversedMessages}
             keyExtractor={(item) => item.id}
-             renderItem={({ item }) => <QuickMessageBubble message={item.id === starterMessage.id ? { ...item, text: localized(language, starterMessage.text, 'I’m ready for quick requests. Ask about your day, log an expense, or set a reminder.') } : item} colors={colors} language={language} onApprove={(approval) => void updateApproval(approval, 'completed')} onReject={(approval) => void updateApproval(approval, 'rejected')} onOpenMain={() => openMain()} onOpenRecord={(record) => openMain(record)} onRetryInput={(attachment) => { if (attachment) void inputCapture.retryAttachment(attachment); }} retryingInput={inputCapture.state === 'processing'} busyOperationId={busyOperationId} />}
+              renderItem={({ item }) => isFreshConversation && item.id === starterMessage.id ? null : <QuickMessageBubble message={item} colors={colors} language={language} onApprove={(approval) => void updateApproval(approval, 'completed')} onReject={(approval) => void updateApproval(approval, 'rejected')} onOpenMain={() => openMain()} onOpenRecord={(record) => openMain(record)} onRetryInput={(attachment) => { if (attachment) void inputCapture.retryAttachment(attachment); }} retryingInput={inputCapture.state === 'processing'} busyOperationId={busyOperationId} />}
              contentContainerStyle={styles.messageList}
             keyboardDismissMode="interactive"
             keyboardShouldPersistTaps="handled"

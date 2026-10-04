@@ -28,7 +28,7 @@
 - [Arabic dialect understanding](arabic-dialect-understanding.md) — normalize dialect vocabulary only at the intent boundary, then prove it with labeled Egyptian, Gulf, and Levantine cases.
 - [Learning signal capture](learning-signal-capture.md) — explicit corrections are review-only signals; never auto-apply them to financial data or production rules.
 - [Mobile Expo preview environment](mobile-expo-preview.md) — Metro can serve correctly despite DevTools libglib warnings or package freshness blocked by the workspace firewall.
-- [Mobile two-surface architecture](mobile-two-surface-architecture.md) — mobile opens on quick, then reaches its full records home in one tap; web remains the broader desktop workspace.
+- [Mobile two-surface architecture](mobile-two-surface-architecture.md) — Quick opens first; Main is a newest-first real-record feed with pinned approvals and explicit conversation navigation.
 - [Secretary chat boundary](secretary-chat-boundary.md) — Main and Quick share a transport-independent chat service with future peer metadata.
 - [External secretary peers](external-secretary-peers.md) — keep A2A framing and remote error normalization inside the transport adapter, not the UI surfaces.
 - [Expo Quick separation limits](expo-quick-separation.md) — Main evaluation can be deferred, but current Metro still emits one native launch bundle and RAM is unmeasured.

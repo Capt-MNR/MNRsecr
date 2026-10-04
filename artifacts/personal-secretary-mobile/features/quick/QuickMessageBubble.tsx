@@ -45,11 +45,15 @@ export function QuickMessageBubble({
 
   return (
     <View style={[styles.messageRow, { alignItems: isUser === isRtl ? 'flex-start' : 'flex-end', direction: isRtl ? 'rtl' : 'ltr' }]}>
-      <View style={[styles.messageBubble, {
-        backgroundColor: isUser ? colors.primary : colors.card,
-        borderColor: isUser ? colors.primary : colors.border,
-      }]}>
-        <Text style={[styles.messageText, { color: isUser ? colors.primaryForeground : colors.foreground, textAlign: isRtl ? 'right' : 'left', writingDirection: isRtl ? 'rtl' : 'ltr' }]}>
+      <View style={[
+        styles.messageBubble,
+        isUser ? styles.userMessageBubble : styles.assistantMessageBubble,
+        {
+          backgroundColor: isUser ? colors.muted : 'transparent',
+          borderColor: isUser ? colors.border : 'transparent',
+        },
+      ]}>
+        <Text style={[styles.messageText, { color: colors.foreground, textAlign: isRtl ? 'right' : 'left', writingDirection: isRtl ? 'rtl' : 'ltr' }]}>
           {message.text}
         </Text>
         {message.inputAttachment && (
@@ -59,7 +63,7 @@ export function QuickMessageBubble({
             retrying={retryingInput}
           />
         )}
-        <Text style={[styles.messageTime, { color: isUser ? colors.primaryForeground : colors.mutedForeground, textAlign: isRtl ? 'right' : 'left' }]}>
+        <Text style={[styles.messageTime, { color: colors.mutedForeground, textAlign: isRtl ? 'right' : 'left' }]}>
           {messageTime(message.createdAt, language)}
         </Text>
 
