@@ -12,6 +12,10 @@ export type SemanticIntent =
   | "record_expense"
   | "expense_report"
   | "person_expense_total"
+  | "project_expenses"
+  | "project_reference"
+  | "memory_financial_conflict"
+  | "planning"
   | "project_people"
   | "create_reminder"
   | "create_agent_work"
@@ -406,21 +410,35 @@ export function parseArabicTimeOfDay(value: string): ParsedTimeOfDay | null {
 
 function extractEntityMentions(message: string): EntityMention[] {
   const mentions: EntityMention[] = [];
+  const project = message.match(
+    /(?<!\p{L})(?:(?:ال)?مشروع|project)\s+(?:اسمه\s+)?([\p{L}][\p{L}\s-]{1,50}?)(?=\s+(?:بمبلغ|مبلغ|بقيمة|جنيه|جنية|دولار|ريال|الف|الفين|ألف|ألفين|امبارح|أمس|اليوم|بكره|مصاريفه?|مصروفات|[0-9٠-٩])|[؟?!.،؛:]|$)/iu,
+  );
+  const definiteProjectReference = message.match(
+    /المشروع\s+[\p{L}][\p{L}\s-]{1,50}?(?=\s+(?:مصاريفه?|مصروفاته?|مصروفات|[؟?!.،؛:]|$)|[؟?!.،؛:]|$)/iu,
+  )?.[0];
+  const projectQuery = project?.[1]
+    ? cleanMention(definiteProjectReference ?? project[1])
+    : undefined;
   const person = message.match(
     /(?<!\p{L})(?:(?:دفعت|دفع(?:ت)?|صرف(?:ت)?|حولت|سددت)\s+(?:ل|الى|إلى|مع|لصالح|على)\s*|(?:اديت|أديت|اعطيت|عطيت)\s+(?:ل|الى|إلى|مع|لصالح)?\s*)([\p{L}][\p{L}\s-]{1,40}?)(?=\s+(?:بمبلغ|مبلغ|بقيمة|على|في|بمشروع|جنيه|جنية|دولار|ريال|الف|الفين|ألف|ألفين|امبارح|أمس|اليوم|بكره|بعد\s+بكره|[0-9٠-٩])|[،؛؟!.,]|$)/u,
   );
   if (person?.[1]) {
     const query = cleanMention(person[1]);
-    if (query.length >= 2 && !isNonPersonMention(query)) {
+    const isProjectMention = projectQuery
+      && canonicalizeArabicText(query) === canonicalizeArabicText(projectQuery);
+    if (query.length >= 2 && !isNonPersonMention(query) && !isProjectMention) {
       mentions.push({ entityType: "person", query, confidence: 0.9 });
     }
   }
-  const project = message.match(
-    /(?:مشروع|project)\s+(?:اسمه\s+)?([\p{L}][\p{L}\s-]{1,50}?)(?=\s+(?:بمبلغ|مبلغ|بقيمة|جنيه|جنية|دولار|ريال|الف|الفين|ألف|ألفين|امبارح|أمس|اليوم|بكره|[0-9٠-٩])|$)/iu,
+  if (projectQuery && projectQuery.length >= 2) {
+    mentions.push({ entityType: "project", query: projectQuery, confidence: 0.92 });
+  }
+  const rememberedExpenseProject = message.match(
+    /(?:مصروف|مصاريف|مدفوع)\s+(?:مشروع\s+)?([\p{L}][\p{L}\s-]{1,40}?)\s+(?:كان|كانت|هو|هي)(?=\s|[؟?!.،؛:]|$)/iu,
   );
-  if (project?.[1]) {
-    const query = cleanMention(project[1]);
-    if (query.length >= 2) mentions.push({ entityType: "project", query, confidence: 0.92 });
+  if (rememberedExpenseProject?.[1] && !mentions.some((item) => item.entityType === "project")) {
+    const query = cleanMention(rememberedExpenseProject[1]);
+    if (query.length >= 2) mentions.push({ entityType: "project", query, confidence: 0.9 });
   }
   return mentions;
 }
@@ -444,6 +462,13 @@ export function parseSemanticRequest(message: string): SemanticParse {
   const travelConflictRequest = TRAVEL_CONFLICT_WORDS.test(normalizedText)
     && OBLIGATION_WORDS.test(normalizedText)
     && CONFLICT_WORDS.test(normalizedText);
+  const obligationPlanningRequest = /(?:التزام|التزامات|مهمه|مهام|موعد|مواعيد)/iu.test(normalizedText)
+    && /(?:الاسبوع\s+(?:ال)?جاي|الاسبوع\s+القادم|next\s+week)/iu.test(normalizedText)
+    && /(?:شوف|قولي|رتب|نظم|خطط|plan|recommend)/iu.test(normalizedText)
+    && !/(?:ادفع|سدد|حول|احجز|نفذ|اجّل|اجل|غير\s+الموعد|pay|reschedule|execute)/iu.test(normalizedText);
+  const memoryFinancialConflict = /(?:فاكر|تفتكر|ذاكره|ذاكرة|memory|remember)/iu.test(normalizedText)
+    && /(?:مصروف|مصاريف|مدفوع|مبلغ|جنيه|دولار|ريال|expense|payment)/iu.test(normalizedText)
+    && /(?:كان|كانت|هو|هي|يطلع|طلع|يكون)/iu.test(normalizedText);
   const amount = REMINDER_WORDS.test(originalText) ? undefined : parseArabicAmount(originalText);
   const entityMentions = extractEntityMentions(originalText);
   const personTotal = normalizedText.match(/^(.+?)\s+(?:اخد)\s+مني\s+(?:كم)/iu)
@@ -476,9 +501,15 @@ export function parseSemanticRequest(message: string): SemanticParse {
   if (/موعد|مواعيد|ميعاد|مهمه|مهام|schedule|task/i.test(normalizedText)) domains.add("schedule");
   if (AGENT_WORK_WORDS.test(normalizedText)) domains.add("work");
   if (travelConflictRequest) domains.add("schedule");
+  if (obligationPlanningRequest || travelConflictRequest) domains.add("schedule");
   if (/شخص|جهة|contact|person|مين/i.test(normalizedText)) domains.add("person");
   if (/مشروع|project/i.test(normalizedText)) domains.add("project");
   if (/فاكر|آخر|اخر|سجلنا|المحفوظ|memory|remember/i.test(normalizedText)) domains.add("memory");
+  if (memoryFinancialConflict) {
+    domains.add("expense");
+    domains.add("memory");
+    domains.add("project");
+  }
 
   let intent: SemanticIntent = "unknown";
   let confidence = 0.35;
@@ -497,10 +528,18 @@ export function parseSemanticRequest(message: string): SemanticParse {
   } else if (AGENT_WORK_WORDS.test(normalizedText)) {
     intent = "create_agent_work";
     confidence = 0.88;
+  } else if (memoryFinancialConflict && !explicitExpenseWrite) {
+    intent = "memory_financial_conflict";
+    confidence = 0.94;
+  } else if (obligationPlanningRequest) {
+    intent = "planning";
+    confidence = 0.9;
   } else if (domains.has("expense") && hasReadLanguage && !explicitExpenseWrite) {
     intent = entityMentions.some((item) => item.entityType === "person")
       ? "person_expense_total"
-      : "expense_report";
+      : entityMentions.some((item) => item.entityType === "project")
+        ? "project_expenses"
+        : "expense_report";
     confidence = 0.91;
   } else if (/مين.*(?:مشروع|project)|(?:الناس|اشخاص).*(?:مشروع|project)/iu.test(normalizedText)) {
     intent = "project_people";
@@ -510,10 +549,10 @@ export function parseSemanticRequest(message: string): SemanticParse {
     confidence = amount
       ? entityMentions.length > 0 ? 0.93 : 0.82
       : 0.78;
-  } else if (travelConflictRequest && hasReadLanguage && !hasWriteLanguage) {
+  } else if (travelConflictRequest && !/(?:ادفع|سدد|حول|احجز|نفذ|اجّل|اجل|pay|reschedule|execute)/iu.test(normalizedText)) {
     // Identify a read-only planning context without inventing a travel interval.
-    intent = "schedule_read";
-    confidence = 0.88;
+    intent = "planning";
+    confidence = 0.9;
   } else if (domains.has("schedule") && hasReadLanguage && !hasWriteLanguage) {
     intent = "schedule_read";
     confidence = 0.9;
@@ -525,8 +564,11 @@ export function parseSemanticRequest(message: string): SemanticParse {
   const domainList = [...domains];
   const intentHasCompatibleDomains = (
     (intent === "record_expense" && domainList.every((domain) => domain === "expense" || domain === "person" || domain === "project"))
-    || (["expense_report", "person_expense_total"].includes(intent)
+    || (["expense_report", "person_expense_total", "project_expenses"].includes(intent)
       && domainList.every((domain) => domain === "expense" || domain === "person" || domain === "project"))
+    || (intent === "memory_financial_conflict"
+      && domainList.every((domain) => domain === "expense" || domain === "memory" || domain === "project"))
+    || (intent === "planning" && domainList.every((domain) => domain === "schedule" || domain === "memory"))
     || (intent === "create_person" && domainList.every((domain) => domain === "expense" || domain === "person"))
     || (intent === "create_project" && domainList.every((domain) => domain === "expense" || domain === "project"))
     || (intent === "create_agent_work" && domainList.every((domain) =>

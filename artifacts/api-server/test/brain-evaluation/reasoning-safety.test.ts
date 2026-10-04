@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { and, eq } from "drizzle-orm";
 import {
   conversationMemoryTable,
+  commitmentsTable,
   db,
   expensesTable,
+  projectsTable,
+  secondBrainMemoriesTable,
   secretaryOperationsTable,
 } from "@workspace/db";
 import {
@@ -29,6 +33,7 @@ import {
 } from "../../src/lib/secretary-operations";
 import { createBrainDecisionEnvelope } from "../../src/lib/brain-contract";
 import { parseSemanticRequest } from "../../src/lib/deterministic-intelligence";
+import { nextCairoCalendarWeekWindow } from "../../src/lib/relationship-context";
 import type { Identity } from "../../src/lib/secretary";
 
 type FixtureIdentity = Identity & { prefix: string };
@@ -50,13 +55,20 @@ class ScriptedProvider implements ModelGateway {
   }
 }
 
-function finalAnswer(message: string): GatewayResponse {
+function finalAnswer(
+  message: string,
+  groundedFacts?: Array<{ type: "money" | "count"; value: number; currency?: string; label?: string }>,
+): GatewayResponse {
   return {
     text: "",
     toolCalls: [{
       id: "brain-evaluation-final",
       name: "final_response",
-      args: { kind: "answer", message },
+      args: {
+        kind: "answer",
+        message,
+        ...(groundedFacts ? { groundedFacts } : {}),
+      },
     }],
   };
 }
@@ -67,6 +79,16 @@ function identity(prefix: string): FixtureIdentity {
     tenantId: `brain-reasoning-${prefix}-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     userId: `brain-reasoning-user-${prefix}`,
   };
+}
+
+function cairoDateLabel(date: Date): string {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+    timeZone: "Africa/Cairo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date).map((part) => [part.type, part.value]));
+  return `${parts.day}/${parts.month}/${parts.year}`;
 }
 
 async function countRows(identity: Identity): Promise<{ expenses: number; memory: number; operations: number }> {
@@ -88,6 +110,10 @@ async function countRows(identity: Identity): Promise<{ expenses: number; memory
 }
 
 async function cleanup(identity: Identity): Promise<void> {
+  await db.delete(secondBrainMemoriesTable).where(and(
+    eq(secondBrainMemoriesTable.tenantId, identity.tenantId),
+    eq(secondBrainMemoriesTable.ownerUserId, identity.userId),
+  ));
   await db.delete(conversationMemoryTable).where(and(
     eq(conversationMemoryTable.tenantId, identity.tenantId),
     eq(conversationMemoryTable.ownerUserId, identity.userId),
@@ -96,35 +122,203 @@ async function cleanup(identity: Identity): Promise<void> {
     eq(secretaryOperationsTable.tenantId, identity.tenantId),
     eq(secretaryOperationsTable.ownerUserId, identity.userId),
   ));
+  await db.delete(commitmentsTable).where(and(
+    eq(commitmentsTable.tenantId, identity.tenantId),
+    eq(commitmentsTable.ownerUserId, identity.userId),
+  ));
   await db.delete(expensesTable).where(and(
     eq(expensesTable.tenantId, identity.tenantId),
     eq(expensesTable.ownerUserId, identity.userId),
+  ));
+  await db.delete(projectsTable).where(and(
+    eq(projectsTable.tenantId, identity.tenantId),
+    eq(projectsTable.ownerUserId, identity.userId),
   ));
 }
 
 test("planning fixture measures read-only provider-backed planning separately from safety", async () => {
   const testIdentity = identity("planning");
   await cleanup(testIdentity);
-  const provider = new ScriptedProvider(finalAnswer(
-    "خطة الأسبوع: أولًا مراجعة الالتزامات المستحقة، ثم ترتيبها حسب الموعد، وأخيرًا لا يتم تنفيذ أي تغيير تلقائيًا.",
-  ));
-  const runtime = new Phase2AgentRuntime(new FailoverModelGateway(
-    { groq: provider },
-    ["groq"],
-  ));
+  try {
+    const nextWeek = nextCairoCalendarWeekWindow();
+    await db.insert(commitmentsTable).values({
+      tenantId: testIdentity.tenantId,
+      ownerUserId: testIdentity.userId,
+      title: "تسليم قائمة المخزون",
+      dueAt: new Date(nextWeek.start.getTime() + 24 * 60 * 60 * 1000),
+      status: "open",
+    });
+    const provider = new ScriptedProvider(finalAnswer(
+      "خطة الأسبوع: أولًا مراجعة الالتزامات المستحقة، ثم ترتيبها حسب الموعد، وأخيرًا لا يتم تنفيذ أي تغيير تلقائيًا.",
+    ));
+    const runtime = new Phase2AgentRuntime(new FailoverModelGateway(
+      { groq: provider },
+      ["groq"],
+    ));
 
-  const result = await runtime.run(testIdentity, {
-    message: "شوفلي الالتزامات اللي عليا الأسبوع الجاي وقولي أرتبها إزاي",
-    requestId: "brain-planning-fixture",
-  }, { dryRun: true });
+    const result = await runtime.run(testIdentity, {
+      message: "شوفلي الالتزامات اللي عليا الأسبوع الجاي وقولي أرتبها إزاي",
+      requestId: "brain-planning-fixture",
+    }, { dryRun: true });
+    const prompt = provider.calls.flatMap((call) => call.messages)
+      .map((message) => message.text ?? "")
+      .join("\n");
 
-  assert.equal(result.response?.kind, "answer");
-  assert.match(result.assistantMessage, /خطة الأسبوع/);
-  assert.match(result.assistantMessage, /لا يتم تنفيذ/);
-  assert.equal(result.action?.providerTrace?.providersAttempted?.length, 1);
-  assert.equal(result.action?.llmCalls, 1);
-  assert.deepEqual(await countRows(testIdentity), { expenses: 0, memory: 0, operations: 0 });
+    assert.equal(result.response?.kind, "answer");
+    assert.match(result.assistantMessage, /خطة الأسبوع/);
+    assert.match(result.assistantMessage, /تسليم قائمة المخزون/);
+    assert.match(result.assistantMessage, /لم أغيّر أي موعد/);
+    assert.ok(prompt.includes("تسليم قائمة المخزون"));
+    assert.equal(result.action?.providerTrace?.providersAttempted?.length, 1);
+    assert.equal(result.action?.llmCalls, 1);
+    assert.deepEqual(await countRows(testIdentity), { expenses: 0, memory: 0, operations: 0 });
+  } finally {
+    await cleanup(testIdentity);
+  }
+});
+
+test("dated travel-conflict runtime gives the provider scoped obligations without writing", async () => {
+  const testIdentity = identity("dated-travel-runtime");
   await cleanup(testIdentity);
+  try {
+    const nextWeek = nextCairoCalendarWeekWindow();
+    const dayMs = 24 * 60 * 60 * 1000;
+    const endDay = new Date(nextWeek.start.getTime() + 2 * dayMs);
+    const [commitment] = await db.insert(commitmentsTable).values({
+      tenantId: testIdentity.tenantId,
+      ownerUserId: testIdentity.userId,
+      title: "تسليم أثناء فترة السفر",
+      dueAt: new Date(nextWeek.start.getTime() + dayMs),
+      status: "open",
+    }).returning();
+    const provider = new ScriptedProvider({
+      text: "",
+      toolCalls: [{
+        id: "irrelevant-expense-read",
+        name: "query_expenses",
+        args: { period: "last_month" },
+      }],
+    });
+    const runtime = new Phase2AgentRuntime(new FailoverModelGateway(
+      { groq: provider },
+      ["groq"],
+    ));
+
+    const message = `أنا مسافر من ${cairoDateLabel(nextWeek.start)} إلى ${cairoDateLabel(endDay)}، شوف لو فيه التزامات ممكن تتعارض مع السفر`;
+    const result = await runtime.run(testIdentity, {
+      message,
+      requestId: "brain-dated-travel-runtime",
+    }, { dryRun: true });
+    const prompt = provider.calls.flatMap((call) => call.messages)
+      .map((item) => item.text ?? "")
+      .join("\n");
+    const recordsAfter = await db.select({
+      id: commitmentsTable.id,
+      title: commitmentsTable.title,
+      dueAt: commitmentsTable.dueAt,
+    }).from(commitmentsTable).where(and(
+      eq(commitmentsTable.tenantId, testIdentity.tenantId),
+      eq(commitmentsTable.ownerUserId, testIdentity.userId),
+    ));
+
+    assert.equal(result.response?.kind, "answer");
+    assert.equal(provider.calls.length, 1);
+    assert.ok(prompt.includes(commitment.title));
+    assert.ok(result.assistantMessage.includes(commitment.title));
+    assert.match(result.assistantMessage, /لم أغيّر أي موعد/);
+    assert.equal(result.action?.type, "out_of_scope_read_only_tool_rejected");
+    assert.equal(result.action?.toolName, "query_expenses");
+    assert.equal(result.action?.toolCalls, 0);
+    assert.equal(result.action?.llmCalls, 1);
+    assert.deepEqual(recordsAfter.map(({ id, title, dueAt }) => ({ id, title, dueAt: dueAt?.toISOString() })), [{
+      id: commitment.id,
+      title: commitment.title,
+      dueAt: commitment.dueAt?.toISOString(),
+    }]);
+    assert.equal((await countRows(testIdentity)).operations, 0);
+  } finally {
+    await cleanup(testIdentity);
+  }
+});
+
+test("travel conflict without dates asks for the interval before calling a provider", async () => {
+  const testIdentity = identity("undated-travel-runtime");
+  await cleanup(testIdentity);
+  try {
+    const provider = new ScriptedProvider(finalAnswer("هذا الرد يجب ألا يُستخدم."));
+    const runtime = new Phase2AgentRuntime(new FailoverModelGateway(
+      { groq: provider },
+      ["groq"],
+    ));
+    const result = await runtime.run(testIdentity, {
+      message: "أنا مسافر الأسبوع الجاي، شوف لو فيه التزامات ممكن تتعارض مع السفر",
+      requestId: "brain-undated-travel-runtime",
+    }, { dryRun: true });
+
+    assert.equal(result.response?.kind, "clarification");
+    assert.match(result.assistantMessage, /تاريخ بداية السفر ونهايته/);
+    assert.equal(provider.calls.length, 0);
+    assert.equal(result.action?.llmCalls, 0);
+    assert.deepEqual(await countRows(testIdentity), { expenses: 0, memory: 0, operations: 0 });
+  } finally {
+    await cleanup(testIdentity);
+  }
+});
+
+test("planning and financial-conflict intents reject mutating model tools without widening scope", async () => {
+  const nextWeek = nextCairoCalendarWeekWindow();
+  const cases = [
+    {
+      label: "planning",
+      message: "شوفلي الالتزامات اللي عليا الأسبوع الجاي وقولي أرتبها إزاي",
+    },
+    {
+      label: "travel-conflict",
+      message: `أنا مسافر من ${cairoDateLabel(nextWeek.start)} إلى ${cairoDateLabel(new Date(nextWeek.start.getTime() + 2 * 24 * 60 * 60 * 1000))}، شوف لو فيه التزامات تتعارض مع السفر`,
+    },
+    {
+      label: "financial-conflict",
+      message: "فاكر إن مصروف المحجر كان 5000 جنيه",
+    },
+  ];
+  for (const scenario of cases) {
+    const testIdentity = identity(`read-only-${scenario.label}`);
+    await cleanup(testIdentity);
+    try {
+      const provider = new ScriptedProvider({
+        text: "",
+        toolCalls: [{
+          id: `forbidden-write-${scenario.label}`,
+          name: "record_expense",
+          args: {
+            amountMinor: 500_000,
+            currency: "EGP",
+            description: "يجب ألا يسجل",
+          },
+        }],
+      });
+      const runtime = new Phase2AgentRuntime(new FailoverModelGateway(
+        { groq: provider },
+        ["groq"],
+      ));
+
+      const before = await countRows(testIdentity);
+      const result = await runtime.run(testIdentity, {
+        message: scenario.message,
+        requestId: `brain-read-only-${scenario.label}`,
+      });
+      const after = await countRows(testIdentity);
+
+      assert.equal(provider.calls.length, 1, scenario.label);
+      assert.equal(result.response?.kind, "clarification", scenario.label);
+      assert.equal(result.action?.type, "out_of_scope_read_only_tool_rejected", scenario.label);
+      assert.equal(result.action?.toolName, "record_expense", scenario.label);
+      assert.equal(after.expenses, before.expenses, scenario.label);
+      assert.equal(after.operations, before.operations, scenario.label);
+    } finally {
+      await cleanup(testIdentity);
+    }
+  }
 });
 
 test("memory-financial conflict fixture keeps structured records authoritative", () => {
@@ -140,7 +334,7 @@ test("memory-financial conflict fixture keeps structured records authoritative",
       conversationId: "brain-memory-financial-conflict-conversation",
       strategy: "lexical_v1",
       triggered: true,
-      queryDomain: "structured_record_read",
+      queryDomain: "structured_record_comparison",
       consideredCount: 1,
       selected: [],
       excluded: [{
@@ -161,6 +355,73 @@ test("memory-financial conflict fixture keeps structured records authoritative",
   assert.ok(envelope.context.selected.includes("governed_second_brain_context"));
   assert.ok(envelope.context.excluded.includes("unverified_model_claims"));
   assert.equal(envelope.trace.retrievalUsed, true);
+});
+
+test("memory-financial conflict runtime supplies the authoritative project expense without writing", async () => {
+  const testIdentity = identity("memory-financial-runtime");
+  await cleanup(testIdentity);
+  try {
+    const [savedMemory] = await db.insert(secondBrainMemoriesTable).values({
+      id: randomUUID(),
+      tenantId: testIdentity.tenantId,
+      ownerUserId: testIdentity.userId,
+      kind: "fact",
+      key: "note:quarry_expense",
+      value: "مصروف المحجر كان 5000 جنيه",
+      normalizedValue: "مصروف المحجر كان 5000 جنيه",
+      confidenceBps: 10_000,
+      status: "active",
+      sourceConversationId: "memory-financial-runtime",
+      sourceTurnId: "saved-expense-memory",
+      metadata: { source: "explicit_user_instruction" },
+    }).returning();
+    const [project] = await db.insert(projectsTable).values({
+      tenantId: testIdentity.tenantId,
+      ownerUserId: testIdentity.userId,
+      name: "المحجر",
+      nameKey: "المحجر",
+    }).returning();
+    const [expense] = await db.insert(expensesTable).values({
+      tenantId: testIdentity.tenantId,
+      ownerUserId: testIdentity.userId,
+      projectId: project.id,
+      description: "شراء مولد",
+      amountMinor: 825_000,
+      currency: "EGP",
+    }).returning();
+    const before = await countRows(testIdentity);
+    const provider = new ScriptedProvider(finalAnswer(
+      "السجل الرسمي للمحجر يثبت 8250 جنيه، وهو المرجع المعتمد مقارنة بالملاحظة القديمة.",
+      [{ type: "money", value: 8250, currency: "EGP", label: "مصروف المحجر" }],
+    ));
+    const runtime = new Phase2AgentRuntime(new FailoverModelGateway(
+      { groq: provider },
+      ["groq"],
+    ));
+
+    const result = await runtime.run(testIdentity, {
+      message: "فاكر إن مصروف المحجر كان 5000 جنيه",
+      requestId: "brain-memory-financial-runtime",
+    });
+    const after = await countRows(testIdentity);
+    const prompt = provider.calls.flatMap((call) => call.messages)
+      .map((message) => message.text ?? "")
+      .join("\n");
+
+    assert.equal(result.response?.kind, "answer");
+    assert.equal(provider.calls.length, 1);
+    assert.ok(prompt.includes(expense.description));
+    assert.ok(prompt.includes(String(expense.amountMinor)));
+    assert.ok(prompt.includes(project.name));
+    const secondBrainTrace = JSON.stringify(result.action?.secondBrainRetrievalTrace);
+    assert.ok(secondBrainTrace.includes(savedMemory.id));
+    assert.ok(secondBrainTrace.includes("structured_record_comparison"));
+    assert.ok(secondBrainTrace.includes('"llmContextIncluded":true'));
+    assert.equal(after.expenses, before.expenses);
+    assert.equal(after.operations, before.operations);
+  } finally {
+    await cleanup(testIdentity);
+  }
 });
 
 test("provider failure fixture preserves classification, fallback evidence, and zero writes", async () => {

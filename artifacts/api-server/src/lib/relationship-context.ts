@@ -1,8 +1,9 @@
-import { and, desc, eq, inArray, lt, or } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lt, or } from "drizzle-orm";
 import {
   activityEventEntitiesTable,
   activityEventsTable,
   commitmentPeopleTable,
+  commitmentProjectsTable,
   commitmentsTable,
   db,
   expensesTable,
@@ -12,9 +13,12 @@ import {
   financialPaymentsTable,
   peopleTable,
   pool,
+  projectsTable,
   reminderPeopleTable,
+  reminderProjectsTable,
   remindersTable,
   taskPeopleTable,
+  taskProjectsTable,
   tasksTable,
   type FinancialParty,
 } from "@workspace/db";
@@ -42,7 +46,9 @@ export type RelationshipIntent =
   | "overdue_commitments"
   | "recent_activity"
   | "entity_context"
-  | "planning_conflict";
+  | "planning_conflict"
+  | "obligation_planning"
+  | "memory_financial_conflict";
 
 export type ContextMoneyTotal = {
   currency: string;
@@ -68,6 +74,12 @@ export type RelationshipContext = {
   financialSummary: Record<string, ContextMoneyTotal[]>;
   recentActivity: Array<Record<string, unknown>>;
   conversationReferences: Array<{ type: string; id: string; name: string }>;
+  temporalScope?: {
+    timezone: "Africa/Cairo";
+    start: string;
+    endExclusive: string;
+    interpretation: "next_calendar_week" | "explicit_travel_interval";
+  };
   uncertainties: string[];
   truncated: boolean;
 };
@@ -118,9 +130,158 @@ function cleanProjectQuery(value: string | undefined): string | undefined {
   return cleanQuery(value?.split(/\s+مع\s+/u)[0]);
 }
 
-function hasExplicitTravelInterval(message: string): boolean {
-  return /(?:من|ابتداءً?\s+من)\s+.+?\s+(?:إلى|الى|ل|حتى)\s+.+/iu.test(message)
-    || /(?:يوم|بتاريخ)\s+\d{1,2}(?:\s|\/|-)/u.test(message);
+type CalendarDateParts = { year?: number; month: number; day: number };
+
+const MONTH_NUMBERS = new Map<string, number>([
+  ["يناير", 1], ["كانون الثاني", 1], ["january", 1],
+  ["فبراير", 2], ["شباط", 2], ["february", 2],
+  ["مارس", 3], ["اذار", 3], ["march", 3],
+  ["ابريل", 4], ["نيسان", 4], ["april", 4],
+  ["مايو", 5], ["ايار", 5], ["may", 5],
+  ["يونيو", 6], ["حزيران", 6], ["june", 6],
+  ["يوليو", 7], ["تموز", 7], ["july", 7],
+  ["اغسطس", 8], ["اب", 8], ["august", 8],
+  ["سبتمبر", 9], ["ايلول", 9], ["september", 9],
+  ["اكتوبر", 10], ["تشرين الاول", 10], ["october", 10],
+  ["نوفمبر", 11], ["تشرين الثاني", 11], ["november", 11],
+  ["ديسمبر", 12], ["كانون الاول", 12], ["december", 12],
+]);
+
+function asciiDateDigits(value: string): string {
+  return value.replace(/[٠-٩]/gu, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)));
+}
+
+function parseDatePrefix(value: string): CalendarDateParts | null {
+  const normalized = normalizeEntityText(asciiDateDigits(value));
+  const iso = normalized.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?=\s|$)/u);
+  if (iso) return { year: Number(iso[1]), month: Number(iso[2]), day: Number(iso[3]) };
+  const numeric = normalized.match(/^(\d{1,2})[-/](\d{1,2})(?:[-/](\d{4}))?(?=\s|$)/u);
+  if (numeric) {
+    return {
+      day: Number(numeric[1]),
+      month: Number(numeric[2]),
+      ...(numeric[3] ? { year: Number(numeric[3]) } : {}),
+    };
+  }
+  const named = normalized.match(/^(\d{1,2})\s+([\p{L}\s]+?)(?:\s+(\d{4}))?(?=\s|$)/u);
+  if (!named) return null;
+  const monthName = named[2].trim();
+  const month = MONTH_NUMBERS.get(monthName);
+  return month
+    ? {
+        day: Number(named[1]),
+        month,
+        ...(named[3] ? { year: Number(named[3]) } : {}),
+      }
+    : null;
+}
+
+function validCalendarDate(parts: CalendarDateParts & { year: number }): boolean {
+  const date = new Date(Date.UTC(parts.year, parts.month - 1, parts.day));
+  return date.getUTCFullYear() === parts.year
+    && date.getUTCMonth() + 1 === parts.month
+    && date.getUTCDate() === parts.day;
+}
+
+function parseTravelInterval(message: string): { start: Date; endExclusive: Date } | null {
+  const normalized = normalizeEntityText(asciiDateDigits(message));
+  const range = normalized.match(/(?:من|ابتداء\s+من)\s+(.+?)\s+(?:الي|حتى|لحد|ل)\s+(.+?)$/u);
+  if (!range) return null;
+  const startParts = parseDatePrefix(range[1]);
+  const endParts = parseDatePrefix(range[2]);
+  if (!startParts || !endParts) return null;
+  const today = cairoDateParts(new Date());
+  let startYear = startParts.year ?? today.year;
+  if (
+    startParts.year === undefined
+    && (startParts.month < today.month || (startParts.month === today.month && startParts.day < today.day))
+  ) {
+    startYear += 1;
+  }
+  const endYear = endParts.year
+    ?? (endParts.month < startParts.month || (endParts.month === startParts.month && endParts.day < startParts.day)
+      ? startYear + 1
+      : startYear);
+  const concreteStart = { ...startParts, year: startYear };
+  const concreteEnd = { ...endParts, year: endYear };
+  if (!validCalendarDate(concreteStart) || !validCalendarDate(concreteEnd)) return null;
+  const start = cairoMidnight(startYear, startParts.month, startParts.day);
+  const endExclusive = cairoMidnight(
+    endYear,
+    endParts.month,
+    endParts.day + 1,
+  );
+  if (endExclusive <= start || endExclusive.getTime() - start.getTime() > 366 * 24 * 60 * 60 * 1000) {
+    return null;
+  }
+  return { start, endExclusive };
+}
+
+function cairoDateParts(date: Date): { year: number; month: number; day: number; weekday: number } {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Africa/Cairo",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    weekday: "short",
+  });
+  const parts = Object.fromEntries(formatter.formatToParts(date).map((part) => [part.type, part.value]));
+  const weekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(parts.weekday ?? "");
+  return {
+    year: Number(parts.year),
+    month: Number(parts.month),
+    day: Number(parts.day),
+    weekday: weekday < 0 ? 0 : weekday,
+  };
+}
+
+function cairoMidnight(year: number, month: number, day: number): Date {
+  const desiredLocalEpoch = Date.UTC(year, month - 1, day);
+  let candidate = desiredLocalEpoch;
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Africa/Cairo",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    second: "numeric",
+    hourCycle: "h23",
+  });
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const parts = Object.fromEntries(
+      formatter.formatToParts(new Date(candidate)).map((part) => [part.type, part.value]),
+    );
+    const representedLocalEpoch = Date.UTC(
+      Number(parts.year),
+      Number(parts.month) - 1,
+      Number(parts.day),
+      Number(parts.hour),
+      Number(parts.minute),
+      Number(parts.second),
+    );
+    candidate = desiredLocalEpoch - (representedLocalEpoch - candidate);
+  }
+  return new Date(candidate);
+}
+
+export function nextCairoCalendarWeekWindow(reference = new Date()): { start: Date; endExclusive: Date } {
+  const local = cairoDateParts(reference);
+  const daysUntilNextSunday = local.weekday === 0 ? 7 : 7 - local.weekday;
+  const nextSunday = new Date(Date.UTC(local.year, local.month - 1, local.day + daysUntilNextSunday));
+  const followingSunday = new Date(Date.UTC(
+    nextSunday.getUTCFullYear(),
+    nextSunday.getUTCMonth(),
+    nextSunday.getUTCDate() + 7,
+  ));
+  return {
+    start: cairoMidnight(nextSunday.getUTCFullYear(), nextSunday.getUTCMonth() + 1, nextSunday.getUTCDate()),
+    endExclusive: cairoMidnight(
+      followingSunday.getUTCFullYear(),
+      followingSunday.getUTCMonth() + 1,
+      followingSunday.getUTCDate(),
+    ),
+  };
 }
 
 export function parseRelationshipRequest(
@@ -128,7 +289,10 @@ export function parseRelationshipRequest(
   state?: ConversationState,
 ): ParsedRelationshipRequest | null {
   const normalized = normalizeEntityText(message);
-  const projectMatch = message.match(/(?:مشروع|project)\s+(.+?)(?:[؟?!.،؛:]|$)/iu);
+  const projectMatch = message.match(/(?:(?:ال)?مشروع|project)\s+(.+?)(?:[؟?!.،؛:]|$)/iu);
+  const definiteProjectMatch = message.match(
+    /(المشروع\s+.+?)(?=\s+(?:مصاريفه?|مصروفاته?|مصروفات|دفعت|صرفت|صرفنا|الناس|الأشخاص|اشخاص|مرتبط|علاقات)|[؟?!.،؛:]|$)/iu,
+  );
   const travelConflictRequest = /مسافر|مسافرة|سفر|السفر|رحلة|رحله|travel|trip/iu.test(normalized)
     && /التزام|التزامات|مستحق|واجب|مهمة|مهام|موعد|مواعيد|reminder|task/iu.test(normalized)
     && /تعارض|يتعارض|تتعارض|يتداخل|تتداخل|متعارض|conflict|overlap/iu.test(normalized);
@@ -162,6 +326,14 @@ export function parseRelationshipRequest(
   if (travelConflictRequest) {
     return { intent: "planning_conflict", usesConversationReference: false };
   }
+  if (
+    /(?:التزام|التزامات|مهمه|مهام|موعد|مواعيد)/iu.test(normalized)
+    && /(?:الاسبوع\s+(?:ال)?جاي|الاسبوع\s+القادم|next\s+week)/iu.test(normalized)
+    && /(?:شوف|قولي|رتب|نظم|خطط|plan|recommend)/iu.test(normalized)
+    && !/(?:ادفع|سدد|حول|احجز|نفذ|اجل|pay|reschedule|execute)/iu.test(normalized)
+  ) {
+    return { intent: "obligation_planning", usesConversationReference: false };
+  }
   if (/(?:المشروع)\s+(?:التاني|الثاني|2|٢)/u.test(normalized)) {
     return {
       intent: "entity_context",
@@ -177,8 +349,8 @@ export function parseRelationshipRequest(
   if (/تبرعات|تبرع/u.test(normalized) && /(?:كم|كام|ايه|إيه|اعرض|هات|مرتبط)/u.test(normalized)) {
     return {
       intent: "donations",
-      targetType: projectMatch ? "project" : undefined,
-      targetQuery: cleanQuery(projectMatch?.[1]),
+      targetType: projectMatch || definiteProjectMatch ? "project" : undefined,
+      targetQuery: definiteProjectMatch?.[1] ?? cleanQuery(projectMatch?.[1]),
       usesConversationReference,
     };
   }
@@ -195,7 +367,7 @@ export function parseRelationshipRequest(
     return { intent: "open_obligations", usesConversationReference };
   }
   if (
-    projectMatch
+    (projectMatch || definiteProjectMatch)
     && /(?:الأشخاص|اشخاص|الناس|مرتبط|علاقات)/u.test(normalized)
     && /مصروفات|مصاريف/u.test(normalized)
     && /التزامات|واجب|مهمة|مهام/u.test(normalized)
@@ -203,18 +375,18 @@ export function parseRelationshipRequest(
     return {
       intent: "entity_context",
       targetType: "project",
-      targetQuery: cleanProjectQuery(projectMatch[1]),
+      targetQuery: definiteProjectMatch?.[1] ?? cleanProjectQuery(projectMatch?.[1]),
       usesConversationReference,
     };
   }
   if (
-    projectMatch
-    && /(?:مصروفات|دفعت|دفعنا|انفقت|أنفقت|صرفنا|اتصرف).*(?:كم|كام|اجمالي|إجمالي)|(?:كم|كام|اجمالي|إجمالي).*(?:مصروفات|دفعت|دفعنا|انفقت|أنفقت|صرفنا|اتصرف)/u.test(normalized)
+    (projectMatch || definiteProjectMatch)
+    && /(?:مصروفات|مصاريفه?|دفعت|دفعنا|صرفت|انفقت|أنفقت|صرفنا|اتصرف).*(?:كم|كام|اجمالي|إجمالي)|(?:كم|كام|اجمالي|إجمالي).*(?:مصروفات|مصاريفه?|دفعت|دفعنا|صرفت|انفقت|أنفقت|صرفنا|اتصرف)/u.test(normalized)
   ) {
     return {
       intent: "project_expenses",
       targetType: "project",
-      targetQuery: cleanProjectQuery(projectMatch[1]),
+      targetQuery: definiteProjectMatch?.[1] ?? cleanProjectQuery(projectMatch?.[1]),
       usesConversationReference,
     };
   }
@@ -890,7 +1062,8 @@ export async function retrieveRelationshipContext(
   }
 
   if (parsed.intent === "planning_conflict") {
-    if (!hasExplicitTravelInterval(message)) {
+    const interval = parseTravelInterval(message);
+    if (!interval) {
       context.uncertainties.push("travel_interval_missing");
       return {
         context,
@@ -900,6 +1073,337 @@ export async function retrieveRelationshipContext(
         },
       };
     }
+    const owner = (table: { tenantId: any; ownerUserId: any }) => and(
+      eq(table.tenantId, identity.tenantId),
+      eq(table.ownerUserId, identity.userId),
+    );
+    const [commitments, tasks, reminders] = await Promise.all([
+      db.select({
+        id: commitmentsTable.id,
+        title: commitmentsTable.title,
+        dueAt: commitmentsTable.dueAt,
+        status: commitmentsTable.status,
+      }).from(commitmentsTable).where(and(
+        owner(commitmentsTable),
+        eq(commitmentsTable.status, "open"),
+        gte(commitmentsTable.dueAt, interval.start),
+        lt(commitmentsTable.dueAt, interval.endExclusive),
+      )).orderBy(asc(commitmentsTable.dueAt), asc(commitmentsTable.id))
+        .limit(RELATIONSHIP_CONTEXT_LIMITS.maxRecords + 1),
+      db.select({
+        id: tasksTable.id,
+        title: tasksTable.title,
+        dueAt: tasksTable.dueAt,
+        status: tasksTable.status,
+      }).from(tasksTable).where(and(
+        owner(tasksTable),
+        inArray(tasksTable.status, ["pending", "in_progress"]),
+        gte(tasksTable.dueAt, interval.start),
+        lt(tasksTable.dueAt, interval.endExclusive),
+      )).orderBy(asc(tasksTable.dueAt), asc(tasksTable.id))
+        .limit(RELATIONSHIP_CONTEXT_LIMITS.maxRecords + 1),
+      db.select({
+        id: remindersTable.id,
+        title: remindersTable.text,
+        dueAt: remindersTable.dueAt,
+        status: remindersTable.status,
+      }).from(remindersTable).where(and(
+        owner(remindersTable),
+        eq(remindersTable.status, "scheduled"),
+        gte(remindersTable.dueAt, interval.start),
+        lt(remindersTable.dueAt, interval.endExclusive),
+      )).orderBy(asc(remindersTable.dueAt), asc(remindersTable.id))
+        .limit(RELATIONSHIP_CONTEXT_LIMITS.maxRecords + 1),
+    ]);
+    const scheduledRecords = [
+      ...commitments.map((record) => ({ ...record, kind: "commitment" })),
+      ...tasks.map((record) => ({ ...record, kind: "task" })),
+      ...reminders.map((record) => ({ ...record, kind: "reminder" })),
+    ].sort((left, right) =>
+      (left.dueAt?.getTime() ?? 0) - (right.dueAt?.getTime() ?? 0)
+      || left.id.localeCompare(right.id),
+    );
+    context.temporalScope = {
+      timezone: "Africa/Cairo",
+      start: interval.start.toISOString(),
+      endExclusive: interval.endExclusive.toISOString(),
+      interpretation: "explicit_travel_interval",
+    };
+    context.relevantRecords = scheduledRecords
+      .slice(0, RELATIONSHIP_CONTEXT_LIMITS.maxRecords)
+      .map((record) => ({
+        id: record.id,
+        kind: record.kind,
+        title: record.title,
+        dueAt: record.dueAt?.toISOString() ?? null,
+        status: record.status,
+      }));
+    if (scheduledRecords.length > RELATIONSHIP_CONTEXT_LIMITS.maxRecords) {
+      context.truncated = true;
+      context.uncertainties.push("travel_conflicts_truncated");
+    }
+    return { context };
+  }
+
+  if (parsed.intent === "obligation_planning") {
+    const window = nextCairoCalendarWeekWindow();
+    const owner = (table: { tenantId: any; ownerUserId: any }) => and(
+      eq(table.tenantId, identity.tenantId),
+      eq(table.ownerUserId, identity.userId),
+    );
+    const [commitments, tasks, reminders, undatedCommitments, undatedTasks] = await Promise.all([
+      db.select({
+        id: commitmentsTable.id,
+        title: commitmentsTable.title,
+        personId: commitmentsTable.personId,
+        dueAt: commitmentsTable.dueAt,
+        status: commitmentsTable.status,
+      }).from(commitmentsTable).where(and(
+        owner(commitmentsTable),
+        eq(commitmentsTable.status, "open"),
+        gte(commitmentsTable.dueAt, window.start),
+        lt(commitmentsTable.dueAt, window.endExclusive),
+      )).orderBy(asc(commitmentsTable.dueAt), asc(commitmentsTable.id))
+        .limit(RELATIONSHIP_CONTEXT_LIMITS.maxRecords + 1),
+      db.select({
+        id: tasksTable.id,
+        title: tasksTable.title,
+        dueAt: tasksTable.dueAt,
+        status: tasksTable.status,
+      }).from(tasksTable).where(and(
+        owner(tasksTable),
+        inArray(tasksTable.status, ["pending", "in_progress"]),
+        gte(tasksTable.dueAt, window.start),
+        lt(tasksTable.dueAt, window.endExclusive),
+      )).orderBy(asc(tasksTable.dueAt), asc(tasksTable.id))
+        .limit(RELATIONSHIP_CONTEXT_LIMITS.maxRecords + 1),
+      db.select({
+        id: remindersTable.id,
+        title: remindersTable.text,
+        dueAt: remindersTable.dueAt,
+        status: remindersTable.status,
+      }).from(remindersTable).where(and(
+        owner(remindersTable),
+        eq(remindersTable.status, "scheduled"),
+        gte(remindersTable.dueAt, window.start),
+        lt(remindersTable.dueAt, window.endExclusive),
+      )).orderBy(asc(remindersTable.dueAt), asc(remindersTable.id))
+        .limit(RELATIONSHIP_CONTEXT_LIMITS.maxRecords + 1),
+      db.select({ id: commitmentsTable.id, title: commitmentsTable.title })
+        .from(commitmentsTable).where(and(
+          owner(commitmentsTable),
+          eq(commitmentsTable.status, "open"),
+          isNull(commitmentsTable.dueAt),
+        )).orderBy(asc(commitmentsTable.id)).limit(RELATIONSHIP_CONTEXT_LIMITS.maxRecords + 1),
+      db.select({ id: tasksTable.id, title: tasksTable.title })
+        .from(tasksTable).where(and(
+          owner(tasksTable),
+          inArray(tasksTable.status, ["pending", "in_progress"]),
+          isNull(tasksTable.dueAt),
+        )).orderBy(asc(tasksTable.id)).limit(RELATIONSHIP_CONTEXT_LIMITS.maxRecords + 1),
+    ]);
+
+    const commitmentIds = commitments.map((row) => row.id);
+    const taskIds = tasks.map((row) => row.id);
+    const reminderIds = reminders.map((row) => row.id);
+    const commitmentPersonIdColumn = (commitmentPeopleTable as any).personId;
+    const commitmentProjectIdColumn = (commitmentProjectsTable as any).projectId;
+    const reminderPersonIdColumn = (reminderPeopleTable as any).personId;
+    const reminderProjectIdColumn = (reminderProjectsTable as any).projectId;
+    const [commitmentPeople, commitmentProjects, taskPeople, taskProjects, reminderPeople, reminderProjects] =
+      await Promise.all([
+        commitmentIds.length ? db.select({
+          recordId: commitmentPeopleTable.commitmentId,
+          entityId: commitmentPersonIdColumn,
+        }).from(commitmentPeopleTable).where(and(
+          owner(commitmentPeopleTable),
+          inArray(commitmentPeopleTable.commitmentId, commitmentIds),
+        )).limit(RELATIONSHIP_CONTEXT_LIMITS.maxRelationships + 1) : Promise.resolve([]),
+        commitmentIds.length ? db.select({
+          recordId: commitmentProjectsTable.commitmentId,
+          entityId: commitmentProjectIdColumn,
+        }).from(commitmentProjectsTable).where(and(
+          owner(commitmentProjectsTable),
+          inArray(commitmentProjectsTable.commitmentId, commitmentIds),
+        )).limit(RELATIONSHIP_CONTEXT_LIMITS.maxRelationships + 1) : Promise.resolve([]),
+        taskIds.length ? db.select({
+          recordId: taskPeopleTable.taskId,
+          entityId: taskPeopleTable.personId,
+        }).from(taskPeopleTable).where(and(
+          owner(taskPeopleTable),
+          inArray(taskPeopleTable.taskId, taskIds),
+        )).limit(RELATIONSHIP_CONTEXT_LIMITS.maxRelationships + 1) : Promise.resolve([]),
+        taskIds.length ? db.select({
+          recordId: taskProjectsTable.taskId,
+          entityId: taskProjectsTable.projectId,
+        }).from(taskProjectsTable).where(and(
+          owner(taskProjectsTable),
+          inArray(taskProjectsTable.taskId, taskIds),
+        )).limit(RELATIONSHIP_CONTEXT_LIMITS.maxRelationships + 1) : Promise.resolve([]),
+        reminderIds.length ? db.select({
+          recordId: reminderPeopleTable.reminderId,
+          entityId: reminderPersonIdColumn,
+        }).from(reminderPeopleTable).where(and(
+          owner(reminderPeopleTable),
+          inArray(reminderPeopleTable.reminderId, reminderIds),
+        )).limit(RELATIONSHIP_CONTEXT_LIMITS.maxRelationships + 1) : Promise.resolve([]),
+        reminderIds.length ? db.select({
+          recordId: reminderProjectsTable.reminderId,
+          entityId: reminderProjectIdColumn,
+        }).from(reminderProjectsTable).where(and(
+          owner(reminderProjectsTable),
+          inArray(reminderProjectsTable.reminderId, reminderIds),
+        )).limit(RELATIONSHIP_CONTEXT_LIMITS.maxRelationships + 1) : Promise.resolve([]),
+      ]);
+    const allPeopleLinks = [
+      ...commitments.filter((row) => row.personId).map((row) => ({ recordId: row.id, entityId: row.personId! })),
+      ...commitmentPeople,
+      ...taskPeople,
+      ...reminderPeople,
+    ];
+    const allProjectLinks = [...commitmentProjects, ...taskProjects, ...reminderProjects];
+    const personIds = [...new Set(allPeopleLinks.map((link) => link.entityId))];
+    const projectIds = [...new Set(allProjectLinks.map((link) => link.entityId))];
+    const [people, projects] = await Promise.all([
+      personIds.length ? db.select({ id: peopleTable.id, name: peopleTable.name })
+        .from(peopleTable).where(and(owner(peopleTable), inArray(peopleTable.id, personIds)))
+        : Promise.resolve([]),
+      projectIds.length ? db.select({ id: projectsTable.id, name: projectsTable.name })
+        .from(projectsTable).where(and(owner(projectsTable), inArray(projectsTable.id, projectIds)))
+        : Promise.resolve([]),
+    ]);
+    const peopleById = new Map(people.map((person) => [person.id, person.name]));
+    const projectsById = new Map(projects.map((project) => [project.id, project.name]));
+    const datedRecords: Array<{
+      kind: string;
+      id: string;
+      title: string;
+      dueAt: Date | null;
+      status: string;
+    }> = [
+      ...commitments.map((row) => ({
+        kind: "commitment",
+        id: row.id,
+        title: row.title,
+        dueAt: row.dueAt,
+        status: row.status,
+      })),
+      ...tasks.map((row) => ({
+        kind: "task",
+        id: row.id,
+        title: row.title,
+        dueAt: row.dueAt,
+        status: row.status,
+      })),
+      ...reminders.map((row) => ({
+        kind: "reminder",
+        id: row.id,
+        title: row.title,
+        dueAt: row.dueAt,
+        status: row.status,
+      })),
+    ].sort((left, right) =>
+      (left.dueAt?.getTime() ?? 0) - (right.dueAt?.getTime() ?? 0)
+      || left.id.localeCompare(right.id),
+    );
+    const undatedRecords: typeof datedRecords = [
+      ...undatedCommitments.map((row) => ({
+        kind: "commitment",
+        id: row.id,
+        title: row.title,
+        dueAt: null,
+        status: "open",
+      })),
+      ...undatedTasks.map((row) => ({
+        kind: "task",
+        id: row.id,
+        title: row.title,
+        dueAt: null,
+        status: "pending",
+      })),
+    ];
+    const selectedDated = datedRecords.slice(0, RELATIONSHIP_CONTEXT_LIMITS.maxRecords);
+    const remainingBound = RELATIONSHIP_CONTEXT_LIMITS.maxRecords - selectedDated.length;
+    const selectedUndated = undatedRecords.slice(0, remainingBound);
+    context.temporalScope = {
+      timezone: "Africa/Cairo",
+      start: window.start.toISOString(),
+      endExclusive: window.endExclusive.toISOString(),
+      interpretation: "next_calendar_week",
+    };
+    context.relevantRecords = [...selectedDated, ...selectedUndated].map((record) => {
+      const linkedPeople = allPeopleLinks
+        .filter((link) => link.recordId === record.id)
+        .map((link) => ({ id: link.entityId, name: peopleById.get(link.entityId) }))
+        .filter((person): person is { id: string; name: string } => Boolean(person.name));
+      const linkedProjects = allProjectLinks
+        .filter((link) => link.recordId === record.id)
+        .map((link) => ({ id: link.entityId, name: projectsById.get(link.entityId) }))
+        .filter((project): project is { id: string; name: string } => Boolean(project.name));
+      for (const person of linkedPeople) {
+        if (
+          context.resolvedEntities.length < RELATIONSHIP_CONTEXT_LIMITS.maxEntities
+          && !context.resolvedEntities.some((entity) => entity.id === person.id)
+        ) {
+          context.resolvedEntities.push({
+            id: person.id,
+            name: person.name,
+            type: "person",
+            matchType: "exact",
+            confidence: 1,
+          });
+        }
+      }
+      for (const project of linkedProjects) {
+        if (
+          context.resolvedEntities.length < RELATIONSHIP_CONTEXT_LIMITS.maxEntities
+          && !context.resolvedEntities.some((entity) => entity.id === project.id)
+        ) {
+          context.resolvedEntities.push({
+            id: project.id,
+            name: project.name,
+            type: "project",
+            matchType: "exact",
+            confidence: 1,
+          });
+        }
+      }
+      context.relevantRelationships.push(
+        ...linkedPeople.map((person) => ({
+          fromType: record.kind,
+          fromId: record.id,
+          toType: "person",
+          toId: person.id,
+          name: person.name,
+        })),
+        ...linkedProjects.map((project) => ({
+          fromType: record.kind,
+          fromId: record.id,
+          toType: "project",
+          toId: project.id,
+          name: project.name,
+        })),
+      );
+      return {
+        id: record.id,
+        kind: record.kind,
+        title: record.title,
+        dueAt: record.dueAt?.toISOString() ?? null,
+        status: record.status ?? "open",
+        people: linkedPeople.map((person) => person.name),
+        projects: linkedProjects.map((project) => project.name),
+        ...(record.dueAt ? {} : { dateMissing: true }),
+      };
+    });
+    if (undatedRecords.length > 0) context.uncertainties.push("undated_open_obligations");
+    if (
+      allPeopleLinks.length > RELATIONSHIP_CONTEXT_LIMITS.maxRelationships
+      || allProjectLinks.length > RELATIONSHIP_CONTEXT_LIMITS.maxRelationships
+      || selectedDated.length + selectedUndated.length < datedRecords.length + undatedRecords.length
+    ) {
+      context.truncated = true;
+    }
+    context.relevantRelationships = context.relevantRelationships.slice(0, RELATIONSHIP_CONTEXT_LIMITS.maxRelationships);
     return { context };
   }
 

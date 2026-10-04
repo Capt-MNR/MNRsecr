@@ -122,6 +122,7 @@ import {
   normalizeEntityText,
   recordResolverShadow,
   resolveEntity,
+  resolveExactAssociatedAlias,
   type ResolverResult,
 } from "./entity-resolver";
 import { recordToolActivity, type DbExecutor } from "./entity-graph";
@@ -3576,7 +3577,9 @@ const systemInstruction = `أنت سكرتير شخصي عربي يعمل داخ
 12. لا تذكر رقمًا ماليًا أو عددًا ماليًا من الذاكرة أو التخمين. بعد الأدوات استخدم final_response، وضع كل رقم مالي مؤكد في groundedFacts كما أعادته الأداة. اجعل الرسالة طبيعية وليست قالبًا.
 13. لا تستخدم final_response قبل إكمال الأدوات اللازمة. إذا كانت البيانات ناقصة أو الأسماء متكررة، اجعل kind = clarification بدل التخمين.
 14. إذا فشل مزود، لا تعرض رسالة تقنية ولا تقل إن الكتابة تمت. استخدم final_response برسالة عربية قصيرة توضّح أن الطلب لم يكتمل وأن البيانات لم تتغير.
-15. ${RETRIEVED_MEMORY_SAFETY_RULE}`;
+15. عند مقارنة معلومة محفوظة بسجل مالي، اشرح الاختلاف من دون تعديل أيٍّ من المصدرين، والسجل المالي هو المرجع للمبالغ الحالية.
+16. التخطيط للالتزامات قراءة فقط: لا تدفع أو تعِد الجدولة أو تتواصل مع أحد. استخدم السجلات المؤكدة ضمن الفترة المحددة، واسأل عن التفاصيل الناقصة بدل افتراضها.
+17. ${RETRIEVED_MEMORY_SAFETY_RULE}`;
 
 const expenseSystemGuidance = `قواعد المصروفات عند ارتباط الطلب بها:
 - لا تسجل مصروفًا قبل حل الشخص أو المشروع عند الحاجة. لا تنشئ الشخص تلقائيًا إذا لم يوجد؛ يمكن تسجيل المصروف بدون personId لأن المستلم اختياري. استخدم amountMinor عددًا صحيحًا بوحدات العملة الصغرى، لا رقمًا عائمًا.
@@ -5488,10 +5491,47 @@ function numericTextValues(value: string): number[] {
     .filter((number) => Number.isFinite(number));
 }
 
-function groundedValues(history: ToolHistoryEntry[]): Set<number> {
-  const values = new Set<number>();
+function groundedValues(history: ToolHistoryEntry[], additionalValues: readonly number[] = []): Set<number> {
+  const values = new Set<number>(additionalValues.filter(Number.isSafeInteger));
   for (const entry of history) numericValues(entry.result, values);
   return values;
+}
+
+function structuredComparisonValues(result: {
+  expenses?: unknown;
+  summary?: unknown;
+}): number[] {
+  const values = new Set<number>();
+  const addAmountMinor = (amountMinor: unknown) => {
+    if (!Number.isSafeInteger(amountMinor) || Number(amountMinor) < 0) return;
+    const minor = Number(amountMinor);
+    values.add(minor);
+    if (minor % 100 === 0) values.add(minor / 100);
+  };
+  const addCount = (count: unknown) => {
+    if (Number.isSafeInteger(count) && Number(count) >= 0) values.add(Number(count));
+  };
+
+  if (Array.isArray(result.expenses)) {
+    for (const expense of result.expenses) {
+      if (!expense || typeof expense !== "object") continue;
+      addAmountMinor((expense as Record<string, unknown>).amountMinor);
+    }
+  }
+  if (result.summary && typeof result.summary === "object") {
+    const summary = result.summary as Record<string, unknown>;
+    addAmountMinor(summary.totalMinor ?? summary.amountMinor);
+    addCount(summary.count);
+    if (Array.isArray(summary.currencyTotals)) {
+      for (const total of summary.currencyTotals) {
+        if (!total || typeof total !== "object") continue;
+        const item = total as Record<string, unknown>;
+        addAmountMinor(item.totalMinor ?? item.amountMinor);
+        addCount(item.count);
+      }
+    }
+  }
+  return [...values];
 }
 
 function isFinancialMessage(message: string): boolean {
@@ -5607,6 +5647,7 @@ function safeFinalResponse(
   message: string,
   history: ToolHistoryEntry[],
   groundedFacts?: GroundedFact[],
+  additionalGroundedValues: readonly number[] = [],
 ): FinalResponse {
   if (looksLikeInternalStructuredResponse(message)) {
     return {
@@ -5616,12 +5657,13 @@ function safeFinalResponse(
   }
   const facts = groundedFacts?.filter((fact) => {
     if (!fact || !["money", "count"].includes(fact.type) || !Number.isSafeInteger(fact.value)) return false;
-    const values = groundedValues(history);
+    const values = groundedValues(history, additionalGroundedValues);
     return values.has(fact.value);
   });
   const hasInvalidFact = (groundedFacts?.length ?? 0) !== (facts?.length ?? 0);
   const unverifiedNumbers = isFinancialMessage(message)
-    ? numericTextValues(message).some((value) => !groundedValues(history).has(value))
+    ? numericTextValues(message).some((value) =>
+        !groundedValues(history, additionalGroundedValues).has(value))
     : false;
 
   if (hasInvalidFact || unverifiedNumbers) {
@@ -5642,6 +5684,7 @@ function finalResponseFromArgs(
   args: Record<string, unknown>,
   history: ToolHistoryEntry[],
   requestMessage = "",
+  additionalGroundedValues: readonly number[] = [],
 ): FinalResponse {
   const kind = args.kind === "clarification" || args.kind === "not_found" || args.kind === "error"
     ? args.kind
@@ -5670,20 +5713,82 @@ function finalResponseFromArgs(
   if (canonical) {
     return safeFinalResponse("answer", canonical.message, history, canonical.facts);
   }
-  return safeFinalResponse(kind, message, history, groundedFacts);
+  return safeFinalResponse(kind, message, history, groundedFacts, additionalGroundedValues);
 }
 
 function finalResponseFromText(
   text: string,
   history: ToolHistoryEntry[],
   requestMessage = "",
+  additionalGroundedValues: readonly number[] = [],
 ): FinalResponse {
   const message = text.trim() || "لم أستطع إكمال الطلب بشكل آمن. اكتب التفاصيل المطلوبة وسأحاول مرة أخرى.";
   const canonical = canonicalExpenseTotal(history, requestMessage);
   if (canonical) {
     return safeFinalResponse("answer", canonical.message, history, canonical.facts);
   }
-  return safeFinalResponse("answer", message, history);
+  return safeFinalResponse("answer", message, history, undefined, additionalGroundedValues);
+}
+
+function planningResponseFromContext(context: {
+  intent: string;
+  relevantRecords: Array<Record<string, unknown>>;
+  truncated?: boolean;
+  uncertainties?: string[];
+} | null | undefined): FinalResponse | null {
+  if (!context || !["obligation_planning", "planning_conflict"].includes(context.intent)) return null;
+
+  const labels: Record<string, string> = {
+    commitment: "التزام",
+    task: "مهمة",
+    reminder: "تذكير",
+  };
+  const records = context.relevantRecords.flatMap((record) => {
+    const title = typeof record.title === "string" ? record.title.trim().slice(0, 180) : "";
+    if (!title) return [];
+    const dueAt = record.dueAt instanceof Date
+      ? record.dueAt
+      : typeof record.dueAt === "string"
+        ? new Date(record.dueAt)
+        : null;
+    const validDueAt = dueAt && Number.isFinite(dueAt.getTime()) ? dueAt : null;
+    const dueLabel = validDueAt
+      ? new Intl.DateTimeFormat("ar-EG", {
+          timeZone: "Africa/Cairo",
+          dateStyle: "medium",
+          timeStyle: "short",
+        }).format(validDueAt)
+      : "موعده غير محدد";
+    const kind = typeof record.kind === "string" ? labels[record.kind] ?? "سجل" : "سجل";
+    return [{
+      timestamp: validDueAt?.getTime() ?? Number.MAX_SAFE_INTEGER,
+      line: `• ${kind}: ${title} — ${dueLabel}`,
+    }];
+  }).sort((left, right) => left.timestamp - right.timestamp);
+  const truncatedNote = context.truncated || context.uncertainties?.some((value) => value.includes("truncated"))
+    ? "\nقد تكون القائمة مختصرة حسب حدود السجلات المتاحة."
+    : "";
+
+  if (records.length === 0) {
+    return {
+      kind: "not_found",
+      message: context.intent === "obligation_planning"
+        ? "لا توجد التزامات أو مهام أو تذكيرات مسجلة خلال الأسبوع القادم."
+        : "لم أجد التزامات مسجلة تقع ضمن فترة السفر المحددة.",
+    };
+  }
+
+  const list = records.map((record) => record.line).join("\n");
+  if (context.intent === "obligation_planning") {
+    return {
+      kind: "answer",
+      message: `خطة الأسبوع القادم: ابدأ بالأقرب موعدًا، ثم تابع بهذا الترتيب:\n${list}${truncatedNote}\nهذا ترتيب مقترح فقط؛ لم أغيّر أي موعد.`,
+    };
+  }
+  return {
+    kind: "answer",
+    message: `تتداخل هذه الالتزامات مع فترة السفر المحددة:\n${list}${truncatedNote}\nلم أغيّر أي موعد ولم أتواصل مع أحد.`,
+  };
 }
 
 function recoveryResponseAfterSuccessfulWrite(history: ToolHistoryEntry[]): FinalResponse | null {
@@ -6473,9 +6578,29 @@ export class Phase2AgentRuntime {
       );
     }
     const learningSignal = detectLearningSignal(input.message, conversationMemory.recentTurns);
-    const semanticParse = featureFlags.deterministicIntelligence()
+    let semanticParse = featureFlags.deterministicIntelligence()
       ? parseSemanticRequest(input.message)
       : null;
+    const bareProjectReference = input.message.trim().match(
+      /^(?:المشروع|مشروع)\s+[\p{L}][\p{L}\s-]{1,60}[؟?!.،؛:]?$/u,
+    )?.[0]?.replace(/[؟?!.،؛:]+$/u, "").trim();
+    const exactProjectAlias = bareProjectReference
+      ? await resolveExactAssociatedAlias(identity, "project", bareProjectReference)
+      : null;
+    if (semanticParse && exactProjectAlias?.matchType === "alias") {
+      semanticParse = {
+        ...semanticParse,
+        domains: ["project"],
+        intent: "project_reference",
+        confidence: 0.99,
+        entityMentions: [{
+          entityType: "project",
+          query: bareProjectReference!,
+          confidence: 1,
+        }],
+        ambiguous: false,
+      };
+    }
     const deterministicMetrics: DeterministicRequestMetrics = createDeterministicRequestMetrics();
     if (semanticParse) {
       deterministicMetrics.normalizationApplied = semanticParse.normalizedText !== input.message.trim();
@@ -6537,6 +6662,7 @@ export class Phase2AgentRuntime {
       governedSecondBrain.trace.queryDomain,
     );
     let structuredComparisonData: Record<string, unknown> | null = null;
+    let structuredComparisonGroundedValues: number[] = [];
     let structuredComparisonContextIncluded = false;
     if (secondBrainQueryDomain === "structured_record_comparison") {
       const projectMention = semanticParse?.entityMentions.find((mention) => mention.entityType === "project");
@@ -6573,6 +6699,10 @@ export class Phase2AgentRuntime {
             summary: officialRecords.summary,
             authority: "structured_financial_record",
           };
+          structuredComparisonGroundedValues = structuredComparisonValues({
+            expenses: officialRecords.expenses,
+            summary: officialRecords.summary,
+          });
           structuredComparisonContextIncluded = true;
         }
       }
@@ -6652,7 +6782,37 @@ export class Phase2AgentRuntime {
       },
       { role: "user", text: input.message.trim() },
     ];
-    let activeToolScope = classifyToolScope(semanticParse?.normalizedText ?? input.message);
+    const normalizedSafetyText = input.message.normalize("NFKC")
+      .replace(/[أإآ]/gu, "ا")
+      .toLocaleLowerCase("ar");
+    const lexicalObligationPlanning = /(?:التزام|مهام|مواعيد)/u.test(normalizedSafetyText)
+      && /(?:الاسبوع\s+(?:ال)?جاي|الاسبوع\s+القادم|next\s+week)/u.test(normalizedSafetyText)
+      && /(?:شوف|قولي|رتب|نظم|خطط|plan|recommend)/u.test(normalizedSafetyText)
+      && !/(?:ادفع|سدد|حول|احجز|نفذ|اجل|غير\s+الموعد|pay|reschedule|execute)/u.test(normalizedSafetyText);
+    const lexicalTravelConflict = /(?:مسافر|مسافره|سفر|السفر|رحله|travel|trip)/u.test(normalizedSafetyText)
+      && /(?:التزام|مهام|مواعيد|reminder|task)/u.test(normalizedSafetyText)
+      && /(?:تعارض|يتعارض|تتعارض|يتداخل|conflict|overlap)/u.test(normalizedSafetyText)
+      && !/(?:ادفع|سدد|حول|احجز|نفذ|اجل|غير\s+الموعد|pay|reschedule|execute)/u.test(normalizedSafetyText);
+    const planningOnlyRequest = semanticParse?.intent === "planning"
+      || ["planning_conflict", "obligation_planning"].includes(relationshipContext?.context.intent ?? "")
+      || lexicalObligationPlanning
+      || lexicalTravelConflict;
+    const strictReadOnlyRequest = (
+      ["planning", "memory_financial_conflict"].includes(semanticParse?.intent ?? "")
+      || ["planning_conflict", "obligation_planning"].includes(relationshipContext?.context.intent ?? "")
+      || recallPlan.queryDomain === "structured_record_comparison"
+      || lexicalObligationPlanning
+      || lexicalTravelConflict
+    );
+    let activeToolScope = strictReadOnlyRequest
+      ? namedToolScope("read_only")
+      : classifyToolScope(semanticParse?.normalizedText ?? input.message);
+    if (planningOnlyRequest) {
+      activeToolScope = {
+        ...activeToolScope,
+        allowedToolNames: new Set(["final_response"]),
+      };
+    }
     let toolCalls = 0;
     let llmCalls = 0;
     const metrics = createGatewayMetrics();
@@ -6698,6 +6858,14 @@ export class Phase2AgentRuntime {
     };
 
     const persistResult = async (finalResponse: FinalResponse): Promise<Phase2TurnResult> => {
+      const rejectedWriteCall = action?.type === "out_of_scope_read_only_tool_rejected"
+        && typeof action.toolName === "string"
+        && WRITE_TOOLS.has(action.toolName);
+      const contextResponse = relationshipContext?.response
+        ?? planningResponseFromContext(relationshipContext?.context);
+      const persistedResponse = rejectedWriteCall
+        ? finalResponse
+        : contextResponse ?? finalResponse;
       const providerSelection = this.gateway.getProviderForRequest?.(requestId) ?? {
         provider: this.gateway.provider,
         model: this.gateway.modelName,
@@ -6717,9 +6885,9 @@ export class Phase2AgentRuntime {
         | undefined;
       const brainState = action?.type === "approval_required"
         ? "awaiting_approval" as const
-        : finalResponse.kind === "error"
+        : persistedResponse.kind === "error"
           ? "failed" as const
-          : finalResponse.kind === "clarification"
+          : persistedResponse.kind === "clarification"
             ? "clarification" as const
             : "completed" as const;
       const brainEnvelope: BrainDecisionEnvelope = createBrainDecisionEnvelope({
@@ -6762,8 +6930,8 @@ export class Phase2AgentRuntime {
       const result: Phase2TurnResult = {
         conversationId,
         turnId: requestId,
-        assistantMessage: finalResponse.message,
-        response: finalResponse,
+        assistantMessage: persistedResponse.message,
+        response: persistedResponse,
         action: finalAction,
         provider: providerSelection.provider,
         model: providerSelection.model,
@@ -6888,6 +7056,45 @@ export class Phase2AgentRuntime {
       || isGlobalExpenseTotalRequest(input.message)
       || deterministicExpensePeriodRequested !== null
       || (isExpenseTotalCorrectionRequest(input.message) && recentExpenseTotalContext);
+
+    if (exactProjectAlias?.matchType === "alias" && exactProjectAlias.selected) {
+      deterministicMetrics.decision = "deterministic";
+      deterministicMetrics.falsePositiveGuard = "passed";
+      deterministicMetrics.resolverUsed = true;
+      deterministicMetrics.entityMatches = 1;
+      deterministicMetrics.solvedWithoutLlm = true;
+      action = {
+        type: "project_reference",
+        source: "exact_approved_associated_alias",
+        projectId: exactProjectAlias.selected.id,
+        projectName: exactProjectAlias.selected.name,
+        matchType: exactProjectAlias.matchType,
+        intent: initialBrainEnvelope.intent.name,
+        strategyLevel: initialBrainEnvelope.strategy.level,
+        risk: initialBrainEnvelope.risk.level,
+        requiresApproval: initialBrainEnvelope.risk.requiresApproval,
+      };
+      return await persistResult({
+        kind: "answer",
+        message: `المشروع المقصود هو «${exactProjectAlias.selected.name}».`,
+      });
+    }
+    if (exactProjectAlias?.matchType === "ambiguous") {
+      deterministicMetrics.decision = "clarification";
+      deterministicMetrics.falsePositiveGuard = "blocked";
+      deterministicMetrics.resolverUsed = true;
+      deterministicMetrics.entityMatches = exactProjectAlias.candidates.length;
+      deterministicMetrics.solvedWithoutLlm = true;
+      action = {
+        type: "clarification_needed",
+        source: "exact_approved_associated_alias",
+        reason: "alias_maps_to_multiple_projects",
+      };
+      return await persistResult({
+        kind: "clarification",
+        message: `الاسم «${bareProjectReference}» مرتبط بأكثر من مشروع. حدّد المشروع المقصود.`,
+      });
+    }
 
     if (semanticParse) {
       const parsedDecision = decideDeterministically(semanticParse);
@@ -7183,7 +7390,12 @@ export class Phase2AgentRuntime {
                     nextCallKind: null,
                     nextScope: activeToolScope.name,
                   });
-                return persistResult(finalResponseFromArgs(finalCall.args, toolHistory, input.message));
+                return persistResult(finalResponseFromArgs(
+                  finalCall.args,
+                  toolHistory,
+                  input.message,
+                  structuredComparisonGroundedValues,
+                ));
               }
               if (finalization.text.trim()) {
                   setDiagnosticDecision(diagnosticCall, {
@@ -7193,7 +7405,12 @@ export class Phase2AgentRuntime {
                     nextCallKind: null,
                     nextScope: activeToolScope.name,
                   });
-                return persistResult(finalResponseFromText(finalization.text, toolHistory, input.message));
+                return persistResult(finalResponseFromText(
+                  finalization.text,
+                  toolHistory,
+                  input.message,
+                  structuredComparisonGroundedValues,
+                ));
               }
                 setDiagnosticDecision(diagnosticCall, {
                   kind: "finalization_failed",
@@ -7269,7 +7486,12 @@ export class Phase2AgentRuntime {
             nextCallKind: null,
             nextScope: activeToolScope.name,
           });
-          return persistResult(finalResponseFromText(response.text, toolHistory, input.message));
+          return persistResult(finalResponseFromText(
+            response.text,
+            toolHistory,
+            input.message,
+            structuredComparisonGroundedValues,
+          ));
         }
 
         let scopeWasWidened = false;
@@ -7277,6 +7499,27 @@ export class Phase2AgentRuntime {
           (call) => !activeToolScope.allowedToolNames.has(call.name),
         );
         if (outOfScopeCall && !activeToolScope.isFull) {
+          if (strictReadOnlyRequest) {
+            deterministicMetrics.decision = "clarification";
+            deterministicMetrics.falsePositiveGuard = "blocked";
+            action = {
+              type: "out_of_scope_read_only_tool_rejected",
+              toolName: outOfScopeCall.name,
+            };
+            setDiagnosticDecision(diagnosticCall, {
+              kind: "return_text",
+              reason: "strict_read_only_request_rejected_non_read_tool",
+              nextLogicalCallNumber: null,
+              nextCallKind: null,
+              nextScope: activeToolScope.name,
+            });
+            return persistResult({
+              kind: "clarification",
+              message: semanticParse?.intent === "planning"
+                ? "أقدر أراجع الالتزامات وأقترح ترتيبًا فقط؛ لن أنفّذ دفعًا أو أغيّر موعدًا."
+                : "أقدر أوضح الفرق بين المعلومة المحفوظة والسجل المالي، من دون تعديل أيٍّ منهما.",
+            });
+          }
           const previousScope = activeToolScope;
           activeToolScope = fullToolScope();
           scopeWasWidened = true;
@@ -7304,7 +7547,12 @@ export class Phase2AgentRuntime {
             nextCallKind: null,
             nextScope: activeToolScope.name,
           });
-          return persistResult(finalResponseFromArgs(finalCall.args, toolHistory, input.message));
+          return persistResult(finalResponseFromArgs(
+            finalCall.args,
+            toolHistory,
+            input.message,
+            structuredComparisonGroundedValues,
+          ));
         }
 
         const writeCallCount = response.toolCalls.filter((call) => WRITE_TOOLS.has(call.name)).length;

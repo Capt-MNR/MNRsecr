@@ -49,7 +49,7 @@
 - [Second Brain candidate lifecycle](second-brain-candidate-lifecycle.md) — candidates stay outside retrieval until approval, and promotion/status changes must be atomic.
 - [Second Brain retrieval trace](second-brain-retrieval-trace.md) — trace exact context; treat retrieved data as evidence, and keep current structured state ahead of history.
 - [Brain envelope boundary](brain-envelope-boundary.md) — keep Brain decisions transient and require verified structured results before approval reconciliation can claim success.
-- [Brain evaluation baseline](brain-evaluation-baseline.md) — separate deterministic envelope comparisons from blocked provider, operation, verification, and proactive scenarios.
+- [Brain evaluation baseline](brain-evaluation-baseline.md) — separate envelope coverage from blocked scenarios; ground planning replies in the exact retrieved schedule records.
 - [Brain evaluation provider routing](brain-evaluation-provider-routing.md) — provider fixtures must bypass deterministic and Second Brain short-circuits before measuring failover or planning.
 - [Brain isolated evidence](brain-isolated-evidence.md) — use generated tenant fixtures, child-first cleanup, and exclude provider-rate-limited cases from correctness scoring.
 - [Provider planning baselines](provider-planning-baseline.md) — paired real-provider runs must label rate-limited branches NOT_MEASURED and separate them from planning quality.

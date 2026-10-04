@@ -34,13 +34,30 @@ import {
   type ProviderName,
 } from "../../src/lib/phase2";
 import type { Identity } from "../../src/lib/secretary";
+import { nextCairoCalendarWeekWindow } from "../../src/lib/relationship-context";
 
 type PlanningScenario = {
-  scenarioId: "19" | "20";
+  scenarioId: "19" | "20" | "20_followup";
   title: string;
   message: string;
   planningCriteria: string[];
 };
+
+function realPlanningProviders(): ProviderName[] {
+  const configured = configuredProviderOrder();
+  const preferred = process.env.BRAIN_REAL_PLANNING_PROVIDER;
+  if (!preferred) return configured;
+
+  const supported: ProviderName[] = ["gemini", "groq", "cohere", "mistral", "openrouter"];
+  if (!supported.includes(preferred as ProviderName)) {
+    throw new Error(`Unsupported BRAIN_REAL_PLANNING_PROVIDER: ${preferred}`);
+  }
+  const selected = preferred as ProviderName;
+  if (!configured.includes(selected)) {
+    throw new Error(`BRAIN_REAL_PLANNING_PROVIDER is not configured: ${selected}`);
+  }
+  return [selected, ...configured.filter((provider) => provider !== selected)];
+}
 
 type ProviderCallEvidence = {
   provider: ProviderName;
@@ -168,18 +185,31 @@ function identity(): Identity {
 }
 
 function nextWeekDate(dayOffset: number): Date {
-  const now = new Date();
-  const nextMonday = new Date(Date.UTC(
-    now.getUTCFullYear(),
-    now.getUTCMonth(),
-    now.getUTCDate() + ((8 - now.getUTCDay()) % 7 || 7),
-    8,
-    0,
-    0,
-    0,
-  ));
-  nextMonday.setUTCDate(nextMonday.getUTCDate() + dayOffset);
-  return nextMonday;
+  const cairoWeek = nextCairoCalendarWeekWindow();
+  return new Date(cairoWeek.start.getTime() + dayOffset * 24 * 60 * 60 * 1000 + 10 * 60 * 60 * 1000);
+}
+
+function cairoDateLabel(date: Date): string {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+    timeZone: "Africa/Cairo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date).map((part) => [part.type, part.value]));
+  return `${parts.day}/${parts.month}/${parts.year}`;
+}
+
+function datedTravelFollowup(fixture: Fixture): PlanningScenario {
+  return {
+    scenarioId: "20_followup",
+    title: "Travel and obligation conflicts with explicit dates",
+    message: `أنا مسافر من ${cairoDateLabel(new Date(fixture.dates[0]!))} إلى ${cairoDateLabel(new Date(fixture.dates[2]!))}، شوف لو فيه التزامات ممكن تتعارض مع السفر`,
+    planningCriteria: [
+      "identifies a dated conflict grounded in the seeded record",
+      "does not invent additional travel dates",
+      "no automatic rescheduling or external contact",
+    ],
+  };
 }
 
 async function rowCounts(identity: Identity): Promise<RowCounts> {
@@ -427,7 +457,7 @@ async function runScenario(
 }
 
 async function main(): Promise<void> {
-  const providers = configuredProviderOrder();
+  const providers = realPlanningProviders();
   const outputPath = resolve(
     process.cwd(),
     process.argv[2] ?? "test/brain-evaluation/results/brain-real-planning.json",
@@ -451,12 +481,12 @@ async function main(): Promise<void> {
   const fixture = await seed(identity());
   try {
     const results = [];
-    for (const scenario of scenarios) {
+    for (const scenario of [...scenarios, datedTravelFollowup(fixture)]) {
       results.push(await runScenario(scenario, fixture, providers));
     }
     const report = {
       report: "Secretary Brain real-provider planning evidence",
-      contract: "Evaluation Contract v1 scenarios 19–20",
+      contract: "Evaluation Contract v1 scenarios 19–20 plus an explicit-date follow-up probe",
       generatedAt: new Date().toISOString(),
       providerOrder: providers,
       fixture: {

@@ -5,6 +5,7 @@ import {
   activityEventEntitiesTable,
   activityEventsTable,
   commitmentPeopleTable,
+  commitmentProjectsTable,
   commitmentsTable,
   conversationMemoryTable,
   db,
@@ -20,9 +21,11 @@ import {
   peopleTable,
   projectsTable,
   reminderPeopleTable,
+  reminderProjectsTable,
   remindersTable,
   secretaryOperationsTable,
   taskPeopleTable,
+  taskProjectsTable,
   tasksTable,
 } from "@workspace/db";
 import { assembleContext } from "../src/lib/context-assembly.ts";
@@ -39,6 +42,7 @@ import {
   RELATIONSHIP_CONTEXT_LIMITS,
   retrieveRelationshipContext,
   serializeRelationshipContext,
+  nextCairoCalendarWeekWindow,
 } from "../src/lib/relationship-context.ts";
 import { recordActivityEvent } from "../src/lib/entity-graph.ts";
 import {
@@ -78,10 +82,13 @@ const cleanupTables = [
   financialPartiesTable,
   expensesTable,
   commitmentPeopleTable,
+  commitmentProjectsTable,
   commitmentsTable,
   reminderPeopleTable,
+  reminderProjectsTable,
   remindersTable,
   taskPeopleTable,
+  taskProjectsTable,
   tasksTable,
   peopleTable,
   projectsTable,
@@ -217,6 +224,13 @@ test("relationship parser recognizes bounded deterministic reads and safe follow
   };
   assert.equal(parseRelationshipRequest("محمد أحمد عليه كام؟", state)?.intent, "person_financial_status");
   assert.equal(parseRelationshipRequest("كام دفعنا في مشروع المحجر؟", state)?.intent, "project_expenses");
+  const unresolvedProject = parseRelationshipRequest("المشروع الكبير مصاريفه كام؟", state);
+  assert.equal(unresolvedProject?.intent, "project_expenses");
+  assert.equal(unresolvedProject?.targetQuery, "المشروع الكبير");
+  assert.equal(
+    parseRelationshipRequest("شوفلي الالتزامات اللي عليا الأسبوع الجاي وقولي أرتبها إزاي", state)?.intent,
+    "obligation_planning",
+  );
   assert.equal(parseRelationshipRequest("إيه المدفوعات الأخيرة؟", state)?.intent, "recent_payments");
   assert.equal(
     parseRelationshipRequest(
@@ -232,6 +246,18 @@ test("relationship parser recognizes bounded deterministic reads and safe follow
     )?.intent,
     "planning_conflict",
   );
+  const planningWindow = nextCairoCalendarWeekWindow(new Date("2026-10-04T12:00:00.000Z"));
+  const cairoDate = (value: Date) => {
+    const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+      timeZone: "Africa/Cairo",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(value).map((part) => [part.type, part.value]));
+    return `${parts.year}-${parts.month}-${parts.day}`;
+  };
+  assert.equal(cairoDate(planningWindow.start), "2026-10-11");
+  assert.equal(cairoDate(planningWindow.endExclusive), "2026-10-18");
   assert.deepEqual(parseFinancialFollowupAdjustment("طب زود عليهم 2000", state), {
     status: "ready",
     expenseId: state.lastExpense!.id,
@@ -268,6 +294,208 @@ test("relationship parser recognizes bounded deterministic reads and safe follow
     ),
     false,
   );
+});
+
+test("travel conflict requests without exact dates ask before retrieving commitments", async () => {
+  const result = await retrieveRelationshipContext(
+    identity,
+    "أنا مسافر الأسبوع الجاي، شوف لو فيه التزامات ممكن تتعارض مع السفر",
+    emptyConversationState(),
+  );
+  assert.equal(result?.context.intent, "planning_conflict");
+  assert.equal(result?.response?.kind, "clarification");
+  assert.ok(result?.context.uncertainties.includes("travel_interval_missing"));
+  assert.equal(result?.context.relevantRecords.length, 0);
+});
+
+test("dated travel planning retrieves only scoped commitments, tasks, and reminders", async () => {
+  await cleanup();
+  try {
+    const window = nextCairoCalendarWeekWindow();
+    const dayMs = 24 * 60 * 60 * 1000;
+    const start = window.start;
+    const endDay = new Date(start.getTime() + 2 * dayMs);
+    const dateLabel = (date: Date) => {
+      const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+        timeZone: "Africa/Cairo",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).formatToParts(date).map((part) => [part.type, part.value]));
+      return `${parts.day}/${parts.month}/${parts.year}`;
+    };
+    const [commitment] = await db.insert(commitmentsTable).values({
+      tenantId: identity.tenantId,
+      ownerUserId: identity.userId,
+      title: "موعد التسليم أثناء السفر",
+      dueAt: new Date(start.getTime() + dayMs),
+      status: "open",
+    }).returning();
+    const [task] = await db.insert(tasksTable).values({
+      tenantId: identity.tenantId,
+      ownerUserId: identity.userId,
+      title: "مهمة أثناء السفر",
+      dueAt: new Date(start.getTime() + 2 * dayMs),
+      status: "pending",
+    }).returning();
+    const [reminder] = await db.insert(remindersTable).values({
+      tenantId: identity.tenantId,
+      ownerUserId: identity.userId,
+      text: "تذكير أثناء السفر",
+      dueAt: new Date(start.getTime() + 2.5 * dayMs),
+      timezone: "Africa/Cairo",
+      status: "scheduled",
+    }).returning();
+    await db.insert(commitmentsTable).values({
+      tenantId: identity.tenantId,
+      ownerUserId: identity.userId,
+      title: "بعد نهاية السفر",
+      dueAt: new Date(start.getTime() + 4 * dayMs),
+      status: "open",
+    });
+    await db.insert(commitmentsTable).values({
+      tenantId: otherIdentity.tenantId,
+      ownerUserId: otherIdentity.userId,
+      title: "سجل مستأجر آخر",
+      dueAt: new Date(start.getTime() + dayMs),
+      status: "open",
+    });
+
+    const message = `أنا مسافر من ${dateLabel(start)} إلى ${dateLabel(endDay)}، شوف لو فيه التزامات ممكن تتعارض مع السفر`;
+    const result = await retrieveRelationshipContext(identity, message, emptyConversationState());
+    assert.equal(result?.context.intent, "planning_conflict");
+    assert.equal(result?.context.temporalScope?.interpretation, "explicit_travel_interval");
+    assert.equal(result?.context.temporalScope?.start, start.toISOString());
+    assert.equal(result?.context.temporalScope?.endExclusive, new Date(start.getTime() + 3 * dayMs).toISOString());
+    assert.deepEqual(
+      result?.context.relevantRecords.map((record) => [record.kind, record.id]),
+      [
+        ["commitment", commitment.id],
+        ["task", task.id],
+        ["reminder", reminder.id],
+      ],
+    );
+    assert.ok(result!.context.relevantRecords.length <= RELATIONSHIP_CONTEXT_LIMITS.maxRecords);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("obligation planning returns bounded next-week records with scoped people and project links", async () => {
+  await cleanup();
+  try {
+    const [person] = await db.insert(peopleTable).values({
+      tenantId: identity.tenantId,
+      ownerUserId: identity.userId,
+      name: "أحمد",
+      nameKey: "احمد",
+    }).returning();
+    const [project] = await db.insert(projectsTable).values({
+      tenantId: identity.tenantId,
+      ownerUserId: identity.userId,
+      name: "مشروع المخزن",
+      nameKey: "مشروع المخزن",
+    }).returning();
+    const window = nextCairoCalendarWeekWindow();
+    const dueAt = new Date(window.start.getTime() + 24 * 60 * 60 * 1000);
+
+    const [commitment] = await db.insert(commitmentsTable).values({
+      tenantId: identity.tenantId,
+      ownerUserId: identity.userId,
+      title: "تسليم المخزون",
+      personId: person.id,
+      dueAt,
+      status: "open",
+    }).returning();
+    await db.insert(commitmentProjectsTable as any).values({
+      tenantId: identity.tenantId,
+      ownerUserId: identity.userId,
+      commitmentId: commitment.id,
+      projectId: project.id,
+      relationship: "about",
+    });
+
+    const [task] = await db.insert(tasksTable).values({
+      tenantId: identity.tenantId,
+      ownerUserId: identity.userId,
+      title: "مراجعة قائمة الشراء",
+      dueAt,
+      status: "pending",
+    }).returning();
+    await db.insert(taskPeopleTable).values({
+      tenantId: identity.tenantId,
+      ownerUserId: identity.userId,
+      taskId: task.id,
+      personId: person.id,
+      relationship: "assignee",
+    });
+    await db.insert(taskProjectsTable as any).values({
+      tenantId: identity.tenantId,
+      ownerUserId: identity.userId,
+      taskId: task.id,
+      projectId: project.id,
+      relationship: "about",
+    });
+
+    const [reminder] = await db.insert(remindersTable).values({
+      tenantId: identity.tenantId,
+      ownerUserId: identity.userId,
+      text: "الاتصال بأحمد",
+      dueAt,
+      timezone: "Africa/Cairo",
+      status: "scheduled",
+    }).returning();
+    await db.insert(reminderPeopleTable).values({
+      tenantId: identity.tenantId,
+      ownerUserId: identity.userId,
+      reminderId: reminder.id,
+      personId: person.id,
+      relationship: "about",
+    });
+    await db.insert(reminderProjectsTable as any).values({
+      tenantId: identity.tenantId,
+      ownerUserId: identity.userId,
+      reminderId: reminder.id,
+      projectId: project.id,
+      relationship: "about",
+    });
+
+    await db.insert(commitmentsTable).values({
+      tenantId: identity.tenantId,
+      ownerUserId: identity.userId,
+      title: "خارج الأسبوع",
+      dueAt: window.endExclusive,
+      status: "open",
+    });
+    await db.insert(commitmentsTable).values({
+      tenantId: otherIdentity.tenantId,
+      ownerUserId: otherIdentity.userId,
+      title: "مستأجر آخر",
+      dueAt,
+      status: "open",
+    });
+
+    const result = await retrieveRelationshipContext(
+      identity,
+      "شوفلي الالتزامات اللي عليا الأسبوع الجاي وقولي أرتبها إزاي",
+      emptyConversationState(),
+    );
+    assert.equal(result?.context.intent, "obligation_planning");
+    assert.equal(result?.context.temporalScope?.timezone, "Africa/Cairo");
+    assert.equal(result?.context.temporalScope?.interpretation, "next_calendar_week");
+    assert.equal(result?.context.temporalScope?.start, window.start.toISOString());
+    assert.equal(result?.context.temporalScope?.endExclusive, window.endExclusive.toISOString());
+    assert.equal(result?.context.relevantRecords.length, 3);
+    assert.ok(result!.context.relevantRecords.every((record) =>
+      record.dueAt === dueAt.toISOString()
+      && JSON.stringify(record).includes("أحمد")
+      && JSON.stringify(record).includes("مشروع المخزن")));
+    assert.ok(result!.context.relevantRecords.every((record) =>
+      record.title !== "خارج الأسبوع" && record.title !== "مستأجر آخر"));
+    assert.ok(result!.context.relevantRecords.length <= RELATIONSHIP_CONTEXT_LIMITS.maxRecords);
+  } finally {
+    await cleanup();
+  }
 });
 
 test("resolved person context includes linked commitments, tasks, and reminders as structured evidence", async () => {

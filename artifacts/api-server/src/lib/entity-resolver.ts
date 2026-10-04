@@ -136,6 +136,46 @@ export function resolveFromCandidates(
   };
 }
 
+export function resolveExactAssociatedAliasFromCandidates(
+  entityType: EntityType,
+  query: string,
+  candidates: ResolverCandidate[],
+): ResolverResult {
+  const normalizedQuery = normalizeEntityText(query);
+  const matches = candidates.filter((candidate) =>
+    (candidate.aliases ?? []).some((alias) => normalizeEntityText(alias) === normalizedQuery),
+  );
+  if (matches.length === 1) {
+    return {
+      entityType,
+      query,
+      selected: matches[0],
+      candidates: matches,
+      confidence: 1,
+      matchType: "alias",
+      wouldChange: true,
+    };
+  }
+  if (matches.length > 1) {
+    return {
+      entityType,
+      query,
+      candidates: matches,
+      confidence: 1,
+      matchType: "ambiguous",
+      wouldChange: false,
+    };
+  }
+  return {
+    entityType,
+    query,
+    candidates: [],
+    confidence: 0,
+    matchType: "none",
+    wouldChange: false,
+  };
+}
+
 async function queryCandidates(identity: Identity, entityType: EntityType, query: string): Promise<ResolverCandidate[]> {
   if (entityType === "person") {
     const rows = await db.select().from(peopleTable).where(and(
@@ -194,6 +234,15 @@ export async function resolveEntity(
 ): Promise<ResolverResult> {
   const available = candidates ?? await queryCandidates(identity, entityType, query);
   return resolveFromCandidates(entityType, query, available);
+}
+
+export async function resolveExactAssociatedAlias(
+  identity: Identity,
+  entityType: EntityType,
+  query: string,
+): Promise<ResolverResult> {
+  const available = await queryCandidates(identity, entityType, query);
+  return resolveExactAssociatedAliasFromCandidates(entityType, query, available);
 }
 
 function extractMentions(message: string): Array<{ entityType: EntityType; query: string }> {

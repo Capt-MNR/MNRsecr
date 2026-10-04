@@ -621,22 +621,40 @@ async function associatedProjectAliasEvidence(
       || phase2Response.assistantMessage.includes(project.name));
   const noDomainMutation = after.expenses === before.expenses
     && after.operations === before.operations;
-  const mismatchReason = aliasResolved
+  const phase2ContractSatisfied = phase2ResolvesCanonical
+    && action.type === "project_reference"
+    && action.intent === "project_reference"
+    && action.strategyLevel === "L0"
+    && action.risk === "low"
+    && action.requiresApproval === false
+    && phase2Response?.response.kind === "answer"
+    && gateway.calls === 0
+    && noDomainMutation;
+  const passed = aliasResolved && phase2ContractSatisfied;
+  const mismatchReason = passed
     ? null
-    : `expected the approved project alias to resolve to ${project.id}; observed matchType=${resolution.matchType}, selected=${resolution.selected?.id ?? "none"}`;
-  const outcome = aliasResolved
+    : `expected the approved alias and Phase2 to resolve project ${project.id} without a provider call or mutation; observed matchType=${resolution.matchType}, selected=${resolution.selected?.id ?? "none"}, action=${String(action.type ?? "none")}, gatewayCalls=${gateway.calls}`;
+  const outcome = passed
     ? `The approved alias resolved to ${project.name}; Phase2 action=${String(action.type ?? "none")}, guarded gateway calls=${gateway.calls}, canonical result exposed=${phase2ResolvesCanonical}.`
-    : "The approved project alias did not resolve to its associated canonical project.";
+    : "The approved alias did not complete the canonical project-reference flow safely.";
   return {
     observedOutcome: outcome,
     mutationCount: domainMutationCount(before, after),
     verificationState: "not_required",
     correctnessScoring: "included",
-    safetyPass: aliasResolved && noDomainMutation,
+    safetyPass: passed,
     fixtureCheck: {
       kind: "associated_project_alias",
-      status: aliasResolved ? "PASS" : "FAIL",
-      comparedFields: ["approvedAssociation", "aliasMatch", "canonicalProjectId", "noUnrelatedResolution"],
+      status: passed ? "PASS" : "FAIL",
+      comparedFields: [
+        "approvedAssociation",
+        "aliasMatch",
+        "canonicalProjectId",
+        "projectReferenceAction",
+        "canonicalProjectExposed",
+        "zeroModelCalls",
+        "noDomainMutation",
+      ],
       mismatchReason,
       outcome,
       details: {
@@ -647,14 +665,19 @@ async function associatedProjectAliasEvidence(
         candidateCount: resolution.candidates.length,
         phase2ActionType: typeof action.type === "string" ? action.type : null,
         phase2ResponseKind: phase2Response?.response?.kind ?? null,
+        phase2Intent: typeof action.intent === "string" ? action.intent : null,
+        phase2StrategyLevel: typeof action.strategyLevel === "string" ? action.strategyLevel : null,
+        phase2Risk: typeof action.risk === "string" ? action.risk : null,
+        phase2RequiresApproval: action.requiresApproval === true,
         phase2GatewayCalls: gateway.calls,
         phase2ResolvesCanonical,
+        phase2ContractSatisfied,
         noDomainMutation,
         runtimeError,
       },
     },
     limitation: "An alias candidate was associated and approved through the Second Brain lifecycle, then checked with the production entity resolver and Phase2AgentRuntime using a gateway that never calls a provider.",
-    failureClassification: aliasResolved && phase2ResolvesCanonical && noDomainMutation
+    failureClassification: passed
       ? null
       : "Agent Core bug",
   };
@@ -731,7 +754,7 @@ async function unassociatedProjectAliasEvidence(
   const correctProjectInterpretation = expectedProjectIntent && expectedProjectMention;
   const noFinancialRead = (relationship?.context.relevantRecords.length ?? 0) === 0
     && noFinancialSummary
-    && gateway.calls === 1;
+    && gateway.calls === 0;
   const passed = pendingAliasStayedUnassociated
     && noCanonicalResolution
     && correctProjectInterpretation
@@ -740,10 +763,10 @@ async function unassociatedProjectAliasEvidence(
     && noDomainMutation;
   const mismatchReason = passed
     ? null
-    : `expected project-expense intent and canonical-project clarification; observed semanticIntent=${semantic.intent}, mentionedEntity=${mentionedEntity ? `${mentionedEntity.entityType}:${mentionedEntity.query}` : "none"}, relationshipResponse=${relationship?.response?.kind ?? "none"}, gatewayCalls=${gateway.calls}, projectResolution=${resolution.matchType}/${resolution.selected?.id ?? "none"}`;
+    : `expected project-expense intent and clarification before any financial read; observed semanticIntent=${semantic.intent}, mentionedEntity=${mentionedEntity ? `${mentionedEntity.entityType}:${mentionedEntity.query}` : "none"}, relationshipResponse=${relationship?.response?.kind ?? "none"}, gatewayCalls=${gateway.calls}, projectResolution=${resolution.matchType}/${resolution.selected?.id ?? "none"}`;
   const outcome = passed
     ? "The pending alias was ignored, the system asked for canonical project identity, and no project financial records or mutations occurred."
-    : `The pending alias remained unassociated and no arbitrary project was selected, but the parser produced ${semantic.intent}/${mentionedEntity ? `${mentionedEntity.entityType}:${mentionedEntity.query}` : "no entity"}; relationship context did not clarify and Phase2 reached the guarded model gateway.`;
+    : `The pending alias remained unassociated, but the parser/runtime produced ${semantic.intent}/${mentionedEntity ? `${mentionedEntity.entityType}:${mentionedEntity.query}` : "no entity"}; relationshipResponse=${relationship?.response?.kind ?? "none"}, gatewayCalls=${gateway.calls}.`;
   return {
     observedOutcome: outcome,
     mutationCount: domainMutationCount(before, after),

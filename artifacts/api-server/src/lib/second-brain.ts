@@ -421,10 +421,12 @@ export function isNaturalAgreementRecallQuery(message: string): boolean {
 
 export function classifySecondBrainQuery(message: string): SecondBrainQueryDomain {
   const text = normalize(message);
+  const rememberedFinancialClaim = /(?:فاكر|تفتكر|remember|memory)/iu.test(text)
+    && /(?:كان(?:ت)?|هو|هي|يطلع|طلع|supposed\s+to|was)/iu.test(text);
   if (
     EXPLICIT_MEMORY_WORDS.test(text)
-    && FINANCIAL_COMPARISON_WORDS.test(text)
     && FINANCIAL_RECORD_WORDS.test(text)
+    && (FINANCIAL_COMPARISON_WORDS.test(text) || rememberedFinancialClaim)
   ) {
     return "structured_record_comparison";
   }

@@ -149,10 +149,45 @@ function strategyFor(
   state: BrainDecisionState,
 ): BrainDecisionEnvelope["strategy"] {
   if (relationshipContext?.response?.kind === "clarification") {
+    if (
+      relationshipContext.context.intent === "planning_conflict"
+      || relationshipContext.context.intent === "obligation_planning"
+    ) {
+      return {
+        level: "L3",
+        reason: "planning_context_requires_missing_dates_or_records",
+        llmAllowed: false,
+        deterministicExecution: false,
+      };
+    }
     return {
       level: "L0",
       reason: "authoritative_context_requires_clarification",
       llmAllowed: false,
+      deterministicExecution: false,
+    };
+  }
+  if (semanticParse?.intent === "project_reference") {
+    return {
+      level: "L0",
+      reason: "exact_associated_project_alias_resolution",
+      llmAllowed: false,
+      deterministicExecution: true,
+    };
+  }
+  if (semanticParse?.intent === "memory_financial_conflict") {
+    return {
+      level: "L2",
+      reason: "compare_memory_claim_with_authoritative_financial_record",
+      llmAllowed: true,
+      deterministicExecution: false,
+    };
+  }
+  if (semanticParse?.intent === "planning") {
+    return {
+      level: "L3",
+      reason: "read_only_obligation_or_travel_planning",
+      llmAllowed: true,
       deterministicExecution: false,
     };
   }
@@ -198,7 +233,17 @@ function strategyFor(
     };
   }
   if (semanticParse && !semanticParse.ambiguous && semanticParse.confidence >= 0.9) {
-    const isRead = ["expense_report", "person_expense_total", "project_people", "schedule_read", "memory_recall"]
+    const isRead = [
+      "expense_report",
+      "person_expense_total",
+      "project_expenses",
+      "project_people",
+      "schedule_read",
+      "memory_recall",
+      "memory_financial_conflict",
+      "planning",
+      "project_reference",
+    ]
       .includes(semanticParse.intent);
     const isSimpleWrite = [
       "record_expense",
@@ -244,9 +289,15 @@ function riskFor(
   const semanticRead = [
     "expense_report",
     "person_expense_total",
+    "project_expenses",
     "project_people",
     "schedule_read",
     "memory_recall",
+    "memory_financial_conflict",
+    "planning",
+    "obligation_planning",
+    "planning_conflict",
+    "project_reference",
   ].includes(semanticParse?.intent ?? "");
   const write = !incompleteExpense && (
     !semanticRead && !unknownAction && ([
