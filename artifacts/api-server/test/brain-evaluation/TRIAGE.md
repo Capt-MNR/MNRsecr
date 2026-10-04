@@ -23,8 +23,10 @@ in the JSON. No broader aliases or success criteria were added. The five
 label-only passes are scenarios 05, 06, 13, 21, and 28; scenario 03 passed after
 the isolated production runtime confirmed the clarification boundary.
 
-The five failures are three behavior decisions (14, 19, 20) and two confirmed
-Core defects (12, 29). Scenario 15 moved from FAIL to blocked because the
+The five failures are three behavior gaps (14, 19, 20) and two confirmed Core
+defects (12, 29). The user has since confirmed the intended behavior for 14, 19,
+and 20; the cleaned-run statuses remain FAIL until the runtime behavior is
+implemented and evaluated. Scenario 15 moved from FAIL to blocked because the
 harness has no authoritative prior-agreement fixture. Scenario 12 remains FAIL:
 the direct resolver finds the approved alias, but Phase2 does not use that
 result and reaches the guarded model gateway instead.
@@ -36,18 +38,21 @@ tenant-scoped and all cleanup completed. Scenario 26's one measured expense
 mutation happened in its isolated verification-failure fixture; no retry was
 made and cleanup completed.
 
-## Remaining behavior decisions
+## Confirmed behavior for scenarios 14, 19, and 20
 
 These are the evaluator's deterministic observations, not provider-backed
-production outcomes. The contract result is retained until the desired behavior
-is confirmed. Scenario 12 is a separate confirmed runtime defect, not one of
-these behavior decisions.
+production outcomes. The user confirmed the intended behavior below after the
+cleaned run. This resolves the behavior review but does not change scenario
+inputs, contract expectations, pass criteria, or the observed results. The
+three statuses remain FAIL in the cleaned run; provider-backed end-to-end
+behavior has not been verified. The generated report's “expected behavior
+requires review” classification reflects the state before these decisions.
 
-| ID | Current observation | Contract expectation | Decision needed | Recommendation |
-|---|---|---|---|---|
-| 14 | Parsed as `project_expenses`, L3, with conflict ambiguity; no provider call or mutation. | Explain a memory/structured-record conflict at L2, give structured data precedence, and leave memory unchanged. | When the user explicitly recalls a conflicting amount, should the assistant explain the conflict or answer it as a normal project-expense query? | Explain both sources, state that the structured record is authoritative, and do not rewrite memory or the expense. |
-| 19 | Parsed as `unknown`, L2; no plan produced in this provider-free run. | Read-only L3 recommendations for next week's obligations, grounded in obligations, projects, people, and dates; no automatic payment or rescheduling. | Should the assistant recommend an ordering for existing obligations, or only list/retrieve them? | Allow read-only recommendations from verified records; ask for missing dates or context and never execute the plan automatically. |
-| 20 | Parsed as `schedule_read`, L2; travel dates and related records were not acquired. | L3 read-only conflict analysis, asking for travel dates when needed; no rescheduling or external contact. | Should it ask for exact travel dates before checking conflicts, or only show schedule items? | Ask for dates if the trip window is unclear, then report conflicts without changing records or contacting anyone. |
+| ID | Current observation | Confirmed behavior | Cleaned-run status |
+|---|---|---|---|
+| 14 | Parsed as `project_expenses`, L3, with conflict ambiguity; no provider call or mutation. | Explain both sources, treat the structured financial record as authoritative, and leave the memory and record unchanged. | FAIL |
+| 19 | Parsed as `unknown`, L2; no plan produced in this provider-free run. | Provide read-only recommendations from verified obligations; ask for missing dates or context; do not pay or reschedule automatically. | FAIL |
+| 20 | Parsed as `schedule_read`, L2; travel dates and related records were not acquired. | Ask for missing travel dates, then report conflicts only; do not reschedule, pay, or contact anyone. | FAIL |
 
 ## Confirmed remaining Core defects
 
