@@ -419,7 +419,13 @@ async function processClaimedEvent(event: TriggerOutboxEvent, now: Date): Promis
         )).limit(1);
       outcome = existing ? "coalesced" : "processed";
       const proactiveMessage = evaluation.proactiveMessage;
-      await agentWorkRuntime.createWork({
+      const deadlineEvidenceValue = proactiveMessage?.data.deadlineEvidence;
+      const deadlineEvidence = deadlineEvidenceValue
+        && typeof deadlineEvidenceValue === "object"
+        && !Array.isArray(deadlineEvidenceValue)
+        ? deadlineEvidenceValue as Record<string, unknown>
+        : null;
+      const work = await agentWorkRuntime.createWork({
         identity,
         kind: "workflow",
         title: proactiveMessage?.title ?? `Trigger: ${currentEvent.eventType}`,
@@ -433,6 +439,7 @@ async function processClaimedEvent(event: TriggerOutboxEvent, now: Date): Promis
           aggregateType: currentEvent.aggregateType,
           aggregateId: currentEvent.aggregateId,
           triggerKey: evaluation.triggerKey,
+          ...(deadlineEvidence ? { deadlineEvidence } : {}),
         },
         condition: {
           type: "trigger_event",
@@ -440,19 +447,45 @@ async function processClaimedEvent(event: TriggerOutboxEvent, now: Date): Promis
           eventType: currentEvent.eventType,
           aggregateType: currentEvent.aggregateType,
           aggregateId: currentEvent.aggregateId,
+          ...(deadlineEvidence ? {
+            deadlineAt: deadlineEvidence.dueAt,
+            deadlineWindow: "due-time",
+            triggerCreatedAt: deadlineEvidence.triggerCreatedAt,
+            triggerAvailableAt: deadlineEvidence.triggerAvailableAt,
+          } : {}),
         },
         action: proactiveMessage
           ? {
               type: "proactive_message",
               title: proactiveMessage.title,
               body: proactiveMessage.body,
-              data: proactiveMessage.data,
+              data: { ...proactiveMessage.data, triggerEventId: currentEvent.eventId },
             }
           : { type: "none" },
         schedule: { frequency: "once" },
         nextRunAt: now,
         transactionExecutor: tx,
       });
+      if (deadlineEvidence) {
+        const dueAt = typeof deadlineEvidence.dueAt === "string"
+          ? new Date(deadlineEvidence.dueAt)
+          : null;
+        logger.info({
+          eventId: currentEvent.eventId,
+          workId: work.id,
+          outcome,
+          dueAt: deadlineEvidence.dueAt,
+          triggerCreatedAt: deadlineEvidence.triggerCreatedAt,
+          triggerProcessedAt: now.toISOString(),
+          triggerCreationOffsetMs: deadlineEvidence.triggerCreationOffsetMs,
+          triggerProcessingLatenessMs: deadlineEvidence.triggerProcessingLatenessMs,
+          triggerQueueDelayMs: deadlineEvidence.triggerQueueDelayMs,
+          workIntentCreatedAt: work.createdAt.toISOString(),
+          workIntentCreationOffsetMs: dueAt && Number.isFinite(dueAt.getTime())
+            ? work.createdAt.getTime() - dueAt.getTime()
+            : null,
+        }, "reminder due WorkIntent lifecycle timing");
+      }
     }
 
     const [processed] = await tx.update(triggerOutboxTable).set({

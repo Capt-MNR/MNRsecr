@@ -204,7 +204,26 @@ export function evaluateProactiveBehavior(input: ProactiveInput): ProactiveDecis
     const due = date(r.dueAt);
     const payload = { kind: "reminder", id: r.id, title: r.title, dueAt: due.toISOString(), version: r.version ?? null, window: r.window ?? null, status: r.status ?? "active" };
     if (r.status === "completed" || r.status === "cancelled") return result(input, "ignore", payload, "reminder_not_active");
-    if (due.getTime() < now.getTime()) return result(input, "ignore", payload, "past_due_is_overdue");
+    if (r.window === "due-time") {
+      if (due.getTime() > now.getTime()) return result(input, "ignore", payload, "reminder_due_time_not_reached");
+      if (seen(input, { deadline: payload.dueAt, version: r.version, window: r.window }) && !(r.repeatPermission ?? input.preferences?.repeatPermission)) {
+        return result(input, "ignore", payload, "already_delivered");
+      }
+      return result(
+        input,
+        "remind",
+        payload,
+        due.getTime() === now.getTime() ? "reminder_due_time_reached" : "reminder_due_time_caught_up",
+      );
+    }
+    if (due.getTime() <= now.getTime()) {
+      return result(
+        input,
+        "ignore",
+        payload,
+        due.getTime() < now.getTime() ? "past_due_is_overdue" : "approaching_window_ended_at_due_time",
+      );
+    }
     if (due.getTime() - now.getTime() > day) return result(input, "ignore", payload, "outside_next_24_hours");
     if (seen(input, { deadline: payload.dueAt, version: r.version, window: r.window }) && !(r.repeatPermission ?? input.preferences?.repeatPermission)) {
       return result(input, "ignore", payload, "already_delivered");

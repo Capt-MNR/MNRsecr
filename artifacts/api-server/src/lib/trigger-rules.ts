@@ -189,6 +189,7 @@ registerTriggerEvaluator("task.overdue", "task", commitmentDeadlineEvaluation);
 registerTriggerEvaluator("commitment.approaching", "commitment", commitmentDeadlineEvaluation);
 registerTriggerEvaluator("commitment.overdue", "commitment", commitmentDeadlineEvaluation);
 registerTriggerEvaluator("reminder.approaching", "reminder", commitmentDeadlineEvaluation);
+registerTriggerEvaluator("reminder.due", "reminder", commitmentDeadlineEvaluation);
 registerTriggerEvaluator("relationship.candidate", "project_people", async (event, context) =>
   evaluateProactiveTrigger(event, context.executor, context.now));
 

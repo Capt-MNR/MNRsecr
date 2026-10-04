@@ -52,7 +52,7 @@ test("active task deadline creates next-day and overdue events with versioned id
   assert.match(events[1]?.dedupeKey ?? "", /:overdue:v4:/);
 });
 
-test("commitments use the same safe deadline windows and reminders do not get overdue events", async () => {
+test("commitments keep overdue events and reminders get a separate due-time event", async () => {
   const commitmentEvents: EnqueueTriggerOutboxInput[] = [];
   await enqueueProactiveDeadlineTriggers(
     identity,
@@ -77,12 +77,47 @@ test("commitments use the same safe deadline windows and reminders do not get ov
       entityType: "reminder",
       entityId: "reminder-a",
       status: "scheduled",
-      dueAt: new Date("2026-09-24T03:00:00.000Z"),
+      dueAt: new Date("2026-09-26T12:00:00.000Z"),
     }),
     executor,
     captureWriter(reminderEvents),
   );
-  assert.deepEqual(reminderEvents.map((event) => event.eventType), ["reminder.approaching"]);
+  assert.deepEqual(reminderEvents.map((event) => event.eventType), ["reminder.approaching", "reminder.due"]);
+  assert.equal(reminderEvents[0]?.availableAt?.toISOString(), "2026-09-25T12:00:00.000Z");
+  assert.equal(reminderEvents[1]?.availableAt?.toISOString(), "2026-09-26T12:00:00.000Z");
+  assert.equal(reminderEvents[1]?.occurredAt.toISOString(), "2026-09-26T12:00:00.000Z");
+  assert.equal(reminderEvents[1]?.payload.window, "due-time");
+  assert.match(reminderEvents[1]?.dedupeKey ?? "", /:due-time:v4:/);
+
+  const imminentReminderEvents: EnqueueTriggerOutboxInput[] = [];
+  await enqueueProactiveDeadlineTriggers(
+    identity,
+    deadline({
+      entityType: "reminder",
+      entityId: "reminder-imminent",
+      status: "scheduled",
+      dueAt: new Date("2026-09-24T03:00:00.000Z"),
+    }),
+    executor,
+    captureWriter(imminentReminderEvents),
+  );
+  assert.equal(imminentReminderEvents[0]?.availableAt?.toISOString(), "2026-09-24T00:00:00.000Z");
+
+  const pastReminderEvents: EnqueueTriggerOutboxInput[] = [];
+  await enqueueProactiveDeadlineTriggers(
+    identity,
+    deadline({
+      entityType: "reminder",
+      entityId: "reminder-past",
+      status: "scheduled",
+      dueAt: new Date("2026-09-24T03:00:00.000Z"),
+      occurredAt: new Date("2026-09-25T03:00:00.000Z"),
+    }),
+    executor,
+    captureWriter(pastReminderEvents),
+  );
+  assert.deepEqual(pastReminderEvents.map((event) => event.eventType), ["reminder.due"]);
+  assert.equal(pastReminderEvents[0]?.availableAt?.toISOString(), "2026-09-24T03:00:00.000Z");
 });
 
 test("inactive or undated records never schedule proactive events", async () => {

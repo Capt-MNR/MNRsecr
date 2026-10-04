@@ -3,10 +3,26 @@ import assert from "node:assert/strict";
 import { evaluateProactiveBehavior } from "../src/lib/proactive-behavior";
 
 const now = "2025-01-01T00:00:00.000Z";
-test("reminders are only active in the next 24 hours and past due is not a reminder", () => {
+test("approaching reminders end at due time and due-time reminders catch up without firing early", () => {
   assert.equal(evaluateProactiveBehavior({ kind: "reminder", now, reminder: { id: "r", title: "Call", dueAt: "2025-01-01T12:00:00Z" } }).action, "remind");
   assert.equal(evaluateProactiveBehavior({ kind: "reminder", now, reminder: { id: "r", title: "Call", dueAt: "2025-01-02T00:01:00Z" } }).action, "ignore");
   assert.equal(evaluateProactiveBehavior({ kind: "reminder", now, reminder: { id: "r", title: "Call", dueAt: "2024-12-31T23:00:00Z" } }).reason, "past_due_is_overdue");
+  assert.equal(evaluateProactiveBehavior({ kind: "reminder", now, reminder: { id: "r", title: "Call", dueAt: now } }).reason, "approaching_window_ended_at_due_time");
+  assert.equal(evaluateProactiveBehavior({
+    kind: "reminder",
+    now,
+    reminder: { id: "r", title: "Call", dueAt: "2025-01-01T00:00:00Z", window: "due-time" },
+  }).action, "remind");
+  assert.equal(evaluateProactiveBehavior({
+    kind: "reminder",
+    now,
+    reminder: { id: "r", title: "Call", dueAt: "2024-12-31T23:00:00Z", window: "due-time" },
+  }).reason, "reminder_due_time_caught_up");
+  assert.equal(evaluateProactiveBehavior({
+    kind: "reminder",
+    now,
+    reminder: { id: "r", title: "Call", dueAt: "2025-01-01T00:01:00Z", window: "due-time" },
+  }).reason, "reminder_due_time_not_reached");
 });
 test("delivery dedupe and explicit repeat permission", () => {
   const input = { kind: "reminder" as const, now, reminder: { id: "r", title: "Call", dueAt: "2025-01-01T12:00:00Z", version: 1, window: "morning" }, previousDeliveries: [{ deadline: "2025-01-01T12:00:00.000Z", version: 1, window: "morning" }] };

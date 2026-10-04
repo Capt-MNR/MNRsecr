@@ -570,7 +570,7 @@ export class PostgresAgentWorkStorageAdapter implements StorageAdapter {
         dedupeKey: input.notification.dedupeKey,
         workId: input.notification.workId,
         runId: input.notification.runId,
-        sourceEventId: input.notification.eventId,
+        sourceEventId: input.notification.sourceEventId ?? input.notification.eventId,
       });
 
       const [run] = await tx.update(agentWorkRunsTable).set({

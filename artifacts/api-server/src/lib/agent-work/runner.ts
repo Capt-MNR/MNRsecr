@@ -251,6 +251,9 @@ export class AgentWorkRunner {
         };
         const execution = await planExecution(this.adapters, intent, githubReadContext);
         const plan = execution.plan;
+        const sourceEventId = typeof work.source.eventId === "string"
+          ? work.source.eventId
+          : undefined;
         await this.adapters.storage.storeEvidenceSnapshot({
           identity,
           workId: work.id,
@@ -287,7 +290,10 @@ export class AgentWorkRunner {
               eventType: "run_notification",
               actorType: "agent",
               summary: plan.notificationBody,
-              metadata: { status: plan.status },
+              metadata: {
+                status: plan.status,
+                ...(sourceEventId ? { sourceEventId } : {}),
+              },
               dedupeKey: `agent-work-notification:${run.id}`,
             })
           : null;
@@ -303,7 +309,9 @@ export class AgentWorkRunner {
                 status: plan.status,
                 deepLink: `/main?workId=${encodeURIComponent(work.id)}`,
                 ...(plan.notificationData ?? {}),
+                ...(sourceEventId ? { triggerEventId: sourceEventId } : {}),
               },
+              ...(sourceEventId ? { sourceEventId } : {}),
               dedupeKey: `agent-work-notification:${run.id}`,
               workId: work.id,
               runId: run.id,
@@ -383,8 +391,17 @@ export class AgentWorkRunner {
           runId: run.id,
           eventType: "notification_delivery",
           actorType: "system",
-          summary: delivery.status === "accepted" ? "تم إرسال التنبيه." : "تعذر إرسال التنبيه.",
-          metadata: { status: delivery.status, driver: delivery.driver, reason: delivery.reason ?? null },
+          summary: delivery.status !== "accepted"
+            ? "تعذر إرسال التنبيه."
+            : delivery.reason === "durable_outbox_queued"
+              ? "وُضع التنبيه في قائمة التسليم؛ لم يتأكد وصوله للجهاز بعد."
+              : "قبل مزود التنبيهات الطلب؛ وصوله للجهاز غير مؤكد.",
+            metadata: {
+              status: delivery.status,
+              driver: delivery.driver,
+              reason: delivery.reason ?? null,
+              ...(sourceEventId ? { sourceEventId } : {}),
+            },
           dedupeKey: `agent-work-delivery:${run.id}`,
         });
         result.completed += 1;

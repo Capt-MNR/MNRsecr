@@ -406,6 +406,56 @@ export async function evaluateProactiveTrigger(
     return ignored(key, "temporarily_suppressed_for_record_version");
   }
 
+  if (event.eventType === "reminder.due") {
+    if (record.entityType !== "reminder") return ignored(key, "reminder_due_event_aggregate_mismatch");
+    if (record.dueAt.getTime() > now.getTime()) return ignored(key, "reminder_due_time_not_reached");
+    if (event.payload.window !== "due-time") return ignored(key, "reminder_due_event_window_invalid");
+
+    const decision = evaluateProactiveBehavior({
+      kind: "reminder",
+      now,
+      preferences: behaviorPrefs,
+      reminder: {
+        id: record.entityId,
+        title: record.title,
+        dueAt: record.dueAt,
+        status: "active",
+        version: record.rowVersion,
+        window: "due-time",
+        repeatPermission: preferences?.repeatReminders ?? false,
+      },
+    });
+    const deadlineEvidence = {
+      kind: "reminder_due_time",
+      triggerEventId: event.eventId,
+      triggerEventType: event.eventType,
+      dueAt: record.dueAt.toISOString(),
+      triggerOccurredAt: event.occurredAt.toISOString(),
+      triggerCreatedAt: event.createdAt.toISOString(),
+      triggerAvailableAt: event.availableAt.toISOString(),
+      evaluatedAt: now.toISOString(),
+      triggerCreationOffsetMs: event.createdAt.getTime() - record.dueAt.getTime(),
+      triggerProcessingLatenessMs: now.getTime() - record.dueAt.getTime(),
+      triggerQueueDelayMs: now.getTime() - event.createdAt.getTime(),
+    };
+    return messageEvaluation({
+      triggerKey: "proactive-reminder-due-time-v1",
+      decision,
+      title: preferences?.language === "en" ? "Reminder due now" : "حان موعد التذكير",
+      entityType: record.entityType,
+      entityId: record.entityId,
+      dedupeKey: [
+        "proactive-reminder-due-time",
+        identity.tenantId,
+        identity.userId,
+        record.entityId,
+        `v${record.rowVersion}`,
+        record.dueAt.toISOString(),
+      ].join(":"),
+      data: { triggerEventId: event.eventId, deadlineEvidence },
+    });
+  }
+
   const isOverdueEvent = event.eventType === "task.overdue"
     || event.eventType === "commitment.overdue"
     || event.eventType === "commitment.deadline";

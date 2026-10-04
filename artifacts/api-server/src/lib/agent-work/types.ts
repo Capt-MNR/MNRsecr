@@ -223,6 +223,7 @@ export type CompleteAgentWorkRunInput = {
 export type CompleteAgentWorkRunWithNotificationInput = CompleteAgentWorkRunInput & {
   notification: {
     eventId: string;
+    sourceEventId?: string;
     title: string;
     body: string;
     data: Record<string, unknown>;

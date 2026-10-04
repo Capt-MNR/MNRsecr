@@ -1,12 +1,14 @@
-import { and, eq, gt, inArray, or } from "drizzle-orm";
+import { and, eq, gt, inArray, isNotNull, or, sql } from "drizzle-orm";
 import {
   authMembershipsTable,
   commitmentsTable,
   db,
   remindersTable,
   tasksTable,
+  triggerOutboxTable,
 } from "@workspace/db";
 import type { DbExecutor, Identity } from "./entity-graph";
+import { logger } from "./logger";
 import { enqueueTriggerOutbox } from "./trigger-outbox";
 
 export type ProactiveDeadlineRecord = {
@@ -34,9 +36,9 @@ function isActive(input: ProactiveDeadlineRecord): boolean {
 }
 
 /**
- * Schedules a single reminder-window event and, for tasks, a separate
- * overdue event. Event identity follows the explicit deadline mutation
- * version; title-only edits do not create a second reminder.
+ * Schedules the approaching window for deadlines, a distinct due-time event
+ * for reminders, and a separate overdue event for tasks and commitments.
+ * Event identity follows the explicit deadline mutation version.
  */
 export async function enqueueProactiveDeadlineTriggers(
   identity: Identity,
@@ -52,31 +54,62 @@ export async function enqueueProactiveDeadlineTriggers(
     input.occurredAt.getTime(),
     dueAt.getTime() - DAY_MS,
   ));
-  await writer({
-    identity,
-    eventType: `${input.entityType}.approaching`,
-    aggregateType: input.entityType,
-    aggregateId: input.entityId,
-    occurredAt: input.occurredAt,
-    availableAt: approachingAt,
-    payload: {
-      entityType: input.entityType,
-      entityId: input.entityId,
-      title: input.title,
-      status: input.status,
-      dueAt: dueAt.toISOString(),
-      rowVersion: input.rowVersion,
-      window: "next-24-hours",
-    },
-    dedupeKey: [
-      "proactive-deadline:v1",
-      input.entityType,
-      input.entityId,
-      "approaching",
-      deadlineVersion,
-      dueAt.toISOString(),
-    ].join(":"),
-  }, executor);
+  if (input.entityType !== "reminder" || dueAt.getTime() > input.occurredAt.getTime()) {
+    await writer({
+      identity,
+      eventType: `${input.entityType}.approaching`,
+      aggregateType: input.entityType,
+      aggregateId: input.entityId,
+      occurredAt: input.occurredAt,
+      availableAt: approachingAt,
+      payload: {
+        entityType: input.entityType,
+        entityId: input.entityId,
+        title: input.title,
+        status: input.status,
+        dueAt: dueAt.toISOString(),
+        rowVersion: input.rowVersion,
+        window: "next-24-hours",
+      },
+      dedupeKey: [
+        "proactive-deadline:v1",
+        input.entityType,
+        input.entityId,
+        "approaching",
+        deadlineVersion,
+        dueAt.toISOString(),
+      ].join(":"),
+    }, executor);
+  }
+
+  if (input.entityType === "reminder") {
+    await writer({
+      identity,
+      eventType: "reminder.due",
+      aggregateType: "reminder",
+      aggregateId: input.entityId,
+      occurredAt: dueAt,
+      availableAt: dueAt,
+      payload: {
+        entityType: "reminder",
+        entityId: input.entityId,
+        title: input.title,
+        status: input.status,
+        dueAt: dueAt.toISOString(),
+        rowVersion: input.rowVersion,
+        window: "due-time",
+      },
+      dedupeKey: [
+        "proactive-deadline:v1",
+        "reminder",
+        input.entityId,
+        "due-time",
+        deadlineVersion,
+        dueAt.toISOString(),
+      ].join(":"),
+    }, executor);
+    return;
+  }
 
   if (input.entityType !== "task" && input.entityType !== "commitment") return;
   await writer({
@@ -107,10 +140,11 @@ export async function enqueueProactiveDeadlineTriggers(
 }
 
 /**
- * Reconcile already-saved future deadlines into the existing trigger outbox
- * when the service starts. Event dedupe makes this safe across restarts.
+ * Reconcile saved deadlines into the existing trigger outbox at startup.
+ * Past active reminders are included so reminders whose due trigger predates
+ * this lifecycle are caught up from durable record and outbox state.
  */
-export async function seedUpcomingProactiveDeadlineEvents(
+export async function seedProactiveDeadlineEvents(
   now = new Date(),
   executor: DbExecutor = db,
 ): Promise<number> {
@@ -185,7 +219,7 @@ export async function seedUpcomingProactiveDeadlineEvents(
           : undefined,
       ),
       inArray(remindersTable.status, ["scheduled", "pending", "open", "active"]),
-      gt(remindersTable.dueAt, now),
+      isNotNull(remindersTable.dueAt),
     )),
   ]);
 
@@ -204,6 +238,32 @@ export async function seedUpcomingProactiveDeadlineEvents(
     );
   }
   for (const row of reminders) {
+    const dueAt = row.dueAt?.toISOString();
+    if (!dueAt) continue;
+    const [existingDueEvent] = await executor.select({
+      eventId: triggerOutboxTable.id,
+      status: triggerOutboxTable.status,
+    }).from(triggerOutboxTable).where(and(
+      eq(triggerOutboxTable.tenantId, row.tenantId),
+      eq(triggerOutboxTable.ownerUserId, row.ownerUserId),
+      eq(triggerOutboxTable.eventType, "reminder.due"),
+      eq(triggerOutboxTable.aggregateType, "reminder"),
+      eq(triggerOutboxTable.aggregateId, row.id),
+      sql`${triggerOutboxTable.payload}->>'dueAt' = ${dueAt}`,
+    )).limit(1);
+    if (existingDueEvent) {
+      if (existingDueEvent.status === "quarantined") {
+        logger.warn({
+          eventId: existingDueEvent.eventId,
+          tenantId: row.tenantId,
+          ownerUserId: row.ownerUserId,
+          reminderId: row.id,
+          dueAt,
+        }, "reminder due trigger is quarantined; reconciliation will not duplicate it");
+      }
+      continue;
+    }
+
     await enqueueProactiveDeadlineTriggers(
       { tenantId: row.tenantId, userId: row.ownerUserId },
       { ...row, entityId: row.id, entityType: "reminder", occurredAt: now },
@@ -212,3 +272,6 @@ export async function seedUpcomingProactiveDeadlineEvents(
   }
   return tasks.length + commitments.length + reminders.length;
 }
+
+/** @deprecated Use seedProactiveDeadlineEvents for all deadline windows. */
+export const seedUpcomingProactiveDeadlineEvents = seedProactiveDeadlineEvents;

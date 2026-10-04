@@ -216,6 +216,37 @@ async function buildActionPlan(
   if (source.type === "trigger_outbox") {
     const action = asRecord(work.action);
     const notificationData = asRecord(action.data);
+    const deadlineEvidence = asRecord(source.deadlineEvidence);
+    const dueAtMs = typeof deadlineEvidence.dueAt === "string"
+      ? Date.parse(deadlineEvidence.dueAt)
+      : Number.NaN;
+    const deadlineEvidenceFields = Object.keys(deadlineEvidence).length > 0
+      ? {
+          deadlineDueAt: typeof deadlineEvidence.dueAt === "string" ? deadlineEvidence.dueAt : null,
+          triggerCreatedAt: typeof deadlineEvidence.triggerCreatedAt === "string"
+            ? deadlineEvidence.triggerCreatedAt
+            : null,
+          triggerAvailableAt: typeof deadlineEvidence.triggerAvailableAt === "string"
+            ? deadlineEvidence.triggerAvailableAt
+            : null,
+          triggerEvaluatedAt: typeof deadlineEvidence.evaluatedAt === "string"
+            ? deadlineEvidence.evaluatedAt
+            : null,
+          triggerCreationOffsetMs: typeof deadlineEvidence.triggerCreationOffsetMs === "number"
+            ? deadlineEvidence.triggerCreationOffsetMs
+            : null,
+          triggerProcessingLatenessMs: typeof deadlineEvidence.triggerProcessingLatenessMs === "number"
+            ? deadlineEvidence.triggerProcessingLatenessMs
+            : null,
+          triggerQueueDelayMs: typeof deadlineEvidence.triggerQueueDelayMs === "number"
+            ? deadlineEvidence.triggerQueueDelayMs
+            : null,
+          workIntentCreatedAt: work.createdAt.toISOString(),
+          workIntentCreationOffsetMs: Number.isFinite(dueAtMs)
+            ? work.createdAt.getTime() - dueAtMs
+            : null,
+        }
+      : {};
     const proactive = action.type === "proactive_message";
     return {
       plan: {
@@ -227,6 +258,7 @@ async function buildActionPlan(
           source: "trigger_outbox",
           eventId: typeof source.eventId === "string" ? source.eventId : null,
           triggerKey: typeof source.triggerKey === "string" ? source.triggerKey : null,
+          ...(Object.keys(deadlineEvidence).length > 0 ? { deadlineEvidence } : {}),
         },
         notificationTitle: typeof action.title === "string" ? action.title : title,
         notificationBody: proactive && typeof action.body === "string" ? action.body : "",
@@ -238,6 +270,7 @@ async function buildActionPlan(
         status: "verified",
         source: "trigger_outbox",
         eventId: typeof source.eventId === "string" ? source.eventId : null,
+        ...deadlineEvidenceFields,
       },
     };
   }
