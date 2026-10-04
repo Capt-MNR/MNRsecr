@@ -1,0 +1,302 @@
+We have officially closed the Architecture Hardening phase.
+
+The architecture is considered stable enough to move into Product / Integration work. Do NOT reopen the architecture audit, redesign Agent/Core, or create a new task/approval workflow.
+
+I want one consolidated implementation pass now to finish everything that can be completed and verified entirely inside the Replit development environment, without requiring a laptop, real Android device, real OAuth accounts, production credentials, or production infrastructure.
+
+Operating rules
+
+1. Start with a short audit of the current codebase and identify only concrete remaining gaps.
+2. Do not rebuild or refactor working systems just for cleanup.
+3. Preserve the existing architecture and contracts.
+4. Implement directly in the current workspace. Do not create Replit Tasks.
+5. Prefer existing abstractions, connectors, approval lifecycle, Agent Work, evidence, verification, routing, and notification infrastructure.
+6. Use fake/mock providers wherever a real external account is required.
+7. Do not invent successful live integration results.
+8. Do not modify production infrastructure or production data.
+9. Do not add Android-specific work that cannot be verified in this environment.
+10. If something genuinely requires a real device/account/production environment, leave it clearly marked as "Not Measured — external environment required" rather than creating a fake claim of completion.
+
+---
+
+1. Fix the stale trigger assertion
+
+There is one known stale stress-test assertion.
+
+The old test expects exactly one commitment outbox event, while the current lifecycle intentionally supports multiple stages such as:
+
+- approaching
+- deadline/due
+- overdue
+
+Update the test to match the current lifecycle contract.
+
+Verify specifically:
+
+- correct stage events are emitted
+- duplicate events are deduplicated
+- the resulting Work handoff is not duplicated
+- existing trigger behavior remains unchanged
+
+This is test-only alignment. Do not change the completed trigger implementation unless the test exposes a genuine implementation bug.
+
+---
+
+2. Gmail — complete everything possible without live OAuth
+
+Audit the existing Gmail implementation and complete any missing code-level pieces needed for a production-ready integration.
+
+Verify the complete flow using mocks/fakes:
+
+User intent
+→ structured action
+→ account/provider scope
+→ approval
+→ canonical content/plan hash
+→ Gmail provider call
+→ result classification
+→ verification
+→ evidence
+→ notification/result
+
+Cover at minimum:
+
+- Gmail connector/provider contract
+- account-scoped connection lookup
+- OAuth state/PKCE handling
+- encrypted refresh-token storage
+- provider-neutral email interface
+- approval binding to recipient/content/attachments
+- plan/content hash validation
+- send operation
+- successful verification
+- ambiguous/unknown result
+- reconciliation before retry
+- no blind resend
+- sanitized evidence
+- Agent Work integration
+- recovery/idempotency
+- test-mode/fake provider coverage
+
+Do NOT perform a real OAuth flow or send a real email.
+
+Do NOT add real credentials.
+
+If something is already correctly implemented, leave it alone and test it rather than rewriting it.
+
+---
+
+3. Calendar — prepare the integration completely in code
+
+Audit the current Calendar capability and implement only the missing pieces needed for the same external-action lifecycle.
+
+Support the architecture for:
+
+- read events
+- create event
+- update event
+- cancel/delete event where supported
+
+Use the existing External Action / Agent Work / approval / evidence architecture.
+
+For write operations, preserve:
+
+- approval
+- canonical action/plan identity
+- idempotency
+- verification
+- UNKNOWN_RESULT handling
+- reconciliation before retry
+
+Use a fake/mock calendar provider for tests.
+
+Do not require a real Google account.
+
+Do not perform live OAuth.
+
+Do not claim live Calendar E2E success.
+
+---
+
+4. Messaging abstraction
+
+Audit the current messaging architecture.
+
+The Agent must not be coupled directly to WhatsApp or any particular application.
+
+Ensure messaging is expressed through a provider-neutral capability/connector contract that can later support multiple providers.
+
+Verify that:
+
+- Agent Core produces a generic messaging intent/action
+- provider routing happens outside Agent Core
+- approval is content/recipient/scope bound
+- execution and verification remain connector-specific
+- UNKNOWN_RESULT and reconciliation are supported
+- adding another messaging provider later does not require redesigning Agent/Core
+
+Do not implement UI automation for WhatsApp.
+
+Do not require a real messaging account.
+
+---
+
+5. Files / Docs / Sheets integration readiness
+
+Review the existing file/document/spreadsheet action implementations.
+
+Do not rebuild Google Sheets.
+
+Instead, identify concrete gaps against the established External Action contract:
+
+- action identity
+- step identity
+- approval binding
+- idempotency
+- provider execution
+- verification
+- UNKNOWN_RESULT
+- reconciliation
+- evidence
+- Agent Work recovery
+
+Fix only real gaps.
+
+Use fake providers where necessary.
+
+Preserve the existing working Sheets vertical slice.
+
+---
+
+6. Model Capability Registry
+
+Continue the conservative capability model already established.
+
+Capabilities must be explicitly validated per exact model identity.
+
+Do NOT infer capabilities merely from a model name.
+
+Complete any code/tests/documentation that can safely be completed without live benchmarking.
+
+The registry should be able to represent capabilities such as:
+
+- tool calling
+- structured output
+- vision
+- audio
+- reasoning
+- context capacity
+- streaming
+
+But do not mark an unverified model as capable merely because it is expected to support something.
+
+Keep routing extensible for future providers and gateways.
+
+---
+
+7. Integration test matrix
+
+Create or update a deterministic test matrix covering the complete lifecycle:
+
+Understand
+→ Plan
+→ Approval
+→ Action
+→ Provider
+→ Verify
+→ Evidence
+→ Notification
+→ Recovery
+
+Cover the major integration categories currently present:
+
+- email
+- calendar
+- messaging abstraction
+- files
+- sheets
+- proactive work
+
+Use fake/mock providers where live accounts are unavailable.
+
+The goal is to prove that the existing architecture can support real integrations, not to simulate real-world success.
+
+---
+
+8. Identify laptop/external-environment boundaries
+
+Produce a concise final list of anything that remains impossible or inappropriate to verify inside Replit.
+
+Classify each remaining item as one of:
+
+- Replit-complete
+- Requires real account
+- Requires real device
+- Requires production environment
+- Requires live provider benchmark
+
+Do not attempt to fake these measurements.
+
+Examples that may remain external:
+
+- real Gmail OAuth
+- real Calendar OAuth
+- actual Android E2E
+- real notification receipt on a physical device
+- production migration verification
+- live token/cost benchmark
+
+Only list an item if it genuinely remains unverified.
+
+---
+
+9. Final regression
+
+After implementation, run the relevant existing verification suites.
+
+At minimum:
+
+- workspace typecheck
+- build
+- Agent Work tests
+- External Action tests
+- approval/hash tests
+- trigger/outbox tests
+- notification tests
+- learning tests
+- routing/capability tests
+- integration tests
+- diff check
+- API restart + health check
+
+Do not stop merely because one unrelated old test fails.
+
+Classify failures as:
+
+- genuine regression
+- stale test expectation
+- infrastructure/environment limitation
+- unrelated pre-existing failure
+
+Fix genuine regressions and stale expectations where appropriate.
+
+---
+
+Final report
+
+Return one concise implementation report containing:
+
+1. What you actually changed.
+2. What was already complete and therefore left unchanged.
+3. Tests executed and exact pass/fail counts.
+4. Any remaining genuine gaps.
+5. Which gaps require the laptop/real accounts/production.
+6. Whether any architectural change was required.
+
+Most importantly:
+
+End with a clear statement answering:
+
+"Is the codebase now ready to move from Architecture Hardening into real Product/Integration testing, with only real-account/device/production verification remaining?"
+
+Do not reopen the Architecture Audit unless you discover a concrete architectural defect that blocks Product/Integration work.
