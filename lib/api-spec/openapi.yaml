@@ -1212,6 +1212,39 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /operations/summary:
+    get:
+      operationId: getOperationalSummary
+      tags: [operations]
+      summary: Read a tenant-scoped operational summary for a fixed time window
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: Counts and stage latencies derived from persisted operational traces
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationalSummaryResponse"
+        "400":
+          description: Invalid or excessively wide time window
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /learning/signals/{signalId}/review:
     post:
       operationId: reviewLearningSignal
@@ -1248,8 +1281,38 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /learning/signals/{signalId}/evaluate:
+    post:
+      operationId: evaluateLearningSignal
+      tags: [learning]
+      summary: Run a deterministic candidate-integrity evaluation without changing production behavior
+      parameters:
+        - name: signalId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Evaluation evidence persisted for the current approved review
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LearningSignalEvaluationResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Learning signal not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Only an approved learning signal can be evaluated
           content:
             application/json:
               schema:
@@ -2628,9 +2691,57 @@ components:
           type: ["string", "null"]
         previousActionType:
           type: ["string", "null"]
+        evaluationStatus:
+          type: string
+          enum: [blocked, pending, passed, failed]
+        promotionEligible:
+          type: boolean
+        evaluatedAt:
+          type: ["string", "null"]
+          format: date-time
+        evaluationChecks:
+          type: array
+          items:
+            $ref: "#/components/schemas/LearningEvaluationCheck"
         createdAt:
           type: string
-      required: [signalId, conversationId, conversationTitle, turnId, previousTurnId, dialect, category, confidence, status, userMessage, assistantMessage, previousUserMessage, previousAssistantMessage, previousActionType, createdAt]
+      required: [signalId, conversationId, conversationTitle, turnId, previousTurnId, dialect, category, confidence, status, userMessage, assistantMessage, previousUserMessage, previousAssistantMessage, previousActionType, evaluationStatus, promotionEligible, evaluatedAt, evaluationChecks, createdAt]
+    LearningEvaluationCheck:
+      type: object
+      properties:
+        name:
+          type: string
+        passed:
+          type: boolean
+        reason:
+          type: ["string", "null"]
+      required: [name, passed, reason]
+    LearningSignalEvaluationResponse:
+      type: object
+      properties:
+        evaluationId:
+          type: string
+          format: uuid
+        signalId:
+          type: string
+        status:
+          type: string
+          enum: [passed, failed]
+        evaluationScope:
+          type: string
+          enum: [candidate_integrity]
+        promotionEligible:
+          type: boolean
+        evaluatorVersion:
+          type: string
+        evaluatedAt:
+          type: string
+          format: date-time
+        checks:
+          type: array
+          items:
+            $ref: "#/components/schemas/LearningEvaluationCheck"
+      required: [evaluationId, signalId, status, evaluationScope, promotionEligible, evaluatorVersion, evaluatedAt, checks]
     LearningSignalReviewInput:
       type: object
       properties:
@@ -2651,7 +2762,12 @@ components:
           enum: [approved, rejected, needs_context]
         benchmarkReady:
           type: boolean
-      required: [signalId, status, benchmarkReady]
+        evaluationStatus:
+          type: string
+          enum: [blocked, pending]
+        promotionEligible:
+          type: boolean
+      required: [signalId, status, benchmarkReady, evaluationStatus, promotionEligible]
     LearningSignalListResponse:
       type: object
       properties:
@@ -2660,6 +2776,76 @@ components:
           items:
             $ref: "#/components/schemas/LearningSignal"
       required: [signals]
+    OperationalLatencyMetric:
+      type: object
+      properties:
+        count:
+          type: integer
+          minimum: 0
+        averageMs:
+          type: ["number", "null"]
+          minimum: 0
+        maxMs:
+          type: ["number", "null"]
+          minimum: 0
+      required: [count, averageMs, maxMs]
+    OperationalSummaryResponse:
+      type: object
+      properties:
+        schemaVersion:
+          type: integer
+          enum: [1]
+        generatedAt:
+          type: string
+          format: date-time
+        range:
+          type: object
+          properties:
+            from: { type: string, format: date-time }
+            to: { type: string, format: date-time }
+            asOf: { type: string, format: date-time }
+          required: [from, to, asOf]
+        triggers:
+          type: object
+          properties:
+            total: { type: integer, minimum: 0 }
+            processed: { type: integer, minimum: 0 }
+            delayed: { type: integer, minimum: 0 }
+            missed: { type: integer, minimum: 0 }
+            overdue: { type: integer, minimum: 0 }
+          required: [total, processed, delayed, missed, overdue]
+        work:
+          type: object
+          properties:
+            created: { type: integer, minimum: 0 }
+            completed: { type: integer, minimum: 0 }
+            failed: { type: integer, minimum: 0 }
+            stale: { type: integer, minimum: 0 }
+            leaseRecoveries: { type: integer, minimum: 0 }
+          required: [created, completed, failed, stale, leaseRecoveries]
+        notifications:
+          type: object
+          properties:
+            queued: { type: integer, minimum: 0 }
+            attempts: { type: integer, minimum: 0 }
+            retries: { type: integer, minimum: 0 }
+            confirmed: { type: integer, minimum: 0 }
+          required: [queued, attempts, retries, confirmed]
+        providerFailures:
+          type: object
+          properties:
+            count: { type: integer, minimum: 0 }
+          required: [count]
+        latencyMs:
+          type: object
+          properties:
+            triggerToWork: { $ref: "#/components/schemas/OperationalLatencyMetric" }
+            workRun: { $ref: "#/components/schemas/OperationalLatencyMetric" }
+            notificationQueueToFirstAttempt: { $ref: "#/components/schemas/OperationalLatencyMetric" }
+            notificationQueueToConfirmation: { $ref: "#/components/schemas/OperationalLatencyMetric" }
+            providerFailure: { $ref: "#/components/schemas/OperationalLatencyMetric" }
+          required: [triggerToWork, workRun, notificationQueueToFirstAttempt, notificationQueueToConfirmation, providerFailure]
+      required: [schemaVersion, generatedAt, range, triggers, work, notifications, providerFailures, latencyMs]
     ActivityEvent:
       type: object
       additionalProperties: true

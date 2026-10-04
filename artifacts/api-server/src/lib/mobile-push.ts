@@ -488,7 +488,14 @@ async function pollExpoReceipts(now: Date, notificationId?: string): Promise<num
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ ids: [delivery.providerTicket] }),
       });
-      if (!response.ok) return;
+      if (!response.ok) {
+        logger.warn({
+          notificationId: delivery.notificationId,
+          deliveryId: delivery.id,
+          statusCode: response.status,
+        }, "Expo receipt lookup failed; delivery remains pending confirmation");
+        return;
+      }
       const payload = await responseJson(response);
       const data = payload.data;
       const receipt = data && typeof data === "object"
@@ -527,8 +534,12 @@ async function pollExpoReceipts(now: Date, notificationId?: string): Promise<num
       if (receiptRecord.status === "ok" || receiptRecord.status === "error") {
         await refreshOutboxStatus(delivery.notificationId);
       }
-    } catch {
-      // A receipt lookup failure does not prove the original submission failed.
+    } catch (error) {
+      logger.warn({
+        notificationId: delivery.notificationId,
+        deliveryId: delivery.id,
+        errorType: error instanceof Error ? error.name : "unknown",
+      }, "Expo receipt lookup failed; delivery remains pending confirmation");
     }
   }));
   return updatedCount;

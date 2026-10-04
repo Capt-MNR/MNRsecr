@@ -9,6 +9,7 @@ import NotFound from '@/pages/not-found';
 import EntityDetail from '@/pages/entity-detail';
 import FinancialDetail from '@/pages/financial-detail';
 import LearningSignals from '@/pages/learning-signals';
+import OperationsSummary from '@/pages/operations-summary';
 import Memories from '@/pages/memories';
 import Works from '@/pages/works';
 import EmailSettings from '@/pages/email';
@@ -36,6 +37,7 @@ function Router() {
           <Route path="/projects/:id" component={() => <EntityDetail entityType="project" />} />
            <Route path="/financial/parties/:id" component={FinancialDetail} />
          <Route path="/learning" component={LearningSignals} />
+         <Route path="/operations" component={OperationsSummary} />
           <Route path="/memories" component={Memories} />
         <Route path="/works" component={Works} />
         <Route path="/works/:id" component={Works} />

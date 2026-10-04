@@ -1237,6 +1237,23 @@ export const LearningSignalStatus = {
   needs_context: 'needs_context',
 } as const;
 
+export type LearningSignalEvaluationStatus = typeof LearningSignalEvaluationStatus[keyof typeof LearningSignalEvaluationStatus];
+
+
+export const LearningSignalEvaluationStatus = {
+  blocked: 'blocked',
+  pending: 'pending',
+  passed: 'passed',
+  failed: 'failed',
+} as const;
+
+export interface LearningEvaluationCheck {
+  name: string;
+  passed: boolean;
+  /** @nullable */
+  reason: string | null;
+}
+
 export interface LearningSignal {
   signalId: string;
   conversationId: string;
@@ -1257,7 +1274,38 @@ export interface LearningSignal {
   previousAssistantMessage: string | null;
   /** @nullable */
   previousActionType: string | null;
+  evaluationStatus: LearningSignalEvaluationStatus;
+  promotionEligible: boolean;
+  /** @nullable */
+  evaluatedAt: string | null;
+  evaluationChecks: LearningEvaluationCheck[];
   createdAt: string;
+}
+
+export type LearningSignalEvaluationResponseStatus = typeof LearningSignalEvaluationResponseStatus[keyof typeof LearningSignalEvaluationResponseStatus];
+
+
+export const LearningSignalEvaluationResponseStatus = {
+  passed: 'passed',
+  failed: 'failed',
+} as const;
+
+export type LearningSignalEvaluationResponseEvaluationScope = typeof LearningSignalEvaluationResponseEvaluationScope[keyof typeof LearningSignalEvaluationResponseEvaluationScope];
+
+
+export const LearningSignalEvaluationResponseEvaluationScope = {
+  candidate_integrity: 'candidate_integrity',
+} as const;
+
+export interface LearningSignalEvaluationResponse {
+  evaluationId: string;
+  signalId: string;
+  status: LearningSignalEvaluationResponseStatus;
+  evaluationScope: LearningSignalEvaluationResponseEvaluationScope;
+  promotionEligible: boolean;
+  evaluatorVersion: string;
+  evaluatedAt: string;
+  checks: LearningEvaluationCheck[];
 }
 
 export type LearningSignalReviewInputStatus = typeof LearningSignalReviewInputStatus[keyof typeof LearningSignalReviewInputStatus];
@@ -1287,14 +1335,113 @@ export const LearningSignalReviewResponseStatus = {
   needs_context: 'needs_context',
 } as const;
 
+export type LearningSignalReviewResponseEvaluationStatus = typeof LearningSignalReviewResponseEvaluationStatus[keyof typeof LearningSignalReviewResponseEvaluationStatus];
+
+
+export const LearningSignalReviewResponseEvaluationStatus = {
+  blocked: 'blocked',
+  pending: 'pending',
+} as const;
+
 export interface LearningSignalReviewResponse {
   signalId: string;
   status: LearningSignalReviewResponseStatus;
   benchmarkReady: boolean;
+  evaluationStatus: LearningSignalReviewResponseEvaluationStatus;
+  promotionEligible: boolean;
 }
 
 export interface LearningSignalListResponse {
   signals: LearningSignal[];
+}
+
+export interface OperationalLatencyMetric {
+  /** @minimum 0 */
+  count: number;
+  /**
+     * @minimum 0
+     * @nullable
+     */
+  averageMs: number | null;
+  /**
+     * @minimum 0
+     * @nullable
+     */
+  maxMs: number | null;
+}
+
+export type OperationalSummaryResponseSchemaVersion = typeof OperationalSummaryResponseSchemaVersion[keyof typeof OperationalSummaryResponseSchemaVersion];
+
+
+export const OperationalSummaryResponseSchemaVersion = {
+  NUMBER_1: 1,
+} as const;
+
+export type OperationalSummaryResponseRange = {
+  from: string;
+  to: string;
+  asOf: string;
+};
+
+export type OperationalSummaryResponseTriggers = {
+  /** @minimum 0 */
+  total: number;
+  /** @minimum 0 */
+  processed: number;
+  /** @minimum 0 */
+  delayed: number;
+  /** @minimum 0 */
+  missed: number;
+  /** @minimum 0 */
+  overdue: number;
+};
+
+export type OperationalSummaryResponseWork = {
+  /** @minimum 0 */
+  created: number;
+  /** @minimum 0 */
+  completed: number;
+  /** @minimum 0 */
+  failed: number;
+  /** @minimum 0 */
+  stale: number;
+  /** @minimum 0 */
+  leaseRecoveries: number;
+};
+
+export type OperationalSummaryResponseNotifications = {
+  /** @minimum 0 */
+  queued: number;
+  /** @minimum 0 */
+  attempts: number;
+  /** @minimum 0 */
+  retries: number;
+  /** @minimum 0 */
+  confirmed: number;
+};
+
+export type OperationalSummaryResponseProviderFailures = {
+  /** @minimum 0 */
+  count: number;
+};
+
+export type OperationalSummaryResponseLatencyMs = {
+  triggerToWork: OperationalLatencyMetric;
+  workRun: OperationalLatencyMetric;
+  notificationQueueToFirstAttempt: OperationalLatencyMetric;
+  notificationQueueToConfirmation: OperationalLatencyMetric;
+  providerFailure: OperationalLatencyMetric;
+};
+
+export interface OperationalSummaryResponse {
+  schemaVersion: OperationalSummaryResponseSchemaVersion;
+  generatedAt: string;
+  range: OperationalSummaryResponseRange;
+  triggers: OperationalSummaryResponseTriggers;
+  work: OperationalSummaryResponseWork;
+  notifications: OperationalSummaryResponseNotifications;
+  providerFailures: OperationalSummaryResponseProviderFailures;
+  latencyMs: OperationalSummaryResponseLatencyMs;
 }
 
 export type ActivityEventMetadata = { [key: string]: unknown };
@@ -1799,6 +1946,11 @@ export const ListSecondBrainCandidatesStatus = {
 
 export type ListConversationsParams = {
 search?: string;
+};
+
+export type GetOperationalSummaryParams = {
+from: string;
+to: string;
 };
 
 export type GetCandidatesParams = {

@@ -819,6 +819,16 @@ export const triggerOutboxTable = pgTable(
       table.ownerUserId,
       table.occurredAt,
     ),
+    index("trigger_outbox_owner_processed_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.processedAt,
+    ),
+    index("trigger_outbox_owner_quarantined_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.quarantinedAt,
+    ),
   ],
 );
 
@@ -855,6 +865,11 @@ export const notificationDeliveriesTable = pgTable(
       table.nextAttemptAt,
     ),
     index("notification_deliveries_notification_idx").on(table.notificationId),
+    index("notification_deliveries_owner_confirmed_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.confirmedAt,
+    ),
   ],
 );
 
@@ -878,6 +893,11 @@ export const notificationDeliveryAttemptsTable = pgTable(
       table.attemptNumber,
     ),
     index("notification_delivery_attempts_delivery_idx").on(table.deliveryId),
+    index("notification_delivery_attempts_owner_started_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.startedAt,
+    ),
   ],
 );
 
@@ -1160,6 +1180,75 @@ export const learningSignalReviewsTable = pgTable(
   ],
 );
 
+export const learningSignalEvaluationsTable = pgTable(
+  "learning_signal_evaluations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    reviewId: uuid("review_id").notNull().references(() => learningSignalReviewsTable.id),
+    signalId: text("signal_id").notNull(),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }).notNull(),
+    candidateHash: text("candidate_hash").notNull(),
+    evaluatorVersion: text("evaluator_version").notNull(),
+    status: text("status").notNull(),
+    checks: jsonb("checks").$type<Array<{
+      name: string;
+      passed: boolean;
+      reason?: string;
+    }>>().notNull(),
+    evaluatedAt: timestamp("evaluated_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("learning_signal_evaluations_owner_signal_time_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.signalId,
+      table.evaluatedAt,
+    ),
+    index("learning_signal_evaluations_owner_review_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.reviewId,
+      table.evaluatedAt,
+    ),
+  ],
+);
+
+export const operationalProviderFailuresTable = pgTable(
+  "operational_provider_failures",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...ownershipColumns,
+    requestId: text("request_id").notNull(),
+    conversationId: text("conversation_id"),
+    logicalCallNumber: integer("logical_call_number").notNull(),
+    attemptNumber: integer("attempt_number").notNull(),
+    provider: text("provider").notNull(),
+    model: text("model").notNull(),
+    routeId: text("route_id").notNull(),
+    failureReason: text("failure_reason"),
+    latencyMs: integer("latency_ms").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("operational_provider_failures_attempt_unique").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.requestId,
+      table.logicalCallNumber,
+      table.attemptNumber,
+    ),
+    index("operational_provider_failures_owner_completed_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.completedAt,
+    ),
+  ],
+);
+
 /**
  * Explicit, account-scoped operating and communication preferences.
  * Null means the user has not explicitly selected a value; defaults are
@@ -1315,6 +1404,11 @@ export const agentWorksTable = pgTable(
       table.ownerUserId,
       table.updatedAt,
     ),
+    index("agent_works_owner_created_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.createdAt,
+    ),
     uniqueIndex("agent_works_owner_dedupe_unique").on(
       table.tenantId,
       table.ownerUserId,
@@ -1359,6 +1453,11 @@ export const agentWorkRunsTable = pgTable(
       table.workId,
       table.createdAt,
     ),
+    index("agent_work_runs_owner_completed_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.completedAt,
+    ),
     index("agent_work_runs_lease_idx").on(
       table.status,
       table.leaseExpiresAt,
@@ -1392,6 +1491,12 @@ export const agentWorkEventsTable = pgTable(
       table.tenantId,
       table.ownerUserId,
       table.workId,
+      table.occurredAt,
+    ),
+    index("agent_work_events_owner_type_occurred_idx").on(
+      table.tenantId,
+      table.ownerUserId,
+      table.eventType,
       table.occurredAt,
     ),
   ],

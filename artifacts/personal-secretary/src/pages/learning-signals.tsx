@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { Link } from 'wouter';
 import {
   getListLearningSignalsQueryKey,
+  useEvaluateLearningSignal,
   useReviewLearningSignal,
   useListLearningSignals,
 } from '@workspace/api-client-react';
@@ -43,9 +44,23 @@ function formatSignalTime(value: string) {
 
 const statusLabels: Record<LearningSignal['status'], string> = {
   pending_review: 'معلّقة للمراجعة',
-  approved: 'معتمدة كـ benchmark',
+  approved: 'معتمدة؛ بانتظار التقييم',
   rejected: 'مرفوضة',
   needs_context: 'تحتاج سياقًا إضافيًا',
+};
+
+const evaluationLabels: Record<LearningSignal['evaluationStatus'], string> = {
+  blocked: 'غير جاهزة للتقييم',
+  pending: 'بانتظار فحص العينة',
+  passed: 'اجتازت فحص سلامة العينة',
+  failed: 'فشل فحص سلامة العينة',
+};
+
+const evaluationClasses: Record<LearningSignal['evaluationStatus'], string> = {
+  blocked: 'border-border/70 bg-muted/50 text-muted-foreground',
+  pending: 'border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300',
+  passed: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+  failed: 'border-destructive/25 bg-destructive/10 text-destructive',
 };
 
 const statusClasses: Record<LearningSignal['status'], string> = {
@@ -58,10 +73,12 @@ const statusClasses: Record<LearningSignal['status'], string> = {
 function SignalCard({
   signal,
   onReview,
+  onEvaluate,
   isBusy,
 }: {
   signal: LearningSignal;
   onReview: (status: 'approved' | 'rejected' | 'needs_context') => void;
+  onEvaluate: () => void;
   isBusy: boolean;
 }) {
   return (
@@ -77,6 +94,9 @@ function SignalCard({
             </span>
             <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${statusClasses[signal.status]}`}>
               {statusLabels[signal.status]}
+            </span>
+            <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${evaluationClasses[signal.evaluationStatus]}`}>
+              {evaluationLabels[signal.evaluationStatus]}
             </span>
           </div>
           <h2 className="text-base font-semibold text-foreground">{signal.conversationTitle}</h2>
@@ -120,6 +140,19 @@ function SignalCard({
         <p>هذه الإشارة للمراجعة والتقييم فقط. لا تغيّر أي سجل ولا تُعدّل قواعد السكرتير تلقائيًا.</p>
       </div>
 
+      {signal.promotionEligible && (
+        <div className="mt-4 rounded-2xl border border-emerald-500/25 bg-emerald-500/5 px-4 py-3 text-xs leading-6 text-emerald-800 dark:text-emerald-200">
+          العينة مؤهلة للإدراج اليدوي في مجموعة الاختبار فقط؛ لا يحدث أي تغيير تلقائي في سلوك الإنتاج.
+        </div>
+      )}
+      {signal.evaluationStatus === 'failed' && (
+        <ul className="mt-3 space-y-1 text-xs leading-6 text-destructive" aria-label="أسباب فشل فحص العينة">
+          {signal.evaluationChecks.filter((check) => !check.passed).map((check) => (
+            <li key={check.name}>{check.reason ?? check.name}</li>
+          ))}
+        </ul>
+      )}
+
       {signal.status !== 'approved' && (
         <div className="mt-4 flex flex-wrap gap-2">
           <button
@@ -128,7 +161,7 @@ function SignalCard({
             disabled={isBusy}
             className="min-h-10 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
           >
-            اعتماد كـ benchmark
+            اعتماد لإجراء التقييم
           </button>
           <button
             type="button"
@@ -148,6 +181,16 @@ function SignalCard({
           </button>
         </div>
       )}
+      {signal.status === 'approved' && signal.evaluationStatus !== 'passed' && (
+        <button
+          type="button"
+          onClick={onEvaluate}
+          disabled={isBusy}
+          className="mt-4 min-h-10 rounded-xl border border-primary/30 px-3 py-2 text-xs font-semibold text-primary transition hover:bg-primary/5 disabled:cursor-wait disabled:opacity-60"
+        >
+          {signal.evaluationStatus === 'failed' ? 'إعادة فحص العينة' : 'فحص سلامة العينة'}
+        </button>
+      )}
     </article>
   );
 }
@@ -161,6 +204,7 @@ export default function LearningSignals() {
     },
   });
   const reviewMutation = useReviewLearningSignal();
+  const evaluationMutation = useEvaluateLearningSignal();
   const [activeSignalId, setActiveSignalId] = useState<string | null>(null);
   const [reviewError, setReviewError] = useState<string | null>(null);
 
@@ -180,6 +224,19 @@ export default function LearningSignals() {
     }
   }
 
+  async function evaluateSignal(signalId: string) {
+    setActiveSignalId(signalId);
+    setReviewError(null);
+    try {
+      await evaluationMutation.mutateAsync({ signalId });
+      await queryClient.invalidateQueries({ queryKey: getListLearningSignalsQueryKey() });
+    } catch {
+      setReviewError('تعذر تقييم العينة. حاول مرة أخرى.');
+    } finally {
+      setActiveSignalId(null);
+    }
+  }
+
   const pendingCount = signalsQuery.data?.signals.filter(
     (signal) => signal.status === 'pending_review' || signal.status === 'needs_context',
   ).length ?? 0;
@@ -189,10 +246,15 @@ export default function LearningSignals() {
       <div className="mx-auto max-w-4xl">
         <header className="mb-8 flex flex-wrap items-start justify-between gap-4">
           <div>
-            <Link href="/" className="mb-5 inline-flex items-center gap-2 text-xs font-semibold text-muted-foreground transition hover:text-foreground">
-              <ArrowRight className="size-4" />
-              العودة للسكرتير
-            </Link>
+            <div className="mb-5 flex flex-wrap items-center gap-5">
+              <Link href="/" className="inline-flex items-center gap-2 text-xs font-semibold text-muted-foreground transition hover:text-foreground">
+                <ArrowRight className="size-4" />
+                العودة للسكرتير
+              </Link>
+              <Link href="/operations" className="text-xs font-semibold text-primary underline-offset-4 hover:underline">
+                التقرير التشغيلي
+              </Link>
+            </div>
             <div className="flex items-start gap-3">
               <div className="rounded-2xl bg-primary/10 p-3 text-primary">
                 <BrainCircuit className="size-6" />
@@ -259,6 +321,7 @@ export default function LearningSignals() {
                 signal={signal}
                 isBusy={activeSignalId === signal.signalId}
                 onReview={(status) => void reviewSignal(signal.signalId, status)}
+                onEvaluate={() => void evaluateSignal(signal.signalId)}
               />
             ))}
           </div>

@@ -3,6 +3,7 @@ import type { KeyboardEvent, ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Archive,
+  Activity,
   ArrowUp,
   Brain,
   CircleAlert,
@@ -12,6 +13,7 @@ import {
   MessageSquareText,
   PanelRight,
   Plus,
+  ShieldCheck,
   Sparkles,
   X,
 } from 'lucide-react';
@@ -457,6 +459,14 @@ function Home() {
               <Sparkles className="size-4" />
               أعمال الوكيل
             </Link>
+            <Link href="/learning" className="mt-2 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+              <ShieldCheck className="size-4" />
+              حلقة التعلم الآمنة
+            </Link>
+            <Link href="/operations" className="mt-2 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+              <Activity className="size-4" />
+              صحة التشغيل
+            </Link>
             <Link href="/email" className="mt-2 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" data-testid="link-email-settings-sidebar">
               <Mail className="size-4" />
               البريد الإلكتروني
@@ -518,6 +528,14 @@ function Home() {
               >
                 <Brain className="size-4" />
                 <span className="hidden sm:inline">الذاكرة</span>
+              </Link>
+              <Link
+                href="/operations"
+                className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-border/70 bg-card px-3 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                aria-label="صحة التشغيل"
+              >
+                <Activity className="size-4" />
+                <span className="hidden sm:inline">التشغيل</span>
               </Link>
               <Link
                 href="/email"

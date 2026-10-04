@@ -10,6 +10,7 @@ import {
   financialPartiesTable,
   financialPaymentsTable,
   incomeReceivablesTable,
+  learningSignalEvaluationsTable,
   learningSignalReviewsTable,
   remindersTable,
 } from "@workspace/db";
@@ -36,6 +37,7 @@ async function deleteOwned(table: any, ownerTenantId: string) {
 
 async function cleanup() {
   for (const table of [
+    learningSignalEvaluationsTable,
     learningSignalReviewsTable,
     conversationMemoryTable,
     incomeReceivablesTable,
@@ -292,7 +294,9 @@ test("review decisions stay tenant-scoped and never mutate financial records", a
     );
     assert.equal(reviewed.status, 200);
     assert.equal(reviewed.body?.status, status);
-    assert.equal(reviewed.body?.benchmarkReady, status === "approved");
+    assert.equal(reviewed.body?.benchmarkReady, false);
+    assert.equal(reviewed.body?.evaluationStatus, status === "approved" ? "pending" : "blocked");
+    assert.equal(reviewed.body?.promotionEligible, false);
     assert.deepEqual(await snapshotProtectedRecords(tenantId), beforeCurrentRecords);
     assert.deepEqual(await snapshotProtectedRecords(otherTenantId), beforeOtherRecords);
   }
@@ -320,16 +324,56 @@ test("review decisions stay tenant-scoped and never mutate financial records", a
     previousUserMessage: null,
     previousAssistantMessage: null,
     previousActionType: "record_expense",
+    reviewOnly: true,
+    autoApply: false,
     createdAt: "2026-09-16T11:30:00.000Z",
   });
 
+  const approvedSignalId = signals?.find((signal) => signal.turnId === "approve-turn")?.signalId;
+  assert.ok(approvedSignalId);
+  const rejectedEvaluation = await request(
+    `/learning/signals/${encodeURIComponent(signals?.find((signal) => signal.turnId === "reject-turn")?.signalId ?? "")}/evaluate`,
+    "POST",
+  );
+  assert.equal(rejectedEvaluation.status, 409);
+  const evaluation = await request(
+    `/learning/signals/${encodeURIComponent(approvedSignalId)}/evaluate`,
+    "POST",
+  );
+  assert.equal(evaluation.status, 200);
+  assert.equal(evaluation.body?.status, "passed");
+  assert.equal(evaluation.body?.evaluationScope, "candidate_integrity");
+  assert.equal(evaluation.body?.promotionEligible, true);
+
   const reviewedList = await request("/learning/signals");
+  const reviewedSignals = reviewedList.body?.signals as Array<{
+    turnId: string;
+    status: string;
+    evaluationStatus: string;
+    promotionEligible: boolean;
+  }>;
   const reviewedByTurn = new Map(
-    (reviewedList.body?.signals as Array<{ turnId: string; status: string }>).map((signal) => [signal.turnId, signal.status]),
+    reviewedSignals.map((signal) => [signal.turnId, {
+      status: signal.status,
+      evaluationStatus: signal.evaluationStatus,
+      promotionEligible: signal.promotionEligible,
+    }]),
   );
   assert.deepEqual(Object.fromEntries(reviewedByTurn), {
-    "approve-turn": "approved",
-    "context-turn": "needs_context",
-    "reject-turn": "rejected",
+    "approve-turn": {
+      status: "approved",
+      evaluationStatus: "passed",
+      promotionEligible: true,
+    },
+    "context-turn": {
+      status: "needs_context",
+      evaluationStatus: "blocked",
+      promotionEligible: false,
+    },
+    "reject-turn": {
+      status: "rejected",
+      evaluationStatus: "blocked",
+      promotionEligible: false,
+    },
   });
 });

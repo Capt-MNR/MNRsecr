@@ -47,11 +47,13 @@ import type {
   FinancialMutationResponse,
   GetCandidatesParams,
   GetCurrentUser200,
+  GetOperationalSummaryParams,
   GmailEmailAccountResponse,
   GmailOAuthConnectResponse,
   HealthStatus,
   InputAssetProcessInput,
   InputAssetProcessResponse,
+  LearningSignalEvaluationResponse,
   LearningSignalListResponse,
   LearningSignalReviewInput,
   LearningSignalReviewResponse,
@@ -62,6 +64,7 @@ import type {
   ListSecondBrainMemoriesParams,
   ListTypedRelationshipsParams,
   MobilePushTokenResponse,
+  OperationalSummaryResponse,
   PersonGraphResponse,
   ProactivePreferences,
   ProactivePreferencesUpdate,
@@ -5013,6 +5016,90 @@ export function useListLearningSignals<TData = Awaited<ReturnType<typeof listLea
 
 
 
+export const getGetOperationalSummaryUrl = (params: GetOperationalSummaryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/operations/summary?${stringifiedParams}` : `/api/operations/summary`
+}
+
+/**
+ * @summary Read a tenant-scoped operational summary for a fixed time window
+ */
+export const getOperationalSummary = async (params: GetOperationalSummaryParams, options?: Parameters<typeof customFetch>[1]): Promise<OperationalSummaryResponse> => {
+
+  return customFetch<OperationalSummaryResponse>(getGetOperationalSummaryUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOperationalSummaryQueryKey = (params?: GetOperationalSummaryParams,) => {
+    return [
+    `/api/operations/summary`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetOperationalSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getOperationalSummary>>, TError = ErrorType<ErrorResponse>>(params: GetOperationalSummaryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOperationalSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOperationalSummaryQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOperationalSummary>>> = ({ signal }) => getOperationalSummary(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOperationalSummary>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOperationalSummaryQueryResult = NonNullable<Awaited<ReturnType<typeof getOperationalSummary>>>
+export type GetOperationalSummaryQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Read a tenant-scoped operational summary for a fixed time window
+ */
+
+export function useGetOperationalSummary<TData = Awaited<ReturnType<typeof getOperationalSummary>>, TError = ErrorType<ErrorResponse>>(
+ params: GetOperationalSummaryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOperationalSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOperationalSummaryQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getReviewLearningSignalUrl = (signalId: string,) => {
 
 
@@ -5100,6 +5187,80 @@ export const useReviewLearningSignal = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getReviewLearningSignalMutationOptions(options));
+    }
+
+export const getEvaluateLearningSignalUrl = (signalId: string,) => {
+
+
+
+
+  return `/api/learning/signals/${signalId}/evaluate`
+}
+
+/**
+ * @summary Run a deterministic candidate-integrity evaluation without changing production behavior
+ */
+export const evaluateLearningSignal = async (signalId: string, options?: Parameters<typeof customFetch>[1]): Promise<LearningSignalEvaluationResponse> => {
+
+  return customFetch<LearningSignalEvaluationResponse>(getEvaluateLearningSignalUrl(signalId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getEvaluateLearningSignalMutationKey = () => ['evaluateLearningSignal'] as const;
+
+export const getEvaluateLearningSignalMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof evaluateLearningSignal>>, TError,EvaluateLearningSignalMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof evaluateLearningSignal>>, TError,EvaluateLearningSignalMutationVariables, TContext> => {
+
+const mutationKey = getEvaluateLearningSignalMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof evaluateLearningSignal>>, EvaluateLearningSignalMutationVariables> = (props) => {
+          const {signalId} = props ?? {};
+
+          return  evaluateLearningSignal(signalId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type EvaluateLearningSignalMutationResult = NonNullable<Awaited<ReturnType<typeof evaluateLearningSignal>>>
+
+    export type EvaluateLearningSignalMutationError = ErrorType<ErrorResponse>
+    export type EvaluateLearningSignalMutationVariables = {signalId: string}
+
+    /**
+ * @summary Run a deterministic candidate-integrity evaluation without changing production behavior
+ */
+export const useEvaluateLearningSignal = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof evaluateLearningSignal>>, TError,EvaluateLearningSignalMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof evaluateLearningSignal>>,
+        TError,
+        EvaluateLearningSignalMutationVariables,
+        TContext
+      > => {
+      return useMutation(getEvaluateLearningSignalMutationOptions(options));
     }
 
 export const getGetConversationUrl = (conversationId: string,) => {

@@ -5,10 +5,13 @@
  * Personal Secretary API
  * OpenAPI spec version: 0.1.0
  */
+import type { LearningSignalReviewResponseEvaluationStatus } from './learningSignalReviewResponseEvaluationStatus';
 import type { LearningSignalReviewResponseStatus } from './learningSignalReviewResponseStatus';
 
 export interface LearningSignalReviewResponse {
   signalId: string;
   status: LearningSignalReviewResponseStatus;
   benchmarkReady: boolean;
+  evaluationStatus: LearningSignalReviewResponseEvaluationStatus;
+  promotionEligible: boolean;
 }

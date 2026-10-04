@@ -1615,8 +1615,147 @@ export const ListLearningSignalsResponse = zod.object({
   "previousUserMessage": zod.string().nullable(),
   "previousAssistantMessage": zod.string().nullable(),
   "previousActionType": zod.string().nullable(),
+  "evaluationStatus": zod.enum(['blocked', 'pending', 'passed', 'failed']),
+  "promotionEligible": zod.boolean(),
+  "evaluatedAt": zod.coerce.date().nullable(),
+  "evaluationChecks": zod.array(zod.object({
+  "name": zod.string(),
+  "passed": zod.boolean(),
+  "reason": zod.string().nullable()
+})),
   "createdAt": zod.string()
 }))
+})
+
+
+/**
+ * @summary Read a tenant-scoped operational summary for a fixed time window
+ */
+export const GetOperationalSummaryQueryParams = zod.object({
+  "from": zod.date(),
+  "to": zod.date()
+})
+
+export const getOperationalSummaryResponseTriggersTotalMin = 0;
+
+export const getOperationalSummaryResponseTriggersProcessedMin = 0;
+
+export const getOperationalSummaryResponseTriggersDelayedMin = 0;
+
+export const getOperationalSummaryResponseTriggersMissedMin = 0;
+
+export const getOperationalSummaryResponseTriggersOverdueMin = 0;
+
+export const getOperationalSummaryResponseWorkCreatedMin = 0;
+
+export const getOperationalSummaryResponseWorkCompletedMin = 0;
+
+export const getOperationalSummaryResponseWorkFailedMin = 0;
+
+export const getOperationalSummaryResponseWorkStaleMin = 0;
+
+export const getOperationalSummaryResponseWorkLeaseRecoveriesMin = 0;
+
+export const getOperationalSummaryResponseNotificationsQueuedMin = 0;
+
+export const getOperationalSummaryResponseNotificationsAttemptsMin = 0;
+
+export const getOperationalSummaryResponseNotificationsRetriesMin = 0;
+
+export const getOperationalSummaryResponseNotificationsConfirmedMin = 0;
+
+export const getOperationalSummaryResponseProviderFailuresCountMin = 0;
+
+export const getOperationalSummaryResponseLatencyMsTriggerToWorkCountMin = 0;
+
+export const getOperationalSummaryResponseLatencyMsTriggerToWorkAverageMsMin = 0;
+
+export const getOperationalSummaryResponseLatencyMsTriggerToWorkMaxMsMin = 0;
+
+export const getOperationalSummaryResponseLatencyMsWorkRunCountMin = 0;
+
+export const getOperationalSummaryResponseLatencyMsWorkRunAverageMsMin = 0;
+
+export const getOperationalSummaryResponseLatencyMsWorkRunMaxMsMin = 0;
+
+export const getOperationalSummaryResponseLatencyMsNotificationQueueToFirstAttemptCountMin = 0;
+
+export const getOperationalSummaryResponseLatencyMsNotificationQueueToFirstAttemptAverageMsMin = 0;
+
+export const getOperationalSummaryResponseLatencyMsNotificationQueueToFirstAttemptMaxMsMin = 0;
+
+export const getOperationalSummaryResponseLatencyMsNotificationQueueToConfirmationCountMin = 0;
+
+export const getOperationalSummaryResponseLatencyMsNotificationQueueToConfirmationAverageMsMin = 0;
+
+export const getOperationalSummaryResponseLatencyMsNotificationQueueToConfirmationMaxMsMin = 0;
+
+export const getOperationalSummaryResponseLatencyMsProviderFailureCountMin = 0;
+
+export const getOperationalSummaryResponseLatencyMsProviderFailureAverageMsMin = 0;
+
+export const getOperationalSummaryResponseLatencyMsProviderFailureMaxMsMin = 0;
+
+
+
+export const GetOperationalSummaryResponse = zod.object({
+  "schemaVersion": zod.literal(1),
+  "generatedAt": zod.coerce.date(),
+  "range": zod.object({
+  "from": zod.coerce.date(),
+  "to": zod.coerce.date(),
+  "asOf": zod.coerce.date()
+}),
+  "triggers": zod.object({
+  "total": zod.number().int().min(getOperationalSummaryResponseTriggersTotalMin),
+  "processed": zod.number().int().min(getOperationalSummaryResponseTriggersProcessedMin),
+  "delayed": zod.number().int().min(getOperationalSummaryResponseTriggersDelayedMin),
+  "missed": zod.number().int().min(getOperationalSummaryResponseTriggersMissedMin),
+  "overdue": zod.number().int().min(getOperationalSummaryResponseTriggersOverdueMin)
+}),
+  "work": zod.object({
+  "created": zod.number().int().min(getOperationalSummaryResponseWorkCreatedMin),
+  "completed": zod.number().int().min(getOperationalSummaryResponseWorkCompletedMin),
+  "failed": zod.number().int().min(getOperationalSummaryResponseWorkFailedMin),
+  "stale": zod.number().int().min(getOperationalSummaryResponseWorkStaleMin),
+  "leaseRecoveries": zod.number().int().min(getOperationalSummaryResponseWorkLeaseRecoveriesMin)
+}),
+  "notifications": zod.object({
+  "queued": zod.number().int().min(getOperationalSummaryResponseNotificationsQueuedMin),
+  "attempts": zod.number().int().min(getOperationalSummaryResponseNotificationsAttemptsMin),
+  "retries": zod.number().int().min(getOperationalSummaryResponseNotificationsRetriesMin),
+  "confirmed": zod.number().int().min(getOperationalSummaryResponseNotificationsConfirmedMin)
+}),
+  "providerFailures": zod.object({
+  "count": zod.number().int().min(getOperationalSummaryResponseProviderFailuresCountMin)
+}),
+  "latencyMs": zod.object({
+  "triggerToWork": zod.object({
+  "count": zod.number().int().min(getOperationalSummaryResponseLatencyMsTriggerToWorkCountMin),
+  "averageMs": zod.number().min(getOperationalSummaryResponseLatencyMsTriggerToWorkAverageMsMin).nullable(),
+  "maxMs": zod.number().min(getOperationalSummaryResponseLatencyMsTriggerToWorkMaxMsMin).nullable()
+}),
+  "workRun": zod.object({
+  "count": zod.number().int().min(getOperationalSummaryResponseLatencyMsWorkRunCountMin),
+  "averageMs": zod.number().min(getOperationalSummaryResponseLatencyMsWorkRunAverageMsMin).nullable(),
+  "maxMs": zod.number().min(getOperationalSummaryResponseLatencyMsWorkRunMaxMsMin).nullable()
+}),
+  "notificationQueueToFirstAttempt": zod.object({
+  "count": zod.number().int().min(getOperationalSummaryResponseLatencyMsNotificationQueueToFirstAttemptCountMin),
+  "averageMs": zod.number().min(getOperationalSummaryResponseLatencyMsNotificationQueueToFirstAttemptAverageMsMin).nullable(),
+  "maxMs": zod.number().min(getOperationalSummaryResponseLatencyMsNotificationQueueToFirstAttemptMaxMsMin).nullable()
+}),
+  "notificationQueueToConfirmation": zod.object({
+  "count": zod.number().int().min(getOperationalSummaryResponseLatencyMsNotificationQueueToConfirmationCountMin),
+  "averageMs": zod.number().min(getOperationalSummaryResponseLatencyMsNotificationQueueToConfirmationAverageMsMin).nullable(),
+  "maxMs": zod.number().min(getOperationalSummaryResponseLatencyMsNotificationQueueToConfirmationMaxMsMin).nullable()
+}),
+  "providerFailure": zod.object({
+  "count": zod.number().int().min(getOperationalSummaryResponseLatencyMsProviderFailureCountMin),
+  "averageMs": zod.number().min(getOperationalSummaryResponseLatencyMsProviderFailureAverageMsMin).nullable(),
+  "maxMs": zod.number().min(getOperationalSummaryResponseLatencyMsProviderFailureMaxMsMin).nullable()
+})
+})
 })
 
 
@@ -1639,7 +1778,32 @@ export const ReviewLearningSignalBody = zod.object({
 export const ReviewLearningSignalResponse = zod.object({
   "signalId": zod.string(),
   "status": zod.enum(['approved', 'rejected', 'needs_context']),
-  "benchmarkReady": zod.boolean()
+  "benchmarkReady": zod.boolean(),
+  "evaluationStatus": zod.enum(['blocked', 'pending']),
+  "promotionEligible": zod.boolean()
+})
+
+
+/**
+ * @summary Run a deterministic candidate-integrity evaluation without changing production behavior
+ */
+export const EvaluateLearningSignalParams = zod.object({
+  "signalId": zod.coerce.string()
+})
+
+export const EvaluateLearningSignalResponse = zod.object({
+  "evaluationId": zod.string().uuid(),
+  "signalId": zod.string(),
+  "status": zod.enum(['passed', 'failed']),
+  "evaluationScope": zod.enum(['candidate_integrity']),
+  "promotionEligible": zod.boolean(),
+  "evaluatorVersion": zod.string(),
+  "evaluatedAt": zod.coerce.date(),
+  "checks": zod.array(zod.object({
+  "name": zod.string(),
+  "passed": zod.boolean(),
+  "reason": zod.string().nullable()
+}))
 })
 
 

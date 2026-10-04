@@ -593,6 +593,11 @@ export class TriggerOutboxDispatcher {
         else if (outcome === "deferred") result.retried += 1;
         else result.processed += 1;
       } catch (error) {
+        logger.warn({
+          eventId: event.eventId,
+          attemptCount: event.attemptCount,
+          errorType: error instanceof Error ? error.name : "unknown",
+        }, "trigger outbox event processing failed");
         await failClaimedEvent(event, error, now, this.maxAttempts);
         if (event.attemptCount >= this.maxAttempts) result.quarantined += 1;
         else result.retried += 1;
@@ -601,16 +606,35 @@ export class TriggerOutboxDispatcher {
     return result;
   }
 
+  private async runLoggedTick(): Promise<void> {
+    const startedAt = Date.now();
+    try {
+      const result = await this.tick();
+      if (result.inspected > 0 || result.quarantined > 0) {
+        logger.info({
+          ...result,
+          durationMs: Date.now() - startedAt,
+        }, "trigger outbox dispatcher tick completed");
+      }
+    } catch (error) {
+      logger.error({
+        errorType: error instanceof Error ? error.name : "unknown",
+        durationMs: Date.now() - startedAt,
+      }, "trigger outbox dispatcher tick failed");
+    }
+  }
+
   start(): void {
     if (this.timer || !featureFlags.agentWork()) return;
-    this.timer = setInterval(() => {
+    const run = () => {
       if (this.ticking) return;
       this.ticking = true;
-      void this.tick().catch(() => undefined).finally(() => {
+      void this.runLoggedTick().finally(() => {
         this.ticking = false;
       });
-    }, this.pollMs);
-    void this.tick().catch(() => undefined);
+    };
+    this.timer = setInterval(run, this.pollMs);
+    run();
   }
 
   stop(): void {

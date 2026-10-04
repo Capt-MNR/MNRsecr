@@ -7,6 +7,7 @@ import {
   financialPartyPeopleTable,
   financialPartyProjectsTable,
   idempotencyRecordsTable,
+  operationalProviderFailuresTable,
   peopleTable,
   projectPeopleTable,
   projectsTable,
@@ -519,6 +520,7 @@ export type ToolScope = {
 export type GatewayCallContext = {
   requestId: string;
   conversationId?: string;
+  operationalIdentity?: { tenantId: string; userId: string };
   callNumber: number;
   toolCallsExecuted: number;
   toolScope?: ToolScope;
@@ -3999,6 +4001,34 @@ function finishLlmAttempt(
     context: attempt.context,
   };
   metrics.attempts.push(entry);
+  const operationalIdentity = context.operationalIdentity;
+  if (!outcome.success && operationalIdentity?.tenantId && operationalIdentity.userId) {
+    const completedAt = new Date();
+    const write = database.insert(operationalProviderFailuresTable).values({
+      tenantId: operationalIdentity.tenantId,
+      ownerUserId: operationalIdentity.userId,
+      requestId: entry.requestId,
+      conversationId: entry.conversationId,
+      logicalCallNumber: entry.logicalCallNumber,
+      attemptNumber: entry.attemptNumber,
+      provider: entry.provider,
+      model: entry.model,
+      routeId: entry.routeId ?? "unknown",
+      failureReason: entry.failureReason?.slice(0, 160) ?? null,
+      latencyMs: entry.latencyMs,
+      startedAt: new Date(attempt.startedAt),
+      completedAt,
+    }).onConflictDoNothing().then(() => undefined).catch((error: unknown) => {
+      logger.error({
+        requestId: entry.requestId,
+        provider: entry.provider,
+        errorType: error instanceof Error ? error.name : "unknown",
+      }, "provider failure trace persistence failed");
+    });
+    const pending = providerFailureTraceWrites.get(metrics) ?? [];
+    pending.push(write);
+    providerFailureTraceWrites.set(metrics, pending);
+  }
   logger.info({
     requestId: entry.requestId,
     conversationId: entry.conversationId,
@@ -4031,6 +4061,14 @@ function finishLlmAttempt(
     failureReason: entry.failureReason,
     context: entry.context,
   }, "agent llm usage attempt");
+}
+
+const providerFailureTraceWrites = new WeakMap<GatewayRequestMetrics, Promise<void>[]>();
+
+async function flushProviderFailureTraces(metrics: GatewayRequestMetrics): Promise<void> {
+  const pending = providerFailureTraceWrites.get(metrics);
+  if (!pending?.length) return;
+  await Promise.all(pending.splice(0));
 }
 
 function sumMeasured(values: Array<number | null>): number | null {
@@ -7402,6 +7440,9 @@ export class Phase2AgentRuntime {
               const finalization = await this.gateway.generate(messages, {
                 requestId,
                 conversationId,
+                operationalIdentity: identity.tenantId && identity.userId
+                  ? { tenantId: identity.tenantId, userId: identity.userId }
+                  : undefined,
                 callNumber: llmCalls,
                 toolCallsExecuted: toolCalls,
                 toolScope: activeToolScope,
@@ -7467,6 +7508,8 @@ export class Phase2AgentRuntime {
               const recovered = recoveryResponseAfterSuccessfulWrite(toolHistory)
                 ?? recoveryResponseAfterToolLimit(toolHistory);
               return persistResult(recovered);
+            } finally {
+              await flushProviderFailureTraces(metrics);
             }
           }
           throw new SecretaryError(`Agent stopped after ${MAX_LOGICAL_LLM_CALLS} logical LLM calls.`, {
@@ -7490,6 +7533,9 @@ export class Phase2AgentRuntime {
           response = await this.gateway.generate(messages, {
             requestId,
             conversationId,
+            operationalIdentity: identity.tenantId && identity.userId
+              ? { tenantId: identity.tenantId, userId: identity.userId }
+              : undefined,
             callNumber: llmCalls,
             toolCallsExecuted: toolCalls,
             toolScope: activeToolScope,
@@ -7506,6 +7552,8 @@ export class Phase2AgentRuntime {
             nextScope: activeToolScope.name,
           });
           throw error;
+        } finally {
+          await flushProviderFailureTraces(metrics);
         }
         diagnosticCall.selectedTools = response.toolCalls.map(diagnosticSelectedTool);
         if (response.toolCalls.length === 0) {

@@ -5,8 +5,10 @@
  * Personal Secretary API
  * OpenAPI spec version: 0.1.0
  */
+import type { LearningEvaluationCheck } from './learningEvaluationCheck';
 import type { LearningSignalCategory } from './learningSignalCategory';
 import type { LearningSignalDialect } from './learningSignalDialect';
+import type { LearningSignalEvaluationStatus } from './learningSignalEvaluationStatus';
 import type { LearningSignalStatus } from './learningSignalStatus';
 
 export interface LearningSignal {
@@ -29,5 +31,10 @@ export interface LearningSignal {
   previousAssistantMessage: string | null;
   /** @nullable */
   previousActionType: string | null;
+  evaluationStatus: LearningSignalEvaluationStatus;
+  promotionEligible: boolean;
+  /** @nullable */
+  evaluatedAt: Date | null;
+  evaluationChecks: LearningEvaluationCheck[];
   createdAt: string;
 }

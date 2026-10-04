@@ -171,7 +171,10 @@ export class AgentWorkRunner {
         this.adapters.storage.listDueWorks({ now, limit: MAX_DUE_WORKS }),
         this.adapters.storage.listWaitingWorks({ limit: MAX_DUE_WORKS }),
       ]);
-    } catch {
+    } catch (error) {
+      logger.error({
+        errorType: error instanceof Error ? error.name : "unknown",
+      }, "agent work due-work lookup failed");
       return { ...empty, enabled: true, failed: 1 };
     }
     const candidates = [...due, ...waiting];
@@ -189,7 +192,11 @@ export class AgentWorkRunner {
           userId: candidate.identity.userId,
           actor: "scheduler",
         });
-      } catch {
+        } catch (error) {
+          logger.error({
+            workId: candidate.workId,
+            errorType: error instanceof Error ? error.name : "unknown",
+          }, "agent work background identity resolution failed");
         result.failed += 1;
         continue;
       }
@@ -200,7 +207,11 @@ export class AgentWorkRunner {
       let work: AgentWorkRecord | null;
       try {
         work = await this.adapters.storage.getWork(identity, candidate.workId);
-      } catch {
+        } catch (error) {
+          logger.error({
+            workId: candidate.workId,
+            errorType: error instanceof Error ? error.name : "unknown",
+          }, "agent work record lookup failed");
         result.failed += 1;
         continue;
       }
@@ -212,7 +223,11 @@ export class AgentWorkRunner {
         try {
           if (await reconcileWaitingApproval(this.adapters, identity, work)) result.completed += 1;
           else result.skipped += 1;
-        } catch {
+        } catch (error) {
+          logger.error({
+            workId: work.id,
+            errorType: error instanceof Error ? error.name : "unknown",
+          }, "agent work waiting-approval reconciliation failed");
           result.failed += 1;
         }
         continue;
@@ -232,7 +247,11 @@ export class AgentWorkRunner {
           leaseMs: this.leaseMs,
           idempotencyKey,
         });
-      } catch {
+        } catch (error) {
+          logger.error({
+            workId: candidate.workId,
+            errorType: error instanceof Error ? error.name : "unknown",
+          }, "agent work run claim failed");
         result.failed += 1;
         continue;
       }
@@ -408,6 +427,12 @@ export class AgentWorkRunner {
         result.completed += 1;
       } catch (error) {
         result.failed += 1;
+        logger.error({
+          workId: work.id,
+          runId: run.id,
+          errorType: error instanceof Error ? error.name : "unknown",
+          approvalEventRecorded,
+        }, "agent work execution failed");
         // The approval operation and its durable link must remain resumable
         // if completion lost its lease. Marking the Work failed here would
         // strand a valid approval and make a later retry unsafe.
@@ -423,8 +448,12 @@ export class AgentWorkRunner {
             nextRunAt: null,
             completedAt: this.now(),
           });
-        } catch {
-          // The lease/DB failure is already represented by the runner counters.
+        } catch (completionError) {
+          logger.error({
+            workId: work.id,
+            runId: run.id,
+            errorType: completionError instanceof Error ? completionError.name : "unknown",
+          }, "agent work failure state could not be persisted");
         }
       }
     }

@@ -6,6 +6,8 @@ import {
   learningSignalReviewsTable,
 } from "@workspace/db";
 import {
+  EvaluateLearningSignalParams,
+  EvaluateLearningSignalResponse,
   GetConversationResponse,
   ListLearningSignalsResponse,
   ListConversationsResponse,
@@ -17,6 +19,12 @@ import {
   type ConversationTurn,
 } from "../lib/conversation-memory";
 import type { Identity } from "../lib/secretary";
+import {
+  currentLearningEvaluationState,
+  evaluateLearningSignal as runLearningSignalEvaluation,
+  latestLearningEvaluations,
+  LearningEvaluationError,
+} from "../lib/learning-evaluation";
 import {
   requireIdentity,
   sendRouteError,
@@ -120,6 +128,7 @@ async function listLearningSignals(identity: Identity) {
     )),
   ]);
   const reviews = new Map(reviewRows.map((review) => [review.signalId, review]));
+  const evaluations = await latestLearningEvaluations(identity, reviewRows);
   return memoryRows.flatMap((row) => {
     const turns = parseStoredTurns(row.recentStateJson);
     const title = conversationPresentation(
@@ -136,7 +145,11 @@ async function listLearningSignals(identity: Identity) {
       const status = review && signalStatuses.has(review.status)
         ? review.status as LearningSignalStatus
         : signal.status;
-      return [{ ...signal, status }];
+      const evaluationState = currentLearningEvaluationState(
+        review,
+        review ? evaluations.get(review.id) : undefined,
+      );
+      return [{ ...signal, status, ...evaluationState }];
     });
   }).sort((left, right) => right.createdAt.localeCompare(left.createdAt)).slice(0, 100);
 }
@@ -215,6 +228,36 @@ router.get("/learning/signals", async (req, res): Promise<void> => {
   }
 });
 
+router.post("/learning/signals/:signalId/evaluate", async (req, res): Promise<void> => {
+  const identity = requireIdentity(req, res);
+  if (!identity) return;
+  const params = EvaluateLearningSignalParams.safeParse(req.params);
+  if (!params.success) {
+    sendRouteError(req, res, 400, "معرّف إشارة التصحيح غير صالح.", "INVALID_LEARNING_SIGNAL_ID");
+    return;
+  }
+
+  try {
+    const evaluation = await runLearningSignalEvaluation(identity, params.data.signalId);
+    res.json(EvaluateLearningSignalResponse.parse(evaluation));
+  } catch (error) {
+    if (error instanceof LearningEvaluationError) {
+      sendRouteError(
+        req,
+        res,
+        error.statusCode,
+        error.statusCode === 404
+          ? "إشارة التصحيح غير موجودة."
+          : "يجب اعتماد الإشارة قبل تقييمها.",
+        error.code,
+      );
+      return;
+    }
+    req.log.error({ error }, "Learning signal evaluation failed");
+    sendRouteError(req, res, 500, "تعذر تقييم إشارة التصحيح.", "LEARNING_SIGNAL_EVALUATION_FAILED");
+  }
+});
+
 router.post("/learning/signals/:signalId/review", async (req, res): Promise<void> => {
   const identity = requireIdentity(req, res);
   if (!identity) return;
@@ -255,6 +298,8 @@ router.post("/learning/signals/:signalId/review", async (req, res): Promise<void
         previousUserMessage: signal.previousUserMessage,
         previousAssistantMessage: signal.previousAssistantMessage,
         previousActionType: signal.previousActionType,
+        reviewOnly: true,
+        autoApply: false,
         createdAt: signal.createdAt,
       },
       reviewedAt: now,
@@ -286,6 +331,8 @@ router.post("/learning/signals/:signalId/review", async (req, res): Promise<void
           previousUserMessage: signal.previousUserMessage,
           previousAssistantMessage: signal.previousAssistantMessage,
           previousActionType: signal.previousActionType,
+          reviewOnly: true,
+          autoApply: false,
           createdAt: signal.createdAt,
         },
         reviewedAt: now,
@@ -295,7 +342,9 @@ router.post("/learning/signals/:signalId/review", async (req, res): Promise<void
     res.json(ReviewLearningSignalResponse.parse({
       signalId: signal.signalId,
       status: parsed.data.status,
-      benchmarkReady: parsed.data.status === "approved",
+      benchmarkReady: false,
+      evaluationStatus: parsed.data.status === "approved" ? "pending" : "blocked",
+      promotionEligible: false,
     }));
   } catch (error) {
     req.log.error({ error }, "Learning signal review failed");
