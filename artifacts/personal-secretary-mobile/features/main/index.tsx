@@ -16,6 +16,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
@@ -753,6 +754,7 @@ export function RecordsView({
   subtitleEn?: string;
 }) {
   const { language } = useLanguage();
+  const isRtl = language === 'ar';
   const recordsQuery = useListRecords({
     query: {
       queryKey: getListRecordsQueryKey(),
@@ -764,40 +766,40 @@ export function RecordsView({
 
   return (
     <SectionList
-      style={styles.recordsView}
+      style={[styles.recordsView, { direction: isRtl ? 'rtl' : 'ltr' }]}
       sections={sections}
       keyExtractor={(item) => item.id}
       renderItem={({ item }) => (
         <Pressable
           testID={`record-${item.recordType}-${item.id}`}
           accessibilityRole="button"
-          accessibilityLabel={`فتح ${item.title}`}
+          accessibilityLabel={localized(language, `فتح ${item.title}`, `Open ${item.title}`)}
           onPress={() => onOpenRecord(item)}
           style={({ pressed }) => [
             styles.recordRow,
-            { borderBottomColor: colors.border, opacity: pressed ? 0.65 : 1 },
+            { borderBottomColor: colors.border, opacity: pressed ? 0.65 : 1, flexDirection: isRtl ? 'row-reverse' : 'row' },
           ]}
         >
-          <View style={styles.recordCopy}>
-            <Text style={[styles.recordTitle, { color: colors.foreground }]} numberOfLines={2}>
+          <View style={[styles.recordCopy, { alignItems: isRtl ? 'flex-end' : 'flex-start' }]}>
+            <Text style={[styles.recordTitle, { color: colors.foreground, textAlign: isRtl ? 'right' : 'left' }]} numberOfLines={2}>
               {item.title}
             </Text>
-            <Text style={[styles.recordSubtitle, { color: colors.mutedForeground }]} numberOfLines={1}>
+            <Text style={[styles.recordSubtitle, { color: colors.mutedForeground, textAlign: isRtl ? 'right' : 'left' }]} numberOfLines={1}>
               {item.subtitle}
             </Text>
           </View>
           {item.trailing && (
-            <Text style={[styles.recordTrailing, { color: colors.primary }]} numberOfLines={2}>
+            <Text style={[styles.recordTrailing, { color: colors.primary, textAlign: isRtl ? 'left' : 'right' }]} numberOfLines={2}>
               {item.trailing}
             </Text>
           )}
-          <Feather name="chevron-left" size={15} color={colors.mutedForeground} />
+          <Feather name={isRtl ? 'chevron-left' : 'chevron-right'} size={15} color={colors.mutedForeground} />
         </Pressable>
       )}
       renderSectionHeader={({ section }) => (
-        <View style={[styles.recordSectionHeader, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+        <View style={[styles.recordSectionHeader, { backgroundColor: colors.card, borderBottomColor: colors.border, flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
           <View style={styles.recordSectionTitle}>
-            <Text style={[styles.recordSectionName, { color: colors.foreground }]}>
+            <Text style={[styles.recordSectionName, { color: colors.foreground, textAlign: isRtl ? 'right' : 'left' }]}>
               {recordSectionLabel(language, section.key, section.title)}
             </Text>
           </View>
@@ -806,34 +808,34 @@ export function RecordsView({
       )}
       ListHeaderComponent={(
         <View>
-          <View style={styles.recordsIntro}>
-            <View>
-            <Text style={[styles.recordsTitle, { color: colors.foreground }]}>
+          <View style={[styles.recordsIntro, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
+            <View style={{ alignItems: isRtl ? 'flex-end' : 'flex-start' }}>
+            <Text style={[styles.recordsTitle, { color: colors.foreground, textAlign: isRtl ? 'right' : 'left' }]}>
               {localized(language, title, titleEn)}
             </Text>
-              <Text style={[styles.recordsSubtitle, { color: colors.mutedForeground }]}>
+              <Text style={[styles.recordsSubtitle, { color: colors.mutedForeground, textAlign: isRtl ? 'right' : 'left' }]}>
               {localized(language, subtitle, subtitleEn)}
               </Text>
             </View>
-            <View style={styles.recordsHeaderActions}>
+            <View style={[styles.recordsHeaderActions, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
               {onBack && (
                 <Pressable
                   testID="records-back-to-office"
                   accessibilityRole="button"
-                  accessibilityLabel="العودة إلى مكتب السكرتير"
+                  accessibilityLabel={localized(language, 'العودة إلى مكتب السكرتير', 'Back to the secretary workspace')}
                   onPress={onBack}
                   style={({ pressed }) => [
                     styles.iconButton,
                     { borderColor: colors.border, opacity: pressed ? 0.65 : 1 },
                   ]}
                 >
-                  <Feather name="arrow-right" size={17} color={colors.foreground} />
+                  <Feather name={isRtl ? 'arrow-right' : 'arrow-left'} size={17} color={colors.foreground} />
                 </Pressable>
               )}
               <Pressable
                 testID="refresh-records"
                 accessibilityRole="button"
-                accessibilityLabel="تحديث السجلات"
+                accessibilityLabel={localized(language, 'تحديث السجلات', 'Refresh records')}
                 onPress={() => void recordsQuery.refetch()}
                 style={({ pressed }) => [
                   styles.iconButton,
@@ -849,13 +851,13 @@ export function RecordsView({
             </View>
           </View>
 
-          <View style={styles.recordSummaryGrid}>
+          <View style={[styles.recordSummaryGrid, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
             {sections.map((section) => (
               <Pressable
                 key={section.key}
                 testID={`record-summary-${section.key}`}
                 accessibilityRole="button"
-                accessibilityLabel={`فتح ${section.title}`}
+                accessibilityLabel={localized(language, `فتح ${section.title}`, `Open ${recordSectionLabel(language, section.key, section.title)}`)}
                 disabled={section.data.length === 0}
                 onPress={() => {
                   if (onOpenSection) {
@@ -874,7 +876,7 @@ export function RecordsView({
                 <Text style={[styles.recordSummaryLabel, { color: colors.mutedForeground }]}>
                   {recordSectionLabel(language, section.key, section.title)}
                 </Text>
-                <Feather name="arrow-up-left" size={12} color={colors.mutedForeground} />
+                 <Feather name={isRtl ? 'arrow-up-left' : 'arrow-up-right'} size={12} color={colors.mutedForeground} />
               </Pressable>
             ))}
           </View>
@@ -950,6 +952,7 @@ type SecretaryChatProps = {
   context?: MobileRecordRow | null;
   smartSignal?: string;
   quickPrompts?: Array<{ label: string; value: string }>;
+  showPromptRail?: boolean;
   inputState?: SecretaryInputState;
   onToggleVoice?: () => void;
   onCaptureReceipt?: () => void;
@@ -982,6 +985,7 @@ function CentralSecretaryChat({
   context,
   smartSignal,
   quickPrompts,
+  showPromptRail = true,
   compact = false,
   expanded = false,
   onToggleExpanded,
@@ -1129,7 +1133,7 @@ function CentralSecretaryChat({
         </View>
       )}
 
-      {!compact && expanded && onQuickPrompt && (
+      {!compact && expanded && onQuickPrompt && showPromptRail && (
         <ScrollView
           horizontal
           style={styles.centralChatPromptScroll}
@@ -1166,6 +1170,7 @@ function CentralSecretaryChat({
           styles.centralChatTranscript,
           compact && styles.recordChatTranscript,
           !compact && expanded && styles.centralChatTranscriptExpanded,
+          !compact && expanded && onOpenPearlSheet && styles.centralChatTranscriptOffice,
         ]}
         contentContainerStyle={[
           styles.centralChatTranscriptContent,
@@ -1385,6 +1390,7 @@ export function MainOffice({
   language,
   onOpenRecord,
   onOpenRecords,
+  onOpenSection,
   onOpenFinancial,
   assistantPreferences,
   onOpenConversation,
@@ -1422,6 +1428,7 @@ export function MainOffice({
   onRetryInput?: (attachment: LocalMessage['inputAttachment']) => void;
   retryingInput?: boolean;
   onOpenRecords: () => void;
+  onOpenSection: (section: MainSection) => void;
   onOpenFinancial: () => void;
   assistantPreferences: AssistantPreferences;
   onOpenConversation: (conversationId: string) => void;
@@ -1451,6 +1458,10 @@ export function MainOffice({
   onChangeInputReview?: (result: SecretaryInputResult) => void;
   onClearInputReview?: () => void;
 }) {
+  const isRtl = language === 'ar';
+  const { height: windowHeight } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const compactHeight = windowHeight < 760;
   const todayQuery = useGetTodayContext({
     query: {
       queryKey: getGetTodayContextQueryKey(),
@@ -1458,17 +1469,17 @@ export function MainOffice({
     },
   });
   const [financialExpanded, setFinancialExpanded] = useState(false);
-  const [pearlSheetPosition, setPearlSheetPosition] = useState(80);
+  const [pearlSheetPosition, setPearlSheetPosition] = useState(90);
   const [pearlSheetTab, setPearlSheetTab] = useState<'records' | 'context'>('records');
   const [pearlSheetOffset, setPearlSheetOffset] = useState(0);
   const pearlSheetHeight = useRef(0);
-  const pearlSheetPositionRef = useRef(80);
+  const pearlSheetPositionRef = useRef(90);
   const pearlSheetDragStartOffset = useRef(0);
-  const pearlSheetDragStartPosition = useRef(80);
+  const pearlSheetDragStartPosition = useRef(90);
   const pearlSheetWasDragged = useRef(false);
-  const pearlSheetOpen = pearlSheetPosition < 80;
+  const pearlSheetOpen = pearlSheetPosition < 90;
   const pearlComposerLift = (
-    Math.max(0, pearlSheetHeight.current * 0.8 - pearlSheetOffset)
+    Math.max(0, pearlSheetHeight.current * 0.9 - pearlSheetOffset)
     + 40
   );
   const [recentSearchOpen, setRecentSearchOpen] = useState(false);
@@ -1529,7 +1540,7 @@ export function MainOffice({
   }
 
   function animatePearlSheetTo(position: number) {
-    const nextPosition = Math.max(0, Math.min(80, position));
+    const nextPosition = Math.max(0, Math.min(90, position));
     pearlSheetPositionRef.current = nextPosition;
     setPearlSheetPosition(nextPosition);
     const targetOffset = pearlSheetHeight.current * (nextPosition / 100);
@@ -1549,7 +1560,7 @@ export function MainOffice({
         const height = pearlSheetHeight.current;
         if (!height) return;
         if (Math.abs(gestureState.dy) > 3) pearlSheetWasDragged.current = true;
-        const nextOffset = Math.max(0, Math.min(height * 0.8, pearlSheetDragStartOffset.current + gestureState.dy));
+        const nextOffset = Math.max(0, Math.min(height * 0.9, pearlSheetDragStartOffset.current + gestureState.dy));
         setPearlSheetOffset(nextOffset);
       },
       onPanResponderRelease: (_event, gestureState) => {
@@ -1557,10 +1568,10 @@ export function MainOffice({
         if (!height) return;
         const currentOffset = Math.max(
           0,
-          Math.min(height * 0.8, pearlSheetDragStartOffset.current + gestureState.dy),
+          Math.min(height * 0.9, pearlSheetDragStartOffset.current + gestureState.dy),
         );
         const currentPosition = (currentOffset / height) * 100;
-        const snapPoints = [0, 43, 80];
+        const snapPoints = [0, 43, 90];
         const nearest = snapPoints.reduce((best, point) => (
           Math.abs(point - currentPosition) < Math.abs(best - currentPosition) ? point : best
         ));
@@ -1702,21 +1713,30 @@ export function MainOffice({
       icon: 'file-text',
     },
   ];
-  const quickActions: Array<{ icon: FeatherName; label: string; labelEn: string; draft: string }> = [
+  const quickActions: Array<{ icon: FeatherName; label: string; labelEn: string; draft: string; draftEn: string }> = [
     pendingApprovals.length > 0
-      ? { icon: 'shield', label: 'راجع الموافقات', labelEn: 'Review approvals', draft: 'إيه اللي محتاج موافقتي؟' }
-      : { icon: 'sun', label: 'رتّب يومي', labelEn: 'Organize my day', draft: 'اعرض ملخص اليوم ورتب أولوياتي' },
+      ? { icon: 'shield', label: 'راجع الموافقات', labelEn: 'Review approvals', draft: 'إيه اللي محتاج موافقتي؟', draftEn: 'What needs my approval?' }
+      : { icon: 'sun', label: 'رتّب يومي', labelEn: 'Organize my day', draft: 'اعرض ملخص اليوم ورتب أولوياتي', draftEn: 'Summarize today and organize my priorities.' },
     context.recentExpenses.length > 0
-      ? { icon: 'bar-chart-2', label: 'راجع مصروفاتي', labelEn: 'Review spending', draft: 'اعرض مصروفاتي الأخيرة' }
-      : { icon: 'bell', label: 'ما الذي يستحق انتباهي؟', labelEn: 'What needs my attention?', draft: 'ما الذي يحتاج انتباهي اليوم؟' },
+      ? { icon: 'bar-chart-2', label: 'راجع مصروفاتي', labelEn: 'Review spending', draft: 'اعرض مصروفاتي الأخيرة', draftEn: 'Show me my recent expenses.' }
+      : { icon: 'bell', label: 'ما الذي يستحق انتباهي؟', labelEn: 'What needs my attention?', draft: 'ما الذي يحتاج انتباهي اليوم؟', draftEn: 'What needs my attention today?' },
     context.pendingTasks.length > 0
-      ? { icon: 'check-square', label: 'رتّب مهامي', labelEn: 'Organize tasks', draft: 'اعرض مهامي المفتوحة ورتبها' }
-      : { icon: 'layers', label: 'لخّص سياقي', labelEn: 'Summarize my context', draft: 'لخص السجلات المرتبطة بي' },
-    { icon: 'users', label: 'راجع علاقاتي', labelEn: 'Review relationships', draft: 'مين لسه عليه فلوس أو متابعة؟' },
+      ? { icon: 'check-square', label: 'رتّب مهامي', labelEn: 'Organize tasks', draft: 'اعرض مهامي المفتوحة ورتبها', draftEn: 'Show and organize my open tasks.' }
+      : { icon: 'layers', label: 'لخّص سياقي', labelEn: 'Summarize my context', draft: 'لخص السجلات المرتبطة بي', draftEn: 'Summarize my connected records.' },
+    { icon: 'users', label: 'راجع علاقاتي', labelEn: 'Review relationships', draft: 'مين لسه عليه فلوس أو متابعة؟', draftEn: 'Who still owes me money or needs a follow-up?' },
   ];
 
   return (
-    <View testID="main-office-home" style={styles.officeHome}>
+    <View
+      testID="main-office-home"
+      style={[
+        styles.officeHome,
+        {
+          direction: isRtl ? 'rtl' : 'ltr',
+          paddingBottom: 130 + insets.bottom + pearlComposerLift,
+        },
+      ]}
+    >
       <LinearGradient
         pointerEvents="none"
         colors={[
@@ -1769,19 +1789,21 @@ export function MainOffice({
         ))}
       </View>}
 
-      <View style={styles.pearlDateStrip}>
-        <View style={styles.pearlDateCopy}>
-          <Text style={[styles.pearlDateTitle, { color: colors.foreground }]}>{pearlDateLabel}</Text>
+      <View style={[styles.pearlDateStrip, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
+        <View style={[styles.pearlDateCopy, { alignItems: isRtl ? 'flex-end' : 'flex-start' }]}>
+          <Text style={[styles.pearlDateTitle, { color: colors.foreground, textAlign: isRtl ? 'right' : 'left' }]}>{pearlDateLabel}</Text>
           <Text style={[styles.pearlDateHint, { color: colors.mutedForeground }]}>
-            {localized(language, 'نواصل من آخر ما قيل، لا من شاشة جديدة', 'Continue from where you left off')}
+            {localized(language, 'مكتبك الكامل · السياق والسجلات والأعمال', 'Your full workspace · context, records, and work')}
           </Text>
         </View>
-        <View style={[styles.pearlLivePill, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+        <View style={[styles.pearlLivePill, { flexDirection: isRtl ? 'row-reverse' : 'row', backgroundColor: colors.muted, borderColor: colors.border }]}>
           <View style={[styles.pearlLiveDot, { backgroundColor: todayQuery.isFetching ? colors.primary : colors.accent }]} />
           <Text style={[styles.pearlLiveText, { color: todayQuery.isFetching ? colors.primary : colors.accent }]}>
-            {todayQuery.isFetching
-              ? localized(language, 'يحدّث السياق', 'Updating context')
-              : localized(language, 'السياق حي', 'Context live')}
+            {todayQuery.isError
+              ? localized(language, 'تعذر تحميل الموجز', 'Brief unavailable')
+              : todayQuery.isFetching
+                ? localized(language, 'يحدّث السياق', 'Updating context')
+                : localized(language, 'موجز اليوم', 'Today’s brief')}
           </Text>
         </View>
       </View>
@@ -1795,7 +1817,7 @@ export function MainOffice({
         onQuickPrompt={onAskSecretary}
         quickPrompts={quickActions.slice(0, 3).map((action) => ({
           label: localized(language, action.label, action.labelEn),
-          value: action.draft,
+          value: localized(language, action.draft, action.draftEn),
         }))}
         onFocusChat={focusAndExpandChat}
          expanded
@@ -1817,6 +1839,7 @@ export function MainOffice({
         onClearInputReview={onClearInputReview}
         onOpenPearlSheet={openPearlSheet}
         sheetLift={pearlComposerLift}
+        showPromptRail={!compactHeight}
       />
 
       <View
@@ -1853,7 +1876,7 @@ export function MainOffice({
               pearlSheetWasDragged.current = false;
               return;
             }
-            animatePearlSheetTo(pearlSheetOpen ? 80 : 43);
+            animatePearlSheetTo(pearlSheetOpen ? 90 : 43);
           }}
           {...pearlSheetPanResponder.panHandlers}
           style={styles.pearlSheetHandleZone}
@@ -1908,7 +1931,7 @@ export function MainOffice({
                   testID={`pearl-sheet-record-${item.record.recordType}-${item.record.id}`}
                   accessibilityRole="button"
                   onPress={() => {
-                    animatePearlSheetTo(80);
+                    animatePearlSheetTo(90);
                     onOpenRecord(item.record);
                   }}
                   style={({ pressed }) => [
@@ -1996,39 +2019,39 @@ export function MainOffice({
         </ScrollView>
       </View>
 
-      {false && !todayQuery.isLoading && !todayQuery.isError && contextData && (
+      {!todayQuery.isLoading && !todayQuery.isError && (
         <>
-          <View style={styles.officeDashboardSplit}>
+          <View testID="office-dashboard" style={[styles.officeDashboardSplit, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
             <View style={[styles.officeDashboardCard, styles.officeTodayCard]}>
-              <View style={styles.officeSectionHeading}>
-                <View>
+              <View style={[styles.officeSectionHeading, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
+                <View style={{ alignItems: isRtl ? 'flex-end' : 'flex-start' }}>
                   <Text style={[styles.officeSectionTitle, { color: colors.foreground }]}>
                     {localized(language, 'اليوم', 'Today')}
                   </Text>
                   <Text style={[styles.officeSectionHint, { color: colors.mutedForeground }]}>
-                    {localized(language, 'القادم في موجزك', 'Upcoming items')}
+                    {localized(language, 'موجز اليوم', 'Today’s brief')}
                   </Text>
                 </View>
               </View>
               <View style={styles.officeTodayList}>
-                {context.upcomingReminders.slice(0, 3).map((reminder) => (
-                  <Pressable key={`today-${reminder.id}`} onPress={() => openReminder(reminder)} style={styles.officeTodayRow}>
+                {context.upcomingReminders.slice(0, compactHeight ? 1 : 2).map((reminder) => (
+                  <Pressable key={`today-${reminder.id}`} accessibilityRole="button" onPress={() => openReminder(reminder)} style={[styles.officeTodayRow, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
                     <View style={[styles.officeTodayMarker, { backgroundColor: colors.primary }]} />
-                    <Text style={[styles.officeTodayTime, { color: colors.primary }]} numberOfLines={1}>{recordDate(reminder.dueAt)}</Text>
-                    <Text style={[styles.officeTodayText, { color: colors.foreground }]} numberOfLines={1}>{reminder.text}</Text>
+                    <Text style={[styles.officeTodayTime, { color: colors.primary, textAlign: isRtl ? 'right' : 'left' }]} numberOfLines={1}>{recordDate(reminder.dueAt)}</Text>
+                    <Text style={[styles.officeTodayText, { color: colors.foreground, textAlign: isRtl ? 'right' : 'left' }]} numberOfLines={1}>{reminder.text}</Text>
                   </Pressable>
                 ))}
-                {context.pendingTasks.slice(0, 3).map((task) => (
-                  <Pressable key={`today-task-${task.id}`} onPress={() => openTask(task)} style={styles.officeTodayRow}>
+                {context.pendingTasks.slice(0, compactHeight ? 1 : 2).map((task) => (
+                  <Pressable key={`today-task-${task.id}`} accessibilityRole="button" onPress={() => openTask(task)} style={[styles.officeTodayRow, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
                     <View style={[styles.officeTodayMarker, { backgroundColor: colors.accent }]} />
-                    <Text style={[styles.officeTodayTime, { color: colors.mutedForeground }]} numberOfLines={1}>
+                    <Text style={[styles.officeTodayTime, { color: colors.mutedForeground, textAlign: isRtl ? 'right' : 'left' }]} numberOfLines={1}>
                       {task.dueAt ? recordDate(task.dueAt) : localized(language, 'مفتوحة', 'Open')}
                     </Text>
-                    <Text style={[styles.officeTodayText, { color: colors.foreground }]} numberOfLines={1}>{task.title}</Text>
+                    <Text style={[styles.officeTodayText, { color: colors.foreground, textAlign: isRtl ? 'right' : 'left' }]} numberOfLines={1}>{task.title}</Text>
                   </Pressable>
                 ))}
                 {context.upcomingReminders.length === 0 && context.pendingTasks.length === 0 && (
-                  <Text style={[styles.officeEmptyLine, { color: colors.mutedForeground }]}>
+                  <Text style={[styles.officeEmptyLine, { color: colors.mutedForeground, textAlign: isRtl ? 'right' : 'left' }]}>
                     {localized(language, 'لا يوجد شيء مجدول الآن.', 'Nothing scheduled right now.')}
                   </Text>
                 )}
@@ -2036,8 +2059,8 @@ export function MainOffice({
             </View>
 
             <View style={[styles.officeDashboardCard, styles.officeQuickCard]}>
-              <View style={styles.officeSectionHeading}>
-                <View>
+              <View style={[styles.officeSectionHeading, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
+                <View style={{ alignItems: isRtl ? 'flex-end' : 'flex-start' }}>
                   <Text style={[styles.officeSectionTitle, { color: colors.foreground }]}>
                     {localized(language, 'إجراءات سريعة', 'Quick Actions')}
                   </Text>
@@ -2047,41 +2070,62 @@ export function MainOffice({
                 </View>
               </View>
               <View style={styles.officeQuickActions}>
-                {quickActions.map((action) => (
+                {quickActions.slice(0, compactHeight ? 2 : 3).map((action) => (
                   <Pressable
                     key={action.draft}
                     testID={`office-quick-action-${action.icon}`}
                     accessibilityRole="button"
-                    onPress={() => onAskSecretary(action.draft)}
+                    accessibilityLabel={localized(language, action.label, action.labelEn)}
+                    onPress={() => onAskSecretary(localized(language, action.draft, action.draftEn))}
                     style={({ pressed }) => [
                       styles.officeQuickAction,
-                      { opacity: pressed ? 0.62 : 1 },
+                      { opacity: pressed ? 0.62 : 1, flexDirection: isRtl ? 'row-reverse' : 'row' },
                     ]}
                   >
                     <View style={[styles.officeQuickActionIcon, { backgroundColor: colors.muted }]}>
                       <Feather name={action.icon} size={13} color={colors.primary} />
                     </View>
-                    <Text style={[styles.officeQuickActionText, { color: colors.foreground }]} numberOfLines={1}>
+                    <Text style={[styles.officeQuickActionText, { color: colors.foreground, textAlign: isRtl ? 'right' : 'left' }]} numberOfLines={1}>
                       {localized(language, action.label, action.labelEn)}
                     </Text>
-                    <Feather name="chevron-left" size={13} color={colors.mutedForeground} />
+                    <Feather name={isRtl ? 'chevron-left' : 'chevron-right'} size={13} color={colors.mutedForeground} />
                   </Pressable>
                 ))}
               </View>
+              {compactHeight && (
+                <Pressable
+                  testID="recent-activity-view-all-compact"
+                  accessibilityRole="button"
+                  accessibilityLabel={localized(language, 'عرض كل النشاط', 'View all activity')}
+                  onPress={() => onOpenSection('activity')}
+                  style={({ pressed }) => [
+                    styles.officeCompactActivityLink,
+                    { opacity: pressed ? 0.65 : 1, flexDirection: isRtl ? 'row-reverse' : 'row' },
+                  ]}
+                >
+                  <Text style={[styles.officeRecentViewAll, { color: colors.primary }]}>
+                    {localized(language, 'آخر النشاط', 'Recent activity')}
+                  </Text>
+                  <Feather name={isRtl ? 'chevron-left' : 'chevron-right'} size={13} color={colors.primary} />
+                </Pressable>
+              )}
             </View>
           </View>
 
         </>
       )}
 
-      {false && <View testID="recent-activity" style={styles.officeSection}>
-        <View style={styles.officeSectionHeading}>
-          <View>
+      <View
+        testID="recent-activity"
+        style={[styles.officeSection, compactHeight && { display: 'none' }]}
+      >
+        <View style={[styles.officeSectionHeading, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
+          <View style={{ alignItems: isRtl ? 'flex-end' : 'flex-start' }}>
             <Text style={[styles.officeSectionTitle, { color: colors.foreground }]}>
               {localized(language, 'آخر النشاط', 'Recent activity')}
             </Text>
           </View>
-          <View style={styles.officeRecentHeadingActions}>
+          <View style={[styles.officeRecentHeadingActions, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
             <Pressable
               testID="recent-activity-search"
               accessibilityRole="button"
@@ -2100,12 +2144,12 @@ export function MainOffice({
             <Pressable
               testID="recent-activity-view-all"
               accessibilityRole="button"
-              accessibilityLabel={localized(language, 'عرض كل السجلات', 'View all records')}
-              onPress={onOpenRecords}
+              accessibilityLabel={localized(language, 'عرض كل النشاط', 'View all activity')}
+              onPress={() => onOpenSection('activity')}
               style={({ pressed }) => ({ opacity: pressed ? 0.62 : 1 })}
             >
               <Text style={[styles.officeRecentViewAll, { color: colors.primary }]}>
-                {localized(language, 'عرض الكل', 'View all')}
+                {localized(language, 'كل النشاط', 'All activity')}
               </Text>
             </Pressable>
           </View>
@@ -2117,11 +2161,11 @@ export function MainOffice({
               testID="recent-conversations-search"
               value={conversationSearch}
               onChangeText={onChangeConversationSearch}
-              placeholder={localized(language, 'ابحث في أي كلمة داخل المحادثة…', 'Search any word in a conversation…')}
+              placeholder={localized(language, 'ابحث في المحادثات والسجلات…', 'Search conversations and records…')}
               placeholderTextColor={colors.mutedForeground}
               returnKeyType="search"
               clearButtonMode="while-editing"
-              style={[styles.officeSearchInput, { color: colors.foreground }]}
+              style={[styles.officeSearchInput, { color: colors.foreground, textAlign: isRtl ? 'right' : 'left', writingDirection: isRtl ? 'rtl' : 'ltr' }]}
             />
             {conversationsLoading && <ActivityIndicator size="small" color={colors.primary} />}
           </View>
@@ -2130,6 +2174,14 @@ export function MainOffice({
           testID="recent-activity-list"
           style={styles.officeRecentActivityScroll}
         >
+          {conversationsLoading && !hasRecentActivity && (
+            <View style={{ minHeight: 46, flexDirection: isRtl ? 'row-reverse' : 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={[styles.officeEmptyLine, { color: colors.mutedForeground, paddingVertical: 0 }]}>
+                {localized(language, 'جارٍ تحميل النشاط…', 'Loading activity…')}
+              </Text>
+            </View>
+          )}
           {recentConversations.slice(0, 1).map((conversation) => (
               <Pressable
                 key={conversation.conversationId}
@@ -2139,24 +2191,24 @@ export function MainOffice({
                 onPress={() => onOpenConversation(conversation.conversationId)}
                 style={({ pressed }) => [
                   styles.officeRecentActivityRow,
-                  { opacity: pressed ? 0.65 : 1 },
+                  { opacity: pressed ? 0.65 : 1, flexDirection: isRtl ? 'row-reverse' : 'row' },
                 ]}
               >
                 <View style={[styles.officeRecentActivityIcon, { backgroundColor: colors.muted }]}>
                   <Feather name="message-circle" size={15} color={colors.primary} />
                 </View>
-                <View style={styles.officeRecentActivityCopy}>
-                  <Text style={[styles.officeRecentActivityTitle, { color: colors.foreground }]} numberOfLines={1}>
+                <View style={[styles.officeRecentActivityCopy, { alignItems: isRtl ? 'flex-end' : 'flex-start' }]}>
+                  <Text style={[styles.officeRecentActivityTitle, { color: colors.foreground, textAlign: isRtl ? 'right' : 'left' }]} numberOfLines={1}>
                     {conversation.title}
                   </Text>
-                  <Text style={[styles.officeRecentActivityPreview, { color: colors.mutedForeground }]} numberOfLines={2}>
+                  <Text style={[styles.officeRecentActivityPreview, { color: colors.mutedForeground, textAlign: isRtl ? 'right' : 'left' }]} numberOfLines={2}>
                     {conversation.preview}
                   </Text>
-                  <Text style={[styles.officeRecentActivityMeta, { color: colors.primary }]}>
+                  <Text style={[styles.officeRecentActivityMeta, { color: colors.primary, textAlign: isRtl ? 'left' : 'right' }]}>
                     {localized(language, 'محادثة', 'Conversation')} · {conversation.turnCount} {localized(language, 'رسائل', 'turns')}
                   </Text>
                 </View>
-                <Feather name="chevron-left" size={15} color={colors.mutedForeground} />
+                <Feather name={isRtl ? 'chevron-left' : 'chevron-right'} size={15} color={colors.mutedForeground} />
               </Pressable>
             ))}
           {filteredLatestEdits.slice(0, 2).map((edit) => (
@@ -2168,30 +2220,30 @@ export function MainOffice({
                 onPress={() => onOpenRecord(edit.record)}
                 style={({ pressed }) => [
                   styles.officeRecentActivityRow,
-                  { opacity: pressed ? 0.65 : 1 },
+                  { opacity: pressed ? 0.65 : 1, flexDirection: isRtl ? 'row-reverse' : 'row' },
                 ]}
               >
                 <View style={[styles.officeRecentActivityIcon, { backgroundColor: colors.muted }]}>
                   <Feather name={edit.icon} size={15} color={colors.primary} />
                 </View>
-                <View style={styles.officeRecentActivityCopy}>
-                  <Text style={[styles.officeRecentActivityTitle, { color: colors.foreground }]} numberOfLines={1}>
+                <View style={[styles.officeRecentActivityCopy, { alignItems: isRtl ? 'flex-end' : 'flex-start' }]}>
+                  <Text style={[styles.officeRecentActivityTitle, { color: colors.foreground, textAlign: isRtl ? 'right' : 'left' }]} numberOfLines={1}>
                     {edit.record.title}
                   </Text>
-                  <Text style={[styles.officeRecentActivityPreview, { color: colors.mutedForeground }]} numberOfLines={2}>
+                  <Text style={[styles.officeRecentActivityPreview, { color: colors.mutedForeground, textAlign: isRtl ? 'right' : 'left' }]} numberOfLines={2}>
                     {edit.meta} · {edit.record.subtitle}
                   </Text>
                 </View>
-                <Text style={[styles.officeRecentActivityMeta, { color: colors.primary }]} numberOfLines={1}>
+                <Text style={[styles.officeRecentActivityMeta, { color: colors.primary, textAlign: isRtl ? 'left' : 'right' }]} numberOfLines={1}>
                   {localized(language, 'تعديل', 'Update')}
                   {edit.record.trailing ? ` · ${edit.record.trailing}` : ''}
                 </Text>
-                <Feather name="chevron-left" size={15} color={colors.mutedForeground} />
+                <Feather name={isRtl ? 'chevron-left' : 'chevron-right'} size={15} color={colors.mutedForeground} />
               </Pressable>
             ))}
-          {!hasRecentActivity && (
+          {!conversationsLoading && !hasRecentActivity && (
             <View style={[styles.officeEmptyPanel, { backgroundColor: colors.muted, borderColor: colors.border }]}>
-              <Text style={[styles.officeEmptyLine, { color: colors.mutedForeground }]}>
+              <Text style={[styles.officeEmptyLine, { color: colors.mutedForeground, textAlign: isRtl ? 'right' : 'left' }]}>
                 {conversationSearch.trim()
                   ? localized(language, 'لا توجد نتائج مطابقة.', 'No matching results.')
                   : localized(language, 'لا توجد محادثات أو تعديلات بعد.', 'No conversations or updates yet.')}
@@ -2199,15 +2251,15 @@ export function MainOffice({
             </View>
           )}
         </View>
-      </View>}
+      </View>
 
       {todayQuery.isError && (
         <View style={[styles.officeError, { backgroundColor: colors.destructive, borderColor: colors.destructive }]}>
           <Text style={[styles.officeErrorText, { color: colors.destructiveForeground }]}>
-            تعذر تحميل موجز اليوم.
+            {localized(language, 'تعذر تحميل موجز اليوم.', 'Could not load today’s brief.')}
           </Text>
           <Pressable accessibilityRole="button" onPress={() => void todayQuery.refetch()}>
-            <Text style={[styles.recordsRetry, { color: colors.destructiveForeground }]}>حاول</Text>
+            <Text style={[styles.recordsRetry, { color: colors.destructiveForeground }]}>{localized(language, 'حاول مرة أخرى', 'Try again')}</Text>
           </Pressable>
         </View>
       )}
@@ -2215,7 +2267,7 @@ export function MainOffice({
       {todayQuery.isLoading && (
         <View style={styles.officeLoading}>
           <ActivityIndicator color={colors.primary} />
-          <Text style={[styles.recordsLoadingText, { color: colors.mutedForeground }]}>السكرتير يجهز الموجز…</Text>
+          <Text style={[styles.recordsLoadingText, { color: colors.mutedForeground }]}>{localized(language, 'السكرتير يجهز الموجز…', 'Preparing your brief…')}</Text>
         </View>
       )}
 
@@ -4739,6 +4791,9 @@ export const styles = StyleSheet.create({
     marginTop: 0,
     paddingBottom: 174,
   },
+  centralChatTranscriptOffice: {
+    paddingBottom: 0,
+  },
   recordChatTranscript: {
     maxHeight: 220,
   },
@@ -5186,10 +5241,10 @@ export const styles = StyleSheet.create({
     gap: 5,
   },
   pearlDateStrip: {
-    minHeight: 70,
+    minHeight: 58,
     paddingHorizontal: 1,
-    paddingTop: 17,
-    paddingBottom: 14,
+    paddingTop: 7,
+    paddingBottom: 6,
     flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -5267,22 +5322,22 @@ export const styles = StyleSheet.create({
     textAlign: 'center',
   },
   officeDashboardSplit: {
-    marginTop: 8,
+    marginTop: 4,
     flexDirection: 'row',
-    gap: 16,
+    gap: 12,
   },
   officeDashboardCard: {
     flex: 1,
-    minHeight: 112,
+    minHeight: 130,
     borderRadius: 0,
     borderWidth: 0,
     padding: 0,
   },
   officeTodayCard: {
-    flex: 1.15,
+    flex: 1.12,
   },
   officeQuickCard: {
-    flex: 0.9,
+    flex: 0.92,
   },
   officeNetworkCard: {
     minHeight: 94,
@@ -5343,8 +5398,15 @@ export const styles = StyleSheet.create({
   officeQuickActions: {
     gap: 2,
   },
+  officeCompactActivityLink: {
+    alignSelf: 'flex-start',
+    alignItems: 'center',
+    gap: 3,
+    paddingTop: 3,
+    paddingBottom: 2,
+  },
   officeQuickAction: {
-    minHeight: 25,
+    minHeight: 29,
     borderBottomWidth: 0,
     flexDirection: 'row-reverse',
     alignItems: 'center',
@@ -5359,7 +5421,7 @@ export const styles = StyleSheet.create({
   },
   officeQuickActionText: {
     flex: 1,
-    fontSize: 8,
+    fontSize: 10,
     fontWeight: '600',
     textAlign: 'right',
   },
@@ -5535,7 +5597,7 @@ export const styles = StyleSheet.create({
     height: 36,
   },
   officeSection: {
-    marginTop: 8,
+    marginTop: 5,
   },
   officeSectionHeading: {
     marginBottom: 5,
@@ -5544,13 +5606,13 @@ export const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   officeSectionTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
     textAlign: 'right',
   },
   officeSectionHint: {
-    marginTop: 3,
-    fontSize: 11,
+    marginTop: 2,
+    fontSize: 9,
     textAlign: 'right',
   },
   officeRecentViewAll: {
@@ -5587,7 +5649,7 @@ export const styles = StyleSheet.create({
     textAlign: 'right',
   },
   officeRecentActivityScroll: {
-    maxHeight: 90,
+    maxHeight: 112,
     marginTop: 3,
     borderRadius: 0,
   },
@@ -5596,7 +5658,7 @@ export const styles = StyleSheet.create({
     paddingBottom: 2,
   },
   officeRecentActivityRow: {
-    minHeight: 28,
+    minHeight: 34,
     borderRadius: 0,
     borderWidth: 0,
     paddingHorizontal: 0,
@@ -5618,20 +5680,20 @@ export const styles = StyleSheet.create({
   },
   officeRecentActivityTitle: {
     width: '100%',
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '700',
     textAlign: 'right',
   },
   officeRecentActivityPreview: {
     width: '100%',
     marginTop: 1,
-    fontSize: 7,
-    lineHeight: 10,
+    fontSize: 9,
+    lineHeight: 12,
     textAlign: 'right',
   },
   officeRecentActivityMeta: {
-    maxWidth: 72,
-    fontSize: 7,
+    maxWidth: 78,
+    fontSize: 8,
     fontWeight: '700',
     textAlign: 'left',
   },
@@ -5777,7 +5839,7 @@ export const styles = StyleSheet.create({
     borderTopWidth: 0,
   },
   officeTodayRow: {
-    minHeight: 25,
+    minHeight: 27,
     flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 5,
@@ -5788,13 +5850,13 @@ export const styles = StyleSheet.create({
     borderRadius: 3,
   },
   officeTodayTime: {
-    minWidth: 58,
-    fontSize: 8,
+    minWidth: 52,
+    fontSize: 9,
     textAlign: 'right',
   },
   officeTodayText: {
     flex: 1,
-    fontSize: 9,
+    fontSize: 10,
     textAlign: 'right',
   },
   officeActivityList: {

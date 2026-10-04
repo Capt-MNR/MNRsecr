@@ -70,6 +70,7 @@ function colorWithAlpha(color: string, alpha: number) {
 export default function QuickRoute() {
   const colors = useColors();
   const { language } = useLanguage();
+  const isRtl = language === 'ar';
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const params = useLocalSearchParams<{ conversationId?: string }>();
@@ -282,25 +283,25 @@ export default function QuickRoute() {
   const isFreshConversation = messages.length === 1 && messages[0]?.id === starterMessage.id;
   const quickIntro = (
     <View>
-      <View style={[styles.quickHero, { backgroundColor: colorWithAlpha(colors.card, 0.84), borderColor: colors.border }]}>
-        <View style={styles.quickHeroTop}>
+        <View style={[styles.quickHero, { backgroundColor: colorWithAlpha(colors.card, 0.84), borderColor: colors.border }]}>
+        <View style={[styles.quickHeroTop, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
           <View style={[styles.quickHeroMark, { backgroundColor: colorWithAlpha(colors.primary, 0.14), borderColor: colorWithAlpha(colors.primary, 0.22) }]}>
             <Feather name="message-circle" size={22} color={colors.primary} />
           </View>
-          <View style={styles.quickHeroCopy}>
-            <Text style={[styles.quickHeroEyebrow, { color: colors.primary }]}>{localized(language, 'المساعد السريع', 'QUICK SECRETARY')}</Text>
-            <Text style={[styles.quickHeroTitle, { color: colors.foreground }]}>{localized(language, 'السكرتير الشخصي', 'Personal Secretary')}</Text>
+          <View style={[styles.quickHeroCopy, { alignItems: isRtl ? 'flex-end' : 'flex-start' }]}>
+            <Text style={[styles.quickHeroEyebrow, { color: colors.primary, textAlign: isRtl ? 'right' : 'left' }]}>{localized(language, 'المساعد السريع', 'QUICK SECRETARY')}</Text>
+            <Text style={[styles.quickHeroTitle, { color: colors.foreground, textAlign: isRtl ? 'right' : 'left' }]}>{localized(language, 'السكرتير الشخصي', 'Personal Secretary')}</Text>
           </View>
         </View>
-        <Text style={[styles.quickHeroText, { color: colors.mutedForeground }]}>{localized(language, 'اطلبها بطريقتك، وأنا أرتّب الخطوة التالية من غير ما تفتح مساحة العمل كاملة.', 'Ask naturally and I will organize the next step without opening the full workspace.')}</Text>
-        <View style={[styles.quickHeroStatus, { borderTopColor: colors.border }]}>
+        <Text style={[styles.quickHeroText, { color: colors.mutedForeground, textAlign: isRtl ? 'right' : 'left' }]}>{localized(language, 'اكتب أو تكلّم أو أرفق فاتورة؛ وأراجع معك ما يحتاج موافقة.', 'Type, speak, or attach a receipt; I’ll flag actions that need your approval.')}</Text>
+        <View style={[styles.quickHeroStatus, { borderTopColor: colors.border, flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
           <View style={[styles.quickHeroStatusDot, { backgroundColor: colors.accent }]} />
-          <Text style={[styles.quickHeroStatusText, { color: colors.mutedForeground }]}>{localized(language, 'جاهز لطلب قصير', 'Ready for a short request')}</Text>
+          <Text style={[styles.quickHeroStatusText, { color: colors.mutedForeground, textAlign: isRtl ? 'right' : 'left' }]}>{localized(language, 'جاهز لطلب سريع', 'Ready for a quick request')}</Text>
           <Text style={[styles.quickHeroStatusMode, { color: colors.mutedForeground }]}>Quick</Text>
         </View>
       </View>
       <View style={styles.suggestionsBlock}>
-        <Text style={[styles.suggestionsLabel, { color: colors.mutedForeground }]}>{localized(language, 'ابدأ من هنا', 'Start here')}</Text>
+        <Text style={[styles.suggestionsLabel, { color: colors.mutedForeground, textAlign: isRtl ? 'right' : 'left' }]}>{localized(language, 'ابدأ من هنا', 'Start here')}</Text>
         <View style={styles.suggestions}>
           {visibleSuggestions.map((suggestion, index) => (
             <Pressable
@@ -309,14 +310,14 @@ export default function QuickRoute() {
               onPress={() => { setDraft(suggestion); inputRef.current?.focus(); }}
               style={({ pressed }) => [
                 styles.suggestionChip,
-                { borderColor: colors.border, backgroundColor: colorWithAlpha(colors.card, 0.86), opacity: pressed ? 0.65 : 1 },
+                { borderColor: colors.border, backgroundColor: colorWithAlpha(colors.card, 0.86), opacity: pressed ? 0.65 : 1, flexDirection: isRtl ? 'row-reverse' : 'row' },
               ]}
             >
               <View style={[styles.suggestionIcon, { backgroundColor: colors.muted }]}>
                 <Feather name={index === 0 ? 'sun' : index === 1 ? 'bell' : 'credit-card'} size={14} color={colors.primary} />
               </View>
-              <Text style={[styles.suggestionText, { color: colors.foreground }]}>{suggestion}</Text>
-              <Feather name="chevron-left" size={15} color={colors.mutedForeground} />
+              <Text style={[styles.suggestionText, { color: colors.foreground, textAlign: isRtl ? 'right' : 'left' }]}>{suggestion}</Text>
+              <Feather name={isRtl ? 'chevron-left' : 'chevron-right'} size={15} color={colors.mutedForeground} />
             </Pressable>
           ))}
         </View>
@@ -325,7 +326,7 @@ export default function QuickRoute() {
   );
 
   return (
-    <KeyboardAvoidingView style={[styles.screen, { backgroundColor: colors.background }]} behavior="padding">
+    <KeyboardAvoidingView style={[styles.screen, { backgroundColor: colors.background, direction: isRtl ? 'rtl' : 'ltr' }]} behavior="padding">
       <LinearGradient
         pointerEvents="none"
         colors={[
@@ -338,16 +339,16 @@ export default function QuickRoute() {
         style={styles.quickBackground}
       />
       <View style={[styles.header, { paddingTop: topInset + 8, borderBottomColor: colorWithAlpha(colors.border, 0.72) }]}>
-        <View style={styles.headerTop}>
-          <View style={styles.brandBlock}>
+        <View style={[styles.headerTop, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
+          <View style={[styles.brandBlock, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
             <View style={[styles.brandMark, { backgroundColor: colors.primary }]}><Feather name="message-circle" size={18} color={colors.primaryForeground} /></View>
-            <View style={styles.brandCopy}>
-              <Text style={[styles.brandEyebrow, { color: colors.mutedForeground }]}>{localized(language, 'وصول سريع', 'QUICK ACCESS')}</Text>
-              <Text style={[styles.brandName, { color: colors.foreground }]}>{localized(language, 'السكرتير السريع', 'Quick Chat')}</Text>
-              <View style={styles.availability}><View style={[styles.statusDot, { backgroundColor: colors.accent }]} /><Text style={[styles.availabilityText, { color: colors.mutedForeground }]}>{localized(language, 'فتحت السكرتير بسرعة', 'Fast access to your secretary')}</Text></View>
+            <View style={[styles.brandCopy, { alignItems: isRtl ? 'flex-end' : 'flex-start' }]}>
+              <Text style={[styles.brandEyebrow, { color: colors.mutedForeground, textAlign: isRtl ? 'right' : 'left' }]}>{localized(language, 'وصول سريع', 'QUICK ACCESS')}</Text>
+              <Text style={[styles.brandName, { color: colors.foreground, textAlign: isRtl ? 'right' : 'left' }]}>{localized(language, 'السكرتير السريع', 'Quick Chat')}</Text>
+              <View style={[styles.availability, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}><View style={[styles.statusDot, { backgroundColor: colors.accent }]} /><Text style={[styles.availabilityText, { color: colors.mutedForeground, textAlign: isRtl ? 'right' : 'left' }]}>{localized(language, 'فتحت السكرتير بسرعة', 'Fast access to your secretary')}</Text></View>
             </View>
           </View>
-          <Pressable testID="quick-open-main" accessibilityRole="button" accessibilityLabel="فتح البرنامج الكامل" onPress={() => openMain()} style={({ pressed }) => [styles.iconButton, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}>
+          <Pressable testID="quick-open-main" accessibilityRole="button" accessibilityLabel={localized(language, 'فتح البرنامج الكامل', 'Open Main workspace')} onPress={() => openMain()} style={({ pressed }) => [styles.iconButton, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}>
             <Feather name="grid" size={17} color={colors.foreground} />
           </Pressable>
         </View>
@@ -358,7 +359,7 @@ export default function QuickRoute() {
              inverted={!isFreshConversation}
              data={isFreshConversation ? messages : reversedMessages}
             keyExtractor={(item) => item.id}
-            renderItem={({ item }) => <QuickMessageBubble message={item} colors={colors} onApprove={(approval) => void updateApproval(approval, 'completed')} onReject={(approval) => void updateApproval(approval, 'rejected')} onOpenMain={() => openMain()} onOpenRecord={(record) => openMain(record)} onRetryInput={(attachment) => { if (attachment) void inputCapture.retryAttachment(attachment); }} retryingInput={inputCapture.state === 'processing'} busyOperationId={busyOperationId} />}
+             renderItem={({ item }) => <QuickMessageBubble message={item.id === starterMessage.id ? { ...item, text: localized(language, starterMessage.text, 'I’m ready for quick requests. Ask about your day, log an expense, or set a reminder.') } : item} colors={colors} language={language} onApprove={(approval) => void updateApproval(approval, 'completed')} onReject={(approval) => void updateApproval(approval, 'rejected')} onOpenMain={() => openMain()} onOpenRecord={(record) => openMain(record)} onRetryInput={(attachment) => { if (attachment) void inputCapture.retryAttachment(attachment); }} retryingInput={inputCapture.state === 'processing'} busyOperationId={busyOperationId} />}
              contentContainerStyle={styles.messageList}
             keyboardDismissMode="interactive"
             keyboardShouldPersistTaps="handled"
@@ -366,21 +367,21 @@ export default function QuickRoute() {
              ListHeaderComponent={isFreshConversation
                ? quickIntro
                : secretaryChat.isSending || conversationQuery.isFetching
-                 ? <View style={styles.typingRow}><View style={[styles.typingBubble, { backgroundColor: colors.card, borderColor: colors.border }]}><ActivityIndicator size="small" color={colors.primary} /><Text style={[styles.typingText, { color: colors.mutedForeground }]}>{conversationQuery.isFetching ? 'بفتح المحادثة الأصلية…' : 'بفكر في الرد…'}</Text></View></View>
+                  ? <View style={[styles.typingRow, { alignItems: isRtl ? 'flex-end' : 'flex-start' }]}><View style={[styles.typingBubble, { backgroundColor: colors.card, borderColor: colors.border, flexDirection: isRtl ? 'row-reverse' : 'row' }]}><ActivityIndicator size="small" color={colors.primary} /><Text style={[styles.typingText, { color: colors.mutedForeground }]}>{conversationQuery.isFetching ? localized(language, 'بفتح المحادثة الأصلية…', 'Opening the original conversation…') : localized(language, 'بفكر في الرد…', 'Thinking…')}</Text></View></View>
                  : null}
           />
         </QuickScreen>
       )}
-      {localError && <View style={[styles.errorBanner, { backgroundColor: colors.destructive }]}>
+      {localError && <View style={[styles.errorBanner, { backgroundColor: colors.destructive, flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
         <Feather name="alert-circle" size={15} color={colors.destructiveForeground} />
-        <Text style={[styles.errorText, { color: colors.destructiveForeground }]}>{localError}</Text>
+        <Text style={[styles.errorText, { color: colors.destructiveForeground, textAlign: isRtl ? 'right' : 'left' }]}>{localError}</Text>
         {inputCapture.canRetry && <Pressable onPress={() => void inputCapture.retry()} style={styles.errorRetryButton}>
           <Text style={[styles.errorRetryText, { color: colors.destructiveForeground }]}>{localized(language, 'إعادة المحاولة', 'Retry')}</Text>
         </Pressable>}
       </View>}
-      {pushStatus && pushStatus !== 'registered' && <View style={[styles.errorBanner, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+      {pushStatus && pushStatus !== 'registered' && <View style={[styles.errorBanner, { backgroundColor: colors.muted, borderColor: colors.border, flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
         <Feather name="bell-off" size={15} color={colors.mutedForeground} />
-        <Text style={[styles.errorText, { color: colors.mutedForeground }]}>
+        <Text style={[styles.errorText, { color: colors.mutedForeground, textAlign: isRtl ? 'right' : 'left' }]}>
           {pushStatus === 'unsupported'
             ? localized(language, 'الإشعارات متاحة في تطبيق الهاتف فقط.', 'Notifications are available in the native app only.')
             : pushStatus === 'permission-denied'
@@ -397,7 +398,7 @@ export default function QuickRoute() {
           </Pressable>
         ) : null}
       </View>}
-      {conversationQuery.isError && <View style={[styles.errorBanner, { backgroundColor: colors.destructive }]}><Text style={[styles.errorText, { color: colors.destructiveForeground }]}>{localized(language, 'تعذر فتح المحادثة الأصلية.', 'Unable to open the original conversation.')}</Text></View>}
+      {conversationQuery.isError && <View style={[styles.errorBanner, { backgroundColor: colors.destructive }]}><Text style={[styles.errorText, { color: colors.destructiveForeground, textAlign: isRtl ? 'right' : 'left' }]}>{localized(language, 'تعذر فتح المحادثة الأصلية.', 'Unable to open the original conversation.')}</Text></View>}
       <View style={[styles.composerWrap, { paddingBottom: bottomInset, borderTopColor: colors.border, backgroundColor: colors.background }]}>
         {inputReview?.kind === 'receipt' && <ReceiptReviewCard result={inputReview} colors={colors} language={language} onChange={updateInputReview} onClear={() => setInputReview(null)} />}
         {inputReview && inputReview.kind !== 'receipt' && <View style={[styles.inputReview, { backgroundColor: colors.muted, borderColor: colors.border }]}>
@@ -405,15 +406,15 @@ export default function QuickRoute() {
           <Text style={[styles.inputReviewText, { color: colors.mutedForeground }]} numberOfLines={2}>
             {inputReview.text}
           </Text>
-          <Pressable accessibilityRole="button" accessibilityLabel="إلغاء الإدخال" onPress={() => setInputReview(null)}><Feather name="x" size={15} color={colors.mutedForeground} /></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={localized(language, 'إلغاء الإدخال', 'Cancel input')} onPress={() => setInputReview(null)}><Feather name="x" size={15} color={colors.mutedForeground} /></Pressable>
         </View>}
-        <View style={[styles.composer, { backgroundColor: colors.card, borderColor: colors.input }]}>
-          <View style={styles.inputActions}>
-            <Pressable testID="quick-voice-input" accessibilityRole="button" accessibilityLabel={inputCapture.state === 'recording' ? 'إيقاف التسجيل' : 'تسجيل طلب صوتي'} onPress={() => void inputCapture.toggleVoice()} disabled={inputCapture.state === 'processing'} style={({ pressed }) => [styles.inputAction, { backgroundColor: inputCapture.state === 'recording' ? colors.destructive : colors.muted, opacity: pressed || inputCapture.state === 'processing' ? 0.6 : 1 }]}>{inputCapture.state === 'processing' ? <ActivityIndicator size="small" color={colors.primary} /> : <Feather name={inputCapture.state === 'recording' ? 'square' : 'mic'} size={14} color={inputCapture.state === 'recording' ? colors.destructiveForeground : colors.primary} />}</Pressable>
-            <Pressable testID="quick-receipt-camera" accessibilityRole="button" accessibilityLabel="تصوير فاتورة" onPress={() => void inputCapture.pickReceipt('camera')} disabled={inputCapture.state !== 'idle'} style={({ pressed }) => [styles.inputAction, { backgroundColor: colors.muted, opacity: pressed || inputCapture.state !== 'idle' ? 0.6 : 1 }]}><Feather name="camera" size={14} color={colors.primary} /></Pressable>
-            <Pressable testID="quick-receipt-library" accessibilityRole="button" accessibilityLabel="اختيار صورة فاتورة" onPress={() => void inputCapture.pickReceipt('library')} disabled={inputCapture.state !== 'idle'} style={({ pressed }) => [styles.inputAction, { backgroundColor: colors.muted, opacity: pressed || inputCapture.state !== 'idle' ? 0.6 : 1 }]}><Feather name="image" size={14} color={colors.primary} /></Pressable>
+        <View style={[styles.composer, { backgroundColor: colors.card, borderColor: colors.input, flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
+          <View style={[styles.inputActions, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
+            <Pressable testID="quick-voice-input" accessibilityRole="button" accessibilityLabel={inputCapture.state === 'recording' ? localized(language, 'إيقاف التسجيل', 'Stop recording') : localized(language, 'تسجيل طلب صوتي', 'Record a voice request')} onPress={() => void inputCapture.toggleVoice()} disabled={inputCapture.state === 'processing'} style={({ pressed }) => [styles.inputAction, { backgroundColor: inputCapture.state === 'recording' ? colors.destructive : colors.muted, opacity: pressed || inputCapture.state === 'processing' ? 0.6 : 1 }]}>{inputCapture.state === 'processing' ? <ActivityIndicator size="small" color={colors.primary} /> : <Feather name={inputCapture.state === 'recording' ? 'square' : 'mic'} size={14} color={inputCapture.state === 'recording' ? colors.destructiveForeground : colors.primary} />}</Pressable>
+            <Pressable testID="quick-receipt-camera" accessibilityRole="button" accessibilityLabel={localized(language, 'تصوير فاتورة', 'Take a receipt photo')} onPress={() => void inputCapture.pickReceipt('camera')} disabled={inputCapture.state !== 'idle'} style={({ pressed }) => [styles.inputAction, { backgroundColor: colors.muted, opacity: pressed || inputCapture.state !== 'idle' ? 0.6 : 1 }]}><Feather name="camera" size={14} color={colors.primary} /></Pressable>
+            <Pressable testID="quick-receipt-library" accessibilityRole="button" accessibilityLabel={localized(language, 'اختيار صورة فاتورة', 'Choose a receipt image')} onPress={() => void inputCapture.pickReceipt('library')} disabled={inputCapture.state !== 'idle'} style={({ pressed }) => [styles.inputAction, { backgroundColor: colors.muted, opacity: pressed || inputCapture.state !== 'idle' ? 0.6 : 1 }]}><Feather name="image" size={14} color={colors.primary} /></Pressable>
           </View>
-          <TextInput ref={inputRef} testID="quick-message-input" value={draft} onChangeText={setDraft} onSubmitEditing={() => void sendMessage()} placeholder={localized(language, 'اكتب طلبك بسرعة…', 'Write a quick request…')} placeholderTextColor={colors.mutedForeground} multiline maxLength={1000} returnKeyType="send" blurOnSubmit={false} textAlign="right" style={[styles.input, { color: colors.foreground }]} />
+          <TextInput ref={inputRef} testID="quick-message-input" accessibilityLabel={localized(language, 'اكتب طلبك', 'Write your request')} value={draft} onChangeText={setDraft} onSubmitEditing={() => void sendMessage()} placeholder={localized(language, 'اكتب طلبك بسرعة…', 'Write a quick request…')} placeholderTextColor={colors.mutedForeground} multiline maxLength={1000} returnKeyType="send" blurOnSubmit={false} textAlign={isRtl ? 'right' : 'left'} style={[styles.input, { color: colors.foreground, writingDirection: isRtl ? 'rtl' : 'ltr' }]} />
           <Pressable testID="send-message" accessibilityRole="button" accessibilityLabel={localized(language, 'إرسال الطلب', 'Send request')} onPress={() => void sendMessage()} disabled={!draft.trim() || secretaryChat.isSending || conversationQuery.isFetching || inputCapture.state !== 'idle' || receiptNeedsReview(inputReview)} style={({ pressed }) => [styles.sendButton, { backgroundColor: colors.primary, opacity: !draft.trim() || secretaryChat.isSending || conversationQuery.isFetching || inputCapture.state !== 'idle' || receiptNeedsReview(inputReview) ? 0.4 : pressed ? 0.7 : 1 }]}><Feather name="arrow-up" size={18} color={colors.primaryForeground} /></Pressable>
         </View>
         <Text style={[styles.composerHint, { color: colors.mutedForeground }]}>{localized(language, 'للمحادثات السريعة فقط · أي تغيير حساس سيطلب موافقتك', 'Quick conversations only · sensitive changes require your approval')}</Text>

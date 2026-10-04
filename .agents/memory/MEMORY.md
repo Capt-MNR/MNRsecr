@@ -19,7 +19,7 @@
 - [Phase 3 typed relationships](phase3-typed-relationships.md) — use reviewed additive junction migrations and bounded, tenant-scoped graph traversal.
 - [Undo timestamp precision](undo-timestamp-precision.md) — compare database createdAt undo guards with a millisecond range because PostgreSQL may retain sub-millisecond precision.
 - [Bounded relationship context](bounded-relationship-context.md) — scoped financial context never falls back to global totals; preserve direction, explicit links, and currency-safe relative approvals.
-- [Isolated approval browser fixtures](approval-browser-fixtures.md) — run the API fixture with the repository-local scripts tsx binary and a unique tenant; never point browser verification at shared data.
+- [Isolated approval browser fixtures](approval-browser-fixtures.md) — use a unique tenant and local runner; standalone Expo tests must enable development auth explicitly.
 - [Conversation provenance](conversation-provenance.md) — link created expenses, tasks, and reminders to the originating conversation turn; keep manual records explicitly unlinked.
 - [Deferred Gmail integration](per-user-gmail-identity.md) — keep OAuth, migration, account linking, and real email verification deferred until explicitly resumed.
 - [Token baseline experiments](token-baseline-experiments.md) — measure real-provider token cost before optimization; context-budget flags are not safe to enable without repeated accuracy and retry checks.

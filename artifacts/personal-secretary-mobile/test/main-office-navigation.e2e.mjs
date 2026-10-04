@@ -217,7 +217,20 @@ async function waitForBrowserValue(page, expression, description, timeoutMs = 60
     if (lastValue) return lastValue;
     await new Promise((resolve) => setTimeout(resolve, 150));
   }
-  throw new Error(`Timed out waiting for ${description}. Last value: ${JSON.stringify(lastValue)}`);
+  const browserState = await page.evaluate(`JSON.stringify({
+    url: location.href,
+    body: document.body?.innerText?.slice(0, 1000) ?? "",
+    apiRequests: performance.getEntriesByType("resource")
+      .filter((entry) => entry.name.includes("/api/"))
+      .map((entry) => ({
+        name: entry.name,
+        duration: Math.round(entry.duration),
+        status: entry.responseStatus ?? null,
+      }))
+      .slice(-20),
+  })`);
+  const fixtureOutput = fixture.output();
+  throw new Error(`Timed out waiting for ${description}. Last value: ${JSON.stringify(lastValue)}. Browser: ${browserState}. Exceptions: ${JSON.stringify(page.exceptions)}. Fixture: ${fixtureOutput.stderr.slice(-2000)}`);
 }
 
 async function clickAndWaitForDetail(page, testId, returnTestId) {
@@ -260,7 +273,11 @@ try {
     ["exec", "expo", "start", "--web", "--localhost", "--port", String(expoPort)],
     {
       cwd: mobileCwd,
-      env: { PORT: String(expoPort), EXPO_PUBLIC_DOMAIN: "" },
+    env: {
+      PORT: String(expoPort),
+      EXPO_PUBLIC_DOMAIN: "",
+      EXPO_PUBLIC_MOBILE_AUTH_MODE: "development",
+    },
     },
   );
   const expoBaseUrl = `http://127.0.0.1:${expoPort}`;
@@ -423,6 +440,110 @@ try {
     );
     assert.equal(counts.turns, 1, "opening provenance must not create another turn");
     assert.equal(counts.approvals, 1, "opening provenance must not re-approve the operation");
+
+    const mainBackgroundsScript = `(() => {
+      let node = document.querySelector('[data-testid="main-office-home"]');
+      if (!node) return null;
+      const backgrounds = [];
+      while (node && node !== document.documentElement) {
+        backgrounds.push(getComputedStyle(node).backgroundColor);
+        node = node.parentElement;
+      }
+      return backgrounds;
+    })()`;
+    const lightMainBackgrounds = await browser.page.evaluate(mainBackgroundsScript);
+    assert.ok(lightMainBackgrounds?.length, "Main should expose a measurable light-theme surface");
+
+    await browser.page.evaluate(`document.querySelector('[data-testid="open-main-drawer"]').click()`);
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="theme-dark"]') !== null && document.querySelector('[data-testid="language-en"]') !== null`,
+      "Main appearance and language settings",
+    );
+    await browser.page.evaluate(`document.querySelector('[data-testid="theme-dark"]').click()`);
+    const darkMainBackgrounds = await waitForBrowserValue(
+      browser.page,
+      `(() => {
+        const home = document.querySelector('[data-testid="main-office-home"]');
+        if (!home) return null;
+        const backgrounds = [];
+        let node = home;
+        while (node && node !== document.documentElement) {
+          backgrounds.push(getComputedStyle(node).backgroundColor);
+          node = node.parentElement;
+        }
+        return JSON.stringify(backgrounds) !== ${JSON.stringify(JSON.stringify(lightMainBackgrounds))}
+          ? backgrounds
+          : null;
+      })()`,
+      "Main dark theme colors",
+    );
+    assert.notDeepEqual(
+      darkMainBackgrounds,
+      lightMainBackgrounds,
+      "dark mode should change Main's rendered palette",
+    );
+
+    await browser.page.evaluate(`document.querySelector('[data-testid="language-en"]').click()`);
+    await waitForBrowserValue(
+      browser.page,
+      `(() => {
+        const menu = document.querySelector('[data-testid="open-main-drawer"]');
+        const home = document.querySelector('[data-testid="main-office-home"]');
+        return menu?.getAttribute("aria-label") === "Open workspace menu"
+          && home
+          && getComputedStyle(home).direction === "ltr";
+      })()`,
+      "Main English LTR layout",
+    );
+    await browser.page.evaluate(`document.querySelector('[data-testid="close-main-drawer"]').click()`);
+    await browser.page.evaluate(`document.querySelector('[data-testid="main-quick-bubble"]').click()`);
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="quick-message-input"]') !== null`,
+      "Quick with shared English and dark preferences",
+    );
+    await waitForBrowserValue(
+      browser.page,
+      `(() => {
+        const input = document.querySelector('[data-testid="quick-message-input"]');
+        return input?.getAttribute("placeholder")?.includes("Write a quick request")
+          && getComputedStyle(input).direction === "ltr";
+      })()`,
+      "Quick English LTR layout",
+    );
+    const quickInputColor = await browser.page.evaluate(
+      `getComputedStyle(document.querySelector('[data-testid="quick-message-input"]')).color`,
+    );
+    await browser.page.evaluate(`document.querySelector('[data-testid="quick-open-main"]').click()`);
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="main-office-home"]') !== null`,
+      "Main after returning from Quick in dark mode",
+    );
+    const returnedMainBackgrounds = await browser.page.evaluate(mainBackgroundsScript);
+    assert.deepEqual(
+      returnedMainBackgrounds,
+      darkMainBackgrounds,
+      "the shared dark preference should still apply after switching back from Quick",
+    );
+    const mainBrandColor = await browser.page.evaluate(`(() => {
+      const brand = document.querySelector('[data-testid="open-main-drawer-from-brand"]');
+      const title = [...(brand?.querySelectorAll('*') ?? [])]
+        .find((element) => element.textContent?.trim() === "Personal Secretary");
+      return title ? getComputedStyle(title).color : null;
+    })()`);
+    assert.ok(mainBrandColor, "Main should render an English brand label with a readable foreground color");
+    assert.equal(
+      quickInputColor,
+      mainBrandColor,
+      "Quick and Main should use the same shared foreground color in dark mode",
+    );
+    assert.notEqual(
+      mainBrandColor,
+      darkMainBackgrounds.find((color) => color !== "rgba(0, 0, 0, 0)" && color !== "transparent"),
+      "dark-mode text should remain distinct from the Main surface",
+    );
   } finally {
     browser.page.close();
     await closeProcess(browser.child);
@@ -434,7 +555,7 @@ try {
     ok: true,
     turnPosts: counts.turns,
     approvalPosts: counts.approvals,
-    covered: ["expense", "task", "reminder", "person", "project", "provenance"],
+    covered: ["expense", "task", "reminder", "person", "project", "provenance", "language-theme"],
   }));
 } finally {
   if (proxy) {

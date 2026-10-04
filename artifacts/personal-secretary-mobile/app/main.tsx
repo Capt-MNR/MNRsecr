@@ -57,50 +57,7 @@ export default function MainRoute() {
   const { language, setLanguage } = useLanguage();
   const { themePreference, setThemePreference } = useThemePreference();
   const { logout } = useAuth();
-  const baseColors = useColors();
-  const colors = themePreference === 'dark'
-    ? {
-      ...baseColors,
-      text: '#f5f7ff',
-      tint: '#7264ff',
-      background: '#081426',
-      foreground: '#f5f7ff',
-      card: '#11213c',
-      cardForeground: '#f5f7ff',
-      primary: '#7264ff',
-      primaryForeground: '#ffffff',
-      secondary: '#1b2f52',
-      secondaryForeground: '#f5f7ff',
-      muted: '#1a2c4b',
-      mutedForeground: '#a8b5d6',
-      accent: '#27c18c',
-      accentForeground: '#061323',
-      destructive: '#f17880',
-      destructiveForeground: '#061323',
-      border: '#263b5e',
-      input: '#1a2d4c',
-    }
-    : {
-      ...baseColors,
-      text: '#15213d',
-      tint: '#5257e8',
-       background: '#f2eff1',
-      foreground: '#15213d',
-       card: '#fffafd',
-      cardForeground: '#15213d',
-       primary: '#ae7188',
-       primaryForeground: '#fff9fa',
-       secondary: '#e9e3eb',
-       secondaryForeground: '#303446',
-       muted: '#f1e8ef',
-       mutedForeground: '#7a7b8e',
-       accent: '#769c8e',
-       accentForeground: '#fff9fa',
-       destructive: '#bd6a7d',
-       destructiveForeground: '#fff9fa',
-       border: '#e1dce5',
-       input: '#f8f1f6',
-    };
+  const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const params = useLocalSearchParams<{
@@ -381,7 +338,8 @@ export default function MainRoute() {
     if (message.recordLink?.origin) origins[message.recordLink.id] = message.recordLink.origin;
     return origins;
   }, {});
-  const topInset = insets.top + (Platform.OS === 'web' ? 24 : 0);
+  const topInset = insets.top + (Platform.OS === 'web' ? 18 : 0);
+  const isRtl = language === 'ar';
 
   return (
     <KeyboardAvoidingView
@@ -389,14 +347,14 @@ export default function MainRoute() {
       behavior="padding"
       keyboardVerticalOffset={topInset}
     >
-      <View style={[styles.header, { paddingTop: topInset + 5, borderBottomColor: colors.border, backgroundColor: colors.background }]}>
-        <View style={styles.headerTop}>
+      <View style={[styles.header, { paddingTop: topInset + 3, borderBottomColor: colors.border, backgroundColor: colors.background }]}>
+        <View style={[styles.headerTop, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
           <Pressable
             testID="open-main-drawer-from-brand"
             accessibilityRole="button"
-            accessibilityLabel="فتح قائمة البرنامج"
+            accessibilityLabel={language === 'en' ? 'Open the workspace menu' : 'فتح قائمة البرنامج'}
             onPress={() => setDrawerOpen(true)}
-            style={({ pressed }) => [styles.brandBlock, { opacity: pressed ? 0.7 : 1 }]}
+            style={({ pressed }) => [styles.brandBlock, { flexDirection: isRtl ? 'row-reverse' : 'row', opacity: pressed ? 0.7 : 1 }]}
           >
             <LinearGradient
               colors={[colors.primary, colors.secondary]}
@@ -407,16 +365,16 @@ export default function MainRoute() {
               <Feather name="star" size={17} color={colors.primaryForeground} />
             </LinearGradient>
             <View>
-              <Text style={[styles.brandName, { color: colors.foreground }]}>سكرتيرك الذكي</Text>
-              <View style={styles.availability}>
+              <Text style={[styles.brandName, { color: colors.foreground, textAlign: isRtl ? 'right' : 'left' }]}>{language === 'en' ? 'Personal Secretary' : 'سكرتيرك الذكي'}</Text>
+              <View style={[styles.availability, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
                 <View style={[styles.statusDot, { backgroundColor: colors.accent }]} />
-                <Text style={[styles.availabilityText, { color: colors.mutedForeground }]}>حاضر في سياقك · يتعلم من الحديث</Text>
+                <Text style={[styles.availabilityText, { color: colors.mutedForeground, textAlign: isRtl ? 'right' : 'left' }]}>{language === 'en' ? 'Your full workspace' : 'مكتبك الكامل · سياقك وسجلاتك'}</Text>
               </View>
             </View>
           </Pressable>
-          <View style={styles.headerActions}>
-            <Pressable testID="main-quick-bubble" accessibilityRole="button" accessibilityLabel="فتح السكرتير بسرعة" onPress={() => router.replace('/')} style={({ pressed }) => [styles.iconButton, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}><Feather name="bell" size={17} color={colors.mutedForeground} /></Pressable>
-            <Pressable testID="open-main-drawer" accessibilityRole="button" accessibilityLabel="فتح قائمة البرنامج" onPress={() => setDrawerOpen(true)} style={({ pressed }) => [styles.iconButton, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}><Feather name="menu" size={18} color={colors.foreground} /></Pressable>
+          <View style={[styles.headerActions, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
+            <Pressable testID="main-quick-bubble" accessibilityRole="button" accessibilityLabel={language === 'en' ? 'Open Quick Chat' : 'فتح السكرتير بسرعة'} onPress={() => router.replace('/')} style={({ pressed }) => [styles.iconButton, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}><Feather name="message-circle" size={17} color={colors.mutedForeground} /></Pressable>
+            <Pressable testID="open-main-drawer" accessibilityRole="button" accessibilityLabel={language === 'en' ? 'Open workspace menu' : 'فتح قائمة البرنامج'} onPress={() => setDrawerOpen(true)} style={({ pressed }) => [styles.iconButton, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}><Feather name="menu" size={18} color={colors.foreground} /></Pressable>
           </View>
         </View>
       </View>
@@ -427,15 +385,15 @@ export default function MainRoute() {
               pointerEvents={selectedRecord ? 'none' : 'auto'}
               style={[{ flex: 1 }, selectedRecord && { opacity: 0 }]}
             >
-                {mainSection === 'office' && <MainOffice colors={colors} language={language} assistantPreferences={assistantPreferences} onOpenRecord={openRecord} onRetryInput={(attachment) => { if (attachment) void inputCapture.retryAttachment(attachment); }} retryingInput={inputCapture.state === 'processing'} onOpenRecords={() => openMainSection('records')} onOpenFinancial={() => openMainSection('financial')} onOpenConversation={openConversationById} onFocusChat={focusMainChat} onAskSecretary={(value) => { setDraft(value); setInputReview(null); setTimeout(() => inputRef.current?.focus(), 0); }} messages={messages} draft={draft} onChangeDraft={setDraft} onSend={() => void sendMessage()} inputRef={inputRef} isSending={secretaryChat.isSending || conversationQuery.isFetching || inputCapture.state === 'processing'} onApprove={(approval, args) => void updateApproval(approval, 'completed', args)} onReject={(approval) => void updateApproval(approval, 'rejected')} busyOperationId={busyOperationId} recordOrigins={recordOrigins} chatContext={chatContext} recentConversations={recentConversations} conversationSearch={conversationSearch} onChangeConversationSearch={setConversationSearch} conversationsLoading={secretaryChat.conversationsQuery.isFetching} pendingApprovals={messages.flatMap((message) => (message.approvals ?? (message.approval ? [message.approval] : [])).filter((item) => item.status === 'pending'))} inputState={inputCapture.state} onToggleVoice={() => void inputCapture.toggleVoice()} onCaptureReceipt={() => void inputCapture.pickReceipt('camera')} onPickReceipt={() => void inputCapture.pickReceipt('library')} inputReview={inputReview} onChangeInputReview={updateInputReview} onClearInputReview={() => setInputReview(null)} />}
+                {mainSection === 'office' && <MainOffice colors={colors} language={language} assistantPreferences={assistantPreferences} onOpenRecord={openRecord} onRetryInput={(attachment) => { if (attachment) void inputCapture.retryAttachment(attachment); }} retryingInput={inputCapture.state === 'processing'} onOpenRecords={() => openMainSection('records')} onOpenSection={openMainSection} onOpenFinancial={() => openMainSection('financial')} onOpenConversation={openConversationById} onFocusChat={focusMainChat} onAskSecretary={(value) => { setDraft(value); setInputReview(null); setTimeout(() => inputRef.current?.focus(), 0); }} messages={messages} draft={draft} onChangeDraft={setDraft} onSend={() => void sendMessage()} inputRef={inputRef} isSending={secretaryChat.isSending || conversationQuery.isFetching || inputCapture.state === 'processing'} onApprove={(approval, args) => void updateApproval(approval, 'completed', args)} onReject={(approval) => void updateApproval(approval, 'rejected')} busyOperationId={busyOperationId} recordOrigins={recordOrigins} chatContext={chatContext} recentConversations={recentConversations} conversationSearch={conversationSearch} onChangeConversationSearch={setConversationSearch} conversationsLoading={secretaryChat.conversationsQuery.isFetching} pendingApprovals={messages.flatMap((message) => (message.approvals ?? (message.approval ? [message.approval] : [])).filter((item) => item.status === 'pending'))} inputState={inputCapture.state} onToggleVoice={() => void inputCapture.toggleVoice()} onCaptureReceipt={() => void inputCapture.pickReceipt('camera')} onPickReceipt={() => void inputCapture.pickReceipt('library')} inputReview={inputReview} onChangeInputReview={updateInputReview} onClearInputReview={() => setInputReview(null)} />}
                 {mainSection === 'chat' && <ConversationHistoryView colors={colors} language={language} conversations={recentConversations} loading={secretaryChat.conversationsQuery.isFetching} onOpenConversation={openConversationById} onBack={() => openMainSection('office')} />}
                 {mainSection === 'records' && <RecordsView colors={colors} onOpenSection={openRecordSection} onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}
-              {mainSection === 'people' && <RecordsView colors={colors} onOpenSection={openRecordSection} title="الأشخاص" subtitle="الأشخاص وعلاقاتهم بالسجلات والمشاريع" sectionKeys={['people']} onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}
-              {mainSection === 'projects' && <RecordsView colors={colors} onOpenSection={openRecordSection} title="المشاريع" subtitle="المشاريع النشطة وسياقها المرتبط" sectionKeys={['projects']} onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}
-              {mainSection === 'financial' && <RecordsView colors={colors} onOpenSection={openRecordSection} title="الماليات" subtitle="المصروفات والالتزامات والعلاقات المالية" sectionKeys={['expenses', 'commitments']} onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}
-              {mainSection === 'tasks' && <RecordsView colors={colors} onOpenSection={openRecordSection} title="المهام" subtitle="المهام المفتوحة والمكتملة المرتبطة بسياقك" sectionKeys={['tasks']} onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}
-              {mainSection === 'reminders' && <RecordsView colors={colors} onOpenSection={openRecordSection} title="التذكيرات" subtitle="كل المواعيد والتنبيهات التي يتابعها السكرتير" sectionKeys={['reminders']} onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}
-                {mainSection === 'activity' && <RecordsView colors={colors} onOpenSection={openRecordSection} title="النشاط / Timeline" subtitle="آخر السجلات والحركة التي تستحق المراجعة" onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}
+                {mainSection === 'people' && <RecordsView colors={colors} onOpenSection={openRecordSection} title="الأشخاص" titleEn="People" subtitle="الأشخاص وعلاقاتهم بالسجلات والمشاريع" subtitleEn="People and their links to records and projects" sectionKeys={['people']} onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}
+               {mainSection === 'projects' && <RecordsView colors={colors} onOpenSection={openRecordSection} title="المشاريع" titleEn="Projects" subtitle="المشاريع النشطة وسياقها المرتبط" subtitleEn="Active projects and their related context" sectionKeys={['projects']} onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}
+               {mainSection === 'financial' && <RecordsView colors={colors} onOpenSection={openRecordSection} title="الماليات" titleEn="Finances" subtitle="المصروفات والالتزامات والعلاقات المالية" subtitleEn="Expenses, commitments, and financial relationships" sectionKeys={['expenses', 'commitments']} onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}
+               {mainSection === 'tasks' && <RecordsView colors={colors} onOpenSection={openRecordSection} title="المهام" titleEn="Tasks" subtitle="المهام المفتوحة والمكتملة المرتبطة بسياقك" subtitleEn="Open and completed tasks connected to your context" sectionKeys={['tasks']} onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}
+               {mainSection === 'reminders' && <RecordsView colors={colors} onOpenSection={openRecordSection} title="التذكيرات" titleEn="Reminders" subtitle="كل المواعيد والتنبيهات التي يتابعها السكرتير" subtitleEn="Appointments and reminders your secretary tracks" sectionKeys={['reminders']} onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}
+                 {mainSection === 'activity' && <RecordsView colors={colors} onOpenSection={openRecordSection} title="النشاط" titleEn="Activity" subtitle="آخر السجلات والحركة التي تستحق المراجعة" subtitleEn="Recent records and updates worth reviewing" onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}
                 {mainSection === 'works' && <WorksView colors={colors} language={language} initialWorkId={typeof params.workId === 'string' ? params.workId : undefined} onBack={() => openMainSection('office')} />}
             </View>
             {selectedRecord && (
