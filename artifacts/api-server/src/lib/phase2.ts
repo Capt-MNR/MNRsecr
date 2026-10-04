@@ -84,6 +84,7 @@ import {
   routeHealthKey,
   routeTargetId,
   routeWithModel,
+  type InferenceCapability,
   type InferenceRoute,
   type InferenceRouteId,
   type InferenceRouteKind,
@@ -527,6 +528,7 @@ export type GatewayCallContext = {
   metrics?: GatewayRequestMetrics;
   deadlineAt?: number;
   route?: InferenceRoute;
+  requiredCapabilities?: readonly InferenceCapability[];
 };
 
 export type GatewayRequestMetrics = {
@@ -740,6 +742,11 @@ export type ProviderTrace = {
   fallbackRouteId?: InferenceRouteId;
   selectedRouteId?: InferenceRouteId;
   routesAttempted?: InferenceRouteId[];
+  capabilitySkips?: Array<{
+    routeId: InferenceRouteId;
+    required: InferenceCapability[];
+    declared: InferenceCapability[] | null;
+  }>;
   fallbackOccurred: boolean;
   fallbackReason?: string;
   toolCallsExecutedBeforeFailure?: number;
@@ -5240,6 +5247,7 @@ export class MnrInferenceRouter implements ModelGateway {
       } : {}),
       providersAttempted: [],
       routesAttempted: [],
+      capabilitySkips: [],
       fallbackOccurred: false,
     };
     this.traces.set(requestId, created);
@@ -5312,10 +5320,32 @@ export class MnrInferenceRouter implements ModelGateway {
     const preferredRoutes = this.order.slice(startIndex);
     const trace = this.trace(context.requestId);
     const candidates = preferredRoutes.filter((routeId) => this.gateways[routeId]);
-    const available = candidates.filter((routeId) => !this.isCircuitOpen(this.routeFor(routeId)));
+    const requiredCapabilities = [...new Set(context.requiredCapabilities ?? [])];
+    const capabilityEligible = candidates.filter((routeId) => {
+      if (requiredCapabilities.length === 0) return true;
+      const declared = this.routeFor(routeId).model.capabilities;
+      const eligible = requiredCapabilities.every((capability) => declared?.includes(capability));
+      if (!eligible) {
+        trace.capabilitySkips?.push({
+          routeId,
+          required: requiredCapabilities,
+          declared: declared ? [...declared] : null,
+        });
+      }
+      return eligible;
+    });
+    const available = capabilityEligible.filter((routeId) => !this.isCircuitOpen(this.routeFor(routeId)));
     const routesToTry = available;
     if (routesToTry.length === 0) {
-      const cooldownRouteId = candidates[0];
+      if (requiredCapabilities.length > 0 && candidates.length > 0 && capabilityEligible.length === 0) {
+        throw new SecretaryError("No configured model route declares the required capabilities.", {
+          status: 503,
+          category: "provider_unavailable",
+          code: "MODEL_CAPABILITY_UNAVAILABLE",
+          retryable: false,
+        });
+      }
+      const cooldownRouteId = capabilityEligible[0];
       const cooldownRoute = cooldownRouteId ? this.routeFor(cooldownRouteId) : undefined;
       const retryAfterSeconds = cooldownRoute
         ? this.circuitRetryAfterSeconds(cooldownRoute)

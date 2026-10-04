@@ -1,4 +1,5 @@
 import { featureFlags } from "../feature-flags";
+import { logger } from "../logger";
 import { agentWorkAdapters } from "./factory";
 import { AgentWorkRuntime } from "./runtime";
 import type { GitHubReadContext } from "./sources";
@@ -432,14 +433,28 @@ export class AgentWorkRunner {
 
   start(): void {
     if (this.timer || !runnerEnabled()) return;
-    this.timer = setInterval(() => {
+    const run = () => {
       if (this.ticking) return;
       this.ticking = true;
-      void this.tick().catch(() => undefined).finally(() => {
+      const startedAt = Date.now();
+      void this.tick().then((result) => {
+        if (result.claimed > 0 || result.failed > 0) {
+          logger.info({
+            ...result,
+            durationMs: Date.now() - startedAt,
+          }, "agent work runner tick completed");
+        }
+      }).catch((error) => {
+        logger.error({
+          errorType: error instanceof Error ? error.name : "unknown",
+          durationMs: Date.now() - startedAt,
+        }, "agent work runner tick failed");
+      }).finally(() => {
         this.ticking = false;
       });
-    }, this.pollMs);
-    void this.tick().catch(() => undefined);
+    };
+    this.timer = setInterval(run, this.pollMs);
+    run();
   }
 
   stop(): void {

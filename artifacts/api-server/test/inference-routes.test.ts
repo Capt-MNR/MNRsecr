@@ -69,6 +69,56 @@ test("the route registry separates direct providers and Gateways without assumin
   }
 });
 
+test("model capabilities are declared per exact model and reject unknown capability labels", () => {
+  const previousCatalog = process.env.AI_PROVIDER_CATALOG;
+  try {
+    process.env.AI_PROVIDER_CATALOG = JSON.stringify({
+      providers: [{
+        name: "capability-relay",
+        kind: "gateway",
+        protocol: "openai-compatible",
+        apiKeyEnv: "CAPABILITY_RELAY_API_KEY",
+        modelEnv: "CAPABILITY_RELAY_MODEL",
+        defaultModel: "vendor/model-with-tools",
+        defaultApiUrl: "https://relay.example/v1/chat/completions",
+        modelCapabilities: [{
+          modelName: "vendor/model-with-tools",
+          capabilities: ["tool_calling", "structured_output"],
+        }],
+      }],
+    });
+
+    assert.deepEqual(
+      inferenceRouteForService("capability-relay").model.capabilities,
+      ["tool_calling", "structured_output"],
+    );
+    assert.equal(
+      inferenceRouteForService("capability-relay", "vendor/unverified-model").model.capabilities,
+      undefined,
+    );
+
+    process.env.AI_PROVIDER_CATALOG = JSON.stringify({
+      providers: [{
+        name: "invalid-relay",
+        kind: "gateway",
+        protocol: "openai-compatible",
+        apiKeyEnv: "INVALID_RELAY_API_KEY",
+        modelEnv: "INVALID_RELAY_MODEL",
+        defaultModel: "vendor/model",
+        defaultApiUrl: "https://relay.example/v1/chat/completions",
+        modelCapabilities: [{ modelName: "vendor/model", capabilities: ["guaranteed_reasoning"] }],
+      }],
+    });
+    assert.throws(
+      () => inferenceServiceDefinitions(),
+      /INVALID_AI_PROVIDER_CATALOG:expected_openai_compatible_providers/u,
+    );
+  } finally {
+    if (previousCatalog === undefined) delete process.env.AI_PROVIDER_CATALOG;
+    else process.env.AI_PROVIDER_CATALOG = previousCatalog;
+  }
+});
+
 test("a new wire protocol is rejected at the custom catalog boundary", () => {
   const previousCatalog = process.env.AI_PROVIDER_CATALOG;
   try {
@@ -149,6 +199,69 @@ test("MNRsecr routes to an injected Gateway without upstream or protocol routing
   ]);
   assert.equal(router.getProviderForRequest(context.requestId).routeKind, "gateway");
   assert.equal(router.getProviderForRequest(context.requestId).routeId, "gateway:new-gateway");
+});
+
+test("capability-aware routing skips unknown routes and selects only explicitly capable models", async () => {
+  const unsupportedRoute = directProviderRoute("new-provider", "unverified-model");
+  const capableRoute = gatewayRoute("new-gateway", "vendor/tool-model", ["tool_calling"]);
+  const calls: string[] = [];
+  const unsupported: ModelGateway = {
+    provider: "new-provider",
+    modelName: unsupportedRoute.model.upstreamName,
+    routeKind: "direct_provider",
+    async generate() {
+      calls.push("unsupported");
+      return { text: "wrong route", toolCalls: [] };
+    },
+  };
+  const capable: ModelGateway = {
+    provider: "new-gateway",
+    modelName: capableRoute.model.upstreamName,
+    routeKind: "gateway",
+    async generate() {
+      calls.push("capable");
+      return { text: "ok", toolCalls: [] };
+    },
+  };
+  const router = new MnrInferenceRouter(
+    {
+      [unsupportedRoute.id]: unsupported,
+      [capableRoute.id]: capable,
+    },
+    [unsupportedRoute.id, capableRoute.id],
+    {
+      [unsupportedRoute.id]: unsupportedRoute,
+      [capableRoute.id]: capableRoute,
+    },
+  );
+  const context: GatewayCallContext = {
+    requestId: "capability-route-test",
+    callNumber: 1,
+    toolCallsExecuted: 0,
+    requiredCapabilities: ["tool_calling"],
+  };
+
+  const response = await router.generate([], context);
+
+  assert.equal(response.text, "ok");
+  assert.deepEqual(calls, ["capable"]);
+  assert.deepEqual(router.getTrace(context.requestId).routesAttempted, ["gateway:new-gateway"]);
+  assert.deepEqual(router.getTrace(context.requestId).capabilitySkips, [{
+    routeId: "direct:new-provider",
+    required: ["tool_calling"],
+    declared: null,
+  }]);
+
+  const failClosedRouter = new MnrInferenceRouter(
+    { [unsupportedRoute.id]: unsupported },
+    [unsupportedRoute.id],
+    { [unsupportedRoute.id]: unsupportedRoute },
+  );
+  await assert.rejects(
+    failClosedRouter.generate([], { ...context, requestId: "capability-unavailable-test" }),
+    /No configured model route declares the required capabilities/u,
+  );
+  assert.deepEqual(calls, ["capable"]);
 });
 
 test("a registry-configured Gateway reuses the adapter contract without exposing its upstream", async () => {

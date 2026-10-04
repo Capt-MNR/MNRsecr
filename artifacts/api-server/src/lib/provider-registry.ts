@@ -1,11 +1,18 @@
 import {
   directProviderRoute,
   gatewayRoute,
+  isInferenceCapability,
   type InferenceRoute,
+  type InferenceCapability,
   type InferenceRouteKind,
 } from "./inference-routes";
 
 export type ProviderProtocol = "gemini" | "openai-compatible" | "cohere";
+
+export type ModelCapabilityDeclaration = {
+  modelName: string;
+  capabilities: readonly InferenceCapability[];
+};
 
 export type ProviderDefinition = {
   name: string;
@@ -16,6 +23,8 @@ export type ProviderDefinition = {
   defaultModel: string;
   apiUrlEnv?: string;
   defaultApiUrl?: string;
+  /** Declares capabilities only for the exact upstream model names listed. */
+  modelCapabilities?: readonly ModelCapabilityDeclaration[];
 };
 
 const builtInProviderDefinitions: ProviderDefinition[] = [
@@ -100,6 +109,21 @@ type ProviderDefinitionInput = Omit<ProviderDefinition, "kind"> & {
   kind?: InferenceRouteKind;
 };
 
+function validModelCapabilityDeclarations(value: unknown): value is ModelCapabilityDeclaration[] {
+  if (!Array.isArray(value)) return false;
+  const modelNames = new Set<string>();
+  for (const declaration of value) {
+    if (!declaration || typeof declaration !== "object") return false;
+    const item = declaration as Record<string, unknown>;
+    if (typeof item.modelName !== "string" || !item.modelName.trim()) return false;
+    const modelName = item.modelName.trim();
+    if (modelNames.has(modelName)) return false;
+    modelNames.add(modelName);
+    if (!Array.isArray(item.capabilities) || !item.capabilities.every(isInferenceCapability)) return false;
+  }
+  return true;
+}
+
 function validProviderDefinition(value: unknown): value is ProviderDefinitionInput {
   if (!value || typeof value !== "object") return false;
   const item = value as Record<string, unknown>;
@@ -114,6 +138,7 @@ function validProviderDefinition(value: unknown): value is ProviderDefinitionInp
   if (typeof item.defaultModel !== "string" || item.defaultModel.trim().length === 0) return false;
   if (item.apiUrlEnv !== undefined && !validEnvironmentName(item.apiUrlEnv)) return false;
   if (typeof item.defaultApiUrl !== "string" || !/^https:\/\//u.test(item.defaultApiUrl)) return false;
+  if (item.modelCapabilities !== undefined && !validModelCapabilityDeclarations(item.modelCapabilities)) return false;
   return true;
 }
 
@@ -121,6 +146,14 @@ function normalizeProviderDefinition(definition: ProviderDefinitionInput): Provi
   return {
     ...definition,
     kind: definition.kind ?? (definition.name === "openrouter" ? "gateway" : "direct_provider"),
+    ...(definition.modelCapabilities !== undefined
+      ? {
+          modelCapabilities: definition.modelCapabilities.map((item) => ({
+            modelName: item.modelName.trim(),
+            capabilities: [...new Set(item.capabilities)],
+          })),
+        }
+      : {}),
   };
 }
 
@@ -213,6 +246,14 @@ export function inferenceServiceModel(serviceName: ProviderName): string {
   return process.env[definition.modelEnv] ?? definition.defaultModel;
 }
 
+export function inferenceModelCapabilitiesForService(
+  serviceName: ProviderName,
+  modelName = inferenceServiceModel(serviceName),
+): readonly InferenceCapability[] | undefined {
+  const definition = inferenceServiceDefinition(serviceName);
+  return definition.modelCapabilities?.find((item) => item.modelName === modelName.trim())?.capabilities;
+}
+
 export function providerApiUrl(provider: ProviderName): string | undefined {
   const definition = providerDefinition(provider);
   return definition.apiUrlEnv
@@ -232,9 +273,10 @@ export function inferenceRouteForService(
   modelName = inferenceServiceModel(serviceName),
 ): InferenceRoute {
   const definition = inferenceServiceDefinition(serviceName);
+  const capabilities = inferenceModelCapabilitiesForService(serviceName, modelName);
   return definition.kind === "gateway"
-    ? gatewayRoute(definition.name, modelName)
-    : directProviderRoute(definition.name, modelName);
+    ? gatewayRoute(definition.name, modelName, capabilities)
+    : directProviderRoute(definition.name, modelName, capabilities);
 }
 
 export function routeIdForService(serviceName: ProviderName): string {

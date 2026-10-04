@@ -9,6 +9,7 @@ import {
   type MobilePushToken,
 } from "@workspace/db";
 import type { Identity } from "./secretary";
+import { logger } from "./logger";
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 const EXPO_RECEIPTS_URL = "https://exp.host/--/api/v2/push/getReceipts";
@@ -320,6 +321,41 @@ async function finishDelivery(
   });
 }
 
+async function finishReceiptDelivery(input: {
+  deliveryId: string;
+  attemptNumber: number;
+  status: "confirmed" | "unknown" | "failed";
+  errorClass?: string | null;
+  error?: string | null;
+  nextAttemptAt?: Date;
+}, now: Date): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const [updated] = await tx.update(notificationDeliveriesTable).set({
+      status: input.status,
+      nextAttemptAt: input.nextAttemptAt ?? now,
+      lastErrorClass: input.errorClass ?? null,
+      lastError: input.error ?? null,
+      ...(input.status === "confirmed" ? { confirmedAt: now } : {}),
+      updatedAt: now,
+    }).where(and(
+      eq(notificationDeliveriesTable.id, input.deliveryId),
+      eq(notificationDeliveriesTable.status, "submitted"),
+    )).returning({ id: notificationDeliveriesTable.id });
+    if (!updated) return false;
+
+    await tx.update(notificationDeliveryAttemptsTable).set({
+      status: input.status,
+      errorClass: input.errorClass ?? null,
+      error: input.error ?? null,
+      completedAt: now,
+    }).where(and(
+      eq(notificationDeliveryAttemptsTable.deliveryId, input.deliveryId),
+      eq(notificationDeliveryAttemptsTable.attemptNumber, input.attemptNumber),
+    ));
+    return true;
+  });
+}
+
 async function sendDelivery(
   delivery: typeof notificationDeliveriesTable.$inferSelect,
   token: typeof mobilePushTokensTable.$inferSelect,
@@ -429,19 +465,21 @@ async function materializeQueuedRecipients(now: Date): Promise<void> {
   }));
 }
 
-async function pollExpoReceipts(now: Date): Promise<void> {
+async function pollExpoReceipts(now: Date, notificationId?: string): Promise<number> {
   const rows = await db.select({
     delivery: notificationDeliveriesTable,
     token: mobilePushTokensTable,
   }).from(notificationDeliveriesTable)
     .innerJoin(mobilePushTokensTable, eq(notificationDeliveriesTable.tokenId, mobilePushTokensTable.id))
     .where(and(
+      notificationId ? eq(notificationDeliveriesTable.notificationId, notificationId) : undefined,
       eq(notificationDeliveriesTable.provider, "expo"),
       eq(notificationDeliveriesTable.status, "submitted"),
       sql`${notificationDeliveriesTable.providerTicket} is not null`,
       lte(notificationDeliveriesTable.updatedAt, new Date(now.getTime() - 5_000)),
     )).limit(MAX_BATCH);
 
+  let updatedCount = 0;
   await Promise.all(rows.map(async ({ delivery, token }) => {
     if (!delivery.providerTicket) return;
     try {
@@ -459,16 +497,12 @@ async function pollExpoReceipts(now: Date): Promise<void> {
       if (!receipt || typeof receipt !== "object") return;
       const receiptRecord = receipt as Record<string, unknown>;
       if (receiptRecord.status === "ok") {
-        await db.update(notificationDeliveriesTable).set({
+        const updated = await finishReceiptDelivery({
+          deliveryId: delivery.id,
+          attemptNumber: delivery.attemptCount,
           status: "confirmed",
-          confirmedAt: now,
-          updatedAt: now,
-          lastError: null,
-          lastErrorClass: null,
-        }).where(and(
-          eq(notificationDeliveriesTable.id, delivery.id),
-          eq(notificationDeliveriesTable.status, "submitted"),
-        ));
+        }, now);
+        if (updated) updatedCount += 1;
       } else if (receiptRecord.status === "error") {
         const details = receiptRecord.details;
         const error = details && typeof details === "object"
@@ -478,37 +512,39 @@ async function pollExpoReceipts(now: Date): Promise<void> {
         const failureClass = classifyExpoFailure({ error });
         if (error === "DeviceNotRegistered") await disableInvalidToken(token.id);
         const retry = failureClass === "unknown" && delivery.attemptCount < MAX_ATTEMPTS;
-        await db.update(notificationDeliveriesTable).set({
+        const updated = await finishReceiptDelivery({
+          deliveryId: delivery.id,
+          attemptNumber: delivery.attemptCount,
           status: retry ? "unknown" : "failed",
-          nextAttemptAt: retry
-            ? new Date(now.getTime() + notificationBackoffMs(delivery.attemptCount))
-            : now,
-          lastErrorClass: failureClass,
-          lastError: error,
-          updatedAt: now,
-        }).where(and(
-          eq(notificationDeliveriesTable.id, delivery.id),
-          eq(notificationDeliveriesTable.status, "submitted"),
-        ));
+          errorClass: failureClass,
+          error,
+          ...(retry ? {
+            nextAttemptAt: new Date(now.getTime() + notificationBackoffMs(delivery.attemptCount)),
+          } : {}),
+        }, now);
+        if (updated) updatedCount += 1;
       }
-      await refreshOutboxStatus(delivery.notificationId);
+      if (receiptRecord.status === "ok" || receiptRecord.status === "error") {
+        await refreshOutboxStatus(delivery.notificationId);
+      }
     } catch {
       // A receipt lookup failure does not prove the original submission failed.
     }
   }));
+  return updatedCount;
 }
 
 export async function processNotificationOutbox(options: {
   notificationId?: string;
   now?: Date;
   limit?: number;
-} = {}): Promise<{ inspected: number; claimed: number }> {
+} = {}): Promise<{ inspected: number; claimed: number; receiptsUpdated: number }> {
   const now = options.now ?? new Date();
   const limit = Math.min(MAX_BATCH, Math.max(1, Math.floor(options.limit ?? MAX_BATCH)));
   if (!options.notificationId) {
     await materializeQueuedRecipients(now);
-    await pollExpoReceipts(now);
   }
+  const receiptsUpdated = await pollExpoReceipts(now, options.notificationId);
   const rows = await db.select({
     delivery: notificationDeliveriesTable,
     token: mobilePushTokensTable,
@@ -538,7 +574,7 @@ export async function processNotificationOutbox(options: {
     await sendDelivery(claimed, row.token, row.outbox);
     await refreshOutboxStatus(row.outbox.id);
   }));
-  return { inspected: rows.length, claimed: claimedCount };
+  return { inspected: rows.length, claimed: claimedCount, receiptsUpdated };
 }
 
 /**
@@ -551,12 +587,28 @@ export async function dispatchMobilePush(
   notification: MobilePushNotification,
 ): Promise<NotificationEnqueueResult> {
   const queued = await enqueueMobilePushOutbox(db, identity, notification);
-  await processNotificationOutbox({ notificationId: queued.id }).catch(() => undefined);
+  await processNotificationOutbox({ notificationId: queued.id }).catch((error) => {
+    logger.warn({
+      notificationId: queued.id,
+      error: boundedError(error),
+    }, "notification outbox immediate dispatch deferred to recovery");
+  });
   return queued;
 }
 
-export async function recoverNotificationOutbox(): Promise<void> {
-  await processNotificationOutbox().catch(() => undefined);
+export async function recoverNotificationOutbox(): Promise<{ inspected: number; claimed: number } | null> {
+  try {
+    const result = await processNotificationOutbox();
+    if (result.inspected > 0 || result.claimed > 0 || result.receiptsUpdated > 0) {
+      logger.info(result, "notification outbox recovery tick");
+    }
+    return result;
+  } catch (error) {
+    logger.error({
+      error: boundedError(error),
+    }, "notification outbox recovery tick failed");
+    return null;
+  }
 }
 
 export function createNotificationRecovery(options: { pollMs?: number } = {}) {

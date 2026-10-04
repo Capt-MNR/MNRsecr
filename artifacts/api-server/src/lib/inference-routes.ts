@@ -4,10 +4,25 @@ export type InferenceRouteId = string;
 
 export type InferenceRouteKind = "direct_provider" | "gateway";
 
+export const INFERENCE_CAPABILITIES = [
+  "tool_calling",
+  "structured_output",
+  "vision",
+  "audio_input",
+  "audio_output",
+] as const;
+
+export type InferenceCapability = typeof INFERENCE_CAPABILITIES[number];
+
+export function isInferenceCapability(value: unknown): value is InferenceCapability {
+  return typeof value === "string"
+    && (INFERENCE_CAPABILITIES as readonly string[]).includes(value);
+}
+
 export type InferenceModelIdentity = {
   id: string;
   upstreamName: string;
-  capabilities?: readonly string[];
+  capabilities?: readonly InferenceCapability[];
 };
 
 export type InferenceRoute =
@@ -24,29 +39,43 @@ export type InferenceRoute =
       model: InferenceModelIdentity;
     };
 
-function modelIdentity(kind: InferenceRouteKind, targetId: string, upstreamName: string): InferenceModelIdentity {
+function modelIdentity(
+  kind: InferenceRouteKind,
+  targetId: string,
+  upstreamName: string,
+  capabilities?: readonly InferenceCapability[],
+): InferenceModelIdentity {
   const normalizedName = upstreamName.trim() || "unconfigured";
   return {
     id: `${kind}:${targetId}:${normalizedName}`,
     upstreamName: normalizedName,
+    ...(capabilities !== undefined ? { capabilities: [...new Set(capabilities)] } : {}),
   };
 }
 
-export function directProviderRoute(providerId: ProviderId, upstreamName: string): InferenceRoute {
+export function directProviderRoute(
+  providerId: ProviderId,
+  upstreamName: string,
+  capabilities?: readonly InferenceCapability[],
+): InferenceRoute {
   return {
     id: `direct:${providerId}`,
     kind: "direct_provider",
     providerId,
-    model: modelIdentity("direct_provider", providerId, upstreamName),
+    model: modelIdentity("direct_provider", providerId, upstreamName, capabilities),
   };
 }
 
-export function gatewayRoute(gatewayId: GatewayId, upstreamName: string): InferenceRoute {
+export function gatewayRoute(
+  gatewayId: GatewayId,
+  upstreamName: string,
+  capabilities?: readonly InferenceCapability[],
+): InferenceRoute {
   return {
     id: `gateway:${gatewayId}`,
     kind: "gateway",
     gatewayId,
-    model: modelIdentity("gateway", gatewayId, upstreamName),
+    model: modelIdentity("gateway", gatewayId, upstreamName, capabilities),
   };
 }
 
@@ -58,8 +87,14 @@ export function routeHealthKey(route: InferenceRoute): string {
   return `${route.kind}:${routeTargetId(route)}`;
 }
 
-export function routeWithModel(route: InferenceRoute, upstreamName: string): InferenceRoute {
+export function routeWithModel(
+  route: InferenceRoute,
+  upstreamName: string,
+  capabilities?: readonly InferenceCapability[],
+): InferenceRoute {
+  const routeCapabilities = capabilities
+    ?? (upstreamName.trim() === route.model.upstreamName ? route.model.capabilities : undefined);
   return route.kind === "direct_provider"
-    ? directProviderRoute(route.providerId, upstreamName)
-    : gatewayRoute(route.gatewayId, upstreamName);
+    ? directProviderRoute(route.providerId, upstreamName, routeCapabilities)
+    : gatewayRoute(route.gatewayId, upstreamName, routeCapabilities);
 }
