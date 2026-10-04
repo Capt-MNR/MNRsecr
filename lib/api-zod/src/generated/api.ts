@@ -1151,6 +1151,44 @@ export const ListSecondBrainMemoriesResponse = zod.object({
 
 
 /**
+ * @summary Edit one active personal memory while preserving its version history
+ */
+export const EditSecondBrainMemoryParams = zod.object({
+  "memoryId": zod.coerce.string().uuid()
+})
+
+export const editSecondBrainMemoryBodyValueMax = 320;
+
+
+
+
+export const EditSecondBrainMemoryBody = zod.object({
+  "value": zod.string().min(1).max(editSecondBrainMemoryBodyValueMax),
+  "expectedRevision": zod.number().int().min(1)
+})
+
+export const EditSecondBrainMemoryResponse = zod.object({
+  "memory": zod.object({
+  "id": zod.string().uuid(),
+  "kind": zod.enum(['fact', 'preference', 'alias']),
+  "key": zod.string(),
+  "value": zod.string(),
+  "confidence": zod.number(),
+  "status": zod.enum(['active', 'archived']),
+  "temporalState": zod.enum(['current', 'expired', 'archived']),
+  "sourceKind": zod.string(),
+  "revision": zod.number().int(),
+  "sourceConversationId": zod.string().nullable(),
+  "sourceTurnId": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "lastConfirmedAt": zod.coerce.date().nullable(),
+  "expiresAt": zod.coerce.date().nullable()
+})
+})
+
+
+/**
  * @summary Archive one personal Second Brain memory
  */
 export const ArchiveSecondBrainMemoryParams = zod.object({

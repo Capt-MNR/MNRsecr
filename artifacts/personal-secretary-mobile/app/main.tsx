@@ -43,6 +43,8 @@ import {
   starterMessage,
   styles,
   SecondBrainMemorySheet,
+  SettingsSection,
+  PersonalInformationSection,
   type Approval,
   type ApprovalStatus,
   type AssistantPreferences,
@@ -399,6 +401,8 @@ export default function MainRoute() {
                {mainSection === 'reminders' && <RecordsView colors={colors} onOpenSection={openRecordSection} title="التذكيرات" titleEn="Reminders" subtitle="كل المواعيد والتنبيهات التي يتابعها السكرتير" subtitleEn="Appointments and reminders your secretary tracks" sectionKeys={['reminders']} onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}
                  {mainSection === 'activity' && <RecordsView colors={colors} onOpenSection={openRecordSection} title="النشاط" titleEn="Activity" subtitle="آخر السجلات والحركة التي تستحق المراجعة" subtitleEn="Recent records and updates worth reviewing" onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}
                 {mainSection === 'works' && <WorksView colors={colors} language={language} initialWorkId={typeof params.workId === 'string' ? params.workId : undefined} onBack={() => openMainSection('office')} />}
+                 {mainSection === 'settings' && <SettingsSection colors={colors} language={language} themePreference={themePreference} onThemeChange={setThemePreference} onLanguageChange={updateAppLanguage} assistantPreferences={assistantPreferences} onAssistantPreferencesChange={updateAssistantPreference} onOpenPersonalInformation={() => openMainSection('personal-information')} onBack={() => openMainSection('office')} />}
+                 {mainSection === 'personal-information' && <PersonalInformationSection colors={colors} language={language} onBack={() => openMainSection('settings')} onOpenMemoryLibrary={() => setMemorySheetOpen(true)} />}
             </View>
             {selectedRecord && (
               <View style={[{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }, { backgroundColor: colors.background }]}>
@@ -421,7 +425,6 @@ export default function MainRoute() {
         <MainDrawer
           colors={colors}
           language={language}
-          themePreference={themePreference}
           open={drawerOpen}
           activeSection={mainSection}
           onClose={() => setDrawerOpen(false)}
@@ -431,10 +434,6 @@ export default function MainRoute() {
             setDrawerOpen(false);
             setMemorySheetOpen(true);
           }}
-          onThemeChange={setThemePreference}
-          onLanguageChange={updateAppLanguage}
-          assistantPreferences={assistantPreferences}
-          onAssistantPreferencesChange={updateAssistantPreference}
            onLogout={() => void handleLogout()}
         />
       )}

@@ -10,6 +10,8 @@ import {
   useGetCandidates,
   getGetCandidatesQueryKey,
   useRestoreSecondBrainMemory,
+  useCreateSecondBrainMemory,
+  useEditSecondBrainMemory,
   type SecondBrainMemory,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -18,12 +20,12 @@ import {
   ActivityIndicator,
   Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { Feather } from '@expo/vector-icons';
 import type { AppLanguage } from '@/hooks/useLanguage';
 import type { useColors } from '@/hooks/useColors';
@@ -67,6 +69,15 @@ export function SecondBrainMemorySheet({
   const [associationQuery, setAssociationQuery] = useState('');
   const [searchDraft, setSearchDraft] = useState('');
   const [search, setSearch] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [savingEditId, setSavingEditId] = useState<string | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [createKind, setCreateKind] = useState<'fact' | 'preference'>('fact');
+  const [createKey, setCreateKey] = useState('');
+  const [createValue, setCreateValue] = useState('');
+  const [createError, setCreateError] = useState<string | null>(null);
   const [kind, setKind] = useState<ListSecondBrainMemoriesParams['kind']>();
   const [status, setStatus] = useState<NonNullable<ListSecondBrainMemoriesParams['status']>>('active');
   const filters: ListSecondBrainMemoriesParams = {
@@ -97,6 +108,32 @@ export function SecondBrainMemorySheet({
         setRestoringId(null);
       },
       onError: () => setRestoringId(null),
+    },
+  });
+  const editMutation = useEditSecondBrainMemory({
+    mutation: {
+      onSuccess: async () => {
+        await queryClient.invalidateQueries({ queryKey: getListSecondBrainMemoriesQueryKey() });
+        setEditingId(null);
+        setSavingEditId(null);
+      },
+      onError: () => {
+        setSavingEditId(null);
+        setEditError(localized(language, 'تغيرت الذاكرة في مكان آخر. حدّثت القائمة؛ راجع القيمة ثم احفظ مجددًا.', 'This memory changed elsewhere. The list was refreshed; review the value and save again.'));
+        void queryClient.invalidateQueries({ queryKey: getListSecondBrainMemoriesQueryKey() });
+      },
+    },
+  });
+  const createMutation = useCreateSecondBrainMemory({
+    mutation: {
+      onSuccess: async () => {
+        await queryClient.invalidateQueries({ queryKey: getListSecondBrainMemoriesQueryKey() });
+        setCreating(false);
+        setCreateKey('');
+        setCreateValue('');
+        setCreateError(null);
+      },
+      onError: () => setCreateError(localized(language, 'تعذر حفظ الذاكرة. راجع البيانات وحاول مرة أخرى.', 'Could not save this memory. Check the details and try again.')),
     },
   });
   const candidatesQuery = useListSecondBrainCandidates({ status: 'pending_review' }, {
@@ -144,6 +181,22 @@ export function SecondBrainMemorySheet({
     restoreMutation.mutate({ memoryId: id });
   }
 
+  function saveMemoryEdit(memory: SecondBrainMemory) {
+    const value = editValue.trim();
+    if (!value || editMutation.isPending || memory.kind === 'alias') return;
+    setEditError(null);
+    setSavingEditId(memory.id);
+    editMutation.mutate({ memoryId: memory.id, data: { value, expectedRevision: memory.revision } });
+  }
+
+  function saveNewMemory() {
+    const key = createKey.trim();
+    const value = createValue.trim();
+    if (!key || !value || createMutation.isPending) return;
+    setCreateError(null);
+    createMutation.mutate({ data: { kind: createKind, key, value } });
+  }
+
   function reviewCandidate(id: string, status: 'approved' | 'rejected' | 'needs_context') {
     if (reviewCandidateMutation.isPending) return;
     setReviewingCandidateId(id);
@@ -176,6 +229,7 @@ export function SecondBrainMemorySheet({
               </View>
             </View>
             <Pressable
+              testID="memory-sheet-close"
               accessibilityRole="button"
               accessibilityLabel={localized(language, 'إغلاق الذاكرة', 'Close memory')}
               onPress={onClose}
@@ -201,14 +255,96 @@ export function SecondBrainMemorySheet({
               </Pressable>
             </View>
           ) : (
-            <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+            <KeyboardAwareScrollViewCompat style={{ flex: 1 }} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" bottomOffset={24}>
               <Text style={[styles.explainer, { color: colors.mutedForeground }]}>
                 {localized(
                   language,
-                  'يمكنك إزالة أي ذاكرة دون التأثير على المحادثات أو السجلات الرسمية.',
-                  'Remove a memory without changing conversations or official records.',
+                  'الأرشفة قابلة للعكس؛ يمكنك استرجاع أي عنصر من تبويب الأرشيف. لا تغيّر الذاكرة المحادثات أو السجلات الرسمية.',
+                  'Archiving is reversible: restore any item from Archived. Memory changes do not alter conversations or official records.',
                 )}
               </Text>
+              {status === 'active' && (
+                <View style={[styles.createPanel, { borderColor: colors.border, backgroundColor: colors.background }]}>
+                  <Pressable
+                    testID="memory-add-toggle"
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: creating }}
+                    onPress={() => { setCreating((value) => !value); setCreateError(null); }}
+                    style={styles.createHeading}
+                  >
+                    <View style={styles.cardCopy}>
+                      <Text style={[styles.createTitle, { color: colors.foreground }]}>
+                        {localized(language, 'أضف معلومة للذاكرة', 'Add a memory')}
+                      </Text>
+                      <Text style={[styles.meta, { color: colors.mutedForeground }]}>
+                        {localized(language, 'احفظ معلومة أو تفضيلًا تختاره بنفسك.', 'Save a fact or preference you choose yourself.')}
+                      </Text>
+                    </View>
+                    <Feather name={creating ? 'minus' : 'plus'} size={17} color={colors.primary} />
+                  </Pressable>
+                  {creating && (
+                    <View style={styles.createForm}>
+                      <View style={styles.filterRow}>
+                        {([
+                          ['fact', 'معلومة', 'Fact'],
+                          ['preference', 'تفضيل', 'Preference'],
+                        ] as const).map(([value, arabicLabel, englishLabel]) => (
+                          <Pressable
+                            key={value}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected: createKind === value }}
+                            onPress={() => setCreateKind(value)}
+                            style={[styles.filterChip, { borderColor: colors.border, backgroundColor: createKind === value ? colors.primary : colors.muted }]}
+                          >
+                            <Text style={[styles.filterChipText, { color: createKind === value ? colors.primaryForeground : colors.mutedForeground }]}>
+                              {localized(language, arabicLabel, englishLabel)}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                      <TextInput
+                        testID="memory-create-key"
+                        value={createKey}
+                        onChangeText={setCreateKey}
+                        maxLength={160}
+                        placeholder={localized(language, 'عنوان واضح، مثل: العمل', 'A clear title, such as: work')}
+                        placeholderTextColor={colors.mutedForeground}
+                        accessibilityLabel={localized(language, 'عنوان الذاكرة', 'Memory title')}
+                        style={[styles.createInput, { borderColor: colors.border, backgroundColor: colors.card, color: colors.foreground }]}
+                      />
+                      <TextInput
+                        testID="memory-create-value"
+                        value={createValue}
+                        onChangeText={setCreateValue}
+                        maxLength={320}
+                        multiline
+                        placeholder={localized(language, 'ما الذي تريد أن يتذكره السكرتير؟', 'What should the secretary remember?')}
+                        placeholderTextColor={colors.mutedForeground}
+                        accessibilityLabel={localized(language, 'قيمة الذاكرة', 'Memory content')}
+                        style={[styles.createInput, styles.createValueInput, { borderColor: colors.border, backgroundColor: colors.card, color: colors.foreground }]}
+                      />
+                      <Text style={[styles.meta, { color: colors.mutedForeground }]}>
+                        {localized(language, 'العنوان مع النوع يحددان سجلًا واحدًا؛ تعديل السجل الحالي يكون من بطاقة الذاكرة.', 'Title and type identify one entry; edit an existing entry from its memory card.')}
+                      </Text>
+                      {createError && <Text accessibilityLiveRegion="polite" style={[styles.meta, { color: colors.destructive }]}>{createError}</Text>}
+                      <Pressable
+                        testID="memory-create-save"
+                        accessibilityRole="button"
+                        disabled={!createKey.trim() || !createValue.trim() || createMutation.isPending}
+                        onPress={saveNewMemory}
+                        style={[styles.createSave, { backgroundColor: colors.primary, opacity: !createKey.trim() || !createValue.trim() || createMutation.isPending ? 0.55 : 1 }]}
+                      >
+                        {createMutation.isPending
+                          ? <ActivityIndicator size="small" color={colors.primaryForeground} />
+                          : <Feather name="check" size={14} color={colors.primaryForeground} />}
+                        <Text style={[styles.createSaveText, { color: colors.primaryForeground }]}>
+                          {localized(language, 'حفظ في الذاكرة', 'Save to memory')}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  )}
+                </View>
+              )}
               <View style={[styles.searchBox, { borderColor: colors.border, backgroundColor: colors.card }]}>
                 <Feather name="search" size={15} color={colors.mutedForeground} />
                 <TextInput
@@ -424,8 +560,29 @@ export function SecondBrainMemorySheet({
                     <View style={styles.cardTop}>
                       <View style={styles.cardCopy}>
                         <Text style={[styles.kind, { color: colors.primary }]}>{kindLabel(language, memory.kind)}</Text>
-                        <Text style={[styles.value, { color: colors.foreground }]}>{memory.value}</Text>
+                        {editingId === memory.id ? (
+                          <TextInput
+                            value={editValue}
+                            onChangeText={setEditValue}
+                            accessibilityLabel={localized(language, 'تعديل قيمة الذاكرة', 'Edit memory value')}
+                            multiline
+                            style={[styles.editInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.card }]}
+                          />
+                        ) : (
+                          <Text style={[styles.value, { color: colors.foreground }]}>{memory.value}</Text>
+                        )}
+                        <Text style={[styles.meta, { color: colors.mutedForeground }]}>{memory.key}</Text>
                       </View>
+                      {status === 'active' && memory.kind !== 'alias' && editingId !== memory.id && (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={localized(language, `تعديل ${memory.value}`, `Edit ${memory.value}`)}
+                          onPress={() => { setEditingId(memory.id); setEditValue(memory.value); }}
+                          style={[styles.archive, { borderColor: colors.border }]}
+                        >
+                          <Feather name="edit-2" size={14} color={colors.primary} />
+                        </Pressable>
+                      )}
                       {status === 'active' ? <Pressable
                         accessibilityRole="button"
                         accessibilityLabel={localized(language, `إزالة ${memory.value}`, `Remove ${memory.value}`)}
@@ -448,6 +605,30 @@ export function SecondBrainMemorySheet({
                           : <Feather name="rotate-ccw" size={15} color={colors.primary} />}
                       </Pressable>}
                     </View>
+                    {editingId === memory.id && (
+                      <View style={styles.editActions}>
+                        <Pressable
+                          accessibilityRole="button"
+                          disabled={!editValue.trim() || editMutation.isPending}
+                          onPress={() => saveMemoryEdit(memory)}
+                          style={[styles.editSave, { backgroundColor: colors.primary, opacity: !editValue.trim() || editMutation.isPending ? 0.55 : 1 }]}
+                        >
+                          {savingEditId === memory.id ? <ActivityIndicator size="small" color={colors.primaryForeground} /> : <Feather name="check" size={13} color={colors.primaryForeground} />}
+                          <Text style={[styles.editSaveText, { color: colors.primaryForeground }]}>{localized(language, 'حفظ التعديل', 'Save change')}</Text>
+                        </Pressable>
+                        <Pressable accessibilityRole="button" onPress={() => setEditingId(null)} style={[styles.editCancel, { borderColor: colors.border }]}>
+                          <Text style={[styles.editSaveText, { color: colors.mutedForeground }]}>{localized(language, 'إلغاء', 'Cancel')}</Text>
+                        </Pressable>
+                      </View>
+                    )}
+                    {editingId === memory.id && editError && (
+                      <Text accessibilityLiveRegion="polite" style={[styles.meta, { color: colors.destructive }]}>{editError}</Text>
+                    )}
+                    {memory.kind === 'alias' && status === 'active' && (
+                      <Text style={[styles.meta, { color: colors.mutedForeground }]}>
+                        {localized(language, 'الأسماء البديلة مرتبطة بكيان ولا يمكن تعديل قيمتها هنا؛ يمكنك أرشفتها.', 'Aliases are linked to an entity and cannot be edited here; you can archive them.')}
+                      </Text>
+                    )}
                     <Text style={[styles.meta, { color: colors.mutedForeground }]}>
                       {localized(language, 'آخر تأكيد', 'Confirmed')} · {formatDate(language, memory.lastConfirmedAt)}
                       {status === 'archived' ? ` · ${localized(language, 'مؤرشفة', 'Archived')}` : ''}
@@ -455,7 +636,7 @@ export function SecondBrainMemorySheet({
                   </View>
                 );
               })}
-            </ScrollView>
+            </KeyboardAwareScrollViewCompat>
           )}
         </View>
       </View>
@@ -669,6 +850,86 @@ const styles = StyleSheet.create({
   value: {
     fontSize: 14,
     lineHeight: 22,
+  },
+  createPanel: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 12,
+    gap: 11,
+  },
+  createHeading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  createTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  createForm: {
+    gap: 9,
+  },
+  createInput: {
+    minHeight: 42,
+    borderWidth: 1,
+    borderRadius: 11,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  createValueInput: {
+    minHeight: 66,
+    maxHeight: 120,
+    textAlignVertical: 'top',
+  },
+  createSave: {
+    minHeight: 36,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
+  createSaveText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  editInput: {
+    minHeight: 42,
+    maxHeight: 90,
+    borderWidth: 1,
+    borderRadius: 11,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  editActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  editSave: {
+    minHeight: 32,
+    borderRadius: 9,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  editCancel: {
+    minHeight: 32,
+    borderWidth: 1,
+    borderRadius: 9,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editSaveText: {
+    fontSize: 10,
+    fontWeight: '700',
   },
   archive: {
     width: 34,

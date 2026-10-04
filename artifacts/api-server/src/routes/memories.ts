@@ -4,6 +4,8 @@ import {
   ListSecondBrainMemoriesQueryParams,
   CreateSecondBrainMemoryBody,
   CreateSecondBrainMemoryResponse,
+  EditSecondBrainMemoryBody,
+  EditSecondBrainMemoryResponse,
   ArchiveSecondBrainMemoryParams,
   ArchiveSecondBrainMemoryResponse,
   ListSecondBrainMemoryHistoryResponse,
@@ -11,6 +13,7 @@ import {
 import { requestId, requireIdentity, sendRouteError } from "./route-context";
 import {
   archiveSecondBrainMemory,
+  editSecondBrainMemory,
   listSecondBrainMemoryHistory,
   listSecondBrainMemories,
   publicSecondBrainMemory,
@@ -66,6 +69,47 @@ router.get("/memories", async (req, res): Promise<void> => {
   } catch (error) {
     req.log.error({ error, requestId: requestId(req) }, "Second Brain memories list failed");
     sendRouteError(req, res, 500, "تعذر تحميل الذاكرة الشخصية.", "SECOND_BRAIN_LIST_FAILED");
+  }
+});
+
+router.patch("/memories/:memoryId", async (req, res): Promise<void> => {
+  const identity = requireIdentity(req, res);
+  if (!identity) return;
+  const parsedParams = ArchiveSecondBrainMemoryParams.safeParse(req.params);
+  if (!parsedParams.success) {
+    sendRouteError(req, res, 400, "معرّف الذاكرة غير صالح.", "INVALID_MEMORY_ID");
+    return;
+  }
+  const parsedBody = EditSecondBrainMemoryBody.safeParse(req.body);
+  if (!parsedBody.success || !parsedBody.data.value.trim()) {
+    sendRouteError(req, res, 400, "بيانات تعديل الذاكرة غير صالحة.", "INVALID_MEMORY_EDIT");
+    return;
+  }
+  try {
+    const memory = await editSecondBrainMemory(
+      identity,
+      parsedParams.data.memoryId,
+      parsedBody.data.value.trim(),
+      parsedBody.data.expectedRevision,
+    );
+    if (!memory) {
+      sendRouteError(req, res, 404, "الذاكرة النشطة غير موجودة.", "SECOND_BRAIN_MEMORY_NOT_FOUND");
+      return;
+    }
+    res.json(EditSecondBrainMemoryResponse.parse({
+      memory: publicSecondBrainMemory(memory),
+    }));
+  } catch (error) {
+    if (error instanceof Error && error.name === "SecondBrainMemoryRevisionConflictError") {
+      sendRouteError(req, res, 409, "تغيرت هذه الذاكرة في مكان آخر. حدّث القائمة ثم أعد التعديل.", "SECOND_BRAIN_MEMORY_REVISION_CONFLICT");
+      return;
+    }
+    if (error instanceof Error && error.name === "SecondBrainMemoryAliasEditError") {
+      sendRouteError(req, res, 409, "يجب تعديل الاسم المستعار من خلال ربطه بالشخص أو المشروع.", "SECOND_BRAIN_ALIAS_EDIT_REQUIRES_ASSOCIATION");
+      return;
+    }
+    req.log.error({ error, requestId: requestId(req), memoryId: parsedParams.data.memoryId }, "Second Brain memory edit failed");
+    sendRouteError(req, res, 500, "تعذر تعديل الذاكرة الشخصية.", "SECOND_BRAIN_EDIT_FAILED");
   }
 });
 

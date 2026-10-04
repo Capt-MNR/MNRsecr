@@ -22,6 +22,7 @@ import {
   applySecondBrainContextBudget,
   applySecondBrainPolicy,
   classifySecondBrainQuery,
+  editSecondBrainMemory,
   emptyRetrievalTrace,
   formatSecondBrainContext,
   rememberSecondBrain,
@@ -35,6 +36,8 @@ import {
   reviewSecondBrainCandidate,
   SecondBrainCandidateAssociationError,
   SecondBrainCandidateReviewError,
+  SecondBrainMemoryAliasEditError,
+  SecondBrainMemoryRevisionConflictError,
 } from "../src/lib/second-brain.ts";
 import type { SecondBrainMemory } from "@workspace/db";
 import { Phase2AgentRuntime, type ModelGateway } from "../src/lib/phase2.ts";
@@ -365,6 +368,53 @@ test("natural agreement correction revises one memory and preserves the prior ve
   );
   assert.equal(historical.memories[0]?.value, first.value);
   assert.equal(historical.trace.selected[0]?.temporalState, "historical");
+  await cleanup();
+});
+
+test("manual memory edits use revision checks, preserve history, and reject alias rewrites", async () => {
+  await cleanup();
+  const original = await rememberSecondBrain(identity, {
+    memoryKind: "fact",
+    key: "profile.role",
+    value: "Engineer",
+    sourceKind: "api_user_entry",
+  });
+  const updated = await editSecondBrainMemory(
+    identity,
+    original.id,
+    "Designer",
+    original.revision,
+  );
+  assert.equal(updated?.id, original.id);
+  assert.equal(updated?.revision, original.revision + 1);
+  assert.equal(updated?.value, "Designer");
+  assert.equal(
+    await editSecondBrainMemory(otherIdentity, original.id, "Other", updated!.revision),
+    null,
+  );
+  await assert.rejects(
+    editSecondBrainMemory(identity, original.id, "Stale", original.revision),
+    SecondBrainMemoryRevisionConflictError,
+  );
+
+  const history = await listSecondBrainMemoryHistory(identity, original.id);
+  assert.equal(history?.length, 2);
+  assert.ok(history?.some((version) =>
+    version.value === "Engineer" && version.temporalState === "superseded",
+  ));
+  assert.ok(history?.some((version) =>
+    version.value === "Designer" && version.temporalState === "current",
+  ));
+
+  const alias = await rememberSecondBrain(identity, {
+    memoryKind: "alias",
+    key: "alex",
+    value: "Alex Smith",
+  });
+  await assert.rejects(
+    editSecondBrainMemory(identity, alias.id, "Alex Jones", alias.revision),
+    SecondBrainMemoryAliasEditError,
+  );
   await cleanup();
 });
 

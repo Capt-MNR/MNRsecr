@@ -65,6 +65,7 @@ export * from './createAgentWork201';
 export * from './createSecondBrainMemoryRequest';
 export * from './createSecondBrainMemoryRequestKind';
 export * from './createTypedRelationshipParams';
+export * from './editSecondBrainMemoryRequest';
 export * from './entityGraphResponse';
 export * from './entityGraphResponseCapabilities';
 export * from './entityGraphResponseEntity';

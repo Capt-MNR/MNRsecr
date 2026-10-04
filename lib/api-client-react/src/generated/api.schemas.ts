@@ -984,6 +984,16 @@ export interface CreateSecondBrainMemoryRequest {
   expiresAt?: string | null;
 }
 
+export interface EditSecondBrainMemoryRequest {
+  /**
+     * @minLength 1
+     * @maxLength 320
+     */
+  value: string;
+  /** @minimum 1 */
+  expectedRevision: number;
+}
+
 export type SecondBrainMemoryHistoryItemKind = typeof SecondBrainMemoryHistoryItemKind[keyof typeof SecondBrainMemoryHistoryItemKind];
 
 

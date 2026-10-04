@@ -580,10 +580,37 @@ try {
     await browser.page.evaluate(`document.querySelector('[data-testid="open-main-drawer"]').click()`);
     await waitForBrowserValue(
       browser.page,
-      `document.querySelector('[data-testid="theme-dark"]') !== null && document.querySelector('[data-testid="language-en"]') !== null`,
-      "Main appearance and language settings",
+      `document.querySelector('[data-testid="drawer-open-settings"]') !== null`,
+      "Main settings entry",
     );
+    await browser.page.evaluate(`document.querySelector('[data-testid="drawer-open-settings"]').click()`);
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="theme-dark"]') !== null && document.querySelector('[data-testid="language-en"]') !== null`,
+      "dedicated appearance and language settings",
+    );
+    await browser.page.evaluate(`document.querySelector('[data-testid="open-personal-information"]').click()`);
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="profile-save-profile.preferred_name"]') !== null && document.querySelector('[data-testid="open-memory-library"]') !== null`,
+      "personal information profile",
+    );
+    await browser.page.evaluate(`document.querySelector('[data-testid="open-memory-library"]').click()`);
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="memory-add-toggle"]') !== null`,
+      "memory library",
+    );
+    await browser.page.evaluate(`document.querySelector('[data-testid="memory-add-toggle"]').click()`);
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="memory-create-key"]') !== null && document.querySelector('[data-testid="memory-create-value"]') !== null`,
+      "manual memory entry form",
+    );
+    await browser.page.evaluate(`document.querySelector('[data-testid="memory-sheet-close"]').click()`);
+    await browser.page.evaluate(`document.querySelector('[data-testid="personal-information-back"]').click()`);
     await browser.page.evaluate(`document.querySelector('[data-testid="theme-dark"]').click()`);
+    await browser.page.evaluate(`document.querySelector('[data-testid="settings-back"]').click()`);
     const darkMainBackgrounds = await waitForBrowserValue(
       browser.page,
       `(() => {
@@ -607,7 +634,15 @@ try {
       "dark mode should change Main's rendered palette",
     );
 
+    await browser.page.evaluate(`document.querySelector('[data-testid="open-main-drawer"]').click()`);
+    await browser.page.evaluate(`document.querySelector('[data-testid="drawer-open-settings"]').click()`);
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="language-en"]') !== null`,
+      "English language control on Settings",
+    );
     await browser.page.evaluate(`document.querySelector('[data-testid="language-en"]').click()`);
+    await browser.page.evaluate(`document.querySelector('[data-testid="settings-back"]').click()`);
     await waitForBrowserValue(
       browser.page,
       `(() => {
@@ -619,7 +654,6 @@ try {
       })()`,
       "Main English LTR layout",
     );
-    await browser.page.evaluate(`document.querySelector('[data-testid="close-main-drawer"]').click()`);
     await browser.page.evaluate(`document.querySelector('[data-testid="main-quick-bubble"]').click()`);
     await waitForBrowserValue(
       browser.page,

@@ -885,6 +885,78 @@ export async function updateSecondBrainMemoryIfPresent(
   });
 }
 
+export class SecondBrainMemoryRevisionConflictError extends Error {
+  constructor() {
+    super("Second Brain memory changed since it was loaded.");
+    this.name = "SecondBrainMemoryRevisionConflictError";
+  }
+}
+
+export class SecondBrainMemoryAliasEditError extends Error {
+  constructor() {
+    super("Aliases must be changed through their entity association.");
+    this.name = "SecondBrainMemoryAliasEditError";
+  }
+}
+
+export async function editSecondBrainMemory(
+  identity: Identity,
+  memoryId: string,
+  value: string,
+  expectedRevision: number,
+): Promise<SecondBrainMemory | null> {
+  return db.transaction(async (tx) => {
+    const [candidate] = await tx
+      .select()
+      .from(secondBrainMemoriesTable)
+      .where(and(
+        eq(secondBrainMemoriesTable.id, memoryId),
+        eq(secondBrainMemoriesTable.tenantId, identity.tenantId),
+        eq(secondBrainMemoriesTable.ownerUserId, identity.userId),
+      ))
+      .limit(1);
+    if (!candidate || candidate.status !== "active") return null;
+    if (candidate.kind !== "fact" && candidate.kind !== "preference") {
+      throw new SecondBrainMemoryAliasEditError();
+    }
+
+    const lockKey = JSON.stringify([
+      identity.tenantId,
+      identity.userId,
+      "second-brain-memory",
+      candidate.kind,
+      candidate.key,
+    ]);
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`);
+
+    const [existing] = await tx
+      .select()
+      .from(secondBrainMemoriesTable)
+      .where(and(
+        eq(secondBrainMemoriesTable.id, memoryId),
+        eq(secondBrainMemoriesTable.tenantId, identity.tenantId),
+        eq(secondBrainMemoriesTable.ownerUserId, identity.userId),
+      ))
+      .limit(1);
+    if (!existing || existing.status !== "active") return null;
+    if (existing.kind !== "fact" && existing.kind !== "preference") {
+      throw new SecondBrainMemoryAliasEditError();
+    }
+    if (existing.revision !== expectedRevision) {
+      throw new SecondBrainMemoryRevisionConflictError();
+    }
+
+    return writeSecondBrainMemory(tx, identity, {
+      memoryKind: existing.kind,
+      key: existing.key,
+      value,
+      metadata: existing.metadata ?? {},
+      expiresAt: existing.expiresAt,
+      sourceKind: "explicit_user_instruction",
+    });
+  });
+}
+
 export async function getActiveSecondBrainMemory(
   identity: Identity,
   memoryKind: SecondBrainKind,

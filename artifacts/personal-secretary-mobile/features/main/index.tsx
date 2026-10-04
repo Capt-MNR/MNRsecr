@@ -21,7 +21,7 @@ import {
 } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useColors, type ThemePreference } from '@/hooks/useColors';
+import { useColors } from '@/hooks/useColors';
 import { useLanguage, type AppLanguage } from '@/hooks/useLanguage';
 import { useSecretaryChatService, type SecretaryChatContext } from '../../services/secretary-chat';
 import type { LocalInputAttachment } from '../../services/local-input-assets';
@@ -31,6 +31,8 @@ import { ReceiptReviewCard } from '../receipt-review';
 export { default as MainWorkspace } from './MainWorkspace';
 export { default as WorksView } from './WorksView';
 export { SecondBrainMemorySheet } from './SecondBrainMemorySheet';
+export { SettingsSection } from './SettingsSection';
+export { PersonalInformationSection } from './PersonalInformationSection';
 export { MessageBubble };
 
 export type ApprovalStatus = 'pending' | 'executing' | 'completed' | 'rejected' | 'expired' | 'failed';
@@ -105,7 +107,7 @@ type MobileRecordSection = {
   data: MobileRecordRow[];
 };
 
-export type MainSection = 'office' | 'chat' | 'records' | 'people' | 'projects' | 'financial' | 'tasks' | 'reminders' | 'activity' | 'works';
+export type MainSection = 'office' | 'chat' | 'records' | 'people' | 'projects' | 'financial' | 'tasks' | 'reminders' | 'activity' | 'works' | 'settings' | 'personal-information';
 export type AssistantPreferences = {
   activity: 'focused' | 'balanced' | 'quiet';
   proactive: 'low' | 'balanced' | 'high';
@@ -4169,32 +4171,22 @@ export function MainBottomBar({
 export function MainDrawer({
   colors,
   language,
-  themePreference,
   open,
   activeSection,
   onClose,
   onSelect,
   onOpenQuick,
   onOpenMemories,
-  onThemeChange,
-  onLanguageChange,
-  assistantPreferences,
-  onAssistantPreferencesChange,
   onLogout,
 }: {
   colors: ReturnType<typeof useColors>;
   language: AppLanguage;
-  themePreference: ThemePreference;
   open: boolean;
   activeSection: MainSection;
   onClose: () => void;
   onSelect: (section: MainSection) => void;
   onOpenQuick: () => void;
   onOpenMemories: () => void;
-  onThemeChange: (theme: ThemePreference) => void;
-  onLanguageChange: (language: AppLanguage) => void;
-  assistantPreferences: AssistantPreferences;
-  onAssistantPreferencesChange: (patch: Partial<AssistantPreferences>) => void;
   onLogout: () => void;
 }) {
   if (!open) return null;
@@ -4280,11 +4272,37 @@ export function MainDrawer({
           </View>
         </Pressable>
         <View style={[styles.drawerSettings, { borderTopColor: colors.border }]}>
-          <View style={styles.drawerSettingsHeading}>
-            <Text style={[styles.drawerSettingsTitle, { color: colors.foreground }]}>
-              {localized(language, 'الإعدادات', 'Settings')}
-            </Text>
-          </View>
+          <Text style={[styles.drawerSettingsTitle, { color: colors.foreground }]}>
+            {localized(language, 'إدارة حسابك', 'Your account')}
+          </Text>
+          <Pressable
+            testID="drawer-open-settings"
+            accessibilityRole="button"
+            accessibilityLabel={localized(language, 'فتح الإعدادات', 'Open settings')}
+            onPress={() => onSelect('settings')}
+            style={({ pressed }) => [styles.drawerMemoryLink, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}
+          >
+            <Feather name="sliders" size={15} color={colors.primary} />
+            <View style={styles.drawerMemoryCopy}>
+              <Text style={[styles.drawerMemoryTitle, { color: colors.foreground }]}>{localized(language, 'الإعدادات', 'Settings')}</Text>
+              <Text style={[styles.drawerMemoryText, { color: colors.mutedForeground }]}>{localized(language, 'اللغة والمظهر وتفضيلات السكرتير', 'Language, appearance, and assistant preferences')}</Text>
+            </View>
+            <Feather name="chevron-left" size={15} color={colors.mutedForeground} />
+          </Pressable>
+          <Pressable
+            testID="drawer-open-personal-information"
+            accessibilityRole="button"
+            accessibilityLabel={localized(language, 'فتح المعلومات الشخصية', 'Open personal information')}
+            onPress={() => onSelect('personal-information')}
+            style={({ pressed }) => [styles.drawerMemoryLink, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}
+          >
+            <Feather name="user" size={15} color={colors.primary} />
+            <View style={styles.drawerMemoryCopy}>
+              <Text style={[styles.drawerMemoryTitle, { color: colors.foreground }]}>{localized(language, 'معلوماتك الشخصية', 'Personal information')}</Text>
+              <Text style={[styles.drawerMemoryText, { color: colors.mutedForeground }]}>{localized(language, 'ملفك ومكتبة الذاكرة', 'Your profile and memory library')}</Text>
+            </View>
+            <Feather name="chevron-left" size={15} color={colors.mutedForeground} />
+          </Pressable>
           <Pressable
             testID="drawer-open-memories"
             accessibilityRole="button"
@@ -4303,206 +4321,6 @@ export function MainDrawer({
             </View>
             <Feather name="chevron-left" size={15} color={colors.mutedForeground} />
           </Pressable>
-          <Text style={[styles.drawerSettingLabel, { color: colors.mutedForeground }]}>
-            {localized(language, 'الخلفية', 'Appearance')}
-          </Text>
-          <View style={[styles.drawerChoiceRow, { backgroundColor: colors.muted }]}>
-            {([
-              ['light', 'فاتحة', 'Light', 'sun'],
-              ['dark', 'داكنة', 'Dark', 'moon'],
-            ] as const).map(([value, arabicLabel, englishLabel, icon]) => (
-              <Pressable
-                key={value}
-                testID={`theme-${value}`}
-                accessibilityRole="button"
-                accessibilityState={{ selected: themePreference === value }}
-                onPress={() => onThemeChange(value)}
-                style={({ pressed }) => [
-                  styles.drawerChoice,
-                  themePreference === value && { backgroundColor: colors.card, borderColor: colors.border },
-                  { opacity: pressed ? 0.65 : 1 },
-                ]}
-              >
-                <Feather name={icon} size={14} color={themePreference === value ? colors.primary : colors.mutedForeground} />
-                <Text style={[styles.drawerChoiceText, { color: themePreference === value ? colors.foreground : colors.mutedForeground }]}>
-                  {localized(language, arabicLabel, englishLabel)}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-          <Text style={[styles.drawerSettingLabel, { color: colors.mutedForeground }]}>
-            {localized(language, 'اللغة', 'Language')}
-          </Text>
-          <View style={[styles.drawerChoiceRow, { backgroundColor: colors.muted }]}>
-            {([
-              ['ar', 'العربية', 'Arabic'],
-              ['en', 'English', 'English'],
-            ] as const).map(([value, arabicLabel, englishLabel]) => (
-              <Pressable
-                key={value}
-                testID={`language-${value}`}
-                accessibilityRole="button"
-                accessibilityState={{ selected: language === value }}
-                onPress={() => onLanguageChange(value)}
-                style={({ pressed }) => [
-                  styles.drawerChoice,
-                  language === value && { backgroundColor: colors.card, borderColor: colors.border },
-                  { opacity: pressed ? 0.65 : 1 },
-                ]}
-              >
-                <Text style={[styles.drawerChoiceText, { color: language === value ? colors.foreground : colors.mutedForeground }]}>
-                  {localized(language, arabicLabel, englishLabel)}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-          <Text style={[styles.drawerSettingLabel, { color: colors.mutedForeground }]}>
-            {localized(language, 'حضور السكرتير', 'Secretary activity')}
-          </Text>
-          <Text style={[styles.drawerSettingHint, { color: colors.mutedForeground }]}>
-            {localized(language, 'تحكم في مقدار ما يظهر على الشاشة.', 'Control how much the secretary surfaces.')}
-          </Text>
-          <View style={[styles.drawerChoiceRow, { backgroundColor: colors.muted }]}>
-            {([
-              ['focused', 'مركز', 'Focused'],
-              ['balanced', 'متوازن', 'Balanced'],
-              ['quiet', 'استعداد', 'Standby'],
-            ] as const).map(([value, arabicLabel, englishLabel]) => (
-              <Pressable
-                key={value}
-                testID={`assistant-activity-${value}`}
-                accessibilityRole="button"
-                accessibilityState={{ selected: assistantPreferences.activity === value }}
-                onPress={() => onAssistantPreferencesChange({ activity: value })}
-                style={({ pressed }) => [
-                  styles.drawerChoice,
-                  assistantPreferences.activity === value && { backgroundColor: colors.card, borderColor: colors.border },
-                  { opacity: pressed ? 0.65 : 1 },
-                ]}
-              >
-                <Text style={[styles.drawerChoiceText, { color: assistantPreferences.activity === value ? colors.foreground : colors.mutedForeground }]}>
-                  {localized(language, arabicLabel, englishLabel)}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-          <Text style={[styles.drawerSettingLabel, { color: colors.mutedForeground }]}>
-            {localized(language, 'المبادرة', 'Proactive level')}
-          </Text>
-          <Text style={[styles.drawerSettingHint, { color: colors.mutedForeground }]}>
-            {localized(language, 'متى يقترح عليك السكرتير خطوة تالية.', 'When the secretary suggests the next step.')}
-          </Text>
-          <View style={[styles.drawerChoiceRow, { backgroundColor: colors.muted }]}>
-            {([
-              ['low', 'هادئ', 'Low'],
-              ['balanced', 'متوازن', 'Balanced'],
-              ['high', 'استباقي', 'High'],
-            ] as const).map(([value, arabicLabel, englishLabel]) => (
-              <Pressable
-                key={value}
-                testID={`assistant-proactive-${value}`}
-                accessibilityRole="button"
-                accessibilityState={{ selected: assistantPreferences.proactive === value }}
-                onPress={() => onAssistantPreferencesChange({ proactive: value })}
-                style={({ pressed }) => [
-                  styles.drawerChoice,
-                  assistantPreferences.proactive === value && { backgroundColor: colors.card, borderColor: colors.border },
-                  { opacity: pressed ? 0.65 : 1 },
-                ]}
-              >
-                <Text style={[styles.drawerChoiceText, { color: assistantPreferences.proactive === value ? colors.foreground : colors.mutedForeground }]}>
-                  {localized(language, arabicLabel, englishLabel)}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-          <Text style={[styles.drawerSettingLabel, { color: colors.mutedForeground }]}>
-            {localized(language, 'عمق الذكاء', 'AI depth')}
-          </Text>
-          <Text style={[styles.drawerSettingHint, { color: colors.mutedForeground }]}>
-            {localized(language, 'سرعة الرد مقابل تحليل أعمق للسياق.', 'Response speed versus deeper context analysis.')}
-          </Text>
-          <View style={[styles.drawerChoiceRow, { backgroundColor: colors.muted }]}>
-            {([
-              ['fast', 'سريع', 'Fast'],
-              ['balanced', 'متوازن', 'Balanced'],
-              ['deep', 'عميق', 'Deep'],
-            ] as const).map(([value, arabicLabel, englishLabel]) => (
-              <Pressable
-                key={value}
-                testID={`assistant-intelligence-${value}`}
-                accessibilityRole="button"
-                accessibilityState={{ selected: assistantPreferences.intelligence === value }}
-                onPress={() => onAssistantPreferencesChange({ intelligence: value })}
-                style={({ pressed }) => [
-                  styles.drawerChoice,
-                  assistantPreferences.intelligence === value && { backgroundColor: colors.card, borderColor: colors.border },
-                  { opacity: pressed ? 0.65 : 1 },
-                ]}
-              >
-                <Text style={[styles.drawerChoiceText, { color: assistantPreferences.intelligence === value ? colors.foreground : colors.mutedForeground }]}>
-                  {localized(language, arabicLabel, englishLabel)}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-          <Text style={[styles.drawerSettingLabel, { color: colors.mutedForeground }]}>
-            {localized(language, 'أسلوب التواصل', 'Communication style')}
-          </Text>
-          <View style={[styles.drawerChoiceRow, { backgroundColor: colors.muted }]}>
-            {([
-              ['balanced', 'متوازن', 'Balanced'],
-              ['friendly', 'ودود', 'Friendly'],
-              ['concise', 'موجز', 'Concise'],
-              ['formal', 'رسمي', 'Formal'],
-            ] as const).map(([value, arabicLabel, englishLabel]) => (
-              <Pressable
-                key={value}
-                testID={`assistant-style-${value}`}
-                accessibilityRole="button"
-                accessibilityState={{ selected: assistantPreferences.communicationStyle === value }}
-                onPress={() => onAssistantPreferencesChange({ communicationStyle: value })}
-                style={({ pressed }) => [
-                  styles.drawerChoice,
-                  assistantPreferences.communicationStyle === value && { backgroundColor: colors.card, borderColor: colors.border },
-                  { opacity: pressed ? 0.65 : 1 },
-                ]}
-              >
-                <Text style={[styles.drawerChoiceText, { color: assistantPreferences.communicationStyle === value ? colors.foreground : colors.mutedForeground }]}>
-                  {localized(language, arabicLabel, englishLabel)}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-          <Text style={[styles.drawerSettingLabel, { color: colors.mutedForeground }]}>
-            {localized(language, 'تكرار التذكير', 'Repeat reminders')}
-          </Text>
-          <Text style={[styles.drawerSettingHint, { color: colors.mutedForeground }]}>
-            {localized(language, 'التكرار متوقف افتراضيًا؛ فعّله فقط إذا كنت تريده.', 'Repeats are off by default; enable them only if you want them.') }
-          </Text>
-          <View style={[styles.drawerChoiceRow, { backgroundColor: colors.muted }]}>
-            {([
-              [false, 'مرة واحدة', 'Once'],
-              [true, 'السماح بالتكرار', 'Allow repeats'],
-            ] as const).map(([value, arabicLabel, englishLabel]) => (
-              <Pressable
-                key={String(value)}
-                testID={`assistant-repeat-${value}`}
-                accessibilityRole="button"
-                accessibilityState={{ selected: assistantPreferences.repeatReminders === value }}
-                onPress={() => onAssistantPreferencesChange({ repeatReminders: value })}
-                style={({ pressed }) => [
-                  styles.drawerChoice,
-                  assistantPreferences.repeatReminders === value && { backgroundColor: colors.card, borderColor: colors.border },
-                  { opacity: pressed ? 0.65 : 1 },
-                ]}
-              >
-                <Text style={[styles.drawerChoiceText, { color: assistantPreferences.repeatReminders === value ? colors.foreground : colors.mutedForeground }]}>
-                  {localized(language, arabicLabel, englishLabel)}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
           <Pressable
             testID="drawer-logout"
             accessibilityRole="button"
