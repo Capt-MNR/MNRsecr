@@ -1,0 +1,27 @@
+:root {
+  --secretary-background: #f5f1ea;
+  --secretary-foreground: #212f35;
+  --secretary-card: #faf8f5;
+  --secretary-primary: #2b5f69;
+  --secretary-primary-foreground: #f8f6f2;
+  --secretary-secondary: #e3dbce;
+  --secretary-muted: #e9e4dd;
+  --secretary-muted-foreground: #657881;
+  --secretary-accent: #d0996d;
+  --secretary-destructive: #bd4032;
+  --secretary-border: #dfd8ce;
+}
+
+.dark {
+  --secretary-background: #182026;
+  --secretary-foreground: #f5f1ea;
+  --secretary-card: #212a31;
+  --secretary-primary: #7dbdca;
+  --secretary-primary-foreground: #131b20;
+  --secretary-secondary: #343f46;
+  --secretary-muted: #303a41;
+  --secretary-muted-foreground: #a2acb3;
+  --secretary-accent: #d0996d;
+  --secretary-destructive: #d26256;
+  --secretary-border: #38444c;
+}

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { rmSync } from "node:fs";
+import { rmSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import net from "node:net";
 import { once } from "node:events";
@@ -323,6 +323,69 @@ try {
       `document.querySelector('[data-testid="main-office-home"]') !== null`,
       "Main Office after reopening from Quick",
     );
+    await browser.page.send("Emulation.setDeviceMetricsOverride", {
+      width: 402,
+      height: 874,
+      deviceScaleFactor: 1,
+      mobile: true,
+    });
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="office-dashboard"]') !== null`,
+      "adaptive home focus surface",
+    );
+    if (process.env.CAPTURE_MAIN_OFFICE_SNAPSHOTS === "1") {
+      for (const [width, height] of [[360, 780], [402, 874]]) {
+        await browser.page.send("Emulation.setDeviceMetricsOverride", {
+          width,
+          height,
+          deviceScaleFactor: 1,
+          mobile: true,
+        });
+        const screenshot = await browser.page.send("Page.captureScreenshot", {
+          format: "jpeg",
+          quality: 92,
+        });
+        writeFileSync(
+          `/tmp/personal-secretary-main-office-${width}.jpg`,
+          Buffer.from(screenshot.data, "base64"),
+        );
+      }
+    }
+    await browser.page.send("Emulation.setDeviceMetricsOverride", {
+      width: 402,
+      height: 550,
+      deviceScaleFactor: 1,
+      mobile: true,
+    });
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="office-dashboard"]') === null`,
+      "compact home with the focus card cleared for the keyboard viewport",
+    );
+    const compactComposerFit = await browser.page.evaluate(`(() => {
+      const input = document.querySelector('[data-testid="main-message-input"]');
+      const navigation = document.querySelector('[data-testid="main-bottom-records"]');
+      if (!input || !navigation) return false;
+      return input.getBoundingClientRect().bottom <= navigation.getBoundingClientRect().top;
+    })()`);
+    assert.equal(compactComposerFit, true, "the chat composer should stay above bottom navigation in a keyboard-reduced viewport");
+    await browser.page.send("Emulation.setDeviceMetricsOverride", {
+      width: 402,
+      height: 874,
+      deviceScaleFactor: 1,
+      mobile: true,
+    });
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="office-dashboard"]') !== null`,
+      "adaptive focus restored after the compact viewport",
+    );
+    await clickAndWaitForDetail(
+      browser.page,
+      `office-focus-task-${fixtureInfo.ids.task}`,
+      "main-office-home",
+    );
     assert.deepEqual(
       browser.page.exceptions,
       [],
@@ -353,6 +416,11 @@ try {
         return button?.getAttribute("data-testid") ?? null;
       })()`,
       "Main Office approval",
+    );
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid^="office-focus-approval-"]') !== null`,
+      "adaptive focus for pending approval",
     );
     assert.equal(counts.turns, 1, "sending from Main Office must create one turn");
 
