@@ -6,6 +6,9 @@ import {
 } from "./fake-email-action";
 import { GmailEmailProviderAdapter } from "./gmail-email-provider";
 import { gmailOAuthConfigured, gmailOAuthService } from "../gmail-oauth";
+import { createCalendarExternalActionConnector } from "./calendar-action";
+import { fakeCalendarProviderForTests, fakeMessagingProviderForTests } from "./fake-integration-providers";
+import { createMessagingExternalActionConnector } from "./messaging-action";
 import { googleSheetsExternalActionConnector } from "./google-sheets-action";
 
 export function createExternalActionRegistry(
@@ -86,6 +89,14 @@ const connectors: readonly ExternalActionConnector[] = [
   ...(process.env.NODE_ENV === "test"
     && process.env.AGENT_WORK_TEST_FAKE_EMAIL_CONNECTOR === "true"
     ? [fakeEmailExternalActionConnector]
+    : []),
+  ...(process.env.NODE_ENV === "test"
+    && process.env.AGENT_WORK_TEST_FAKE_CALENDAR_CONNECTOR === "true"
+    ? [createCalendarExternalActionConnector(fakeCalendarProviderForTests)]
+    : []),
+  ...(process.env.NODE_ENV === "test"
+    && process.env.AGENT_WORK_TEST_FAKE_MESSAGING_CONNECTOR === "true"
+    ? [createMessagingExternalActionConnector(fakeMessagingProviderForTests)]
     : []),
   ...(process.env.NODE_ENV !== "test" && gmailOAuthConfigured()
     ? [gmailEmailExternalActionConnector]

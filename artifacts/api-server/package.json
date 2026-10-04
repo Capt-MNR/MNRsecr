@@ -9,7 +9,7 @@
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:phase2": "node --test test/phase2.integration.mjs",
-    "test:agent-work": "../../scripts/node_modules/.bin/tsx --test test/agent-work-contract.test.ts test/agent-work-runner.test.ts test/agent-work-recovery.test.ts test/github-monitoring.test.ts test/delegated-action.test.ts test/agent-work-restart.test.ts test/notification-outbox.test.ts test/external-action-contract.test.ts test/google-sheets-action.test.ts test/fake-email-action.integration.test.ts test/gmail-email-provider.test.ts test/email-token-crypto.test.ts",
+    "test:agent-work": "../../scripts/node_modules/.bin/tsx --test test/agent-work-contract.test.ts test/agent-work-runner.test.ts test/agent-work-recovery.test.ts test/github-monitoring.test.ts test/delegated-action.test.ts test/agent-work-restart.test.ts test/notification-outbox.test.ts test/external-action-contract.test.ts test/google-sheets-action.test.ts test/fake-email-action.integration.test.ts test/fake-calendar-messaging.integration.test.ts test/gmail-email-provider.test.ts test/email-token-crypto.test.ts test/gmail-oauth.test.ts test/calendar-messaging-action.test.ts",
     "test:trigger-outbox": "../../scripts/node_modules/.bin/tsx --test test/trigger-outbox.test.ts",
     "test:trigger-stress": "../../scripts/node_modules/.bin/tsx --test test/trigger-stress.test.ts",
     "test:intent-eval-dataset": "../../scripts/node_modules/.bin/tsx --test test/intent-evaluation/dataset.test.mjs test/intent-evaluation/runner.test.ts",

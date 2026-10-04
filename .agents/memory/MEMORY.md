@@ -71,3 +71,4 @@
 - [Transactional trigger outbox](transactional-trigger-outbox.md) — durable handoff stays in PostgreSQL; global dispatcher tests assert scoped state, not shared tick totals.
 - [Task alert mutation identity](task-alert-mutation-identity.md) — task-trigger dedupe keys need the stable task identity plus the mutation version or transition.
 - [Task open-count concurrency](task-open-count-concurrency.md) — serialize tenant-owner Task mutations before count snapshots; READ COMMITTED can otherwise duplicate one threshold crossing.
+- [Global runner test isolation](global-runner-test-isolation.md) — time-shifted stress tests must not treat global Agent Work runner counts as tenant-scoped results.

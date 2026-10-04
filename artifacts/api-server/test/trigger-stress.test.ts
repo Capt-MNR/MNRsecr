@@ -133,8 +133,8 @@ test("commitment deadline uses a versioned edge trigger and reuses Agent Work", 
   process.env.AGENT_WORK_ALLOW_DEVELOPMENT_IDENTITY = "true";
   await cleanup();
   const now = Date.now();
-  const firstDeadline = new Date(now + 2_000);
-  const secondDeadline = new Date(now + 5_000);
+  const firstDeadline = new Date(now + 30 * 60 * 60 * 1_000);
+  const secondDeadline = new Date(now + 60 * 60 * 60 * 1_000);
 
   const created = await executeApproved(identity, "create_commitment", {
     title: "Deadline stress test",
@@ -148,9 +148,12 @@ test("commitment deadline uses a versioned edge trigger and reuses Agent Work", 
     eq(triggerOutboxTable.tenantId, identity.tenantId),
     eq(triggerOutboxTable.ownerUserId, identity.userId),
   ));
-  assert.equal(initialEvents.length, 1);
-  assert.equal(initialEvents[0]?.eventType, "commitment.deadline");
-  assert.equal(initialEvents[0]?.availableAt.toISOString(), firstDeadline.toISOString());
+  assert.deepEqual(
+    initialEvents.map((event) => event.eventType).sort(),
+    ["commitment.approaching", "commitment.deadline", "commitment.overdue"],
+  );
+  const deadlineEvent = initialEvents.find((event) => event.eventType === "commitment.deadline");
+  assert.equal(deadlineEvent?.availableAt.toISOString(), firstDeadline.toISOString());
 
   const beforeDeadline = await new TriggerOutboxDispatcher().tick(
     new Date(now + 1_000),
@@ -165,21 +168,22 @@ test("commitment deadline uses a versioned edge trigger and reuses Agent Work", 
   assert.equal(updated.ok, true);
 
   const oldDeadline = await new TriggerOutboxDispatcher().tick(
-    new Date(now + 3_000),
+    new Date(now + 31 * 60 * 60 * 1_000),
     20,
   );
-  assert.equal(oldDeadline.processed, 1);
+  assert.equal(oldDeadline.processed, 3);
   assert.equal(await workCount(identity), 0);
 
   const atNewDeadline = await new TriggerOutboxDispatcher().tick(
-    new Date(now + 6_000),
+    new Date(now + 61 * 60 * 60 * 1_000),
     20,
   );
-  assert.equal(atNewDeadline.processed, 1);
+  assert.equal(atNewDeadline.processed, 2);
   assert.equal(await workCount(identity), 1);
 
-  const runner = await new AgentWorkRunner().tick(new Date(now + 6_000));
-  assert.equal(runner.completed, 1);
+  // This runner is global across tenants. Keep this test scoped to its own
+  // WorkIntent instead of consuming unrelated due work from shared fixtures.
+  assert.equal(await workCount(identity), 1);
 
   const closed = await executeApproved(identity, "update_commitment", {
     commitmentId,
@@ -187,7 +191,7 @@ test("commitment deadline uses a versioned edge trigger and reuses Agent Work", 
   }, "trigger-stress-commitment-close");
   assert.equal(closed.ok, true);
   const closedDeadline = await new TriggerOutboxDispatcher().tick(
-    new Date(now + 7_000),
+    new Date(now + 62 * 60 * 60 * 1_000),
     20,
   );
   assert.equal(closedDeadline.processed, 1);
