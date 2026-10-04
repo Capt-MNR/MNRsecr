@@ -6,7 +6,9 @@ import {
 } from "./fake-email-action";
 import { GmailEmailProviderAdapter } from "./gmail-email-provider";
 import { gmailOAuthConfigured, gmailOAuthService } from "../gmail-oauth";
+import { googleCalendarOAuthConfigured } from "../google-calendar-oauth";
 import { createCalendarExternalActionConnector } from "./calendar-action";
+import { createLinkedGoogleCalendarExternalActionConnector } from "./linked-calendar-provider";
 import { fakeCalendarProviderForTests, fakeMessagingProviderForTests } from "./fake-integration-providers";
 import { createMessagingExternalActionConnector } from "./messaging-action";
 import { googleSheetsExternalActionConnector } from "./google-sheets-action";
@@ -100,6 +102,9 @@ const connectors: readonly ExternalActionConnector[] = [
     : []),
   ...(process.env.NODE_ENV !== "test" && gmailOAuthConfigured()
     ? [gmailEmailExternalActionConnector]
+    : []),
+  ...(process.env.NODE_ENV !== "test" && googleCalendarOAuthConfigured()
+    ? [createLinkedGoogleCalendarExternalActionConnector()]
     : []),
 ];
 

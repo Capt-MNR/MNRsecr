@@ -151,6 +151,54 @@ export const CompleteGmailEmailOAuthResponse = zod.void()
 
 
 /**
+ * @summary Get the current user's Google Calendar connection status
+ */
+export const GetGoogleCalendarAccountResponse = zod.object({
+  "configured": zod.boolean(),
+  "connected": zod.boolean(),
+  "emailAddress": zod.string().email().nullable(),
+  "grantedScopes": zod.array(zod.string())
+})
+
+
+/**
+ * @summary Disconnect and revoke the current user's Google Calendar account
+ */
+export const DisconnectGoogleCalendarAccountResponse = zod.object({
+  "disconnected": zod.literal(true),
+  "revoked": zod.boolean()
+})
+
+
+/**
+ * @summary Start Google Calendar OAuth for the current user
+ */
+export const ConnectGoogleCalendarAccountResponse = zod.object({
+  "authorizationUrl": zod.string().url()
+})
+
+
+/**
+ * @summary Complete the one-time Google Calendar OAuth callback
+ */
+export const completeGoogleCalendarOAuthQueryCodeMax = 4096;
+
+export const completeGoogleCalendarOAuthQueryStateMax = 128;
+
+export const completeGoogleCalendarOAuthQueryErrorMax = 128;
+
+
+
+export const CompleteGoogleCalendarOAuthQueryParams = zod.object({
+  "code": zod.coerce.string().max(completeGoogleCalendarOAuthQueryCodeMax).optional(),
+  "state": zod.coerce.string().max(completeGoogleCalendarOAuthQueryStateMax).optional(),
+  "error": zod.coerce.string().max(completeGoogleCalendarOAuthQueryErrorMax).optional()
+})
+
+export const CompleteGoogleCalendarOAuthResponse = zod.void()
+
+
+/**
  * @summary Register a mobile push token
  */
 export const registerMobilePushTokenBodyTokenMin = 8;

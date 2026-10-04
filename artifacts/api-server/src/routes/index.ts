@@ -13,12 +13,14 @@ import agentWorkRouter from "./agent-work";
 import authRouter from "./auth";
 import proactivePreferencesRouter from "./proactive-preferences";
 import emailRouter from "./email";
+import calendarRouter from "./calendar";
 import operationsRouter from "./operations";
 
 const router: IRouter = Router();
 
 router.use(authRouter);
 router.use(emailRouter);
+router.use(calendarRouter);
 router.use(operationsRouter);
 router.use(proactivePreferencesRouter);
 router.use(healthRouter);

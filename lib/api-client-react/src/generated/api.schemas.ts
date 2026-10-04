@@ -272,6 +272,23 @@ export interface GmailOAuthConnectResponse {
   authorizationUrl: string;
 }
 
+export interface GoogleCalendarAccountResponse {
+  configured: boolean;
+  connected: boolean;
+  /** @nullable */
+  emailAddress: string | null;
+  grantedScopes: string[];
+}
+
+export interface GoogleCalendarOAuthConnectResponse {
+  authorizationUrl: string;
+}
+
+export interface GoogleCalendarDisconnectResponse {
+  disconnected: true;
+  revoked: boolean;
+}
+
 export type ErrorResponseCategory = typeof ErrorResponseCategory[keyof typeof ErrorResponseCategory];
 
 
@@ -1832,6 +1849,21 @@ export type GetCurrentUser200 = {
 };
 
 export type CompleteGmailEmailOAuthParams = {
+/**
+ * @maxLength 4096
+ */
+code?: string;
+/**
+ * @maxLength 128
+ */
+state?: string;
+/**
+ * @maxLength 128
+ */
+error?: string;
+};
+
+export type CompleteGoogleCalendarOAuthParams = {
 /**
  * @maxLength 4096
  */

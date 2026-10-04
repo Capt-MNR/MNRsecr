@@ -155,6 +155,78 @@ paths:
           schema: { type: string, maxLength: 128 }
       responses:
         "303": { description: Redirect to the email connection status page }
+  /calendar/google/account:
+    get:
+      operationId: getGoogleCalendarAccount
+      tags: [calendar]
+      summary: Get the current user's Google Calendar connection status
+      responses:
+        "200":
+          description: Calendar connection status and the granted Calendar scopes
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GoogleCalendarAccountResponse" }
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    delete:
+      operationId: disconnectGoogleCalendarAccount
+      tags: [calendar]
+      summary: Disconnect and revoke the current user's Google Calendar account
+      responses:
+        "200":
+          description: Local connection removed; revoked reports Google's revocation response
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GoogleCalendarDisconnectResponse" }
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /calendar/google/connect:
+    post:
+      operationId: connectGoogleCalendarAccount
+      tags: [calendar]
+      summary: Start Google Calendar OAuth for the current user
+      responses:
+        "200":
+          description: Google authorization URL
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GoogleCalendarOAuthConnectResponse" }
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "503":
+          description: Google Calendar OAuth is not configured or is disabled
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /calendar/google/oauth/callback:
+    get:
+      operationId: completeGoogleCalendarOAuth
+      tags: [calendar]
+      summary: Complete the one-time Google Calendar OAuth callback
+      parameters:
+        - name: code
+          in: query
+          required: false
+          schema: { type: string, maxLength: 4096 }
+        - name: state
+          in: query
+          required: false
+          schema: { type: string, maxLength: 128 }
+        - name: error
+          in: query
+          required: false
+          schema: { type: string, maxLength: 128 }
+      responses:
+        "303": { description: Redirect to the connected accounts page }
   /push-tokens:
     post:
       operationId: registerMobilePushToken
@@ -1818,6 +1890,27 @@ components:
       properties:
         authorizationUrl: { type: string, format: uri }
       required: [authorizationUrl]
+    GoogleCalendarAccountResponse:
+      type: object
+      properties:
+        configured: { type: boolean }
+        connected: { type: boolean }
+        emailAddress: { type: ["string", "null"], format: email }
+        grantedScopes:
+          type: array
+          items: { type: string }
+      required: [configured, connected, emailAddress, grantedScopes]
+    GoogleCalendarOAuthConnectResponse:
+      type: object
+      properties:
+        authorizationUrl: { type: string, format: uri }
+      required: [authorizationUrl]
+    GoogleCalendarDisconnectResponse:
+      type: object
+      properties:
+        disconnected: { type: boolean, const: true }
+        revoked: { type: boolean }
+      required: [disconnected, revoked]
     ErrorResponse:
       type: object
       properties:
