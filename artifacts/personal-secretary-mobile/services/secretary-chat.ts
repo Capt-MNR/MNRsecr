@@ -391,6 +391,11 @@ function classifyTransportError(error: unknown): SecretaryChatTransportError {
   );
 }
 
+export function isSecretaryAuthenticationFailure(error: unknown): boolean {
+  const classified = classifyTransportError(error);
+  return classified.status === 401 || classified.category === 'authentication_error';
+}
+
 /**
  * A transport for a secretary peer that speaks A2A JSON-RPC.
  *

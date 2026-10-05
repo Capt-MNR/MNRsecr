@@ -15,7 +15,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors, useThemePreference } from '@/hooks/useColors';
 import { useLanguage } from '@/hooks/useLanguage';
 import { useAuth } from '@/services/auth-context';
-import { useSecretaryChatService } from '../services/secretary-chat';
+import {
+  isSecretaryAuthenticationFailure,
+  useSecretaryChatService,
+} from '../services/secretary-chat';
 import {
   receiptDraft,
   receiptNeedsReview,
@@ -249,8 +252,10 @@ export default function MainRoute() {
         })(),
         ...(linked ? { recordLink: addOrigin(linked, result.conversationId, typeof objectValue(result.action).operationId === 'string' ? objectValue(result.action).operationId as string : null, result.turnId) } : {}),
       });
-    } catch {
-      setLocalError('لم أتمكن من الوصول للسكرتير. جرّب مرة أخرى.');
+    } catch (error) {
+      setLocalError(isSecretaryAuthenticationFailure(error)
+        ? (language === 'ar' ? 'انتهت جلسة الدخول. سجّل الدخول مرة أخرى.' : 'Your session expired. Sign in again.')
+        : (language === 'ar' ? 'تعذر تنفيذ الطلب. جرّب مرة أخرى.' : 'The request could not be completed. Try again.'));
     }
   }
   async function updateApproval(approval: Approval, status: ApprovalStatus, args?: Record<string, unknown>) {
@@ -277,8 +282,10 @@ export default function MainRoute() {
       setConversationId(response.conversationId);
       if (response.assistantMessage) appendMessage({ id: `approval-${Date.now()}`, role: 'assistant', text: response.assistantMessage, createdAt: new Date().toISOString(), ...(linked ? { recordLink: addOrigin(linked, response.conversationId, response.operationId, response.turnId) } : {}) });
       if (status === 'completed') await queryClient.invalidateQueries({ queryKey: ['records'] });
-    } catch {
-      setLocalError('لم يتم حفظ قرار الموافقة. جرّب مرة أخرى.');
+    } catch (error) {
+      setLocalError(isSecretaryAuthenticationFailure(error)
+        ? (language === 'ar' ? 'انتهت جلسة الدخول. سجّل الدخول مرة أخرى.' : 'Your session expired. Sign in again.')
+        : (language === 'ar' ? 'لم يتم حفظ قرار الموافقة. جرّب مرة أخرى.' : 'Your approval could not be saved. Try again.'));
     } finally {
       setBusyOperationId(null);
     }

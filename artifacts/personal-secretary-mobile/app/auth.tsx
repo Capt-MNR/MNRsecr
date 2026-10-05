@@ -30,7 +30,7 @@ export default function AuthRoute() {
   }
 
   return (
-    <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 24, backgroundColor: colors.background }} keyboardShouldPersistTaps="handled">
+    <ScrollView testID="auth-login-screen" contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 24, backgroundColor: colors.background }} keyboardShouldPersistTaps="handled">
       <View style={{ backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 18, padding: 24 }}>
         <Text style={{ color: colors.primary, fontSize: 14, fontWeight: '700', textAlign: 'right' }}>السكرتير الشخصي</Text>
         <Text style={{ color: colors.foreground, fontSize: 26, fontWeight: '700', marginTop: 8, textAlign: 'right' }}>

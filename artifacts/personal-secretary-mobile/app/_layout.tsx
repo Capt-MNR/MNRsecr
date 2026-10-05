@@ -72,16 +72,15 @@ function RootLayoutNav() {
   }, [router]);
 
   if (loading) return null;
-  if (!user) {
-    return (
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="auth" />
-      </Stack>
-    );
-  }
   return (
     <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="index" />
+      <Stack.Protected guard={Boolean(user)}>
+        <Stack.Screen name="index" />
+        <Stack.Screen name="main" />
+      </Stack.Protected>
+      <Stack.Protected guard={!user}>
+        <Stack.Screen name="auth" />
+      </Stack.Protected>
     </Stack>
   );
 }

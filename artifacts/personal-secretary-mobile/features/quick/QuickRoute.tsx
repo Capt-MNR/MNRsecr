@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { useLanguage } from '@/hooks/useLanguage';
 import {
+  isSecretaryAuthenticationFailure,
   useSecretaryChatService,
 } from '../../services/secretary-chat';
 import {
@@ -216,9 +217,18 @@ export default function QuickRoute() {
         ...(linked ? { recordLink: addOrigin(linked, result.conversationId, typeof objectValue(result.action).operationId === 'string' ? objectValue(result.action).operationId as string : null, result.turnId) } : {}),
       });
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch {
-      setLocalError('لم أتمكن من الوصول للسكرتير. جرّب مرة أخرى.');
-      appendMessage({ id: `error-${Date.now()}`, role: 'assistant', text: 'حصلت مشكلة مؤقتة في الاتصال. رسالتك لم تُنفّذ.', createdAt: new Date().toISOString() });
+    } catch (error) {
+      if (isSecretaryAuthenticationFailure(error)) {
+        setLocalError(localized(language, 'انتهت جلسة الدخول. سجّل الدخول مرة أخرى.', 'Your session expired. Sign in again.'));
+      } else {
+        setLocalError(localized(language, 'تعذر تنفيذ الطلب. جرّب مرة أخرى.', 'The request could not be completed. Try again.'));
+        appendMessage({
+          id: `error-${Date.now()}`,
+          role: 'assistant',
+          text: localized(language, 'تعذر تنفيذ الطلب. لم يُحفظ أي تغيير.', 'The request could not be completed. No changes were saved.'),
+          createdAt: new Date().toISOString(),
+        });
+      }
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       actionGuardRef.current.endTurn();
@@ -252,8 +262,10 @@ export default function QuickRoute() {
       if (response.assistantMessage) appendMessage({ id: `approval-${Date.now()}`, role: 'assistant', text: response.assistantMessage, createdAt: new Date().toISOString(), ...(linked ? { recordLink: addOrigin(linked, response.conversationId, response.operationId, response.turnId) } : {}) });
       if (status === 'completed') await queryClient.invalidateQueries({ queryKey: ['records'] });
       await Haptics.notificationAsync(status === 'completed' ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Warning);
-    } catch {
-      setLocalError('لم يتم حفظ قرار الموافقة. جرّب مرة أخرى.');
+    } catch (error) {
+      setLocalError(isSecretaryAuthenticationFailure(error)
+        ? localized(language, 'انتهت جلسة الدخول. سجّل الدخول مرة أخرى.', 'Your session expired. Sign in again.')
+        : localized(language, 'لم يتم حفظ قرار الموافقة. جرّب مرة أخرى.', 'Your approval could not be saved. Try again.'));
     } finally {
       actionGuardRef.current.endApproval(approval.operationId);
       setBusyOperationId(null);
