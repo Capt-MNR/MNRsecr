@@ -1800,8 +1800,7 @@ export async function listSecondBrainMemoryHistory(
         eq(secondBrainMemoryHistoryTable.tenantId, identity.tenantId),
         eq(secondBrainMemoryHistoryTable.ownerUserId, identity.userId),
       ))
-      .orderBy(desc(secondBrainMemoryHistoryTable.recordedAt))
-      .limit(100),
+      .orderBy(desc(secondBrainMemoryHistoryTable.recordedAt)),
   ]);
   if (!current[0] && historyRows.length === 0) return null;
   const versions: SecondBrainMemoryHistoryItem[] = historyRows.map((version) => ({

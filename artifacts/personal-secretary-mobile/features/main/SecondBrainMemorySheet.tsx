@@ -12,7 +12,10 @@ import {
   useRestoreSecondBrainMemory,
   useCreateSecondBrainMemory,
   useEditSecondBrainMemory,
+  useListSecondBrainMemoryHistory,
+  getListSecondBrainMemoryHistoryQueryKey,
   type SecondBrainMemory,
+  type SecondBrainMemoryHistoryItem,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -49,6 +52,26 @@ function formatDate(language: AppLanguage, value: Date | string | null) {
   }).format(new Date(value));
 }
 
+function formatRevisionDate(language: AppLanguage, value: string) {
+  return new Intl.DateTimeFormat(language === 'ar' ? 'ar-EG' : 'en-US', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(value));
+}
+
+function historyStateLabel(language: AppLanguage, state: SecondBrainMemoryHistoryItem['temporalState']) {
+  const labels: Record<SecondBrainMemoryHistoryItem['temporalState'], [string, string]> = {
+    current: ['الحالي', 'Current'],
+    historical: ['سابق', 'Previous'],
+    superseded: ['مستبدل', 'Superseded'],
+    expired: ['منتهي', 'Expired'],
+    archived: ['مؤرشف', 'Archived'],
+    conflict: ['متعارض', 'Conflict'],
+  };
+  const [arabic, english] = labels[state];
+  return localized(language, arabic, english);
+}
+
 export function SecondBrainMemorySheet({
   colors,
   language,
@@ -73,6 +96,9 @@ export function SecondBrainMemorySheet({
   const [editValue, setEditValue] = useState('');
   const [savingEditId, setSavingEditId] = useState<string | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
+  const [historyMemoryId, setHistoryMemoryId] = useState<string | null>(null);
+  const [restoringHistoryId, setRestoringHistoryId] = useState<string | null>(null);
+  const [historyRestoreErrorId, setHistoryRestoreErrorId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [createKind, setCreateKind] = useState<'fact' | 'preference'>('fact');
   const [createKey, setCreateKey] = useState('');
@@ -89,6 +115,13 @@ export function SecondBrainMemorySheet({
     query: {
       queryKey: getListSecondBrainMemoriesQueryKey(filters),
       enabled: visible,
+      staleTime: 0,
+    },
+  });
+  const memoryHistoryQuery = useListSecondBrainMemoryHistory(historyMemoryId ?? '', {
+    query: {
+      queryKey: getListSecondBrainMemoryHistoryQueryKey(historyMemoryId ?? ''),
+      enabled: visible && Boolean(historyMemoryId),
       staleTime: 0,
     },
   });
@@ -187,6 +220,46 @@ export function SecondBrainMemorySheet({
     setEditError(null);
     setSavingEditId(memory.id);
     editMutation.mutate({ memoryId: memory.id, data: { value, expectedRevision: memory.revision } });
+  }
+
+  function toggleMemoryHistory(memoryId: string) {
+    setHistoryRestoreErrorId(null);
+    setHistoryMemoryId((current) => current === memoryId ? null : memoryId);
+  }
+
+  function restoreMemoryVersion(memory: SecondBrainMemory, version: SecondBrainMemoryHistoryItem) {
+    if (
+      status !== 'active'
+      || memory.kind === 'alias'
+      || version.revision >= memory.revision
+      || version.value === memory.value
+      || editMutation.isPending
+    ) return;
+
+    const restoreKey = `${memory.id}:${version.revision}`;
+    setRestoringHistoryId(restoreKey);
+    setHistoryRestoreErrorId(null);
+    editMutation.mutate(
+      {
+        memoryId: memory.id,
+        data: { value: version.value, expectedRevision: memory.revision },
+      },
+      {
+        onSuccess: async () => {
+          await queryClient.invalidateQueries({
+            queryKey: getListSecondBrainMemoryHistoryQueryKey(memory.id),
+          });
+          setRestoringHistoryId(null);
+        },
+        onError: async () => {
+          await queryClient.invalidateQueries({
+            queryKey: getListSecondBrainMemoryHistoryQueryKey(memory.id),
+          });
+          setRestoringHistoryId(null);
+          setHistoryRestoreErrorId(memory.id);
+        },
+      },
+    );
   }
 
   function saveNewMemory() {
@@ -633,6 +706,103 @@ export function SecondBrainMemorySheet({
                       {localized(language, 'آخر تأكيد', 'Confirmed')} · {formatDate(language, memory.lastConfirmedAt)}
                       {status === 'archived' ? ` · ${localized(language, 'مؤرشفة', 'Archived')}` : ''}
                     </Text>
+                    <View style={[styles.historyHeader, { borderTopColor: colors.border }]}>
+                      <Text style={[styles.meta, { color: colors.mutedForeground }]}>
+                        {localized(language, 'سجل التغييرات', 'Change history')}
+                      </Text>
+                      <Pressable
+                        testID={`memory-history-toggle-${memory.id}`}
+                        accessibilityRole="button"
+                        accessibilityState={{ expanded: historyMemoryId === memory.id }}
+                        accessibilityLabel={localized(language, `عرض سجل ${memory.key}`, `View history for ${memory.key}`)}
+                        onPress={() => toggleMemoryHistory(memory.id)}
+                        style={styles.historyToggle}
+                      >
+                        <Feather
+                          name={historyMemoryId === memory.id ? 'chevron-up' : 'clock'}
+                          size={14}
+                          color={colors.primary}
+                        />
+                        <Text style={[styles.historyToggleText, { color: colors.primary }]}>
+                          {historyMemoryId === memory.id
+                            ? localized(language, 'إخفاء', 'Hide')
+                            : localized(language, 'عرض', 'Review')}
+                        </Text>
+                      </Pressable>
+                    </View>
+                    {historyMemoryId === memory.id && (
+                      <View style={[styles.historyPanel, { borderColor: colors.border, backgroundColor: colors.card }]}>
+                        {memoryHistoryQuery.isLoading ? (
+                          <ActivityIndicator size="small" color={colors.primary} />
+                        ) : memoryHistoryQuery.isError ? (
+                          <View style={styles.historyState}>
+                            <Text style={[styles.meta, { color: colors.destructive }]}>
+                              {localized(language, 'تعذر تحميل سجل التغييرات.', 'Could not load revision history.')}
+                            </Text>
+                            <Pressable
+                              accessibilityRole="button"
+                              onPress={() => void memoryHistoryQuery.refetch()}
+                            >
+                              <Text style={[styles.historyToggleText, { color: colors.primary }]}>
+                                {localized(language, 'حاول مرة أخرى', 'Try again')}
+                              </Text>
+                            </Pressable>
+                          </View>
+                        ) : (memoryHistoryQuery.data?.versions.length ?? 0) === 0 ? (
+                          <Text style={[styles.meta, { color: colors.mutedForeground }]}>
+                            {localized(language, 'لا توجد إصدارات محفوظة.', 'No saved revisions yet.')}
+                          </Text>
+                        ) : (
+                          [...(memoryHistoryQuery.data?.versions ?? [])]
+                            .sort((left, right) => right.revision - left.revision)
+                            .map((version) => {
+                              const restoreKey = `${memory.id}:${version.revision}`;
+                              const canRestore = status === 'active'
+                                && memory.kind !== 'alias'
+                                && version.revision < memory.revision
+                                && version.value !== memory.value;
+                              return (
+                                <View key={`${version.id}:${version.revision}`} style={[styles.historyItem, { borderBottomColor: colors.border }]}>
+                                  <View style={styles.historyItemTop}>
+                                    <Text style={[styles.historyRevision, { color: colors.foreground }]}>
+                                      {localized(language, `الإصدار ${version.revision}`, `Revision ${version.revision}`)}
+                                    </Text>
+                                    <Text style={[styles.historyStateLabel, { color: version.temporalState === 'current' ? colors.primary : colors.mutedForeground }]}>
+                                      {historyStateLabel(language, version.temporalState)}
+                                    </Text>
+                                  </View>
+                                  <Text style={[styles.historyValue, { color: colors.foreground }]}>{version.value}</Text>
+                                  <Text style={[styles.meta, { color: colors.mutedForeground }]}>
+                                    {formatRevisionDate(language, version.recordedAt)}
+                                  </Text>
+                                  {canRestore && (
+                                    <Pressable
+                                      testID={`memory-history-restore-${memory.id}-${version.revision}`}
+                                      accessibilityRole="button"
+                                      accessibilityLabel={localized(language, `استرجاع الإصدار ${version.revision}`, `Restore revision ${version.revision}`)}
+                                      disabled={editMutation.isPending}
+                                      onPress={() => restoreMemoryVersion(memory, version)}
+                                      style={[styles.historyRestore, { borderColor: colors.border, opacity: editMutation.isPending ? 0.55 : 1 }]}
+                                    >
+                                      {restoringHistoryId === restoreKey
+                                        ? <ActivityIndicator size="small" color={colors.primary} />
+                                        : <Feather name="rotate-ccw" size={12} color={colors.primary} />}
+                                      <Text style={[styles.historyToggleText, { color: colors.primary }]}>
+                                        {localized(language, 'استرجاع هذه القيمة', 'Restore this value')}
+                                      </Text>
+                                    </Pressable>
+                                  )}
+                                </View>
+                              );
+                            })
+                        )}
+                        {historyRestoreErrorId === memory.id && (
+                          <Text accessibilityLiveRegion="polite" style={[styles.meta, { color: colors.destructive }]}>
+                            {localized(language, 'تغيرت الذاكرة في مكان آخر. حدّث السجل ثم راجع القيمة الحالية.', 'This memory changed elsewhere. History was refreshed; review the current value.')}
+                          </Text>
+                        )}
+                      </View>
+                    )}
                   </View>
                 );
               })}
@@ -941,6 +1111,68 @@ const styles = StyleSheet.create({
   },
   meta: {
     fontSize: 10,
+  },
+  historyHeader: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  historyToggle: {
+    minHeight: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 4,
+  },
+  historyToggleText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  historyPanel: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  historyState: {
+    alignItems: 'center',
+    gap: 7,
+    paddingVertical: 12,
+  },
+  historyItem: {
+    gap: 6,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  historyItemTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  historyRevision: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  historyStateLabel: {
+    fontSize: 9,
+    fontWeight: '600',
+  },
+  historyValue: {
+    fontSize: 12,
+    lineHeight: 19,
+  },
+  historyRestore: {
+    alignSelf: 'flex-start',
+    minHeight: 30,
+    borderWidth: 1,
+    borderRadius: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 9,
   },
   empty: {
     borderWidth: 1,

@@ -418,6 +418,63 @@ test("manual memory edits use revision checks, preserve history, and reject alia
   await cleanup();
 });
 
+test("restoring an earlier memory value creates a new revision without losing intervening versions", async () => {
+  await cleanup();
+  const original = await rememberSecondBrain(identity, {
+    memoryKind: "preference",
+    key: "profile.reply_style",
+    value: "Concise replies",
+    sourceKind: "api_user_entry",
+  });
+  const second = await editSecondBrainMemory(
+    identity,
+    original.id,
+    "Detailed replies",
+    original.revision,
+  );
+  let latest = await editSecondBrainMemory(
+    identity,
+    original.id,
+    "Replies with examples",
+    second!.revision,
+  );
+  for (let revision = 0; revision < 100; revision += 1) {
+    latest = await editSecondBrainMemory(
+      identity,
+      original.id,
+      `Intermediate wording ${revision + 1}`,
+      latest!.revision,
+    );
+  }
+  const earlier = (await listSecondBrainMemoryHistory(identity, original.id))
+    ?.find((version) => version.revision === original.revision);
+  assert.equal(earlier?.value, original.value);
+
+  const restored = await editSecondBrainMemory(
+    identity,
+    original.id,
+    earlier!.value,
+    latest!.revision,
+  );
+  assert.equal(restored?.revision, latest!.revision + 1);
+  assert.equal(restored?.value, original.value);
+
+  const history = await listSecondBrainMemoryHistory(identity, original.id);
+  assert.equal(history?.length, restored!.revision);
+  assert.deepEqual(history?.slice(0, 4).map((version) => [version.revision, version.value]), [
+    [1, "Concise replies"],
+    [2, "Detailed replies"],
+    [3, "Replies with examples"],
+    [4, "Intermediate wording 1"],
+  ]);
+  assert.equal(history?.at(-1)?.temporalState, "current");
+  await assert.rejects(
+    editSecondBrainMemory(identity, original.id, "Stale restore", latest!.revision),
+    SecondBrainMemoryRevisionConflictError,
+  );
+  await cleanup();
+});
+
 test("stores explicit memories with replacement and tenant isolation", async () => {
   await cleanup();
   await rememberSecondBrain(identity, {
