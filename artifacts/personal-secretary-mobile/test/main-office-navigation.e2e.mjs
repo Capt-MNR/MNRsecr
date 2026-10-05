@@ -701,6 +701,23 @@ try {
       darkMainBackgrounds.find((color) => color !== "rgba(0, 0, 0, 0)" && color !== "transparent"),
       "dark-mode text should remain distinct from the Main surface",
     );
+    await browser.page.evaluate(`document.querySelector('[data-testid="open-main-drawer"]').click()`);
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="drawer-logout"]') !== null`,
+      "workspace drawer before logout",
+    );
+    await browser.page.evaluate(`document.querySelector('[data-testid="drawer-logout"]').click()`);
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="auth-login-screen"]') !== null`,
+      "login screen after the session is cleared",
+    );
+    assert.equal(
+      await browser.page.evaluate("location.pathname"),
+      "/auth",
+      "clearing the session must remove Quick and Main from navigation",
+    );
   } finally {
     browser.page.close();
     await closeProcess(browser.child);
