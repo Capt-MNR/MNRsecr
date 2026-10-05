@@ -87,6 +87,104 @@ paths:
       summary: Revoke the current session
       responses:
         "204": { description: Session revoked }
+  /auth/oauth/start:
+    post:
+      operationId: startAuthOAuth
+      tags: [auth]
+      summary: Start Google or Microsoft sign-in or account linking
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AuthOAuthStartInput" }
+      responses:
+        "200": { description: Provider authorization URL, content: { application/json: { schema: { $ref: "#/components/schemas/AuthOAuthStartResponse" } } } }
+        "400": { description: Invalid OAuth request, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "401": { description: Authentication or password verification required, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "503": { description: OAuth provider is not configured, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+  /auth/oauth/linked:
+    get:
+      operationId: getAuthOAuthLinkedProviders
+      tags: [auth]
+      summary: List sign-in providers linked to the current account
+      responses:
+        "200": { description: Linked providers, content: { application/json: { schema: { $ref: "#/components/schemas/AuthOAuthLinkedProvidersResponse" } } } }
+        "401": { description: Authentication required, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+  /auth/oauth/linked/{provider}:
+    delete:
+      operationId: unlinkAuthOAuthProvider
+      tags: [auth]
+      summary: Remove a provider sign-in link from the current account
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema: { type: string, enum: [google, microsoft] }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AuthOAuthUnlinkInput" }
+      responses:
+        "204": { description: Provider unlinked; existing account data is unchanged }
+        "400": { description: Invalid provider or request, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "401": { description: Authentication or password verification required, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "404": { description: Provider not linked, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+  /auth/oauth/ticket/exchange:
+    post:
+      operationId: exchangeAuthOAuthTicket
+      tags: [auth]
+      summary: Exchange a one-time mobile OAuth ticket for an app session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AuthOAuthTicketInput" }
+      responses:
+        "200": { description: Authenticated session, content: { application/json: { schema: { $ref: "#/components/schemas/AuthSessionResponse" } } } }
+        "401": { description: Invalid or expired ticket, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+  /auth/oauth/google/callback:
+    get:
+      operationId: completeGoogleOAuthCallback
+      tags: [auth]
+      summary: Complete the Google OAuth redirect
+      parameters:
+        - name: code
+          in: query
+          required: false
+          schema: { type: string }
+        - name: state
+          in: query
+          required: true
+          schema: { type: string }
+        - name: error
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        "302": { description: Redirect to the web app or mobile app }
+        "400": { description: Invalid OAuth callback, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+  /auth/oauth/microsoft/callback:
+    get:
+      operationId: completeMicrosoftOAuthCallback
+      tags: [auth]
+      summary: Complete the Microsoft OAuth redirect
+      parameters:
+        - name: code
+          in: query
+          required: false
+          schema: { type: string }
+        - name: state
+          in: query
+          required: true
+          schema: { type: string }
+        - name: error
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        "302": { description: Redirect to the web app or mobile app }
+        "400": { description: Invalid OAuth callback, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
   /email/gmail/account:
     get:
       operationId: getGmailEmailAccount
@@ -1926,6 +2024,47 @@ components:
         accessExpiresAt: { type: string, format: date-time }
         refreshExpiresAt: { type: string, format: date-time }
       required: [user, accessExpiresAt, refreshExpiresAt]
+    AuthOAuthProvider:
+      type: string
+      enum: [google, microsoft]
+    AuthOAuthStartInput:
+      type: object
+      properties:
+        provider: { $ref: "#/components/schemas/AuthOAuthProvider" }
+        mode: { type: string, enum: [login, link] }
+        client: { type: string, enum: [web, mobile] }
+        currentPassword: { type: string, minLength: 12, maxLength: 256 }
+        returnTo: { type: string, maxLength: 512 }
+      required: [provider, mode, client]
+    AuthOAuthStartResponse:
+      type: object
+      properties:
+        authorizationUrl: { type: string, format: uri }
+      required: [authorizationUrl]
+    AuthOAuthLinkedProvider:
+      type: object
+      properties:
+        provider: { $ref: "#/components/schemas/AuthOAuthProvider" }
+        emailAddress: { type: ["string", "null"], format: email }
+        linkedAt: { type: string, format: date-time }
+      required: [provider, emailAddress, linkedAt]
+    AuthOAuthLinkedProvidersResponse:
+      type: object
+      properties:
+        providers:
+          type: array
+          items: { $ref: "#/components/schemas/AuthOAuthLinkedProvider" }
+      required: [providers]
+    AuthOAuthUnlinkInput:
+      type: object
+      properties:
+        currentPassword: { type: string, minLength: 12, maxLength: 256 }
+      required: [currentPassword]
+    AuthOAuthTicketInput:
+      type: object
+      properties:
+        ticket: { type: string, minLength: 16, maxLength: 512 }
+      required: [ticket]
     GmailEmailAccountResponse:
       type: object
       properties:

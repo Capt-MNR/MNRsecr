@@ -20,3 +20,4 @@
 export * from "./personal-secretary";
 export * from "./email-connections";
 export * from "./google-calendar-connections";
+export * from "./auth-provider-identities";

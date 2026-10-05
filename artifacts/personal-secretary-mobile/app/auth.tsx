@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
 import { useAuth } from '@/services/auth-context';
@@ -7,7 +7,7 @@ import { useAuth } from '@/services/auth-context';
 export default function AuthRoute() {
   const colors = useColors();
   const router = useRouter();
-  const { login, signup } = useAuth();
+  const { login, loginWithProvider, signup } = useAuth();
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -29,6 +29,19 @@ export default function AuthRoute() {
     }
   }
 
+  async function signInWithProvider(provider: 'google' | 'microsoft') {
+    setPending(true);
+    setError('');
+    try {
+      await loginWithProvider(provider);
+      router.replace('/');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'تعذر تسجيل الدخول الخارجي.');
+    } finally {
+      setPending(false);
+    }
+  }
+
   return (
     <ScrollView testID="auth-login-screen" contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 24, backgroundColor: colors.background }} keyboardShouldPersistTaps="handled">
       <View style={{ backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 18, padding: 24 }}>
@@ -45,6 +58,30 @@ export default function AuthRoute() {
         <Pressable disabled={pending || !email || password.length < 12} onPress={() => void submit()} style={{ backgroundColor: colors.primary, borderRadius: 10, padding: 14, marginTop: 20, opacity: pending || !email || password.length < 12 ? 0.5 : 1 }}>
           <Text style={{ color: colors.primaryForeground, textAlign: 'center', fontWeight: '700' }}>{pending ? 'جارٍ المعالجة…' : mode === 'login' ? 'دخول' : 'إنشاء الحساب'}</Text>
         </Pressable>
+        {mode === 'login' && Platform.OS !== 'web' && (
+          <>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 18 }}>
+              <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+              <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>أو سجّل الدخول باستخدام</Text>
+              <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+            </View>
+            {(['google', 'microsoft'] as const).map((provider) => (
+              <Pressable
+                key={provider}
+                disabled={pending}
+                onPress={() => void signInWithProvider(provider)}
+                style={{ borderColor: colors.border, borderWidth: 1, borderRadius: 10, padding: 13, marginTop: 10, opacity: pending ? 0.5 : 1 }}
+              >
+                <Text style={{ color: colors.foreground, textAlign: 'center', fontWeight: '600' }}>
+                  {provider === 'google' ? 'المتابعة باستخدام Google' : 'المتابعة باستخدام Microsoft'}
+                </Text>
+              </Pressable>
+            ))}
+            <Text style={{ color: colors.mutedForeground, fontSize: 11, lineHeight: 17, textAlign: 'center', marginTop: 8 }}>
+              يجب ربط المزوّد بحسابك الحالي أولًا من الإعدادات.
+            </Text>
+          </>
+        )}
         <Pressable onPress={() => { setMode(mode === 'login' ? 'signup' : 'login'); setError(''); }} style={{ padding: 14 }}>
           <Text style={{ color: colors.mutedForeground, textAlign: 'center' }}>{mode === 'login' ? 'ليس لديك حساب؟ أنشئ حسابًا' : 'لديك حساب؟ سجّل الدخول'}</Text>
         </Pressable>

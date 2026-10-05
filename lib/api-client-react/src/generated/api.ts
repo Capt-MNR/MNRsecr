@@ -27,6 +27,11 @@ import type {
   ApprovalOperation,
   ApprovalResponse,
   AuthCredentials,
+  AuthOAuthLinkedProvidersResponse,
+  AuthOAuthStartInput,
+  AuthOAuthStartResponse,
+  AuthOAuthTicketInput,
+  AuthOAuthUnlinkInput,
   AuthSessionResponse,
   AuthSignupInput,
   Candidate,
@@ -34,6 +39,8 @@ import type {
   ClaimAgentWorkRun200,
   CompleteGmailEmailOAuthParams,
   CompleteGoogleCalendarOAuthParams,
+  CompleteGoogleOAuthCallbackParams,
+  CompleteMicrosoftOAuthCallbackParams,
   ConversationDetail,
   ConversationListResponse,
   CreateAgentWork201,
@@ -541,6 +548,516 @@ export const useLogout = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getLogoutMutationOptions(options));
     }
+
+export const getStartAuthOAuthUrl = () => {
+
+
+
+
+  return `/api/auth/oauth/start`
+}
+
+/**
+ * @summary Start Google or Microsoft sign-in or account linking
+ */
+export const startAuthOAuth = async (authOAuthStartInput: AuthOAuthStartInput, options?: Parameters<typeof customFetch>[1]): Promise<AuthOAuthStartResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<AuthOAuthStartResponse>(getStartAuthOAuthUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(authOAuthStartInput)
+  }
+);}
+
+
+
+
+
+export const getStartAuthOAuthMutationKey = () => ['startAuthOAuth'] as const;
+
+export const getStartAuthOAuthMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startAuthOAuth>>, TError,StartAuthOAuthMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startAuthOAuth>>, TError,StartAuthOAuthMutationVariables, TContext> => {
+
+const mutationKey = getStartAuthOAuthMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startAuthOAuth>>, StartAuthOAuthMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  startAuthOAuth(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartAuthOAuthMutationResult = NonNullable<Awaited<ReturnType<typeof startAuthOAuth>>>
+    export type StartAuthOAuthMutationBody = BodyType<AuthOAuthStartInput>
+    export type StartAuthOAuthMutationError = ErrorType<ErrorResponse>
+    export type StartAuthOAuthMutationVariables = {data: BodyType<AuthOAuthStartInput>}
+
+    /**
+ * @summary Start Google or Microsoft sign-in or account linking
+ */
+export const useStartAuthOAuth = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startAuthOAuth>>, TError,StartAuthOAuthMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof startAuthOAuth>>,
+        TError,
+        StartAuthOAuthMutationVariables,
+        TContext
+      > => {
+      return useMutation(getStartAuthOAuthMutationOptions(options));
+    }
+
+export const getGetAuthOAuthLinkedProvidersUrl = () => {
+
+
+
+
+  return `/api/auth/oauth/linked`
+}
+
+/**
+ * @summary List sign-in providers linked to the current account
+ */
+export const getAuthOAuthLinkedProviders = async ( options?: Parameters<typeof customFetch>[1]): Promise<AuthOAuthLinkedProvidersResponse> => {
+
+  return customFetch<AuthOAuthLinkedProvidersResponse>(getGetAuthOAuthLinkedProvidersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAuthOAuthLinkedProvidersQueryKey = () => {
+    return [
+    `/api/auth/oauth/linked`
+    ] as const;
+    }
+
+
+export const getGetAuthOAuthLinkedProvidersQueryOptions = <TData = Awaited<ReturnType<typeof getAuthOAuthLinkedProviders>>, TError = ErrorType<ErrorResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAuthOAuthLinkedProviders>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAuthOAuthLinkedProvidersQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAuthOAuthLinkedProviders>>> = ({ signal }) => getAuthOAuthLinkedProviders({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAuthOAuthLinkedProviders>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAuthOAuthLinkedProvidersQueryResult = NonNullable<Awaited<ReturnType<typeof getAuthOAuthLinkedProviders>>>
+export type GetAuthOAuthLinkedProvidersQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary List sign-in providers linked to the current account
+ */
+
+export function useGetAuthOAuthLinkedProviders<TData = Awaited<ReturnType<typeof getAuthOAuthLinkedProviders>>, TError = ErrorType<ErrorResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAuthOAuthLinkedProviders>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAuthOAuthLinkedProvidersQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUnlinkAuthOAuthProviderUrl = (provider: 'google' | 'microsoft',) => {
+
+
+
+
+  return `/api/auth/oauth/linked/${provider}`
+}
+
+/**
+ * @summary Remove a provider sign-in link from the current account
+ */
+export const unlinkAuthOAuthProvider = async (provider: 'google' | 'microsoft',
+    authOAuthUnlinkInput: AuthOAuthUnlinkInput, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<void>(getUnlinkAuthOAuthProviderUrl(provider),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(authOAuthUnlinkInput)
+  }
+);}
+
+
+
+
+
+export const getUnlinkAuthOAuthProviderMutationKey = () => ['unlinkAuthOAuthProvider'] as const;
+
+export const getUnlinkAuthOAuthProviderMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unlinkAuthOAuthProvider>>, TError,UnlinkAuthOAuthProviderMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof unlinkAuthOAuthProvider>>, TError,UnlinkAuthOAuthProviderMutationVariables, TContext> => {
+
+const mutationKey = getUnlinkAuthOAuthProviderMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof unlinkAuthOAuthProvider>>, UnlinkAuthOAuthProviderMutationVariables> = (props) => {
+          const {provider,data} = props ?? {};
+
+          return  unlinkAuthOAuthProvider(provider,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UnlinkAuthOAuthProviderMutationResult = NonNullable<Awaited<ReturnType<typeof unlinkAuthOAuthProvider>>>
+    export type UnlinkAuthOAuthProviderMutationBody = BodyType<AuthOAuthUnlinkInput>
+    export type UnlinkAuthOAuthProviderMutationError = ErrorType<ErrorResponse>
+    export type UnlinkAuthOAuthProviderMutationVariables = {provider: 'google' | 'microsoft';data: BodyType<AuthOAuthUnlinkInput>}
+
+    /**
+ * @summary Remove a provider sign-in link from the current account
+ */
+export const useUnlinkAuthOAuthProvider = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unlinkAuthOAuthProvider>>, TError,UnlinkAuthOAuthProviderMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof unlinkAuthOAuthProvider>>,
+        TError,
+        UnlinkAuthOAuthProviderMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUnlinkAuthOAuthProviderMutationOptions(options));
+    }
+
+export const getExchangeAuthOAuthTicketUrl = () => {
+
+
+
+
+  return `/api/auth/oauth/ticket/exchange`
+}
+
+/**
+ * @summary Exchange a one-time mobile OAuth ticket for an app session
+ */
+export const exchangeAuthOAuthTicket = async (authOAuthTicketInput: AuthOAuthTicketInput, options?: Parameters<typeof customFetch>[1]): Promise<AuthSessionResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<AuthSessionResponse>(getExchangeAuthOAuthTicketUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(authOAuthTicketInput)
+  }
+);}
+
+
+
+
+
+export const getExchangeAuthOAuthTicketMutationKey = () => ['exchangeAuthOAuthTicket'] as const;
+
+export const getExchangeAuthOAuthTicketMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exchangeAuthOAuthTicket>>, TError,ExchangeAuthOAuthTicketMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof exchangeAuthOAuthTicket>>, TError,ExchangeAuthOAuthTicketMutationVariables, TContext> => {
+
+const mutationKey = getExchangeAuthOAuthTicketMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof exchangeAuthOAuthTicket>>, ExchangeAuthOAuthTicketMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  exchangeAuthOAuthTicket(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ExchangeAuthOAuthTicketMutationResult = NonNullable<Awaited<ReturnType<typeof exchangeAuthOAuthTicket>>>
+    export type ExchangeAuthOAuthTicketMutationBody = BodyType<AuthOAuthTicketInput>
+    export type ExchangeAuthOAuthTicketMutationError = ErrorType<ErrorResponse>
+    export type ExchangeAuthOAuthTicketMutationVariables = {data: BodyType<AuthOAuthTicketInput>}
+
+    /**
+ * @summary Exchange a one-time mobile OAuth ticket for an app session
+ */
+export const useExchangeAuthOAuthTicket = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exchangeAuthOAuthTicket>>, TError,ExchangeAuthOAuthTicketMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof exchangeAuthOAuthTicket>>,
+        TError,
+        ExchangeAuthOAuthTicketMutationVariables,
+        TContext
+      > => {
+      return useMutation(getExchangeAuthOAuthTicketMutationOptions(options));
+    }
+
+export const getCompleteGoogleOAuthCallbackUrl = (params: CompleteGoogleOAuthCallbackParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/auth/oauth/google/callback?${stringifiedParams}` : `/api/auth/oauth/google/callback`
+}
+
+/**
+ * @summary Complete the Google OAuth redirect
+ */
+export const completeGoogleOAuthCallback = async (params: CompleteGoogleOAuthCallbackParams, options?: Parameters<typeof customFetch>[1]): Promise<unknown> => {
+
+  return customFetch<unknown>(getCompleteGoogleOAuthCallbackUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getCompleteGoogleOAuthCallbackQueryKey = (params?: CompleteGoogleOAuthCallbackParams,) => {
+    return [
+    `/api/auth/oauth/google/callback`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getCompleteGoogleOAuthCallbackQueryOptions = <TData = Awaited<ReturnType<typeof completeGoogleOAuthCallback>>, TError = ErrorType<void | ErrorResponse>>(params: CompleteGoogleOAuthCallbackParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof completeGoogleOAuthCallback>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getCompleteGoogleOAuthCallbackQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof completeGoogleOAuthCallback>>> = ({ signal }) => completeGoogleOAuthCallback(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof completeGoogleOAuthCallback>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type CompleteGoogleOAuthCallbackQueryResult = NonNullable<Awaited<ReturnType<typeof completeGoogleOAuthCallback>>>
+export type CompleteGoogleOAuthCallbackQueryError = ErrorType<void | ErrorResponse>
+
+
+/**
+ * @summary Complete the Google OAuth redirect
+ */
+
+export function useCompleteGoogleOAuthCallback<TData = Awaited<ReturnType<typeof completeGoogleOAuthCallback>>, TError = ErrorType<void | ErrorResponse>>(
+ params: CompleteGoogleOAuthCallbackParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof completeGoogleOAuthCallback>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getCompleteGoogleOAuthCallbackQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCompleteMicrosoftOAuthCallbackUrl = (params: CompleteMicrosoftOAuthCallbackParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/auth/oauth/microsoft/callback?${stringifiedParams}` : `/api/auth/oauth/microsoft/callback`
+}
+
+/**
+ * @summary Complete the Microsoft OAuth redirect
+ */
+export const completeMicrosoftOAuthCallback = async (params: CompleteMicrosoftOAuthCallbackParams, options?: Parameters<typeof customFetch>[1]): Promise<unknown> => {
+
+  return customFetch<unknown>(getCompleteMicrosoftOAuthCallbackUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getCompleteMicrosoftOAuthCallbackQueryKey = (params?: CompleteMicrosoftOAuthCallbackParams,) => {
+    return [
+    `/api/auth/oauth/microsoft/callback`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getCompleteMicrosoftOAuthCallbackQueryOptions = <TData = Awaited<ReturnType<typeof completeMicrosoftOAuthCallback>>, TError = ErrorType<void | ErrorResponse>>(params: CompleteMicrosoftOAuthCallbackParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof completeMicrosoftOAuthCallback>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getCompleteMicrosoftOAuthCallbackQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof completeMicrosoftOAuthCallback>>> = ({ signal }) => completeMicrosoftOAuthCallback(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof completeMicrosoftOAuthCallback>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type CompleteMicrosoftOAuthCallbackQueryResult = NonNullable<Awaited<ReturnType<typeof completeMicrosoftOAuthCallback>>>
+export type CompleteMicrosoftOAuthCallbackQueryError = ErrorType<void | ErrorResponse>
+
+
+/**
+ * @summary Complete the Microsoft OAuth redirect
+ */
+
+export function useCompleteMicrosoftOAuthCallback<TData = Awaited<ReturnType<typeof completeMicrosoftOAuthCallback>>, TError = ErrorType<void | ErrorResponse>>(
+ params: CompleteMicrosoftOAuthCallbackParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof completeMicrosoftOAuthCallback>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getCompleteMicrosoftOAuthCallbackQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetGmailEmailAccountUrl = () => {
 

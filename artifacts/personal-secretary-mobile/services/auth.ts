@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
+import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
 import {
   customFetch,
@@ -13,6 +14,8 @@ export type AuthUser = {
   tenantId: string;
   email: string;
 };
+
+export type AuthProvider = 'google' | 'microsoft';
 
 type AuthResponse = {
   user: AuthUser;
@@ -40,6 +43,7 @@ const DEVELOPMENT_AUTH_USER: AuthUser = {
   tenantId: 'development-identity',
   email: 'development identity',
 };
+const MOBILE_OAUTH_REDIRECT_URI = 'personal-secretary-mobile://oauth';
 let accessToken: string | null = null;
 let refreshToken: string | null = null;
 let refreshPromise: Promise<boolean> | null = null;
@@ -173,6 +177,89 @@ export async function signup(email: string, password: string, name: string): Pro
     email,
     password,
     ...(name.trim() ? { name: name.trim() } : {}),
+  });
+}
+
+function providerErrorMessage(code: string | null): string {
+  if (code === 'provider_not_linked') return 'هذا المزوّد غير مرتبط بحسابك. سجّل الدخول بكلمة المرور أولًا ثم اربطه من الإعدادات.';
+  if (code === 'provider_cancelled') return 'أُلغيت عملية تسجيل الدخول.';
+  if (code === 'provider_already_linked') return 'هذا المزوّد مرتبط بحساب آخر أو يوجد له ربط حالي.';
+  if (code === 'provider_not_configured') return 'تسجيل الدخول بهذا المزوّد غير مهيأ بعد.';
+  return 'تعذر إكمال تسجيل الدخول الخارجي.';
+}
+
+async function openProviderAuthorization(
+  provider: AuthProvider,
+  mode: 'login' | 'link',
+  currentPassword?: string,
+): Promise<URL> {
+  if (Platform.OS === 'web') {
+    throw new Error('استخدم صفحة الويب لإدارة تسجيل الدخول الخارجي.');
+  }
+  const response = await customFetch<{ authorizationUrl: string }>('/api/auth/oauth/start', {
+    method: 'POST',
+    responseType: 'json',
+    skipAuthRefresh: true,
+    headers: { 'x-auth-transport': 'bearer' },
+    body: JSON.stringify({
+      provider,
+      mode,
+      client: 'mobile',
+      ...(currentPassword ? { currentPassword } : {}),
+    }),
+  });
+  const result = await WebBrowser.openAuthSessionAsync(
+    response.authorizationUrl,
+    MOBILE_OAUTH_REDIRECT_URI,
+  );
+  if (result.type !== 'success' || !result.url) {
+    throw new Error(providerErrorMessage('provider_cancelled'));
+  }
+  let callbackUrl: URL;
+  try {
+    callbackUrl = new URL(result.url);
+  } catch {
+    throw new Error(providerErrorMessage(null));
+  }
+  const errorCode = callbackUrl.searchParams.get('authError');
+  if (errorCode) throw new Error(providerErrorMessage(errorCode));
+  return callbackUrl;
+}
+
+export async function loginWithProvider(provider: AuthProvider): Promise<AuthUser> {
+  const callbackUrl = await openProviderAuthorization(provider, 'login');
+  const ticket = callbackUrl.searchParams.get('ticket');
+  if (!ticket) throw new Error(providerErrorMessage(null));
+  const response = await customFetch<AuthResponse>('/api/auth/oauth/ticket/exchange', {
+    method: 'POST',
+    responseType: 'json',
+    skipAuthRefresh: true,
+    headers: { 'x-auth-transport': 'bearer' },
+    body: JSON.stringify({ ticket }),
+  });
+  await saveTokens(response.accessToken, response.refreshToken);
+  await clearPersistedAccountState();
+  return response.user;
+}
+
+export async function linkProvider(
+  provider: AuthProvider,
+  currentPassword: string,
+): Promise<void> {
+  const callbackUrl = await openProviderAuthorization(provider, 'link', currentPassword);
+  if (callbackUrl.searchParams.get('authProviderLinked') !== provider) {
+    throw new Error(providerErrorMessage(callbackUrl.searchParams.get('authError')));
+  }
+}
+
+export async function unlinkProvider(
+  provider: AuthProvider,
+  currentPassword: string,
+): Promise<void> {
+  await customFetch(`/api/auth/oauth/linked/${provider}`, {
+    method: 'DELETE',
+    responseType: 'json',
+    body: JSON.stringify({ currentPassword }),
   });
 }
 

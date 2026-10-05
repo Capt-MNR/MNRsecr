@@ -332,3 +332,42 @@ export async function getAuthUser(identity: AuthIdentity): Promise<AuthUser | nu
     .limit(1);
   return row ? userFromRow(row, identity.tenantId) : null;
 }
+
+export async function verifyAuthUserPassword(
+  identity: AuthIdentity,
+  password: string,
+): Promise<boolean> {
+  const [row] = await db.select({
+    passwordHash: authUsersTable.passwordHash,
+  }).from(authUsersTable)
+    .innerJoin(authMembershipsTable, and(
+      eq(authMembershipsTable.userId, authUsersTable.id),
+      eq(authMembershipsTable.tenantId, identity.tenantId),
+    ))
+    .where(and(
+      eq(authUsersTable.id, identity.userId),
+      eq(authUsersTable.disabled, false),
+    ))
+    .limit(1);
+  return row ? verifyPassword(password, row.passwordHash) : false;
+}
+
+export async function issueAuthSessionForIdentity(
+  identity: AuthIdentity,
+): Promise<IssuedSession> {
+  const [row] = await db.select({
+    id: authUsersTable.id,
+    email: authUsersTable.email,
+  }).from(authUsersTable)
+    .innerJoin(authMembershipsTable, and(
+      eq(authMembershipsTable.userId, authUsersTable.id),
+      eq(authMembershipsTable.tenantId, identity.tenantId),
+    ))
+    .where(and(
+      eq(authUsersTable.id, identity.userId),
+      eq(authUsersTable.disabled, false),
+    ))
+    .limit(1);
+  if (!row) throw new AuthError(401, "AUTH_PROVIDER_NOT_LINKED");
+  return db.transaction((tx) => issueSession(tx, userFromRow(row, identity.tenantId)));
+}

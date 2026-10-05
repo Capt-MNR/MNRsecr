@@ -11,6 +11,7 @@ import {
   encryptEmailToken,
   isEmailTokenEncryptionKeyConfigured,
 } from "./email-token-crypto";
+import { getOAuthPublicOrigin } from "./oauth-public-origin";
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -35,10 +36,13 @@ export type GoogleCalendarOAuthConfig = {
 export function getGoogleCalendarOAuthConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): GoogleCalendarOAuthConfig | null {
-  if (env.NODE_ENV === "production" || env.GOOGLE_CALENDAR_ENABLED !== "true") return null;
-  const clientId = env.GOOGLE_CALENDAR_CLIENT_ID?.trim();
-  const clientSecret = env.GOOGLE_CALENDAR_CLIENT_SECRET?.trim();
-  const redirectUri = env.GOOGLE_CALENDAR_REDIRECT_URI?.trim();
+  if (env.GOOGLE_CALENDAR_ENABLED !== "true"
+    || (env.NODE_ENV === "production" && env.GOOGLE_OAUTH_CONSENT_VERIFIED !== "true")) return null;
+  const publicOrigin = getOAuthPublicOrigin(env);
+  const clientId = env.GOOGLE_CALENDAR_CLIENT_ID?.trim() || env.GOOGLE_OAUTH_CLIENT_ID?.trim();
+  const clientSecret = env.GOOGLE_CALENDAR_CLIENT_SECRET?.trim() || env.GOOGLE_OAUTH_CLIENT_SECRET?.trim();
+  const redirectUri = env.GOOGLE_CALENDAR_REDIRECT_URI?.trim()
+    || (publicOrigin ? `${publicOrigin}/api/calendar/google/oauth/callback` : "");
   const tokenEncryptionKey = env.EMAIL_TOKEN_ENCRYPTION_KEY?.trim();
   if (!clientId || !clientSecret || !redirectUri || !tokenEncryptionKey
     || !isEmailTokenEncryptionKeyConfigured(tokenEncryptionKey)) {

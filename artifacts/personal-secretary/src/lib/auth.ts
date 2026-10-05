@@ -6,11 +6,36 @@ export type AuthUser = {
   email: string;
 };
 
+export type AuthProvider = 'google' | 'microsoft';
+
 type AuthResponse = {
   user: AuthUser;
   accessExpiresAt: string;
   refreshExpiresAt: string;
 };
+
+export async function beginOAuth(
+  provider: AuthProvider,
+  mode: 'login' | 'link',
+  options: { currentPassword?: string; returnTo?: string } = {},
+): Promise<string> {
+  const returnTo = options.returnTo
+    ?? `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  const response = await customFetch<{ authorizationUrl: string }>('/api/auth/oauth/start', {
+    method: 'POST',
+    credentials: 'include',
+    responseType: 'json',
+    skipAuthRefresh: true,
+    body: JSON.stringify({
+      provider,
+      mode,
+      client: 'web',
+      returnTo,
+      ...(options.currentPassword ? { currentPassword: options.currentPassword } : {}),
+    }),
+  });
+  return response.authorizationUrl;
+}
 
 export async function getCurrentUser(): Promise<AuthUser | null> {
   try {

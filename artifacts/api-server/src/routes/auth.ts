@@ -1,6 +1,13 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod";
 import {
+  ExchangeAuthOAuthTicketBody,
+  GetAuthOAuthLinkedProvidersResponse,
+  StartAuthOAuthBody,
+  UnlinkAuthOAuthProviderBody,
+  UnlinkAuthOAuthProviderParams,
+} from "@workspace/api-zod";
+import {
   ACCESS_COOKIE,
   AuthError,
   REFRESH_COOKIE,
@@ -13,7 +20,15 @@ import {
   type IssuedSession,
 } from "../lib/auth";
 import { checkAuthAbuse } from "../lib/auth-abuse";
-import { getIdentity, requestId } from "./route-context";
+import {
+  completeExternalOAuthCallback,
+  exchangeExternalOAuthTicket,
+  getLinkedAuthProviders,
+  startExternalOAuth,
+  unlinkExternalAuthProvider,
+  type AuthProvider,
+} from "../lib/external-auth-oauth";
+import { getIdentity, requestId, requireIdentity } from "./route-context";
 
 const router: IRouter = Router();
 const credentialsSchema = z.object({
@@ -87,6 +102,36 @@ function sendAuthRateLimit(req: Request, res: Response, retryAfterSeconds: numbe
     requestId: requestId(req),
     retryable: true,
   });
+}
+
+function queryString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+async function handleExternalOAuthCallback(
+  provider: AuthProvider,
+  req: Request,
+  res: Response,
+): Promise<void> {
+  const state = queryString(req.query.state);
+  if (!state) {
+    res.redirect(302, "/?authError=oauth_failed");
+    return;
+  }
+  try {
+    const result = await completeExternalOAuthCallback({
+      provider,
+      state,
+      code: queryString(req.query.code),
+      providerError: queryString(req.query.error),
+    });
+    if (result.session) setSessionCookies(res, result.session);
+    res.redirect(302, result.redirectUrl);
+  } catch (error) {
+    const code = error instanceof AuthError ? error.code : "AUTH_OAUTH_CALLBACK_FAILED";
+    req.log.warn({ provider, code }, "External sign-in callback failed");
+    res.redirect(302, "/?authError=oauth_failed");
+  }
 }
 
 router.post("/auth/signup", async (req, res): Promise<void> => {
@@ -195,6 +240,91 @@ router.post("/auth/logout", async (req, res): Promise<void> => {
   });
   clearSessionCookies(res);
   res.status(204).end();
+});
+
+router.post("/auth/oauth/start", async (req, res): Promise<void> => {
+  const parsed = StartAuthOAuthBody.safeParse(req.body);
+  if (!parsed.success) {
+    sendAuthError(req, res, new AuthError(400, "AUTH_OAUTH_REQUEST_INVALID"));
+    return;
+  }
+  const abuse = checkAuthAbuse({
+    kind: "login",
+    ip: req.ip || req.socket.remoteAddress || "unknown",
+    identity: `oauth:${parsed.data.provider}:${parsed.data.mode}`,
+  });
+  if (!abuse.allowed) {
+    sendAuthRateLimit(req, res, abuse.retryAfterSeconds);
+    return;
+  }
+  try {
+    const authorizationUrl = await startExternalOAuth({
+      provider: parsed.data.provider,
+      mode: parsed.data.mode,
+      client: parsed.data.client,
+      currentPassword: parsed.data.currentPassword,
+      returnTo: parsed.data.returnTo,
+      identity: getIdentity(req),
+    });
+    res.json({ authorizationUrl });
+  } catch (error) {
+    sendAuthError(req, res, error);
+  }
+});
+
+router.get("/auth/oauth/linked", async (req, res): Promise<void> => {
+  const identity = requireIdentity(req, res);
+  if (!identity) return;
+  try {
+    const providers = await getLinkedAuthProviders(identity);
+    res.json(GetAuthOAuthLinkedProvidersResponse.parse({ providers }));
+  } catch (error) {
+    sendAuthError(req, res, error);
+  }
+});
+
+router.delete("/auth/oauth/linked/:provider", async (req, res): Promise<void> => {
+  const identity = requireIdentity(req, res);
+  if (!identity) return;
+  const parsedParams = UnlinkAuthOAuthProviderParams.safeParse(req.params);
+  const parsedBody = UnlinkAuthOAuthProviderBody.safeParse(req.body);
+  if (!parsedParams.success || !parsedBody.success) {
+    sendAuthError(req, res, new AuthError(400, "AUTH_OAUTH_REQUEST_INVALID"));
+    return;
+  }
+  try {
+    await unlinkExternalAuthProvider({
+      identity,
+      provider: parsedParams.data.provider,
+      currentPassword: parsedBody.data.currentPassword,
+    });
+    res.status(204).end();
+  } catch (error) {
+    sendAuthError(req, res, error);
+  }
+});
+
+router.post("/auth/oauth/ticket/exchange", async (req, res): Promise<void> => {
+  const parsed = ExchangeAuthOAuthTicketBody.safeParse(req.body);
+  if (!parsed.success) {
+    sendAuthError(req, res, new AuthError(401, "AUTH_OAUTH_TICKET_INVALID"));
+    return;
+  }
+  try {
+    const session = await exchangeExternalOAuthTicket(parsed.data.ticket);
+    setSessionCookies(res, session);
+    res.json(serializeSession(session, wantsBearer(req)));
+  } catch (error) {
+    sendAuthError(req, res, error);
+  }
+});
+
+router.get("/auth/oauth/google/callback", async (req, res): Promise<void> => {
+  await handleExternalOAuthCallback("google", req, res);
+});
+
+router.get("/auth/oauth/microsoft/callback", async (req, res): Promise<void> => {
+  await handleExternalOAuthCallback("microsoft", req, res);
 });
 
 export default router;

@@ -10,6 +10,7 @@ import {
   Unlink,
 } from "lucide-react";
 import {
+  getGetAuthOAuthLinkedProvidersQueryKey,
   getGetGoogleCalendarAccountQueryKey,
   getGetGmailEmailAccountQueryKey,
   useConnectGoogleCalendarAccount,
@@ -20,6 +21,7 @@ import {
   useGetGmailEmailAccount,
 } from "@workspace/api-client-react";
 import { Link, useLocation, useSearch } from "wouter";
+import AuthProvidersSection from "@/components/auth-providers-section";
 
 function EmailSettings() {
   const queryClient = useQueryClient();
@@ -48,10 +50,22 @@ function EmailSettings() {
     const params = new URLSearchParams(searchString);
     const emailStatus = params.get("email_connection");
     const calendarStatus = params.get("calendar_connection");
-    if (!emailStatus && !calendarStatus) return;
+    const authProviderLinked = params.get("authProviderLinked");
+    const authError = params.get("authError");
+    if (!emailStatus && !calendarStatus && !authProviderLinked && !authError) return;
     if (handledCallbackRef.current === searchString) return;
     handledCallbackRef.current = searchString;
-    if (calendarStatus) {
+    if (authProviderLinked) {
+      const providerName = authProviderLinked === "google" ? "Google" : "Microsoft";
+      setNotice(`تم ربط ${providerName} بحسابك الحالي.`);
+      void queryClient.invalidateQueries({ queryKey: getGetAuthOAuthLinkedProvidersQueryKey() });
+    } else if (authError) {
+      setNotice(authError === "provider_cancelled"
+        ? "أُلغيت عملية ربط طريقة تسجيل الدخول."
+        : authError === "provider_already_linked"
+          ? "هذا المزوّد مرتبط بحساب آخر أو يوجد له ربط حالي."
+          : "تعذر إكمال ربط طريقة تسجيل الدخول.");
+    } else if (calendarStatus) {
       if (calendarStatus === "connected") {
         setNotice("تم ربط Google Calendar. تحقق من عنوان الحساب والصلاحيات أدناه.");
         void queryClient.invalidateQueries({ queryKey: getGetGoogleCalendarAccountQueryKey() });
@@ -307,6 +321,7 @@ function EmailSettings() {
             </p>
           </div>
         </section>
+        <AuthProvidersSection />
       </div>
     </main>
   );

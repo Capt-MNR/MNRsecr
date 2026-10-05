@@ -7,6 +7,7 @@ import {
 } from "@workspace/db";
 import type { AgentWorkIdentity } from "./agent-work/types";
 import { decryptEmailToken, encryptEmailToken, isEmailTokenEncryptionKeyConfigured } from "./email-token-crypto";
+import { getOAuthPublicOrigin } from "./oauth-public-origin";
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -31,10 +32,13 @@ export type GmailOAuthConfig = {
 export function getGmailOAuthConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): GmailOAuthConfig | null {
-  if (env.NODE_ENV === "production" || env.EMAIL_GMAIL_ENABLED !== "true") return null;
-  const clientId = env.EMAIL_GMAIL_CLIENT_ID?.trim();
-  const clientSecret = env.EMAIL_GMAIL_CLIENT_SECRET?.trim();
-  const redirectUri = env.EMAIL_GMAIL_REDIRECT_URI?.trim();
+  if (env.EMAIL_GMAIL_ENABLED !== "true"
+    || (env.NODE_ENV === "production" && env.GOOGLE_OAUTH_CONSENT_VERIFIED !== "true")) return null;
+  const publicOrigin = getOAuthPublicOrigin(env);
+  const clientId = env.EMAIL_GMAIL_CLIENT_ID?.trim() || env.GOOGLE_OAUTH_CLIENT_ID?.trim();
+  const clientSecret = env.EMAIL_GMAIL_CLIENT_SECRET?.trim() || env.GOOGLE_OAUTH_CLIENT_SECRET?.trim();
+  const redirectUri = env.EMAIL_GMAIL_REDIRECT_URI?.trim()
+    || (publicOrigin ? `${publicOrigin}/api/email/gmail/oauth/callback` : "");
   const tokenEncryptionKey = env.EMAIL_TOKEN_ENCRYPTION_KEY?.trim();
   if (!clientId || !clientSecret || !redirectUri || !tokenEncryptionKey
     || !isEmailTokenEncryptionKeyConfigured(tokenEncryptionKey)) {

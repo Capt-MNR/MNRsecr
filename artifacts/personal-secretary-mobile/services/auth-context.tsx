@@ -2,10 +2,14 @@ import { createContext, useContext, useEffect, useMemo, useState, type PropsWith
 import { useQueryClient } from '@tanstack/react-query';
 import {
   login as loginRequest,
+  loginWithProvider as loginWithProviderRequest,
+  linkProvider as linkProviderRequest,
   logout as logoutRequest,
   restoreSession,
   setAuthSessionInvalidatedCallback,
   signup as signupRequest,
+  unlinkProvider as unlinkProviderRequest,
+  type AuthProvider,
   type AuthUser,
 } from './auth';
 
@@ -13,7 +17,10 @@ type AuthContextValue = {
   user: AuthUser | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithProvider: (provider: AuthProvider) => Promise<void>;
   signup: (email: string, password: string, name: string) => Promise<void>;
+  linkProvider: (provider: AuthProvider, currentPassword: string) => Promise<void>;
+  unlinkProvider: (provider: AuthProvider, currentPassword: string) => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -44,10 +51,23 @@ export function AuthProvider({ children }: PropsWithChildren) {
       queryClient.clear();
       setUser(nextUser);
     },
+    loginWithProvider: async (provider) => {
+      const nextUser = await loginWithProviderRequest(provider);
+      queryClient.clear();
+      setUser(nextUser);
+    },
     signup: async (email, password, name) => {
       const nextUser = await signupRequest(email, password, name);
       queryClient.clear();
       setUser(nextUser);
+    },
+    linkProvider: async (provider, currentPassword) => {
+      await linkProviderRequest(provider, currentPassword);
+      await queryClient.invalidateQueries({ queryKey: ['/api/auth/oauth/linked'] });
+    },
+    unlinkProvider: async (provider, currentPassword) => {
+      await unlinkProviderRequest(provider, currentPassword);
+      await queryClient.invalidateQueries({ queryKey: ['/api/auth/oauth/linked'] });
     },
     logout: async () => {
       try {

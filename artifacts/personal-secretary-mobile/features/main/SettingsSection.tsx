@@ -1,10 +1,16 @@
 import { Feather } from '@expo/vector-icons';
 import * as Notifications from 'expo-notifications';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, AppState, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  getGetAuthOAuthLinkedProvidersQueryKey,
+  useGetAuthOAuthLinkedProviders,
+} from '@workspace/api-client-react';
+import { ActivityIndicator, AppState, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { useColors, ThemePreference } from '@/hooks/useColors';
 import type { AppLanguage } from '@/hooks/useLanguage';
 import type { AssistantPreferences } from './index';
+import { useAuth } from '@/services/auth-context';
+import type { AuthProvider } from '@/services/auth';
 
 function copy(language: AppLanguage, ar: string, en: string) {
   return language === 'ar' ? ar : en;
@@ -35,7 +41,18 @@ export function SettingsSection({
 }) {
   const [permission, setPermission] = useState<PermissionState>(Platform.OS === 'web' ? 'unsupported' : 'checking');
   const [permissionBusy, setPermissionBusy] = useState(false);
+  const [authPassword, setAuthPassword] = useState('');
+  const [authProviderBusy, setAuthProviderBusy] = useState<AuthProvider | null>(null);
+  const [authProviderError, setAuthProviderError] = useState('');
+  const [authProviderNotice, setAuthProviderNotice] = useState('');
   const rtl = language === 'ar';
+  const { linkProvider, unlinkProvider } = useAuth();
+  const linkedProvidersQuery = useGetAuthOAuthLinkedProviders({
+    query: {
+      queryKey: getGetAuthOAuthLinkedProvidersQueryKey(),
+      enabled: Platform.OS !== 'web',
+    },
+  });
 
   const refreshPermission = useCallback(async () => {
     if (Platform.OS === 'web') {
@@ -77,6 +94,31 @@ export function SettingsSection({
       await Linking.openSettings();
     } catch {
       setPermission('error');
+    }
+  }
+
+  async function toggleAuthProvider(provider: AuthProvider) {
+    if (!authPassword || authProviderBusy) return;
+    const linked = linkedProvidersQuery.data?.providers.some((item) => item.provider === provider) ?? false;
+    setAuthProviderBusy(provider);
+    setAuthProviderError('');
+    setAuthProviderNotice('');
+    try {
+      if (linked) {
+        await unlinkProvider(provider, authPassword);
+        setAuthProviderNotice(copy(language, 'أُلغي ربط المزوّد. لم تتغير بيانات حسابك.', 'Provider unlinked. Your account data was not changed.'));
+      } else {
+        await linkProvider(provider, authPassword);
+        setAuthProviderNotice(copy(language, 'تم ربط المزوّد بحسابك الحالي.', 'Provider linked to your existing account.'));
+      }
+      setAuthPassword('');
+      await linkedProvidersQuery.refetch();
+    } catch (error) {
+      setAuthProviderError(error instanceof Error
+        ? error.message
+        : copy(language, 'تعذر تحديث ربط تسجيل الدخول.', 'Could not update the sign-in link.'));
+    } finally {
+      setAuthProviderBusy(null);
     }
   }
 
@@ -178,6 +220,91 @@ export function SettingsSection({
         </View>
         <Feather name={rtl ? 'chevron-left' : 'chevron-right'} size={17} color={colors.primary} />
       </Pressable>
+
+      {Platform.OS !== 'web' ? (
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.sectionEyebrow, { color: colors.primary, textAlign: rtl ? 'right' : 'left' }]}>
+            {copy(language, 'الحساب', 'ACCOUNT')}
+          </Text>
+          <Text style={[styles.sectionTitle, { color: colors.foreground, textAlign: rtl ? 'right' : 'left' }]}>
+            {copy(language, 'طرق تسجيل الدخول', 'Sign-in methods')}
+          </Text>
+          <Text style={[styles.helper, { color: colors.mutedForeground, textAlign: rtl ? 'right' : 'left' }]}>
+            {copy(language, 'اربط Google أو Microsoft بحسابك الحالي. لا يؤدي الربط إلى إنشاء حساب جديد أو نقل بياناتك.', 'Link Google or Microsoft to your existing account. Linking does not create a new account or move your data.')}
+          </Text>
+          <TextInput
+            accessibilityLabel={copy(language, 'كلمة مرور الحساب الحالية', 'Current account password')}
+            placeholder={copy(language, 'أدخل كلمة مرور حسابك الحالية', 'Enter your current account password')}
+            placeholderTextColor={colors.mutedForeground}
+            value={authPassword}
+            onChangeText={setAuthPassword}
+            secureTextEntry
+            autoCapitalize="none"
+            style={{
+              color: colors.foreground,
+              borderColor: colors.input,
+              borderWidth: 1,
+              borderRadius: 11,
+              padding: 12,
+              textAlign: rtl ? 'right' : 'left',
+            }}
+          />
+          {linkedProvidersQuery.isLoading ? (
+            <ActivityIndicator color={colors.primary} />
+          ) : linkedProvidersQuery.isError ? (
+            <Text style={[styles.helper, { color: colors.destructive, textAlign: rtl ? 'right' : 'left' }]}>
+              {copy(language, 'تعذر تحميل طرق تسجيل الدخول؛ أعد المحاولة قبل تغيير أي ربط.', 'Could not load sign-in methods. Retry before changing a link.')}
+            </Text>
+          ) : (
+            (['google', 'microsoft'] as const).map((provider) => {
+              const linked = linkedProvidersQuery.data?.providers.find((item) => item.provider === provider);
+              return (
+                <View key={provider} style={{ gap: 6 }}>
+                  <Text style={[styles.helper, { color: colors.mutedForeground, textAlign: rtl ? 'right' : 'left' }]}>
+                    {linked
+                      ? `${provider === 'google' ? 'Google' : 'Microsoft'} · ${linked.emailAddress ?? copy(language, 'مرتبط', 'Linked')}`
+                      : `${provider === 'google' ? 'Google' : 'Microsoft'} · ${copy(language, 'غير مرتبط', 'Not linked')}`}
+                  </Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={!authPassword || authProviderBusy !== null || linkedProvidersQuery.isError}
+                    onPress={() => void toggleAuthProvider(provider)}
+                    style={{
+                      backgroundColor: linked ? colors.muted : colors.primary,
+                      borderRadius: 11,
+                      padding: 12,
+                      opacity: !authPassword || authProviderBusy !== null ? 0.5 : 1,
+                    }}
+                  >
+                    <Text style={{
+                      color: linked ? colors.foreground : colors.primaryForeground,
+                      textAlign: 'center',
+                      fontWeight: '700',
+                    }}>
+                      {authProviderBusy === provider
+                        ? copy(language, 'جارٍ المعالجة…', 'Working…')
+                        : linked
+                          ? copy(language, 'إلغاء الربط', 'Unlink')
+                          : copy(language, 'ربط المزوّد', 'Link provider')}
+                    </Text>
+                  </Pressable>
+                </View>
+              );
+            })
+          )}
+          {authProviderError ? <Text style={{ color: colors.destructive, fontSize: 12 }}>{authProviderError}</Text> : null}
+          {authProviderNotice ? <Text style={{ color: colors.primary, fontSize: 12 }}>{authProviderNotice}</Text> : null}
+        </View>
+      ) : (
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.sectionTitle, { color: colors.foreground, textAlign: rtl ? 'right' : 'left' }]}>
+            {copy(language, 'طرق تسجيل الدخول', 'Sign-in methods')}
+          </Text>
+          <Text style={[styles.helper, { color: colors.mutedForeground, textAlign: rtl ? 'right' : 'left' }]}>
+            {copy(language, 'افتح إعدادات الحساب في نسخة الويب لربط Google أو Microsoft.', 'Open account settings in the web app to link Google or Microsoft.')}
+          </Text>
+        </View>
+      )}
 
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <Text style={[styles.sectionEyebrow, { color: colors.primary, textAlign: rtl ? 'right' : 'left' }]}>{copy(language, 'السكرتير', 'SECRETARY')}</Text>

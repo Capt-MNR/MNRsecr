@@ -107,6 +107,109 @@ export const LogoutResponse = zod.void()
 
 
 /**
+ * @summary Start Google or Microsoft sign-in or account linking
+ */
+export const startAuthOAuthBodyCurrentPasswordMin = 12;
+export const startAuthOAuthBodyCurrentPasswordMax = 256;
+
+export const startAuthOAuthBodyReturnToMax = 512;
+
+
+
+export const StartAuthOAuthBody = zod.object({
+  "provider": zod.enum(['google', 'microsoft']),
+  "mode": zod.enum(['login', 'link']),
+  "client": zod.enum(['web', 'mobile']),
+  "currentPassword": zod.string().min(startAuthOAuthBodyCurrentPasswordMin).max(startAuthOAuthBodyCurrentPasswordMax).optional(),
+  "returnTo": zod.string().max(startAuthOAuthBodyReturnToMax).optional()
+})
+
+export const StartAuthOAuthResponse = zod.object({
+  "authorizationUrl": zod.string().url()
+})
+
+
+/**
+ * @summary List sign-in providers linked to the current account
+ */
+export const GetAuthOAuthLinkedProvidersResponse = zod.object({
+  "providers": zod.array(zod.object({
+  "provider": zod.enum(['google', 'microsoft']),
+  "emailAddress": zod.string().email().nullable(),
+  "linkedAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Remove a provider sign-in link from the current account
+ */
+export const UnlinkAuthOAuthProviderParams = zod.object({
+  "provider": zod.enum(['google', 'microsoft'])
+})
+
+export const unlinkAuthOAuthProviderBodyCurrentPasswordMin = 12;
+export const unlinkAuthOAuthProviderBodyCurrentPasswordMax = 256;
+
+
+
+export const UnlinkAuthOAuthProviderBody = zod.object({
+  "currentPassword": zod.string().min(unlinkAuthOAuthProviderBodyCurrentPasswordMin).max(unlinkAuthOAuthProviderBodyCurrentPasswordMax)
+})
+
+export const UnlinkAuthOAuthProviderResponse = zod.void()
+
+
+/**
+ * @summary Exchange a one-time mobile OAuth ticket for an app session
+ */
+export const exchangeAuthOAuthTicketBodyTicketMin = 16;
+export const exchangeAuthOAuthTicketBodyTicketMax = 512;
+
+
+
+export const ExchangeAuthOAuthTicketBody = zod.object({
+  "ticket": zod.string().min(exchangeAuthOAuthTicketBodyTicketMin).max(exchangeAuthOAuthTicketBodyTicketMax)
+})
+
+export const ExchangeAuthOAuthTicketResponse = zod.object({
+  "user": zod.object({
+  "userId": zod.string(),
+  "tenantId": zod.string(),
+  "email": zod.string().email()
+}),
+  "accessToken": zod.string().optional(),
+  "refreshToken": zod.string().optional(),
+  "accessExpiresAt": zod.coerce.date(),
+  "refreshExpiresAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Complete the Google OAuth redirect
+ */
+export const CompleteGoogleOAuthCallbackQueryParams = zod.object({
+  "code": zod.coerce.string().optional(),
+  "state": zod.coerce.string(),
+  "error": zod.coerce.string().optional()
+})
+
+export const CompleteGoogleOAuthCallbackResponse = zod.void()
+
+
+/**
+ * @summary Complete the Microsoft OAuth redirect
+ */
+export const CompleteMicrosoftOAuthCallbackQueryParams = zod.object({
+  "code": zod.coerce.string().optional(),
+  "state": zod.coerce.string(),
+  "error": zod.coerce.string().optional()
+})
+
+export const CompleteMicrosoftOAuthCallbackResponse = zod.void()
+
+
+/**
  * @summary Get the current user's Gmail connection status
  */
 export const GetGmailEmailAccountResponse = zod.object({

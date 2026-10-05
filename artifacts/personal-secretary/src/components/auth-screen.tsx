@@ -1,12 +1,20 @@
 import { useState, type FormEvent } from 'react';
-import { login, signup, type AuthUser } from '@/lib/auth';
+import { beginOAuth, login, signup, type AuthProvider, type AuthUser } from '@/lib/auth';
 
 export default function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: AuthUser) => void }) {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState(() => {
+    const code = new URLSearchParams(window.location.search).get('authError');
+    if (code === 'provider_not_linked') return 'هذا المزوّد غير مرتبط بحسابك بعد. سجّل الدخول بكلمة المرور ثم اربطه من إعدادات الحساب.';
+    if (code === 'provider_cancelled') return 'أُلغيت عملية تسجيل الدخول.';
+    if (code === 'provider_already_linked') return 'هذا المزوّد مرتبط بحساب آخر أو يوجد له ربط حالي.';
+    if (code === 'provider_not_configured') return 'تسجيل الدخول بهذا المزوّد غير مهيأ بعد.';
+    if (code) return 'تعذر إكمال تسجيل الدخول الخارجي. حاول مرة أخرى.';
+    return '';
+  });
   const [pending, setPending] = useState(false);
 
   async function submit(event?: FormEvent<HTMLFormElement>) {
@@ -21,6 +29,20 @@ export default function AuthScreen({ onAuthenticated }: { onAuthenticated: (user
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'تعذر تسجيل الدخول.');
     } finally {
+      setPending(false);
+    }
+  }
+
+  async function signInWithProvider(provider: AuthProvider) {
+    setPending(true);
+    setError('');
+    try {
+      const authorizationUrl = await beginOAuth(provider, 'login');
+      window.location.assign(authorizationUrl);
+    } catch (reason) {
+      setError(reason instanceof Error
+        ? reason.message
+        : 'تعذر بدء تسجيل الدخول الخارجي.');
       setPending(false);
     }
   }
@@ -53,6 +75,38 @@ export default function AuthScreen({ onAuthenticated }: { onAuthenticated: (user
           {pending ? 'جارٍ المعالجة…' : mode === 'login' ? 'دخول' : 'إنشاء الحساب'}
         </button>
         </form>
+        {mode === 'login' && (
+          <>
+            <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
+              <span className="h-px flex-1 bg-border" />
+              <span>أو سجّل الدخول باستخدام</span>
+              <span className="h-px flex-1 bg-border" />
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                className="flex w-full items-center justify-center gap-2 rounded-lg border bg-background px-4 py-2.5 text-sm font-medium hover:bg-muted disabled:opacity-50"
+                disabled={pending}
+                onClick={() => void signInWithProvider('google')}
+              >
+                <span aria-hidden="true" className="font-bold text-primary">G</span>
+                Google
+              </button>
+              <button
+                type="button"
+                className="flex w-full items-center justify-center gap-2 rounded-lg border bg-background px-4 py-2.5 text-sm font-medium hover:bg-muted disabled:opacity-50"
+                disabled={pending}
+                onClick={() => void signInWithProvider('microsoft')}
+              >
+                <span aria-hidden="true" className="font-bold text-primary">M</span>
+                Microsoft
+              </button>
+            </div>
+            <p className="mt-3 text-center text-xs text-muted-foreground">
+              يجب ربط المزوّد بحسابك الحالي أولًا من إعدادات الحساب.
+            </p>
+          </>
+        )}
         <button type="button" className="mt-4 w-full text-sm text-muted-foreground underline-offset-4 hover:underline" onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setError(''); }}>
           {mode === 'login' ? 'ليس لديك حساب؟ أنشئ حسابًا' : 'لديك حساب؟ سجّل الدخول'}
         </button>

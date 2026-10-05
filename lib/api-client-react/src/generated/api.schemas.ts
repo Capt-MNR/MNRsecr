@@ -261,6 +261,74 @@ export interface AuthSessionResponse {
   refreshExpiresAt: string;
 }
 
+export type AuthOAuthProvider = typeof AuthOAuthProvider[keyof typeof AuthOAuthProvider];
+
+
+export const AuthOAuthProvider = {
+  google: 'google',
+  microsoft: 'microsoft',
+} as const;
+
+export type AuthOAuthStartInputMode = typeof AuthOAuthStartInputMode[keyof typeof AuthOAuthStartInputMode];
+
+
+export const AuthOAuthStartInputMode = {
+  login: 'login',
+  link: 'link',
+} as const;
+
+export type AuthOAuthStartInputClient = typeof AuthOAuthStartInputClient[keyof typeof AuthOAuthStartInputClient];
+
+
+export const AuthOAuthStartInputClient = {
+  web: 'web',
+  mobile: 'mobile',
+} as const;
+
+export interface AuthOAuthStartInput {
+  provider: AuthOAuthProvider;
+  mode: AuthOAuthStartInputMode;
+  client: AuthOAuthStartInputClient;
+  /**
+     * @minLength 12
+     * @maxLength 256
+     */
+  currentPassword?: string;
+  /** @maxLength 512 */
+  returnTo?: string;
+}
+
+export interface AuthOAuthStartResponse {
+  authorizationUrl: string;
+}
+
+export interface AuthOAuthLinkedProvider {
+  provider: AuthOAuthProvider;
+  /** @nullable */
+  emailAddress: string | null;
+  linkedAt: string;
+}
+
+export interface AuthOAuthLinkedProvidersResponse {
+  providers: AuthOAuthLinkedProvider[];
+}
+
+export interface AuthOAuthUnlinkInput {
+  /**
+     * @minLength 12
+     * @maxLength 256
+     */
+  currentPassword: string;
+}
+
+export interface AuthOAuthTicketInput {
+  /**
+     * @minLength 16
+     * @maxLength 512
+     */
+  ticket: string;
+}
+
 export interface GmailEmailAccountResponse {
   configured: boolean;
   connected: boolean;
@@ -1856,6 +1924,18 @@ export type RefreshSessionBody = {
 
 export type GetCurrentUser200 = {
   user: AuthUser;
+};
+
+export type CompleteGoogleOAuthCallbackParams = {
+code?: string;
+state: string;
+error?: string;
+};
+
+export type CompleteMicrosoftOAuthCallbackParams = {
+code?: string;
+state: string;
+error?: string;
 };
 
 export type CompleteGmailEmailOAuthParams = {
