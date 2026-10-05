@@ -8,3 +8,9 @@ Every user-facing request must derive tenant and owner identity from a valid dat
 **Why:** Accepting a bearer placeholder or client-supplied tenant/user headers would let one caller impersonate another owner, while automatic reassignment of existing records would be destructive and unauditable.
 
 **How to apply:** New routes must use the centralized authentication middleware and `getIdentity`; never read tenant/user identity from request body, query, or headers. Keep auth tokens out of logs, activity, and evidence, and preserve tenant/owner predicates through approvals, notifications, Agent Work, and recovery.
+
+The updated mobile preview with guarded auth routes and 401 classification was confirmed working on the previously affected Xiaomi phone on 2026-10-05.
+
+**Why:** The user verified the new build on the device after the earlier Quick connection and Main loading errors.
+
+**How to apply:** Treat that build's device-specific failure as resolved. If it recurs, confirm the installed APK version and current signed-in account before revisiting the route fix.
