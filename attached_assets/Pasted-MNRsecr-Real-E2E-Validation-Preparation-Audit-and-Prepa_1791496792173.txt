@@ -1,0 +1,68 @@
+MNRsecr — Real E2E Validation Preparation
+
+Audit and Prepare Only — No Product Changes
+
+We have completed product phases A–H. The next step is validating the existing product through a real authenticated end-to-end journey.
+
+This is NOT a new development phase.
+
+Strict constraints
+
+- Do not modify application code or product behavior.
+- Do not create Replit Tasks.
+- Do not use mock data, fixtures, fake providers, or simulated success as evidence of live integration.
+- Do not send real emails, modify real calendar events, or perform irreversible external actions during this preparation step.
+- Do not enable production OAuth or change production infrastructure.
+- Do not change AI provider configuration.
+- Do not bypass authentication, approval, tenant isolation, or owner checks.
+- Do not expose credentials, tokens, or secrets in the report.
+
+Step 1 — Inspect the current runnable environment
+
+Determine what can actually be tested using the existing development setup:
+
+1. Can the mobile app reach the current backend?
+2. Is a real authenticated user session available?
+3. Can the existing AI provider be reached from this environment?
+4. Which existing Agent Work capabilities can be tested without external side effects?
+5. Can we observe the real lifecycle from request creation through server execution, verification, and Work status?
+6. Are logs or existing diagnostics sufficient to distinguish real provider/API calls from fixture-based tests?
+
+Do not assume any of these are available. Report the evidence.
+
+Step 2 — Select the safest real E2E scenario
+
+Prefer an existing, supported scenario that:
+
+- Uses the normal Ask → "/api/turns" → existing Agent path.
+- Creates a real Work item through the existing Agent tool, if applicable.
+- Uses the existing execution and verification path.
+- Produces an observable final state in Work or Secretary.
+- Does not send messages, modify external accounts, or cause irreversible side effects.
+
+If no supported scenario meets these conditions, explain exactly what prerequisite is missing. Do not invent a test capability or modify the backend to create one.
+
+Step 3 — Preserve the existing lifecycle
+
+For the eventual live test, we must observe:
+
+Request → clarification if required → approval if required → execution → verification → Work/status visibility.
+
+Only include stages that the selected existing capability actually requires. Never manufacture an approval or verification step just to complete the sequence.
+
+Confirm that "operationId", existing approval semantics, tenant/owner scoping, and "UNKNOWN_RESULT" safeguards remain unchanged.
+
+Step 4 — Report and stop
+
+Return:
+
+1. Environment readiness: READY / PARTIAL / BLOCKED.
+2. Which checks were verified against the real environment.
+3. Which checks were verified only by source inspection or existing automated tests.
+4. The safest next live scenario and its expected side effects.
+5. Any user action genuinely required before the test can proceed.
+6. Exact blockers, if any.
+
+Do not execute the live scenario yet.
+Do not change code.
+Stop after reporting the preparation results.
