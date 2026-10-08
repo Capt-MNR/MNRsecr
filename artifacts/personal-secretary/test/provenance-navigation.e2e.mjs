@@ -195,7 +195,7 @@ async function waitForBrowserValue(page, expression, description, timeoutMs = 30
 }
 
 async function exerciseFirstApprovalInBrowser(appBaseUrl, apiBaseUrl, message, proxyControls) {
-  const browser = await startInteractiveChromium(`${appBaseUrl}/`);
+  const browser = await startInteractiveChromium(`${appBaseUrl}/ask`);
   let turnPosts = 0;
   const approvalSnapshotExpression = `(() => {
     const form = document.querySelector('[data-testid^="approval-form-"]');
@@ -650,7 +650,7 @@ try {
     const expectedConversationQuery = `conversationId=${encodeURIComponent(fixtureInfo.ids.conversation)}&turnId=1`;
     await waitForBrowserValue(
       recordsBrowser.page,
-      `window.location.pathname === "/" && window.location.search.includes(${JSON.stringify(expectedConversationQuery)})`,
+      `window.location.pathname === "/ask" && window.location.search.includes(${JSON.stringify(expectedConversationQuery)})`,
       "navigation to the originating conversation and turn",
     );
     const highlightedTurn = await waitForBrowserValue(
@@ -668,6 +668,51 @@ try {
     recordsBrowser.page.close();
     await closeProcess(recordsBrowser.child);
     rmSync(recordsBrowser.profile, { recursive: true, force: true });
+  }
+
+  const secretaryBrowser = await startInteractiveChromium(`${appBaseUrl}/`);
+  try {
+    await waitForBrowserValue(
+      secretaryBrowser.page,
+      `document.querySelector('[data-testid="link-ask"]') !== null`,
+      "Secretary Home navigation",
+    );
+    await waitForBrowserValue(
+      secretaryBrowser.page,
+      `document.querySelector('[data-testid="section-upcoming"]') !== null
+        && document.querySelector('[data-testid="section-recorded-items"]') !== null`,
+      "real upcoming and recorded data on Secretary Home",
+    );
+    const realRecordLinks = await secretaryBrowser.page.evaluate(`(() => {
+      const task = document.querySelector('[data-testid="card-later-task-${fixtureInfo.ids.task}"]');
+      const expense = document.querySelector('[data-testid="row-recorded-expense-${createdExpense.id}"]');
+      return { task: task?.getAttribute("href") ?? null, expense: expense?.getAttribute("href") ?? null };
+    })()`);
+    assert.ok(realRecordLinks.task?.includes(`recordId=${fixtureInfo.ids.task}`));
+    assert.ok(realRecordLinks.expense?.includes(`recordId=${createdExpense.id}`));
+    await secretaryBrowser.page.evaluate(`document.querySelector('[data-testid="link-ask"]').click()`);
+    await waitForBrowserValue(
+      secretaryBrowser.page,
+      `window.location.pathname === "/ask" && document.querySelector('[data-testid="input-message"]') !== null`,
+      "navigation from Secretary Home to Ask",
+    );
+  } finally {
+    secretaryBrowser.page.close();
+    await closeProcess(secretaryBrowser.child);
+    rmSync(secretaryBrowser.profile, { recursive: true, force: true });
+  }
+
+  const operationBrowser = await startInteractiveChromium(`${appBaseUrl}/ask?operationId=${encodeURIComponent(operationId)}`);
+  try {
+    await waitForBrowserValue(
+      operationBrowser.page,
+      `document.querySelector('[data-testid="operation-status-completed"]') !== null`,
+      "direct lookup of the saved completed operation from its operationId",
+    );
+  } finally {
+    operationBrowser.page.close();
+    await closeProcess(operationBrowser.child);
+    rmSync(operationBrowser.profile, { recursive: true, force: true });
   }
 
   console.log(JSON.stringify({

@@ -13,6 +13,7 @@ import {
   MessageSquareText,
   PanelRight,
   Plus,
+  House,
   ShieldCheck,
   Sparkles,
   X,
@@ -24,6 +25,7 @@ import {
   useApproveSecretaryOperation,
   useCreateTurn,
   useGetTodayContext,
+  useGetSecretaryOperation,
   useHealthCheck,
   useListDonations,
   useListFinancialObligations,
@@ -125,6 +127,10 @@ type PendingSend = {
 function Home() {
   const [location, setLocation] = useLocation();
   const searchString = useSearch();
+  const requestedOperationId = useMemo(
+    () => new URLSearchParams(searchString).get('operationId'),
+    [searchString],
+  );
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState('');
   const [askContext, setAskContext] = useState<{ entityType: string; entityId: string; entityName: string; } | null>(null);
@@ -135,6 +141,7 @@ function Home() {
   const [selectedConversationId, setSelectedConversationId] = useState<string | undefined>();
   const [highlightedTurnId, setHighlightedTurnId] = useState<string | undefined>();
   const [messages, setMessages] = useState<LocalMessage[]>([starterMessage]);
+  const loadedOperationId = useRef<string | null>(null);
   const [approvalError, setApprovalError] = useState<string | null>(null);
   const [sendError, setSendError] = useState<ReturnType<typeof classifySecretaryError> | null>(null);
   const [uncertainSend, setUncertainSend] = useState<PendingSend | null>(null);
@@ -164,6 +171,15 @@ function Home() {
   });
   const receivablesQuery = useListIncomeReceivables({
     query: { queryKey: ['/api/financial/receivables'], staleTime: 30_000 },
+  });
+  const operationQuery = useGetSecretaryOperation(requestedOperationId ?? '', {
+    query: {
+      queryKey: requestedOperationId
+        ? getGetSecretaryOperationQueryKey(requestedOperationId)
+        : ['/api/approvals/disabled'],
+      enabled: Boolean(requestedOperationId),
+      staleTime: 2_000,
+    },
   });
   const createTurn = useCreateTurn({
     request: { timeoutMs: 90_000 },
@@ -211,6 +227,38 @@ function Home() {
       }
     }
   }, [searchString]);
+
+  useEffect(() => {
+    if (!requestedOperationId) {
+      loadedOperationId.current = null;
+      return;
+    }
+    const operation = operationQuery.data;
+    if (!operation || operation.operationId !== requestedOperationId || loadedOperationId.current === requestedOperationId) return;
+    setConversationId(operation.conversationId ?? undefined);
+    setMessages([{
+      id: `saved-operation-${operation.operationId}`,
+      role: 'assistant',
+      text: 'راجع العملية المحفوظة قبل اتخاذ القرار.',
+      time: formatTime(operation.updatedAt),
+      approval: {
+        operationId: operation.operationId,
+        toolName: operation.toolName,
+        initialArgs: operation.args,
+        title: operation.display.title,
+        details: operation.display.details,
+        status: operation.status,
+      },
+    }]);
+    setApprovalError(null);
+    loadedOperationId.current = requestedOperationId;
+  }, [operationQuery.data, requestedOperationId]);
+
+  useEffect(() => {
+    if (requestedOperationId && operationQuery.isError && loadedOperationId.current !== requestedOperationId) {
+      setApprovalError('تعذر تحميل حالة الموافقة الحالية.');
+    }
+  }, [operationQuery.isError, requestedOperationId]);
 
   useEffect(() => {
     if (!highlightedTurnId) return;
@@ -466,10 +514,14 @@ function Home() {
 
           <div className="mt-12 px-2">
             <p className="text-[11px] tracking-wide text-muted-foreground">مساحة العمل</p>
+            <Link href="/" data-testid="link-secretary-home-sidebar" className="mt-3 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+              <House className="size-4" />
+              موجز السكرتير
+            </Link>
             <button
               type="button"
               onClick={startNewConversation}
-              className="mt-3 flex w-full items-center gap-3 rounded-xl bg-primary/10 px-3 py-3 text-left text-sm font-medium text-primary transition-colors hover:bg-primary/15"
+              className="mt-2 flex w-full items-center gap-3 rounded-xl bg-primary/10 px-3 py-3 text-left text-sm font-medium text-primary transition-colors hover:bg-primary/15"
               data-testid="button-new-conversation"
             >
               <Plus className="size-4" />
@@ -537,10 +589,18 @@ function Home() {
               </button>
               <div>
                 <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">{dateLabel}</p>
-                 <h1 className="mt-1 font-serif text-[24px] leading-none tracking-tight sm:text-[28px]">يومك في محادثة واحدة</h1>
+                  <h1 className="mt-1 font-serif text-[24px] leading-none tracking-tight sm:text-[28px]">اسأل السكرتير</h1>
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <Link
+                href="/"
+                className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-border/70 bg-card px-3 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                data-testid="link-secretary-home-header"
+              >
+                <House className="size-4" />
+                <span className="hidden sm:inline">الرئيسية</span>
+              </Link>
               <Link
                 href="/records"
                 className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-border/70 bg-card px-3 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
@@ -611,6 +671,20 @@ function Home() {
                     مسح المحادثة
                   </button>
                 </div>
+
+                {requestedOperationId && operationQuery.isLoading && (
+                  <div role="status" aria-busy="true" className="mb-4 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-muted-foreground">
+                    جارٍ تحميل حالة العملية المحفوظة…
+                  </div>
+                )}
+                {requestedOperationId && operationQuery.isError && (
+                  <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm">
+                    <span>تعذر تحميل حالة الموافقة الحالية.</span>
+                    <button type="button" onClick={() => void operationQuery.refetch()} className="text-xs font-semibold text-destructive underline underline-offset-4">
+                      أعد المحاولة
+                    </button>
+                  </div>
+                )}
 
                 <div className="scrollbar-thin flex-1 space-y-7 overflow-y-auto pb-6">
                   {messages.map((message, index) => (

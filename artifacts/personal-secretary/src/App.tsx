@@ -4,6 +4,7 @@ import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import Home from '@/pages/home';
+import SecretaryHomePage from '@/pages/secretary-home/SecretaryHomePage';
 import Records from '@/pages/records';
 import NotFound from '@/pages/not-found';
 import EntityDetail from '@/pages/entity-detail';
@@ -30,7 +31,8 @@ function Router() {
     // survives a page crash.
     <RoutedErrorBoundary>
       <Switch>
-        <Route path="/" component={Home} />
+        <Route path="/" component={SecretaryHomePage} />
+        <Route path="/ask" component={Home} />
         <Route path="/email" component={EmailSettings} />
          <Route path="/records" component={Records} />
           <Route path="/people/:id" component={() => <EntityDetail entityType="person" />} />

@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:errors": "node --experimental-strip-types --test test/error-classification.test.ts",
     "test:operation-presentation": "node --experimental-strip-types --test test/operation-presentation.test.ts",
+    "test:secretary-home-model": "node --experimental-strip-types --test test/secretary-home-model.test.ts",
     "test:record-editing": "node --experimental-strip-types --test test/record-editing.test.ts",
     "test:provenance-navigation": "node test/provenance-navigation.e2e.mjs"
   },

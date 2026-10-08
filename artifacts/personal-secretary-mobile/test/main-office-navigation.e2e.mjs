@@ -315,16 +315,16 @@ try {
       `document.querySelector('[data-testid="office-feed"]') !== null`,
       "Main Office activity feed",
     );
-    const newestFirstRecordIds = [
-      `office-focus-reminder-${fixtureInfo.ids.reminder}`,
+    const sectionRecordIds = [
       `office-focus-task-${fixtureInfo.ids.task}`,
+      `office-focus-reminder-${fixtureInfo.ids.reminder}`,
       `office-focus-expense-${fixtureInfo.ids.expense}`,
     ];
     await waitForBrowserValue(
       browser.page,
       `(() => {
         const feed = document.querySelector('[data-testid="office-feed"]');
-        const ids = ${JSON.stringify(newestFirstRecordIds)};
+        const ids = ${JSON.stringify(sectionRecordIds)};
         const nodes = Array.from(feed?.querySelectorAll('[data-testid]') ?? []);
         return ids.every((id) => nodes.some((node) => node.getAttribute('data-testid') === id));
       })()`,
@@ -332,13 +332,15 @@ try {
     );
     const feedCardTops = await browser.page.evaluate(`(() => {
       const feed = document.querySelector('[data-testid="office-feed"]');
-      const ids = ${JSON.stringify(newestFirstRecordIds)};
+      const ids = ${JSON.stringify(sectionRecordIds)};
       const nodes = Array.from(feed?.querySelectorAll('[data-testid]') ?? []);
       return ids.map((id) => nodes.find((node) => node.getAttribute('data-testid') === id)?.getBoundingClientRect().top ?? null);
     })()`);
     assert.ok(
-      feedCardTops.every((top, index) => typeof top === "number" && (index === 0 || top > feedCardTops[index - 1])),
-      `Main feed should sort saved records newest first: ${JSON.stringify(feedCardTops)}`,
+      feedCardTops.every((top) => typeof top === "number")
+        && feedCardTops[0] < feedCardTops[1]
+        && feedCardTops[2] > feedCardTops[1],
+      `Upcoming records should be chronological, with recorded items later: ${JSON.stringify(feedCardTops)}`,
     );
     await browser.page.evaluate(`document.querySelector('[data-testid="home-open-ask"]').click()`);
     await waitForBrowserValue(

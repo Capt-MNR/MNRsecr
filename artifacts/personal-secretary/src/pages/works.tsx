@@ -406,7 +406,7 @@ export default function Works() {
       <main className="mx-auto min-h-[100dvh] max-w-[1280px] px-4 py-6 sm:px-8 lg:px-12">
         <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border/70 pb-6">
           <div>
-            <Link href="/" className="inline-flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-primary">
+            <Link href="/ask" className="inline-flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-primary">
               <ArrowLeft className="size-3.5" /> العودة للمحادثة
             </Link>
             <div className="mt-5 flex items-center gap-3">

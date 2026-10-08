@@ -261,7 +261,7 @@ function recordOrigin(record: RecordItem): RecordOrigin | null {
 function conversationPath(origin: RecordOrigin) {
   const params = new URLSearchParams({ conversationId: origin.conversationId });
   if (origin.turnId) params.set('turnId', origin.turnId);
-  return `/?${params.toString()}`;
+  return `/ask?${params.toString()}`;
 }
 
 function localDateTimeValue(value: Date) {
@@ -697,7 +697,7 @@ export default function Records() {
       <main className="mx-auto min-h-[100dvh] max-w-[1240px] px-4 py-6 sm:px-8 sm:py-10">
          <header className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
           <div>
-             <button type="button" onClick={() => setLocation('/')} className="inline-flex min-h-10 items-center rounded-lg text-xs text-muted-foreground transition hover:text-primary" data-testid="link-records-conversation">← العودة للمحادثة</button>
+             <button type="button" onClick={() => setLocation('/ask')} className="inline-flex min-h-10 items-center rounded-lg text-xs text-muted-foreground transition hover:text-primary" data-testid="link-records-conversation">← العودة للمحادثة</button>
             <p className="mt-6 text-xs uppercase tracking-[0.2em] text-muted-foreground">Structured Memory</p>
             <h1 className="mt-2 font-serif text-3xl tracking-tight sm:text-4xl">سجلاتك المحفوظة</h1>
             <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">المحادثة تساعدك على الفهم، لكن هذه السجلات هي المصدر الأساسي لبياناتك. عدّلها أو احذفها مع مراجعة واضحة.</p>

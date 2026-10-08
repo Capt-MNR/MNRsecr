@@ -11,6 +11,7 @@ import type { AppLanguage } from '@/hooks/useLanguage';
 import { useColors } from '@/hooks/useColors';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { statusLabel as workStatusLabel } from './WorksView';
+import { buildSecretaryHomeModel } from './secretary-home-model';
 
 type Colors = ReturnType<typeof useColors>;
 export type HomeRecord = { id: string; recordType: string; title: string; subtitle: string; trailing?: string };
@@ -93,8 +94,8 @@ export default function SecretaryHome({
   const context = todayQuery.data?.context;
   const agentWorks = worksQuery.data?.works ?? [];
   const pendingApprovals = approvalsQuery.data?.approvals ?? [];
-  const activeWorks = agentWorks.filter((work) => work.status === 'active' || work.status === 'needs_review' || work.status === 'waiting');
-  const focusCount = pendingApprovals.length + (context?.pendingTasks.length ?? 0);
+  const model = buildSecretaryHomeModel(context, agentWorks, pendingApprovals);
+  const focusCount = model.attention.length;
   const refreshing = todayQuery.isFetching || worksQuery.isFetching || approvalsQuery.isFetching;
   const refresh = () => {
     void todayQuery.refetch();
@@ -177,62 +178,143 @@ export default function SecretaryHome({
         </View>
       )}
 
-      {pendingApprovals.length > 0 && (
+      {model.attention.length > 0 && (
         <View style={styles.section}>
-          <SectionTitle title={copy(language, 'بانتظار قرارك', 'Your approval needed')} count={pendingApprovals.length} colors={colors} rtl={rtl} />
-          {pendingApprovals.map((item) => (
+          <SectionTitle title={copy(language, 'محتاج منك الآن', 'Needs your attention')} count={model.attention.length} colors={colors} rtl={rtl} />
+          {model.attention.map((item) => {
+            if (item.kind === 'approval') {
+              return (
+                <Row
+                  key={item.key}
+                  icon="shield"
+                  testID={`office-focus-approval-${item.operationId}`}
+                  title={item.title}
+                  subtitle={copy(language, item.reason, 'Your approval is required before this runs.')}
+                  tag={copy(language, 'موافقة', 'Approval')}
+                  onPress={() => onReviewApproval({ operationId: item.operationId, conversationId: item.conversationId })}
+                  colors={colors}
+                  rtl={rtl}
+                  accent={colors.accent}
+                />
+              );
+            }
+            if (item.kind === 'task') {
+              return (
+                <Row
+                  key={item.key}
+                  icon="alert-circle"
+                  testID={`office-focus-overdue-task-${item.id}`}
+                  title={item.title}
+                  subtitle={`${copy(language, item.reason, 'Its deadline passed and the task is still open.')} · ${dateText(item.dueAt, language)}`}
+                  tag={copy(language, 'متأخرة', 'Overdue')}
+                  onPress={() => onOpenRecord({ id: item.id, recordType: 'task', title: item.title, subtitle: dateText(item.dueAt, language), trailing: item.status })}
+                  colors={colors}
+                  rtl={rtl}
+                  accent={colors.accent}
+                />
+              );
+            }
+            return (
+              <Row
+                key={item.key}
+                icon="alert-circle"
+                testID={`office-focus-work-review-${item.workId}`}
+                title={item.title}
+                subtitle={copy(language, item.reason, item.status === 'unknown_result'
+                  ? 'The outcome is unconfirmed. It will not be retried automatically.'
+                  : item.status === 'needs_review' ? 'This work needs your review.' : 'The latest run failed.')}
+                tag={workStatusLabel(item.status, language)}
+                onPress={() => onOpenWork(item.workId)}
+                colors={colors}
+                rtl={rtl}
+                accent={colors.accent}
+              />
+            );
+          })}
+        </View>
+      )}
+
+      {model.watching.length > 0 && (
+        <View style={styles.section}>
+          <SectionTitle title={copy(language, 'السكرتير بيتابع', 'Under the secretary’s watch')} count={model.watching.length} colors={colors} rtl={rtl} />
+          {model.watching.map((work) => {
+            const lastRun = work.lastRunAt
+              ? `${copy(language, 'آخر تشغيل', 'Last run')}: ${dateText(work.lastRunAt, language)}${work.lastRunStatus ? ` · ${workStatusLabel(work.lastRunStatus, language)}` : ''}`
+              : '';
+            const nextRun = work.nextRunAt
+              ? `${copy(language, 'التالي', 'Next')}: ${dateText(work.nextRunAt, language)}`
+              : '';
+            return (
+              <Row
+                key={work.id}
+                testID={`office-focus-work-${work.id}`}
+                icon="activity"
+                title={work.title ?? copy(language, 'عمل جارٍ', 'Ongoing work')}
+                subtitle={[lastRun, nextRun].filter(Boolean).join(' · ') || work.description || ''}
+                tag={workStatusLabel(work.status ?? 'draft', language)}
+                onPress={() => { if (work.id) onOpenWork(work.id); }}
+                colors={colors}
+                rtl={rtl}
+              />
+            );
+          })}
+        </View>
+      )}
+
+      {model.today.length > 0 && (
+        <View style={styles.section}>
+          <SectionTitle title={copy(language, 'اليوم', 'Today')} count={model.today.length} colors={colors} rtl={rtl} />
+          {model.today.map((item) => (
             <Row
-              key={item.operationId}
-              icon="shield"
-              testID={`office-focus-approval-${item.operationId}`}
-              title={item.display.title}
-              subtitle={item.display.details[0] ?? copy(language, 'لن ينفّذ السكرتير هذا قبل موافقتك.', 'Nothing proceeds until you approve.')}
-              tag={copy(language, 'مراجعة', 'Review')}
-              onPress={() => onReviewApproval({ operationId: item.operationId, conversationId: item.conversationId })}
+              key={item.key}
+              testID={`office-focus-${item.kind}-${item.id}`}
+              icon={item.kind === 'reminder' ? 'clock' : 'check-square'}
+              title={item.title}
+              subtitle={item.dueAt
+                ? dateText(item.dueAt, language)
+                : copy(language, 'مهمة مفتوحة بلا موعد', 'Open task with no due date')}
+              tag={item.kind === 'reminder'
+                ? copy(language, 'تذكير', 'Reminder')
+                : item.status === 'in_progress'
+                  ? copy(language, 'قيد العمل', 'In progress')
+                  : copy(language, 'مفتوحة', 'Open')}
+              onPress={() => onOpenRecord({
+                id: item.id,
+                recordType: item.kind,
+                title: item.title,
+                subtitle: item.dueAt ? dateText(item.dueAt, language) : item.status,
+                trailing: item.status,
+              })}
               colors={colors}
               rtl={rtl}
-              accent={colors.accent}
             />
           ))}
         </View>
       )}
 
-      {((context?.upcomingReminders.length ?? 0) > 0 || (context?.pendingTasks.length ?? 0) > 0) && (
+      {model.upcoming.length > 0 && (
         <View style={styles.section}>
-          <SectionTitle title={copy(language, 'اليوم والقريب', 'Today and coming up')} count={(context?.upcomingReminders.length ?? 0) + (context?.pendingTasks.length ?? 0)} colors={colors} rtl={rtl} />
-          {(context?.upcomingReminders ?? []).map((reminder) => (
-            <Row key={`reminder-${reminder.id}`} testID={`office-focus-reminder-${reminder.id}`} icon="clock" title={reminder.text} subtitle={dateText(reminder.dueAt, language)} tag={reminder.status} onPress={() => onOpenRecord({ id: reminder.id, recordType: 'reminder', title: reminder.text, subtitle: dateText(reminder.dueAt, language), trailing: reminder.status })} colors={colors} rtl={rtl} />
-          ))}
-          {(context?.pendingTasks ?? []).map((task) => (
-            <Row key={`task-${task.id}`} testID={`office-focus-task-${task.id}`} icon="check-square" title={task.title} subtitle={task.dueAt ? dateText(task.dueAt, language) : task.status} tag={task.status} onPress={() => onOpenRecord({ id: task.id, recordType: 'task', title: task.title, subtitle: task.dueAt ? dateText(task.dueAt, language) : task.status, trailing: task.status })} colors={colors} rtl={rtl} />
-          ))}
-        </View>
-      )}
-
-      {activeWorks.length > 0 && (
-        <View style={styles.section}>
-          <SectionTitle title={copy(language, 'ما يتابعه السكرتير', 'Under the secretary’s watch')} count={activeWorks.length} colors={colors} rtl={rtl} />
-          {activeWorks.slice(0, 4).map((work) => (
+          <SectionTitle title={copy(language, 'قريبًا', 'Coming up')} count={model.upcoming.length} colors={colors} rtl={rtl} />
+          {model.upcoming.map((item) => (
             <Row
-              key={work.id ?? work.title}
-              testID={`office-focus-work-${work.id ?? work.title}`}
-              icon={work.status === 'needs_review' ? 'alert-circle' : 'activity'}
-              title={work.title ?? copy(language, 'عمل جارٍ', 'Ongoing work')}
-              subtitle={work.description ?? (work.lastRunStatus ? workStatusLabel(work.lastRunStatus, language) : '')}
-              tag={workStatusLabel(work.status ?? 'draft', language)}
-              onPress={() => { if (work.id) onOpenWork(work.id); }}
+              key={item.key}
+              testID={`office-focus-${item.kind}-${item.id}`}
+              icon={item.kind === 'reminder' ? 'clock' : 'check-square'}
+              title={item.title}
+              subtitle={item.dueAt ? dateText(item.dueAt, language) : ''}
+              tag={item.kind === 'reminder' ? copy(language, 'تذكير', 'Reminder') : copy(language, 'مهمة', 'Task')}
+              onPress={() => onOpenRecord({ id: item.id, recordType: item.kind, title: item.title, subtitle: item.dueAt ? dateText(item.dueAt, language) : '', trailing: item.status })}
               colors={colors}
               rtl={rtl}
-              accent={work.status === 'needs_review' ? colors.accent : colors.primary}
             />
           ))}
         </View>
       )}
 
-      {(context?.recentExpenses.length ?? 0) > 0 && (
+      {model.recentExpenses.length > 0 && (
         <View style={styles.section}>
-          <SectionTitle title={copy(language, 'آخر ما تم', 'Recently recorded')} count={context?.recentExpenses.length ?? 0} colors={colors} rtl={rtl} />
-          {(context?.recentExpenses ?? []).slice(0, 3).map((expense) => (
+          <SectionTitle title={copy(language, 'آخر ما سُجّل', 'Recently recorded')} count={model.recentExpenses.length} colors={colors} rtl={rtl} />
+          {model.recentExpenses.map((expense) => (
             <Row
               key={expense.id}
               testID={`office-focus-expense-${expense.id}`}
@@ -248,7 +330,7 @@ export default function SecretaryHome({
         </View>
       )}
 
-      {focusCount === 0 && activeWorks.length === 0 && (context?.recentExpenses.length ?? 0) === 0 && !todayQuery.isLoading && !approvalsQuery.isLoading && !worksQuery.isLoading && !todayQuery.isError && !approvalsQuery.isError && !worksQuery.isError && (
+      {model.attention.length === 0 && model.watching.length === 0 && model.today.length === 0 && model.upcoming.length === 0 && model.recentExpenses.length === 0 && !todayQuery.isLoading && !approvalsQuery.isLoading && !worksQuery.isLoading && !todayQuery.isError && !approvalsQuery.isError && !worksQuery.isError && (
         <View style={[styles.empty, { borderColor: colors.border, backgroundColor: colors.card }]}>
           <Feather name="check-circle" size={23} color={colors.primary} />
           <Text style={[styles.emptyTitle, { color: colors.foreground, textAlign: rtl ? 'right' : 'left' }]}>{copy(language, 'أنت على اطلاع', 'You’re up to date')}</Text>
