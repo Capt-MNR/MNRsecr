@@ -389,6 +389,23 @@ try {
       `document.querySelector('[data-testid="main-message-input"]') !== null`,
       "Main conversation before keyboard viewport",
     );
+    const fullHeightChatContentFit = await browser.page.evaluate(`(() => {
+      const transcript = document.querySelector('[data-testid="main-chat-transcript"]');
+      const composer = document.querySelector('[data-testid="main-chat-composer"]');
+      if (!transcript || !composer) return false;
+      return transcript.getBoundingClientRect().bottom <= composer.getBoundingClientRect().top + 1;
+    })()`);
+    assert.equal(fullHeightChatContentFit, true, "Main's composer should not cover the transcript at full height");
+    if (process.env.CAPTURE_MAIN_OFFICE_SNAPSHOTS === "1") {
+      const screenshot = await browser.page.send("Page.captureScreenshot", {
+        format: "jpeg",
+        quality: 92,
+      });
+      writeFileSync(
+        "/tmp/personal-secretary-main-chat-402.jpg",
+        Buffer.from(screenshot.data, "base64"),
+      );
+    }
     await browser.page.send("Emulation.setDeviceMetricsOverride", {
       width: 402,
       height: 550,
@@ -400,6 +417,23 @@ try {
       `document.querySelector('[data-testid="main-message-input"]') !== null && document.querySelector('[data-testid="office-feed"]') === null`,
       "Main conversation in the keyboard viewport",
     );
+    const compactHeightChatContentFit = await browser.page.evaluate(`(() => {
+      const transcript = document.querySelector('[data-testid="main-chat-transcript"]');
+      const composer = document.querySelector('[data-testid="main-chat-composer"]');
+      if (!transcript || !composer) return false;
+      return transcript.getBoundingClientRect().bottom <= composer.getBoundingClientRect().top + 1;
+    })()`);
+    assert.equal(compactHeightChatContentFit, true, "Main's composer should not cover the transcript in a keyboard-sized viewport");
+    if (process.env.CAPTURE_MAIN_OFFICE_SNAPSHOTS === "1") {
+      const screenshot = await browser.page.send("Page.captureScreenshot", {
+        format: "jpeg",
+        quality: 92,
+      });
+      writeFileSync(
+        "/tmp/personal-secretary-main-chat-550.jpg",
+        Buffer.from(screenshot.data, "base64"),
+      );
+    }
     const compactComposerFit = await browser.page.evaluate(`(() => {
       const input = document.querySelector('[data-testid="main-message-input"]');
       const navigation = document.querySelector('[data-testid="main-bottom-records"]');

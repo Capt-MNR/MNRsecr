@@ -14,7 +14,10 @@ import {
   Phase2AgentRuntime,
   GroqModelGateway,
   MistralModelGateway,
+  DeepSeekModelGateway,
   CohereModelGateway,
+  MnrInferenceRouter,
+  OpenRouterModelGateway,
   configuredRouteOrder,
   classifyToolScope,
   configuredProviderOrder,
@@ -710,6 +713,130 @@ test("failover advances to a third provider after the selected fallback is rate 
   );
   assert.equal(secondary.calls.length, 2);
   assert.equal(tertiary.calls.length, 1);
+});
+
+test("provider fallback attempts do not exhaust the budget before a four-call turn can finish", async () => {
+  const envKeys = [
+    "GROQ_API_KEY",
+    "GEMINI_API_KEY",
+    "COHERE_API_KEY",
+    "MISTRAL_API_KEY",
+    "OPENROUTER_API_KEY",
+    "DEEPSEEK_API_KEY",
+  ] as const;
+  const previousEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
+  const providerCalls: Record<string, number> = {};
+  const previousFetch = globalThis.fetch;
+  const findProject = {
+    id: "find-project",
+    name: "find_project",
+    args: { name: "مشروع الاختبار" },
+  };
+  const final = {
+    id: "final-response",
+    name: "final_response",
+    args: { kind: "answer", message: "اكتمل الرد بعد التحويل بين المزودين." },
+  };
+  const openAiResponse = (call: typeof findProject | typeof final) => new Response(JSON.stringify({
+    choices: [{
+      message: {
+        tool_calls: [{
+          id: call.id,
+          function: { name: call.name, arguments: JSON.stringify(call.args) },
+        }],
+      },
+    }],
+  }), { status: 200, headers: { "content-type": "application/json" } });
+
+  try {
+    for (const key of envKeys) process.env[key] = `test-${key.toLowerCase()}`;
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      if (url.includes("generativelanguage.googleapis.com") && url.includes("cachedContents")) {
+        return new Response("cache unavailable", { status: 403 });
+      }
+      const provider = url.includes("api.groq.com") ? "groq"
+        : url.includes("generativelanguage.googleapis.com") ? "gemini"
+          : url.includes("api.cohere.com") ? "cohere"
+            : url.includes("api.mistral.ai") ? "mistral"
+              : url.includes("openrouter.ai") ? "openrouter"
+                : url.includes("api.deepseek.com") ? "deepseek"
+                  : "unknown";
+      const callNumber = providerCalls[provider] = (providerCalls[provider] ?? 0) + 1;
+      if (provider === "groq" || (provider === "gemini" && callNumber === 2)
+        || (provider === "cohere" && callNumber === 2)
+        || (provider === "mistral" && callNumber === 2)
+        || (provider === "openrouter" && callNumber === 2)) {
+        return new Response("rate limited", {
+          status: 429,
+          headers: { "retry-after": "30", "content-type": "text/plain" },
+        });
+      }
+      if (provider === "gemini") {
+        return new Response(JSON.stringify({
+          candidates: [{
+            content: {
+              parts: [{ functionCall: { name: findProject.name, args: findProject.args } }],
+            },
+          }],
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      if (provider === "cohere") {
+        return new Response(JSON.stringify({
+          message: {
+            content: [],
+            tool_calls: [{
+              id: findProject.id,
+              function: { name: findProject.name, arguments: JSON.stringify(findProject.args) },
+            }],
+          },
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      return openAiResponse(provider === "deepseek" ? final : findProject);
+    };
+
+    const gateway = new MnrInferenceRouter({
+      "direct:groq": new GroqModelGateway(),
+      "direct:gemini": new GeminiModelGateway(),
+      "direct:cohere": new CohereModelGateway(),
+      "direct:mistral": new MistralModelGateway(),
+      "gateway:openrouter": new OpenRouterModelGateway(),
+      "direct:deepseek": new DeepSeekModelGateway(),
+    }, [
+      "direct:groq",
+      "direct:gemini",
+      "direct:cohere",
+      "direct:mistral",
+      "gateway:openrouter",
+      "direct:deepseek",
+    ]);
+    const result = await new Phase2AgentRuntime(gateway).run(identity("fallback-budget-four-calls"), {
+      message: "وريني المشروع المحجر",
+      requestId: "fallback-budget-four-calls-request",
+    }, { dryRun: true });
+
+    assert.equal(result.provider, "deepseek");
+    assert.equal(result.response?.message, "اكتمل الرد بعد التحويل بين المزودين.");
+    assert.equal(result.action?.providerTrace?.httpAttempts, 10);
+    assert.deepEqual(result.action?.providerTrace?.providersAttempted, [
+      "groq",
+      "gemini",
+      "gemini",
+      "cohere",
+      "cohere",
+      "mistral",
+      "mistral",
+      "openrouter",
+      "openrouter",
+      "deepseek",
+    ]);
+  } finally {
+    globalThis.fetch = previousFetch;
+    for (const key of envKeys) {
+      if (previousEnv[key] === undefined) delete process.env[key];
+      else process.env[key] = previousEnv[key]!;
+    }
+  }
 });
 
 test("a read tool result is preserved when the primary fails and fallback writes the final response", async () => {

@@ -795,7 +795,8 @@ type ToolResult = {
 
 const MAX_TOOL_CALLS = 8;
 const MAX_LOGICAL_LLM_CALLS = 4;
-const MAX_PROVIDER_HTTP_ATTEMPTS = 6;
+// Four normal model calls may be followed by one finalization call, each with one fallback.
+const MAX_PROVIDER_HTTP_ATTEMPTS = (MAX_LOGICAL_LLM_CALLS + 1) * 2;
 const MAX_GROQ_HTTP_ATTEMPTS = 1;
 const MODEL_REQUEST_DEADLINE_MS = 45_000;
 const MAX_CIRCUIT_COOLDOWN_MS = 15 * 60_000;

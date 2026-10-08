@@ -19,7 +19,6 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { useLanguage, type AppLanguage } from '@/hooks/useLanguage';
@@ -1004,7 +1003,6 @@ function CentralSecretaryChat({
 }: SecretaryChatProps) {
   const inputBlocked = receiptNeedsReview(inputReview);
   const { language } = useLanguage();
-  const insets = useSafeAreaInsets();
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [inputHeight, setInputHeight] = useState(30);
   const transcriptRef = useRef<ScrollView>(null);
@@ -1034,6 +1032,7 @@ function CentralSecretaryChat({
       style={[
         compact ? styles.recordChatPanel : styles.centralChatPanel,
         !compact && expanded && styles.centralChatExpanded,
+        !compact && expanded && onOpenPearlSheet && { paddingBottom: sheetLift },
         {
             backgroundColor: compact ? colors.card : 'transparent',
             borderColor: compact ? colors.border : 'transparent',
@@ -1182,6 +1181,7 @@ function CentralSecretaryChat({
            !compact && expanded && transcriptMessages.length === 0 && styles.centralChatTranscriptEmptyContentPearl,
         ]}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         nestedScrollEnabled
         showsVerticalScrollIndicator={false}
       >
@@ -1260,12 +1260,11 @@ function CentralSecretaryChat({
       <View style={[
         styles.centralChatComposer,
         expanded && styles.centralChatComposerExpanded,
-        expanded && { bottom: 78 + insets.bottom + sheetLift },
         {
           backgroundColor: expanded ? colors.card : 'transparent',
           borderColor: expanded ? colors.border : 'transparent',
         },
-      ]}>
+      ]} testID={compact ? 'record-context-chat-composer' : 'main-chat-composer'}>
         <View style={styles.centralChatInputActions}>
           {onToggleVoice && (
             <Pressable
@@ -1489,8 +1488,8 @@ export function MainOffice({
   const pearlSheetContentVisible = pearlSheetHeight.current > 0
     && pearlSheetOffset / pearlSheetHeight.current < 0.76;
   const pearlComposerLift = (
-    Math.max(0, pearlSheetHeight.current * 0.9 - pearlSheetOffset)
-    + 40
+    Math.max(0, pearlSheetHeight.current - pearlSheetOffset)
+    + 8
   );
   const [recentSearchOpen, setRecentSearchOpen] = useState(false);
   const recentSearchRef = useRef<TextInput>(null);
@@ -5227,12 +5226,6 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
     paddingLeft: 6,
     paddingRight: 7,
-    position: 'absolute',
-    left: 12,
-    right: 12,
-    bottom: -16,
-    zIndex: 40,
-    elevation: 40,
   },
   centralChatInputExpanded: {
     paddingTop: 7,
