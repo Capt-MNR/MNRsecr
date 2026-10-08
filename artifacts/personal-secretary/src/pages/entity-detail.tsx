@@ -16,7 +16,7 @@ import { useGetEntityGraph, useGetFinancialParty } from "@workspace/api-client-r
 import { useLocation, useRoute } from "wouter";
 import type { ReactNode } from "react";
 import { ActivityTimeline, type ActivityTimelineEvent } from "../components/graph/activity-timeline";
-import { AskSecretaryLink, entityPath, financialRecordPath, recordPath } from "../components/graph/context-link";
+import { AskSecretaryLink, FollowSecretaryLink, entityPath, financialRecordPath, recordPath } from "../components/graph/context-link";
 import { EmptyRelation, GraphSection, RelatedLink } from "../components/graph/graph-section";
 
 type EntityType = "person" | "project";
@@ -137,7 +137,10 @@ export default function EntityDetail({ entityType }: { entityType: EntityType })
                 )}
               </div>
             </div>
-            <AskSecretaryLink entityType={entityType} entityId={entity.id} entityName={entity.name} />
+            <div className="flex flex-wrap gap-2">
+              <AskSecretaryLink entityType={entityType} entityId={entity.id} entityName={entity.name} />
+              <FollowSecretaryLink entityType={entityType} entityId={entity.id} entityName={entity.name} />
+            </div>
           </div>
         </header>
         {entityType === "person" ? <PersonSections data={data} setLocation={setLocation} /> : <ProjectSections data={data} setLocation={setLocation} />}

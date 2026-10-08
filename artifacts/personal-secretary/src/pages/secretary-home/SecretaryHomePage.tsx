@@ -178,7 +178,7 @@ export default function SecretaryHomePage() {
                 <MessageCircle className="size-4" /> اسألني
               </Link>
               <Link href="/works" data-testid="link-works" className="inline-flex min-h-9 items-center gap-2 rounded-xl px-3 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
-                <Workflow className="size-4" /> الأعمال
+                <Workflow className="size-4" /> المتابعات
               </Link>
               <Link href="/records" data-testid="link-records" className="inline-flex min-h-9 items-center gap-2 rounded-xl px-3 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
                 <ListChecks className="size-4" /> السجلات
@@ -201,7 +201,7 @@ export default function SecretaryHomePage() {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3 self-start sm:self-auto">
-              <Link href="/works" data-testid="link-start-work-follow-up" className="inline-flex min-h-11 items-center gap-2 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-2.5 text-xs font-semibold text-primary transition-colors hover:border-primary/40 hover:bg-primary/10">
+              <Link href="/ask?entry=follow" data-testid="link-start-work-follow-up" className="inline-flex min-h-11 items-center gap-2 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-2.5 text-xs font-semibold text-primary transition-colors hover:border-primary/40 hover:bg-primary/10">
                 <Workflow className="size-4" />
                 اجعل السكرتير يتابع
               </Link>
@@ -343,7 +343,7 @@ export default function SecretaryHomePage() {
                 <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
                   <SectionHeading icon={Workflow} title="السكرتير بيتابع" note="الحالة وآخر تشغيل والموعد القادم عند توفرها" />
                   <Link href="/works" data-testid="link-all-works" className="mb-1 inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline">
-                    إدارة الأعمال <ArrowLeft className="size-3.5" />
+                    إدارة المتابعات <ArrowLeft className="size-3.5" />
                   </Link>
                 </div>
                 <div className="grid gap-3 md:grid-cols-2">

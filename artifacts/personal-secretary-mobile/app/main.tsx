@@ -6,6 +6,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
   getGetSecretaryOperationQueryKey,
+  getListAgentWorksQueryKey,
   getListPendingSecretaryApprovalsQueryKey,
   getGetProactivePreferencesQueryKey,
   useGetSecretaryOperation,
@@ -31,6 +32,7 @@ import {
   secretaryFailureText,
 } from '../services/operation-presentation';
 import { hydrateLocalInputAttachments } from '../services/local-input-assets';
+import { agentWorkIdFromAction } from '../services/agent-work-presentation';
 import { initializeSecretaryPush } from '../services/mobile-push';
 import {
   MainDrawer,
@@ -92,6 +94,7 @@ export default function MainRoute() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [memorySheetOpen, setMemorySheetOpen] = useState(false);
   const [chatContext, setChatContext] = useState<MobileRecordRow | null>(null);
+  const [followEntryActive, setFollowEntryActive] = useState(false);
   const [messages, setMessages] = useState<LocalMessage[]>([starterMessage]);
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [focusedApproval, setFocusedApproval] = useState<{ operationId: string } | null>(null);
@@ -315,6 +318,7 @@ export default function MainRoute() {
        void queryClient.invalidateQueries({ queryKey: getListPendingSecretaryApprovalsQueryKey() });
       const linked = recordLinkFromAction(result.action);
       const actionApprovals = approvalsFromAction(result.action);
+      const agentWorkId = agentWorkIdFromAction(result.action);
       const derivedNotice = operationNoticeFromAction(result.action, result.action?.status);
       const operationNotice = actionApprovals.length > 0 && derivedNotice?.status === 'pending_approval'
         ? undefined
@@ -330,7 +334,10 @@ export default function MainRoute() {
           ? { approval: actionApprovals[0], ...(actionApprovals.length > 1 ? { approvals: actionApprovals } : {}) }
           : {}),
         ...(linked ? { recordLink: addOrigin(linked, result.conversationId, typeof objectValue(result.action).operationId === 'string' ? objectValue(result.action).operationId as string : null, result.turnId) } : {}),
+        ...(agentWorkId ? { agentWorkId } : {}),
       });
+      setFollowEntryActive(false);
+      if (agentWorkId) void queryClient.invalidateQueries({ queryKey: getListAgentWorksQueryKey() });
     } catch (error) {
       setLocalError(secretaryFailureText(error, language));
       void queryClient.invalidateQueries({ queryKey: getListPendingSecretaryApprovalsQueryKey() });
@@ -344,6 +351,7 @@ export default function MainRoute() {
         ? await secretaryChat.approveOperation(approval.operationId, args)
         : await secretaryChat.rejectOperation(approval.operationId);
       const linked = recordLinkFromAction(response.action);
+      const agentWorkId = agentWorkIdFromAction(response.action);
       const operationNotice = operationNoticeFromAction(response.action, response.status);
       setMessages((current) => current.map((message) => {
         const approvals = message.approvals ?? (message.approval ? [message.approval] : []);
@@ -356,6 +364,7 @@ export default function MainRoute() {
           approval: updatedApprovals[0],
           ...(updatedApprovals.length > 1 ? { approvals: updatedApprovals } : {}),
           ...(operationNotice ? { operationNotice } : {}),
+          ...(agentWorkId ? { agentWorkId } : {}),
           ...(linked ? { recordLink: addOrigin(linked, response.conversationId, response.operationId, response.turnId) } : {}),
         };
       }));
@@ -366,7 +375,9 @@ export default function MainRoute() {
         text: response.assistantMessage,
         createdAt: new Date().toISOString(),
         ...(linked ? { recordLink: addOrigin(linked, response.conversationId, response.operationId, response.turnId) } : {}),
+        ...(agentWorkId ? { agentWorkId } : {}),
       });
+      if (agentWorkId) void queryClient.invalidateQueries({ queryKey: getListAgentWorksQueryKey() });
       void queryClient.invalidateQueries({ queryKey: getListPendingSecretaryApprovalsQueryKey() });
       if (status === 'completed') await queryClient.invalidateQueries({ queryKey: ['records'] });
     } catch (error) {
@@ -402,6 +413,7 @@ export default function MainRoute() {
     setSelectedRecord(null);
     setMainSection(section);
     setChatContext(null);
+    setFollowEntryActive(false);
     setDrawerOpen(false);
   }
   function openRecordSection(sectionKey: string) {
@@ -413,6 +425,7 @@ export default function MainRoute() {
     setSelectedRecord(record);
     setMainSection('records');
     setChatContext(null);
+    setFollowEntryActive(false);
   }
   function openConversation(origin: RecordOrigin) {
     if (origin.conversationId !== conversationId) {
@@ -421,6 +434,7 @@ export default function MainRoute() {
     }
     setSelectedRecord(null);
     setMainSection('chat');
+    setFollowEntryActive(false);
   }
   function openConversationById(id: string) {
     openConversation({ conversationId: id });
@@ -429,8 +443,28 @@ export default function MainRoute() {
     if (!selectedRecord) return;
     setDraft(`اسألني عن ${selectedRecord.title}`);
     setChatContext(selectedRecord);
+    setFollowEntryActive(false);
     setSelectedRecord(null);
     setMainSection('chat');
+  }
+  function startFollowingFromHome() {
+    setDraft('');
+    setInputReview(null);
+    openMainSection('chat');
+    setFollowEntryActive(true);
+  }
+  function startFollowingFromRecord() {
+    if (!selectedRecord || !['person', 'project'].includes(selectedRecord.recordType)) return;
+    setDraft('');
+    setInputReview(null);
+    setChatContext(selectedRecord);
+    setFollowEntryActive(true);
+    setSelectedRecord(null);
+    setMainSection('chat');
+  }
+  function openWork(workId: string) {
+    router.setParams({ workId });
+    openMainSection('works');
   }
   const recordOrigins = messages.reduce<Record<string, RecordOrigin>>((origins, message) => {
     if (message.recordLink?.origin) origins[message.recordLink.id] = message.recordLink.origin;
@@ -487,6 +521,7 @@ export default function MainRoute() {
                   <SecretaryHome
                     language={language}
                     onOpenAsk={() => openMainSection('chat')}
+                    onStartFollowing={startFollowingFromHome}
                     onOpenRecord={openRecord}
                     onReviewApproval={(approval) => {
                       if (approval.conversationId) {
@@ -525,6 +560,8 @@ export default function MainRoute() {
                     onRetryInput={(attachment) => { if (attachment) void inputCapture.retryAttachment(attachment); }}
                     retryingInput={inputCapture.state === 'processing'}
                     context={chatContext}
+                    followEntryActive={followEntryActive}
+                    onOpenWork={openWork}
                     smartSignal={localError ?? (
                       params.providerTest === 'groq-only'
                         ? (language === 'ar'
@@ -566,13 +603,13 @@ export default function MainRoute() {
                {mainSection === 'tasks' && <RecordsView colors={colors} onOpenSection={openRecordSection} title="المهام" titleEn="Tasks" subtitle="المهام المفتوحة والمكتملة المرتبطة بسياقك" subtitleEn="Open and completed tasks connected to your context" sectionKeys={['tasks']} onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}
                {mainSection === 'reminders' && <RecordsView colors={colors} onOpenSection={openRecordSection} title="التذكيرات" titleEn="Reminders" subtitle="كل المواعيد والتنبيهات التي يتابعها السكرتير" subtitleEn="Appointments and reminders your secretary tracks" sectionKeys={['reminders']} onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}
                  {mainSection === 'activity' && <RecordsView colors={colors} onOpenSection={openRecordSection} title="النشاط" titleEn="Activity" subtitle="آخر السجلات والحركة التي تستحق المراجعة" subtitleEn="Recent records and updates worth reviewing" onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}
-                 {mainSection === 'works' && <WorksView colors={colors} language={language} initialWorkId={typeof params.workId === 'string' ? params.workId : undefined} onBack={() => openMainSection('office')} onStartFollowing={() => { setDraft(language === 'ar' ? 'عايز السكرتير يتابع ' : 'I want the secretary to follow '); setInputReview(null); openMainSection('chat'); }} />}
+                  {mainSection === 'works' && <WorksView colors={colors} language={language} initialWorkId={typeof params.workId === 'string' ? params.workId : undefined} onBack={() => openMainSection('office')} onStartFollowing={startFollowingFromHome} />}
                  {mainSection === 'settings' && <SettingsSection colors={colors} language={language} themePreference={themePreference} onThemeChange={setThemePreference} onLanguageChange={updateAppLanguage} assistantPreferences={assistantPreferences} onAssistantPreferencesChange={updateAssistantPreference} onOpenPersonalInformation={() => openMainSection('personal-information')} onBack={() => openMainSection('office')} />}
                  {mainSection === 'personal-information' && <PersonalInformationSection colors={colors} language={language} onBack={() => openMainSection('settings')} onOpenMemoryLibrary={() => setMemorySheetOpen(true)} />}
             </View>
             {selectedRecord && (
               <View style={[{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }, { backgroundColor: colors.background }]}>
-                <RecordDetailView record={selectedRecord} colors={colors} language={language} onBack={() => { setSelectedRecord(null); setMainSection(recordReturnSection); }} onAskSecretary={askSecretaryAboutRecord} onOpenConversation={openConversation} onOpenRelatedRecord={openRecord} onPendingApproval={handleRecordPendingApproval} onRecordSaved={() => setSelectedRecord(null)} chatMessages={messages} chatDraft={draft} onChangeChatDraft={setDraft} onSendChat={() => void sendMessage()} chatBusy={secretaryChat.isSending || conversationQuery.isFetching} onApprove={(approval, args) => void updateApproval(approval, 'completed', args)} onReject={(approval) => void updateApproval(approval, 'rejected')} busyOperationId={busyOperationId} chatContext={chatContext} />
+                 <RecordDetailView record={selectedRecord} colors={colors} language={language} onBack={() => { setSelectedRecord(null); setMainSection(recordReturnSection); }} onAskSecretary={askSecretaryAboutRecord} onStartFollowing={startFollowingFromRecord} followEntryActive={followEntryActive} onOpenWork={openWork} onOpenConversation={openConversation} onOpenRelatedRecord={openRecord} onPendingApproval={handleRecordPendingApproval} onRecordSaved={() => setSelectedRecord(null)} chatMessages={messages} chatDraft={draft} onChangeChatDraft={setDraft} onSendChat={() => void sendMessage()} chatBusy={secretaryChat.isSending || conversationQuery.isFetching} onApprove={(approval, args) => void updateApproval(approval, 'completed', args)} onReject={(approval) => void updateApproval(approval, 'rejected')} busyOperationId={busyOperationId} chatContext={chatContext} />
               </View>
             )}
           </View>

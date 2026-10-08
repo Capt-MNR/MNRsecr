@@ -342,6 +342,32 @@ try {
         && feedCardTops[2] > feedCardTops[1],
       `Upcoming records should be chronological, with recorded items later: ${JSON.stringify(feedCardTops)}`,
     );
+    const homeTurnsBeforeFollowEntry = counts.turns;
+    await browser.page.evaluate(`document.querySelector('[data-testid="home-start-following"]').click()`);
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="follow-entry-guide"]') !== null && document.querySelector('[data-testid="main-message-input"]') !== null`,
+      "Secretary follow-up entry",
+    );
+    const homeFollowDraft = await browser.page.evaluate(`document.querySelector('[data-testid="main-message-input"]')?.value ?? null`);
+    assert.equal(homeFollowDraft, "", "the Secretary entry should not prefill or send a generic Work request");
+    assert.equal(counts.turns, homeTurnsBeforeFollowEntry, "opening follow-up entry must not send a turn");
+    await browser.page.evaluate(`document.querySelector('[data-testid="main-bottom-office"]').click()`);
+    await waitForBrowserValue(browser.page, `document.querySelector('[data-testid="main-office-home"]') !== null`, "Home after follow-up entry");
+    await browser.page.evaluate(`document.querySelector('[data-testid="main-bottom-works"]').click()`);
+    await waitForBrowserValue(browser.page, `document.querySelector('[data-testid="agent-works-view"]') !== null`, "follow-ups list");
+    const worksTurnsBeforeFollowEntry = counts.turns;
+    await browser.page.evaluate(`document.querySelector('[data-testid="agent-work-start-following"]').click()`);
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="follow-entry-guide"]') !== null && document.querySelector('[data-testid="main-message-input"]') !== null`,
+      "follow-ups list creation entry",
+    );
+    const worksFollowDraft = await browser.page.evaluate(`document.querySelector('[data-testid="main-message-input"]')?.value ?? null`);
+    assert.equal(worksFollowDraft, "", "Work entry should hand off to natural-language chat without a canned request");
+    assert.equal(counts.turns, worksTurnsBeforeFollowEntry, "opening follow-up from Work must not send a turn");
+    await browser.page.evaluate(`document.querySelector('[data-testid="main-bottom-office"]').click()`);
+    await waitForBrowserValue(browser.page, `document.querySelector('[data-testid="main-office-home"]') !== null`, "Home after Work follow-up entry");
     await browser.page.evaluate(`document.querySelector('[data-testid="home-open-ask"]').click()`);
     await waitForBrowserValue(
       browser.page,
@@ -587,11 +613,29 @@ try {
       );
       await clickAndWaitForDetail(browser.page, testId, "records-back-to-office");
       assert.ok(label, `${label} should remain covered by this drill-down`);
-      await browser.page.evaluate(`document.querySelector('[data-testid="records-back-to-office"]').click()`);
+      const followTurnsBeforeContextEntry = counts.turns;
+      await browser.page.evaluate(`document.querySelector('[data-testid="${testId}"]').click()`);
+      await waitForBrowserValue(
+        browser.page,
+        `document.querySelector('[data-testid="follow-secretary-from-record"]') !== null`,
+        `${label} follow-up entry`,
+      );
+      await browser.page.evaluate(`document.querySelector('[data-testid="follow-secretary-from-record"]').click()`);
+      await waitForBrowserValue(
+        browser.page,
+        `document.querySelector('[data-testid="follow-entry-guide"]') !== null`,
+        `${label} follow-up context`,
+      );
+      const contextWasForwarded = await browser.page.evaluate(
+        `document.querySelector('[data-testid="follow-entry-guide"]')?.textContent?.includes('سياق المحادثة:') ?? false`,
+      );
+      assert.equal(contextWasForwarded, true, `${label} context should accompany the follow-up handoff`);
+      assert.equal(counts.turns, followTurnsBeforeContextEntry, `${label} follow-up entry must not send a turn`);
+      await browser.page.evaluate(`document.querySelector('[data-testid="main-bottom-office"]').click()`);
       await waitForBrowserValue(
         browser.page,
         `document.querySelector('[data-testid="main-office-home"]') !== null`,
-        `Home after leaving ${section}`,
+        `Home after opening follow-up from ${label}`,
       );
     }
 

@@ -19,6 +19,7 @@ export type HomeRecord = { id: string; recordType: string; title: string; subtit
 type Props = {
   language: AppLanguage;
   onOpenAsk: () => void;
+  onStartFollowing: () => void;
   onOpenRecord: (record: HomeRecord) => void;
   onReviewApproval: (approval: { operationId: string; conversationId?: string | null }) => void;
   onOpenWork: (workId: string) => void;
@@ -78,7 +79,7 @@ function Row({ icon, title, subtitle, tag, testID, onPress, colors, rtl, accent 
 }
 
 export default function SecretaryHome({
-  language, onOpenAsk, onOpenRecord, onReviewApproval, onOpenWork, onOpenContext,
+  language, onOpenAsk, onStartFollowing, onOpenRecord, onReviewApproval, onOpenWork, onOpenContext,
 }: Props) {
   const colors = useColors();
   const rtl = language === 'ar';
@@ -143,6 +144,15 @@ export default function SecretaryHome({
         </View>
         <Feather name={rtl ? 'arrow-left' : 'arrow-right'} size={18} color={colors.primaryForeground} />
       </Pressable>
+      <Row
+        testID="home-start-following"
+        icon="activity"
+        title={copy(language, 'اجعل السكرتير يتابع', 'Ask the secretary to follow')}
+        subtitle={copy(language, 'صف ما تريد متابعته بطريقتك.', 'Describe what you want followed.')}
+        onPress={onStartFollowing}
+        colors={colors}
+        rtl={rtl}
+      />
 
       <Pressable
         testID="home-open-context"

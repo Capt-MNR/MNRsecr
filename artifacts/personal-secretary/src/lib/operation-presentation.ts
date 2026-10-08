@@ -20,6 +20,14 @@ export type OperationNotice = {
   errorSummary?: string;
 };
 
+export function workRetryAllowed(
+  status: string,
+  unknownOutcome: boolean,
+  needsReview: boolean,
+): boolean {
+  return status === 'failed' && !unknownOutcome && !needsReview;
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>

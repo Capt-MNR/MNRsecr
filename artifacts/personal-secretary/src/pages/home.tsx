@@ -16,12 +16,14 @@ import {
   House,
   ShieldCheck,
   Sparkles,
+  Workflow,
   X,
 } from 'lucide-react';
 import {
   getGetTodayContextQueryKey,
   getGetSecretaryOperationQueryKey,
   getHealthCheckQueryKey,
+  getListAgentWorksQueryKey,
   useApproveSecretaryOperation,
   useCreateTurn,
   useGetTodayContext,
@@ -51,6 +53,7 @@ type LocalMessage = {
   turnId?: string;
   facts?: Array<{ type: 'money' | 'count'; value: number; currency?: string; label?: string }>;
   operationNotice?: OperationNotice;
+  createdWorkId?: string;
   approval?: {
     operationId: string;
     toolName: string;
@@ -134,6 +137,8 @@ function Home() {
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState('');
   const [askContext, setAskContext] = useState<{ entityType: string; entityId: string; entityName: string; } | null>(null);
+  const [isFollowEntryActive, setIsFollowEntryActive] = useState(false);
+  const [selectedFollowCapability, setSelectedFollowCapability] = useState<'tasks' | 'github' | 'daily' | null>(null);
   const [conversationId, setConversationId] = useState<string | undefined>();
 
   const [isContextOpen, setIsContextOpen] = useState(false);
@@ -213,18 +218,22 @@ function Home() {
         setHighlightedTurnId(linkedTurnId ?? undefined);
       }
       const askParam = searchParams.get('ask');
+      const entryParam = searchParams.get('entry');
       const entityTypeParam = searchParams.get('entityType');
       const entityIdParam = searchParams.get('entityId');
       const entityNameParam = searchParams.get('entityName');
 
+      if (entityTypeParam && entityIdParam && entityNameParam) {
+        setAskContext({ entityType: entityTypeParam, entityId: entityIdParam, entityName: entityNameParam });
+      }
       if (askParam) {
         setDraft(askParam);
-        if (entityTypeParam && entityIdParam && entityNameParam) {
-          setAskContext({ entityType: entityTypeParam, entityId: entityIdParam, entityName: entityNameParam });
-        }
-        // Remove from URL without page reload using wouter
-        setLocation(location, { replace: true });
       }
+      if (entryParam === 'follow') {
+        setSelectedFollowCapability(null);
+        setIsFollowEntryActive(true);
+      }
+      if (askParam || entryParam === 'follow') setLocation(location, { replace: true });
     }
   }, [searchString]);
 
@@ -300,6 +309,9 @@ function Home() {
           ...(turn.turnId ? { turnId: turn.turnId } : {}),
         ...(approval ? { approval } : {}),
         ...(notice?.status !== 'pending_approval' ? { operationNotice: notice } : {}),
+        ...(action?.type === 'agent_work_created' && typeof action.workId === 'string'
+          ? { createdWorkId: action.workId }
+          : {}),
       });
     });
     setMessages((current) => {
@@ -387,6 +399,7 @@ function Home() {
           sendingRef.current = false;
           setSendError(null);
           setUncertainSend(null);
+          setIsFollowEntryActive(false);
           const approval = approvalFromAction(response.action);
           const derivedNotice = operationNoticeFromAction(response.action);
           const operationNotice = approval && derivedNotice?.status === 'pending_approval' ? undefined : derivedNotice;
@@ -405,10 +418,16 @@ function Home() {
                ...(response.response?.groundedFacts ? { facts: response.response.groundedFacts } : {}),
               ...(approval ? { approval } : {}),
                ...(operationNotice ? { operationNotice } : {}),
+               ...(response.action?.type === 'agent_work_created' && typeof response.action.workId === 'string'
+                 ? { createdWorkId: response.action.workId }
+                 : {}),
             },
           ]);
           queryClient.invalidateQueries({ queryKey: getGetTodayContextQueryKey() });
           queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
+          if (response.action?.type === 'agent_work_created' && typeof response.action.workId === 'string') {
+            queryClient.invalidateQueries({ queryKey: getListAgentWorksQueryKey() });
+          }
         },
         onError: (error) => {
           sendingRef.current = false;
@@ -431,6 +450,12 @@ function Home() {
   }) {
     setApprovalError(null);
     const operationNotice = operationNoticeFromAction(response.action, response.status);
+    const action = response.action && typeof response.action === 'object'
+      ? response.action as Record<string, unknown>
+      : undefined;
+    const createdWorkId = action?.type === 'agent_work_created' && typeof action.workId === 'string'
+      ? action.workId
+      : undefined;
     setMessages((current) => current.map((message) => (
       message.approval?.operationId === response.operationId
         ? {
@@ -439,12 +464,14 @@ function Home() {
              ...(response.turnId ? { turnId: response.turnId } : {}),
             approval: { ...message.approval, status: response.status },
              ...(operationNotice ? { operationNotice } : {}),
+             ...(createdWorkId ? { createdWorkId } : {}),
           }
         : message
     )));
     queryClient.invalidateQueries({ queryKey: getGetSecretaryOperationQueryKey(response.operationId) });
     queryClient.invalidateQueries({ queryKey: getGetTodayContextQueryKey() });
     queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
+    if (createdWorkId) queryClient.invalidateQueries({ queryKey: getListAgentWorksQueryKey() });
   }
 
   function approve(operationId: string, args?: Record<string, unknown>) {
@@ -537,7 +564,7 @@ function Home() {
             </Link>
             <Link href="/works" className="mt-2 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
               <Sparkles className="size-4" />
-              أعمال الوكيل
+              ما يتابعه السكرتير
             </Link>
             <Link href="/learning" className="mt-2 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
               <ShieldCheck className="size-4" />
@@ -656,7 +683,7 @@ function Home() {
           <div className="flex min-h-0 flex-1 flex-col xl:flex-row">
             <section className="flex min-h-0 min-w-0 flex-1 flex-col px-4 pb-5 pt-7 sm:px-8 sm:pt-10 lg:px-12">
               <div className="mx-auto flex w-full max-w-[760px] flex-1 flex-col">
-                <div className="mb-7 flex items-end justify-between">
+                <div className="mb-5 flex items-end justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground">اكتب طلبك بطريقتك الطبيعية.</p>
                     <p className="mt-1 text-xs text-muted-foreground/75">المصروفات والتذكيرات تُحفظ في مساحتك الخاصة.</p>
@@ -671,6 +698,65 @@ function Home() {
                     مسح المحادثة
                   </button>
                 </div>
+
+                {isFollowEntryActive && (
+                  <div className="mb-3 rounded-2xl border border-primary/15 bg-primary/[0.035] px-4 py-3" data-testid="follow-entry-prompt">
+                    <p className="text-sm font-semibold">ماذا تريد من السكرتير أن يتابع؟</p>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">اكتب طلبك في المحادثة بطريقتك. إذا احتاج التنفيذ إلى موافقة، ستظهر لك للمراجعة.</p>
+                    <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="اختيار نوع المتابعة">
+                      <button
+                        type="button"
+                        data-testid="follow-capability-tasks"
+                        aria-pressed={selectedFollowCapability === 'tasks'}
+                        onClick={() => setSelectedFollowCapability('tasks')}
+                        className={`min-h-9 rounded-full border px-3 text-xs font-semibold transition-colors ${selectedFollowCapability === 'tasks' ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background/70 text-foreground hover:border-primary/40'}`}
+                      >
+                        عدد المهام المفتوحة
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="follow-capability-github"
+                        aria-pressed={selectedFollowCapability === 'github'}
+                        onClick={() => setSelectedFollowCapability('github')}
+                        className={`min-h-9 rounded-full border px-3 text-xs font-semibold transition-colors ${selectedFollowCapability === 'github' ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background/70 text-foreground hover:border-primary/40'}`}
+                      >
+                        مسائل مستودع GitHub
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="follow-capability-daily"
+                        aria-pressed={selectedFollowCapability === 'daily'}
+                        onClick={() => setSelectedFollowCapability('daily')}
+                        className={`min-h-9 rounded-full border px-3 text-xs font-semibold transition-colors ${selectedFollowCapability === 'daily' ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background/70 text-foreground hover:border-primary/40'}`}
+                      >
+                        مهمة يومية
+                      </button>
+                    </div>
+                    {selectedFollowCapability && (
+                      <p className="mt-2 text-xs leading-5 text-muted-foreground" role="status">
+                        {selectedFollowCapability === 'tasks'
+                          ? 'اكتب الحدّ الرقمي الذي تريد التنبيه عند تجاوزه.'
+                          : selectedFollowCapability === 'github'
+                            ? 'اكتب اسم المستودع العام بصيغة owner/repo والحدّ الرقمي.'
+                            : 'اكتب المهمة والوقت اليومي بوضوح.'}
+                      </p>
+                    )}
+                  </div>
+                )}
+                {!requestedOperationId && !isFollowEntryActive && (
+                  <details open={isFollowEntryActive} className="group mb-5 rounded-2xl border border-primary/15 bg-primary/[0.035] px-4 py-3" data-testid="disclosure-follow-up-capabilities">
+                    <summary className="flex min-h-8 cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold marker:hidden">
+                      <span>ما الذي يمكنني متابعته لك؟</span>
+                      <span className="text-xs font-normal text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true">⌄</span>
+                    </summary>
+                    <div className="mt-3 grid gap-2 border-t border-border/60 pt-3 text-xs leading-6 text-muted-foreground sm:grid-cols-2">
+                      <p><strong className="text-foreground">مهامك:</strong> أخبرني أن أتابع عدد مهامك المفتوحة إذا تجاوز رقمًا تحدده.</p>
+                      <p><strong className="text-foreground">GitHub:</strong> يمكنني متابعة عدد المسائل المفتوحة في مستودع عام تحدده مع رقم واضح.</p>
+                      <p><strong className="text-foreground">تذكير يومي:</strong> اذكر المهمة ووقت التذكير صراحةً.</p>
+                      <p className="sm:col-span-2">الإجراءات الخارجية تحتاج موفّرًا متصلًا وموافقتك قبل التنفيذ. اكتب ما تريد هنا؛ لن يبدأ شيء قبل أن ترسله.</p>
+                    </div>
+                  </details>
+                )}
 
                 {requestedOperationId && operationQuery.isLoading && (
                   <div role="status" aria-busy="true" className="mb-4 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-muted-foreground">
@@ -759,6 +845,16 @@ function Home() {
                           </div>
                         )}
                         {!message.approval && message.operationNotice && <OperationStatusNotice notice={message.operationNotice} />}
+                         {message.createdWorkId && (
+                           <Link
+                             href={`/works/${encodeURIComponent(message.createdWorkId)}`}
+                             onClick={() => queryClient.invalidateQueries({ queryKey: getListAgentWorksQueryKey() })}
+                             className="mt-3 inline-flex min-h-9 items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 text-xs font-semibold text-primary transition-colors hover:bg-primary/10"
+                             data-testid={`link-created-work-${message.createdWorkId}`}
+                           >
+                             <Workflow className="size-3.5" /> عرض المتابعة
+                           </Link>
+                         )}
                       </div>
                     </article>
                   ))}
@@ -816,10 +912,13 @@ function Home() {
 
                 <div className="rounded-[20px] border border-border bg-card p-2 shadow-[0_18px_44px_-35px_hsl(var(--foreground)/.45)]">
                   {askContext && (
-                    <div className="mb-2 flex items-center justify-between rounded-lg bg-primary/5 px-3 py-1.5 text-xs text-primary">
+                    <div className="mb-2 flex items-center justify-between gap-3 rounded-lg bg-primary/5 px-3 py-1.5 text-xs text-primary">
                       <div className="flex items-center gap-2">
                         <Sparkles className="size-3.5" />
-                        <span>سؤال عن: <strong>{askContext.entityName}</strong></span>
+                        <span>
+                          سياق المحادثة: <strong>{askContext.entityName}</strong>
+                          {isFollowEntryActive && <span className="mt-0.5 block text-[10px] text-muted-foreground">يُستخدم السياق لفهم الطلب، ولا يُحفظ كعلاقة على المتابعة.</span>}
+                        </span>
                       </div>
                       <button 
                         type="button" 
@@ -835,7 +934,13 @@ function Home() {
                     value={draft}
                     onChange={(event) => setDraft(event.target.value)}
                     onKeyDown={handleComposerKeyDown}
-                    placeholder="اكتب طلبك هنا..."
+                    placeholder={isFollowEntryActive && selectedFollowCapability === 'tasks'
+                      ? 'مثال: راقب مهامي المفتوحة إذا تجاوزت 5 وأبلغني...'
+                      : isFollowEntryActive && selectedFollowCapability === 'github'
+                        ? 'مثال: تابع مسائل owner/repo المفتوحة إذا تجاوزت 10...'
+                        : isFollowEntryActive && selectedFollowCapability === 'daily'
+                          ? 'مثال: فكرني يوميًا بمراجعة العمل الساعة 9...'
+                          : 'اكتب طلبك هنا...'}
                     rows={2}
                     className="w-full resize-none bg-transparent px-3 py-2 text-[15px] leading-relaxed outline-none placeholder:text-muted-foreground/65"
                     data-testid="input-message"

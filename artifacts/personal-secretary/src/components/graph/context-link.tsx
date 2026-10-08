@@ -31,7 +31,7 @@ export function askAboutEntityHref(entityType: GraphEntityType, id: string, name
     entityId: id,
     entityName: name,
   });
-  return `/?${params.toString()}`;
+  return `/ask?${params.toString()}`;
 }
 
 export function AskSecretaryLink({
@@ -53,6 +53,38 @@ export function AskSecretaryLink({
     >
       {compact ? <MessageCircle className="size-4" /> : <Sparkles className="size-4" />}
       اسأل السكرتير عن هذا الكيان
+    </a>
+  );
+}
+
+export function followSecretaryHref(entityType: "person" | "project", id: string, name: string) {
+  const params = new URLSearchParams({
+    entry: "follow",
+    entityType,
+    entityId: id,
+    entityName: name,
+  });
+  return `/ask?${params.toString()}`;
+}
+
+export function FollowSecretaryLink({
+  entityType,
+  entityId,
+  entityName,
+}: {
+  entityType: "person" | "project";
+  entityId: string;
+  entityName: string;
+}) {
+  return (
+    <a
+      href={followSecretaryHref(entityType, entityId, entityName)}
+      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-primary/25 bg-primary/5 px-3 py-2.5 text-sm font-semibold text-primary transition hover:bg-primary/10"
+      aria-label={`اجعل السكرتير يتابع بشأن ${entityName}`}
+      data-testid="link-follow-secretary-with-context"
+    >
+      <Sparkles className="size-4" />
+      اجعل السكرتير يتابع
     </a>
   );
 }

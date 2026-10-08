@@ -36,6 +36,7 @@ import {
   secretaryFailureText,
   type OperationNotice,
 } from '../../services/operation-presentation';
+import { workRetryAllowed } from '../../services/agent-work-presentation';
 
 type WorksColors = ReturnType<typeof useColors>;
 
@@ -141,7 +142,7 @@ function statusColor(status: string, colors: WorksColors): string {
   return colors.mutedForeground;
 }
 
-function transitionActions(status: AgentWorkStatus, unknownOutcome = false): Array<{
+function transitionActions(status: AgentWorkStatus, unknownOutcome = false, needsReview = false): Array<{
   to: AgentWorkStatus;
   labelAr: string;
   labelEn: string;
@@ -166,7 +167,7 @@ function transitionActions(status: AgentWorkStatus, unknownOutcome = false): Arr
     case 'needs_review':
       return [{ to: 'cancelled', labelAr: 'إلغاء', labelEn: 'Cancel', icon: 'x-circle', tone: 'destructive' }];
     case 'failed':
-      if (unknownOutcome) {
+      if (!workRetryAllowed(status, unknownOutcome, needsReview)) {
         return [{ to: 'cancelled', labelAr: 'إلغاء المتابعة', labelEn: 'Cancel monitoring', icon: 'x-circle', tone: 'destructive' }];
       }
       return [
@@ -367,7 +368,7 @@ function WorkDetail({
     ?? (operation?.status ? operationNoticeFromStatus(operation.status) : persistedRunNotice);
   const unknownOutcome = currentOperationNotice?.status === 'unknown_result';
   const needsReview = currentOperationNotice?.status === 'needs_review';
-  const actions = transitionActions(work.status ?? 'draft', unknownOutcome);
+  const actions = transitionActions(work.status ?? 'draft', unknownOutcome, needsReview);
   const approvalVisible = Boolean(
     operation
     && approvalOperationId
@@ -389,7 +390,7 @@ function WorkDetail({
         <Pressable
           testID="agent-work-back"
           accessibilityRole="button"
-          accessibilityLabel={localized(language, 'العودة إلى أعمال الوكيل', 'Back to agent work')}
+          accessibilityLabel={localized(language, 'العودة إلى المتابعات', 'Back to follow-ups')}
           onPress={onBack}
           style={({ pressed }) => [styles.iconButton, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}
         >
@@ -639,7 +640,7 @@ export default function WorksView({
         <View style={styles.listHeader}>
           <View style={styles.recordsIntro}>
             <View style={styles.listHeaderCopy}>
-              <Text style={[styles.detailTitle, { color: colors.foreground }]}>{localized(language, 'أعمال الوكيل', 'Agent work')}</Text>
+              <Text style={[styles.detailTitle, { color: colors.foreground }]}>{localized(language, 'ما يتابعه السكرتير', 'Secretary follow-ups')}</Text>
               <Text style={[styles.detailDescription, { color: colors.mutedForeground }]}>
                 {localized(language, 'ما يتابعه الوكيل وما يحتاج انتباهك.', 'What the agent is following and what needs your attention.')}
               </Text>
@@ -658,13 +659,13 @@ export default function WorksView({
             <Pressable
               testID="agent-work-start-following"
               accessibilityRole="button"
-              accessibilityLabel={localized(language, 'اطلب من السكرتير متابعة عمل جديد', 'Ask the secretary to follow something new')}
+              accessibilityLabel={localized(language, 'اجعل السكرتير يتابع شيئًا جديدًا', 'Ask the secretary to follow something new')}
               onPress={onStartFollowing}
               style={({ pressed }) => [{ padding: 14, borderRadius: 16, borderWidth: 1, backgroundColor: colors.primary, borderColor: colors.primary, flexDirection: 'row-reverse', alignItems: 'center', gap: 10, opacity: pressed ? 0.75 : 1 }]}
             >
               <Feather name="plus-circle" size={18} color={colors.primaryForeground} />
               <View style={{ flex: 1 }}>
-                <Text style={[styles.errorTitle, { color: colors.primaryForeground }]}>{localized(language, 'اطلب متابعة جديدة', 'Ask for new follow-up')}</Text>
+                <Text style={[styles.errorTitle, { color: colors.primaryForeground }]}>{localized(language, 'اجعل السكرتير يتابع', 'Ask the secretary to follow')}</Text>
                 <Text style={[styles.emptyText, { color: colors.primaryForeground, opacity: 0.8 }]}>{localized(language, 'صف ما تريد متابعته بلغة عادية.', 'Describe what you want tracked in plain language.')}</Text>
               </View>
             </Pressable>
@@ -672,12 +673,12 @@ export default function WorksView({
           {worksQuery.isLoading && (
             <View style={styles.loadingState}>
               <ActivityIndicator color={colors.primary} />
-              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>{localized(language, 'جاري تحميل الأعمال…', 'Loading agent work…')}</Text>
+              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>{localized(language, 'جاري تحميل المتابعات…', 'Loading follow-ups…')}</Text>
             </View>
           )}
           {worksQuery.isError && (
             <View style={[styles.errorCard, { backgroundColor: `${colors.destructive}14`, borderColor: colors.destructive }]}>
-              <Text style={[styles.errorTitle, { color: colors.destructive }]}>{localized(language, 'تعذر تحميل أعمال الوكيل', 'Unable to load agent work')}</Text>
+              <Text style={[styles.errorTitle, { color: colors.destructive }]}>{localized(language, 'تعذر تحميل المتابعات', 'Unable to load follow-ups')}</Text>
               <Pressable accessibilityRole="button" onPress={() => void worksQuery.refetch()}>
                 <Text style={[styles.retryText, { color: colors.destructive }]}>{localized(language, 'حاول مرة أخرى', 'Try again')}</Text>
               </Pressable>
@@ -700,7 +701,7 @@ export default function WorksView({
           {!worksQuery.isLoading && !worksQuery.isError && works.length === 0 && (
             <View style={[styles.emptyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <Feather name="compass" size={24} color={colors.primary} />
-              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>{localized(language, 'لا توجد أعمال بعد', 'No agent work yet')}</Text>
+              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>{localized(language, 'لا توجد متابعات بعد', 'No follow-ups yet')}</Text>
               <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
                 {localized(language, 'اطلب من السكرتير متابعة شيء مستمر، وسيظهر هنا.', 'Ask the secretary to keep following something and it will appear here.')}
               </Text>

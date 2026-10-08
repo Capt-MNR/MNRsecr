@@ -24,6 +24,7 @@ import { useColors } from '@/hooks/useColors';
 import { useLanguage, type AppLanguage } from '@/hooks/useLanguage';
 import { useSecretaryChatService, type SecretaryChatContext } from '../../services/secretary-chat';
 import { operationNoticeFromAction, type OperationNotice } from '../../services/operation-presentation';
+import { agentWorkIdFromAction } from '../../services/agent-work-presentation';
 import type { LocalInputAttachment } from '../../services/local-input-assets';
 import { receiptNeedsReview, type SecretaryInputResult, type SecretaryInputState } from '../../services/secretary-input';
 import { MessageBubble } from '../message-bubble';
@@ -66,6 +67,7 @@ export type LocalMessage = {
   approval?: Approval;
   approvals?: Approval[];
   operationNotice?: OperationNotice;
+  agentWorkId?: string;
   recordLink?: MobileRecordRow;
 };
 
@@ -707,6 +709,7 @@ export function messagesFromConversation(detail: unknown, conversationId: string
     const createdAt = typeof turn.createdAt === 'string' ? turn.createdAt : new Date().toISOString();
     const action = Object.keys(objectValue(turn.action)).length > 0 ? objectValue(turn.action) : undefined;
     const recordLink = action ? recordLinkFromAction(action) : undefined;
+    const agentWorkId = action ? agentWorkIdFromAction(action) : undefined;
     const linkedRecord = recordLink ? addOrigin(recordLink, conversationId, typeof action?.operationId === 'string' ? action.operationId : null) : undefined;
     const inputId = typeof turn.inputId === 'string' ? turn.inputId : undefined;
 
@@ -735,6 +738,7 @@ export function messagesFromConversation(detail: unknown, conversationId: string
           const notice = operationNoticeFromAction(action, action.status);
           return notice ? { operationNotice: notice } : {};
         })() : {}),
+        ...(agentWorkId ? { agentWorkId } : {}),
         ...(linkedRecord ? { recordLink: linkedRecord } : {}),
       });
     }
@@ -958,9 +962,11 @@ export type SecretaryChatProps = {
   onReject: (approval: Approval) => void;
   busyOperationId: string | null;
   onOpenRecord: (record: MobileRecordRow) => void;
+  onOpenWork?: (workId: string) => void;
   onRetryInput?: (attachment: LocalMessage['inputAttachment']) => void;
   retryingInput?: boolean;
   context?: MobileRecordRow | null;
+  followEntryActive?: boolean;
   smartSignal?: string;
   quickPrompts?: Array<{ label: string; value: string }>;
   showPromptRail?: boolean;
@@ -1023,9 +1029,11 @@ function CentralSecretaryChat({
   onReject,
   busyOperationId,
   onOpenRecord,
+  onOpenWork,
   onRetryInput,
   retryingInput = false,
   context,
+  followEntryActive = false,
   smartSignal,
   quickPrompts,
   showPromptRail = true,
@@ -1045,8 +1053,12 @@ function CentralSecretaryChat({
   const inputBlocked = receiptNeedsReview(inputReview);
   const { language } = useLanguage();
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const [selectedFollowCapability, setSelectedFollowCapability] = useState<'tasks' | 'github' | 'daily' | null>(null);
   const [inputHeight, setInputHeight] = useState(30);
   const transcriptRef = useRef<ScrollView>(null);
+  useEffect(() => {
+    if (!followEntryActive) setSelectedFollowCapability(null);
+  }, [followEntryActive]);
   useEffect(() => {
     if (!draft) setInputHeight(30);
   }, [draft]);
@@ -1245,6 +1257,69 @@ function CentralSecretaryChat({
         nestedScrollEnabled
         showsVerticalScrollIndicator={false}
       >
+        {followEntryActive && (
+          <View
+            testID="follow-entry-guide"
+            style={{ marginBottom: 14, padding: 13, borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, backgroundColor: colors.card }}
+          >
+            <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: '800', textAlign: 'right' }}>
+              {localized(language, 'ماذا تريد من السكرتير أن يتابع؟', 'What should your secretary follow?')}
+            </Text>
+            <Text style={{ marginTop: 5, color: colors.mutedForeground, fontSize: 11, lineHeight: 17, textAlign: 'right' }}>
+              {localized(language, 'اختر متابعة مدعومة أو اكتب طلبك بطريقتك. الاختيار يوجّهك فقط؛ لن يُرسل أو ينشئ شيئًا.', 'Choose a supported follow-up or describe it naturally. Selecting only guides you; it does not send or create anything.')}
+            </Text>
+            <View style={{ marginTop: 9, flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 6 }}>
+              {([
+                { id: 'tasks', label: localized(language, 'عدد المهام المفتوحة', 'Open-task count') },
+                { id: 'github', label: localized(language, 'مسائل مستودع GitHub', 'GitHub repository issues') },
+                { id: 'daily', label: localized(language, 'مهمة يومية', 'Daily task') },
+              ] as const).map((capability) => {
+                const selected = selectedFollowCapability === capability.id;
+                return (
+                  <Pressable
+                    key={capability.id}
+                    testID={`follow-capability-${capability.id}`}
+                    accessibilityRole="button"
+                    accessibilityLabel={capability.label}
+                    accessibilityState={{ selected }}
+                    onPress={() => setSelectedFollowCapability(capability.id)}
+                    style={({ pressed }) => ({
+                      minHeight: 34,
+                      paddingHorizontal: 11,
+                      borderRadius: 18,
+                      borderWidth: StyleSheet.hairlineWidth,
+                      borderColor: selected ? colors.primary : colors.border,
+                      backgroundColor: selected ? colors.primary : colors.background,
+                      justifyContent: 'center',
+                      opacity: pressed ? 0.72 : 1,
+                    })}
+                  >
+                    <Text style={{ color: selected ? colors.primaryForeground : colors.foreground, fontSize: 10, fontWeight: '700', textAlign: 'right' }}>
+                      {capability.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {selectedFollowCapability && (
+              <Text style={{ marginTop: 7, color: colors.primary, fontSize: 10, lineHeight: 16, textAlign: 'right' }} accessibilityLiveRegion="polite">
+                {selectedFollowCapability === 'tasks'
+                  ? localized(language, 'اكتب حدّ المهام المفتوحة الذي تريد التنبيه عند تجاوزه.', 'Describe the open-task threshold that should trigger an alert.')
+                  : selectedFollowCapability === 'github'
+                    ? localized(language, 'اكتب اسم المستودع العام بصيغة owner/repo والحدّ الرقمي.', 'Provide a public repository as owner/repo and a numeric threshold.')
+                    : localized(language, 'اكتب المهمة ووقت التذكير اليومي بوضوح.', 'Specify the task and its daily reminder time.')}
+              </Text>
+            )}
+            <Text style={{ marginTop: 5, color: colors.mutedForeground, fontSize: 10, lineHeight: 16, textAlign: 'right' }}>
+              {localized(language, 'الإجراءات عبر الخدمات المتصلة تحتاج موافقة منفصلة.', 'Actions through connected services require separate approval.')}
+            </Text>
+            {context && (
+              <Text style={{ marginTop: 5, color: colors.primary, fontSize: 10, lineHeight: 15, textAlign: 'right' }}>
+                {localized(language, `سياق المحادثة: ${context.title}. لن يُحفظ كارتباط بالمتابعة.`, `Conversation context: ${context.title}. It will not be stored as a Work relationship.`)}
+              </Text>
+            )}
+          </View>
+        )}
         {!compact && transcriptMessages.length === 0 && !isSending && (
           <View style={styles.centralChatEmpty}>
             <View style={[styles.centralChatEmptyIcon, { backgroundColor: colors.muted }]}>
@@ -1261,18 +1336,31 @@ function CentralSecretaryChat({
           </View>
         )}
         {transcriptMessages.map((message) => (
-          <MessageBubble
-            key={message.id}
-            message={message}
-            colors={colors}
-            onApprove={onApprove}
-            onReject={onReject}
-            onOpenRecord={onOpenRecord}
-            onRetryInput={onRetryInput}
-            retryingInput={retryingInput}
-            busyOperationId={busyOperationId}
-            pearlStyle={!compact}
-          />
+          <View key={message.id} style={{ width: '100%' }}>
+            <MessageBubble
+              message={message}
+              colors={colors}
+              onApprove={onApprove}
+              onReject={onReject}
+              onOpenRecord={onOpenRecord}
+              onRetryInput={onRetryInput}
+              retryingInput={retryingInput}
+              busyOperationId={busyOperationId}
+              pearlStyle={!compact}
+            />
+            {message.agentWorkId && onOpenWork && (
+              <Pressable
+                testID={`open-created-work-${message.agentWorkId}`}
+                accessibilityRole="button"
+                accessibilityLabel={localized(language, 'عرض المتابعة المحفوظة', 'Open saved follow-up')}
+                onPress={() => onOpenWork(message.agentWorkId!)}
+                style={({ pressed }) => ({ alignSelf: 'flex-start', minHeight: 34, marginTop: 6, paddingHorizontal: 11, borderRadius: 11, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, backgroundColor: colors.card, flexDirection: 'row-reverse', alignItems: 'center', gap: 6, opacity: pressed ? 0.7 : 1 })}
+              >
+                <Feather name="arrow-up-left" size={13} color={colors.primary} />
+                <Text style={{ color: colors.primary, fontSize: 11, fontWeight: '700' }}>{localized(language, 'عرض المتابعة', 'View follow-up')}</Text>
+              </Pressable>
+            )}
+          </View>
         ))}
         {isSending && (
           <View style={[styles.centralChatTyping, { backgroundColor: colors.muted }]}>
@@ -3639,6 +3727,9 @@ export function RecordDetailView({
   language,
   onBack,
   onAskSecretary,
+  onStartFollowing,
+  followEntryActive = false,
+  onOpenWork,
   onOpenConversation,
   onOpenRelatedRecord,
   chatMessages,
@@ -3658,6 +3749,9 @@ export function RecordDetailView({
   language: AppLanguage;
   onBack: () => void;
   onAskSecretary: () => void;
+  onStartFollowing?: () => void;
+  followEntryActive?: boolean;
+  onOpenWork?: (workId: string) => void;
   onOpenConversation?: (origin: RecordOrigin) => void;
   onOpenRelatedRecord: (record: MobileRecordRow) => void;
   chatMessages: LocalMessage[];
@@ -4019,6 +4113,21 @@ export function RecordDetailView({
         <Feather name="message-circle" size={16} color={colors.primaryForeground} />
         <Text style={[detailStyles.detailPrimaryActionText, { color: colors.primaryForeground }]}>اسأل السكرتير عن هذا</Text>
       </Pressable>
+      {(displayRecord.recordType === 'person' || displayRecord.recordType === 'project') && onStartFollowing && (
+        <Pressable
+          testID="follow-secretary-from-record"
+          accessibilityRole="button"
+          accessibilityLabel="اجعل السكرتير يتابع مع سياق هذا الشخص أو المشروع"
+          onPress={onStartFollowing}
+          style={({ pressed }) => [
+            detailStyles.detailSecondaryAction,
+            { borderColor: colors.border, backgroundColor: colors.card, opacity: pressed ? 0.68 : 1 },
+          ]}
+        >
+          <Feather name="activity" size={16} color={colors.primary} />
+          <Text style={[detailStyles.detailSecondaryActionText, { color: colors.primary }]}>اجعل السكرتير يتابع</Text>
+        </Pressable>
+      )}
       {chatContext?.id === displayRecord.id && (
         <CentralSecretaryChat
           colors={colors}
@@ -4032,6 +4141,8 @@ export function RecordDetailView({
           busyOperationId={busyOperationId}
           onOpenRecord={onOpenRelatedRecord}
           context={record}
+          followEntryActive={followEntryActive}
+          onOpenWork={onOpenWork}
           compact
         />
       )}
@@ -4064,7 +4175,7 @@ const mainNavigation: Array<{ key: MainSection; labelAr: string; labelEn: string
   { key: 'tasks', labelAr: 'المهام', labelEn: 'Tasks', icon: 'check-square' },
   { key: 'reminders', labelAr: 'التذكيرات', labelEn: 'Reminders', icon: 'bell' },
   { key: 'activity', labelAr: 'النشاط', labelEn: 'Activity', icon: 'activity' },
-  { key: 'works', labelAr: 'الأعمال والمتابعة', labelEn: 'Work', icon: 'compass' },
+  { key: 'works', labelAr: 'متابعات السكرتير', labelEn: 'Follow-ups', icon: 'compass' },
 ];
 
 export function ConversationHistoryView({
@@ -4175,7 +4286,7 @@ export function MainBottomBar({
     { key: 'office', labelAr: 'السكرتير', labelEn: 'Secretary', icon: 'home' },
     { key: 'chat', labelAr: 'اسأل', labelEn: 'Ask', icon: 'message-circle' },
     { key: 'context', labelAr: 'السياق', labelEn: 'Context', icon: 'layers' },
-    { key: 'works', labelAr: 'العمل', labelEn: 'Work', icon: 'compass' },
+    { key: 'works', labelAr: 'المتابعات', labelEn: 'Follow-ups', icon: 'compass' },
     { key: 'more', labelAr: 'المزيد', labelEn: 'More', icon: 'more-horizontal' },
   ];
   return (

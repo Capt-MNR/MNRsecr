@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { operationNoticeFromAction } from '../src/lib/operation-presentation.ts';
+import { operationNoticeFromAction, workRetryAllowed } from '../src/lib/operation-presentation.ts';
 
 test('operation states remain distinct', () => {
   assert.equal(operationNoticeFromAction({ status: 'pending' })?.status, 'pending_approval');
@@ -12,6 +12,14 @@ test('operation states remain distinct', () => {
   assert.equal(operationNoticeFromAction({ status: 'failed' })?.status, 'failed');
   assert.equal(operationNoticeFromAction({ status: 'needs_review' })?.status, 'needs_review');
   assert.equal(operationNoticeFromAction({ status: 'cancelled' })?.status, 'cancelled');
+});
+
+test('Work retry is limited to known failures outside review', () => {
+  assert.equal(workRetryAllowed('failed', false, false), true);
+  assert.equal(workRetryAllowed('failed', true, false), false);
+  assert.equal(workRetryAllowed('failed', false, true), false);
+  assert.equal(workRetryAllowed('needs_review', false, false), false);
+  assert.equal(workRetryAllowed('completed', false, false), false);
 });
 
 test('nested unknown external outcome overrides a completed operation status', () => {
