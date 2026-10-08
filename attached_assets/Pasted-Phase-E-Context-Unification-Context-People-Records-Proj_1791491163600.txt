@@ -1,0 +1,616 @@
+Phase E — Context Unification
+
+الهدف
+
+حوّل Context من مجرد شاشة لعرض People / Records / Projects إلى طبقة موحدة تجعل المستخدم يشعر أن السكرتير فاهم الشخص أو الموضوع وعارف تاريخه وعلاقاته وما يتابعه حاليًا.
+
+السؤال الأساسي الذي يجب أن تجيب عنه شاشة Context:
+
+«"إيه اللي السكرتير يعرفه عن ده؟ وإيه اللي حصل؟ وإيه اللي بيتابعه؟ وإيه المطلوب؟"»
+
+نفّذ التغييرات مباشرة في الكود الحالي.
+لا تنشئ Replit Tasks جديدة ولا تغيّر الخطة إلى backlog.
+
+---
+
+1. ابدأ بـ Audit
+
+قبل التعديل، افحص التنفيذ الحالي لـ:
+
+- Context
+- People
+- Projects
+- Records
+- Memory / Second Brain
+- Relationships
+- Agent Work
+- Evidence / provenance
+- Secretary Home links
+- Ask links
+
+حدد ما هو موجود فعليًا في الـAPI والـfrontend.
+
+لا تفترض أن وجود schema يعني أن capability مدعومة فعليًا.
+
+ولا تضف Backend contract جديدًا إلا إذا كان ضروريًا فعلًا ولا يمكن تنفيذ المطلوب بدونه.
+
+---
+
+2. Context يجب أن يصبح طبقة موحدة
+
+عند فتح Person أو Project أو Record، لا تجعل الشاشة مجرد:
+
+- بيانات
+- جدول
+- CRUD
+- قائمة records
+
+بل اجعلها Context View مترابطة.
+
+التنظيم المقترح:
+
+رأس الصفحة
+
+يعرض بوضوح:
+
+- الاسم / العنوان
+- نوع الكيان
+- أهم المعلومات الرسمية المتاحة
+- الإجراءات المناسبة للسياق
+
+الإجراءات الأساسية:
+
+- اسأل السكرتير
+- اجعل السكرتير يتابع
+
+استخدم مسارات Ask وWork الموجودة بالفعل.
+
+لا تنشئ execution path جديدًا.
+
+---
+
+3. طبقات الـContext
+
+رتب المعلومات حسب الأهمية، وليس حسب جداول قاعدة البيانات.
+
+أولًا: ما يعرفه السكرتير
+
+اعرض المعلومات ذات الصلة والمتاحة فعليًا:
+
+- structured records
+- official fields
+- facts
+- known attributes
+- relevant memory
+- relationships
+
+لكن يجب الالتزام بقاعدة أساسية:
+
+«Structured / official data هو المصدر الأعلى سلطة من inferred memory.»
+
+إذا اختلف inferred memory مع structured record:
+
+- لا تخلطهما
+- لا تعرض inferred value وكأنها حقيقة
+- اعرض المصدر/طبيعة المعلومة عند الحاجة
+
+لا تغير نظام Second Brain الحالي.
+
+---
+
+4. Memory + Provenance
+
+إذا كانت هناك Memory مرتبطة بالسياق:
+
+اعرضها بطريقة تفرق بين:
+
+- معلومة رسمية
+- معلومة محفوظة
+- استنتاج / inferred information
+
+ولا تعرض inference كحقيقة.
+
+استخدم الـprovenance/evidence الموجود حاليًا.
+
+لا تخترع evidence إذا لم يرجعه الـAPI.
+
+إذا كانت provenance غير متاحة لمعلومة معينة، لا تدّعِ وجودها.
+
+استخدم Progressive Disclosure:
+
+المستخدم يرى المعلومة أولًا، ويمكنه فتح المصدر/التفاصيل عندما تكون متاحة.
+
+---
+
+5. Relationships
+
+إذا كان Person أو Project مرتبطًا بكيانات أخرى بالفعل، اعرض العلاقات المهمة.
+
+أمثلة:
+
+Person:
+
+- مرتبط بمشروع
+- مرتبط بشركة
+- مرتبط بسجل
+- مرتبط بـWork
+- مرتبط بأشخاص آخرين
+
+Project:
+
+- الأشخاص المرتبطون
+- السجلات
+- Work
+- النشاط المرتبط
+
+لا تحول الشاشة إلى Graph visualization.
+
+الهدف هنا هو فهم السياق وليس عرض database graph.
+
+استخدم العلاقات الموجودة حاليًا فقط.
+
+---
+
+6. Work داخل Context
+
+إذا كان هناك Agent Work مرتبط فعليًا بهذا السياق:
+
+اعرضه بوضوح.
+
+مثال:
+
+السكرتير بيتابع
+
+- مراقبة عدد المهام المفتوحة
+- الحالة: بيتابع
+- آخر فحص: ...
+- الفحص القادم: ...
+
+وإذا كان يحتاج تدخل:
+
+محتاج منك
+
+- يحتاج موافقة
+- يحتاج مراجعة
+- فشل
+- نتيجة غير محسومة
+
+استخدم نفس state model الذي تم توحيده في Phase B.
+
+لا تنشئ state model جديد.
+
+مهم جدًا
+
+Phase D أوضحت أن context الشخص/المشروع قد يصل للمحادثة بدون أن يتم حفظ typed relationship دائمًا في Work.
+
+لا تزيف وجود علاقة.
+
+إذا كان الـbackend لا يحفظ العلاقة فعليًا:
+
+- لا تعرض Work على أنه مرتبط بشكل دائم
+- يمكن عرض أنه تم إنشاؤه من هذا السياق فقط إذا كان ذلك مثبتًا من البيانات المتاحة
+- لا تخترع "personId/projectId" داخل Work لمجرد تحسين الـUI
+
+إذا احتاج الأمر Backend contract جديدًا للحفاظ على العلاقة، توقف واذكر ذلك بدل اختراع contract من عندك.
+
+---
+
+7. Recent Activity
+
+اعرض النشاط الحقيقي المتاح للسياق.
+
+مثل:
+
+- سجل جديد
+- expense
+- task
+- reminder
+- Work event
+- تحديث Record
+
+لكن:
+
+لا تسمي أي Record بأنه "إجراء تم" إلا إذا كان الـAPI يثبت أن الإجراء تم.
+
+نفس قاعدة Phase C:
+
+وجود expense أو record لا يعني بالضرورة أن Agent نفذ action.
+
+لا تستخدم mock activity.
+
+---
+
+8. Commitments / Tasks
+
+إذا كانت هناك:
+
+- open tasks
+- overdue tasks
+- reminders
+- commitments
+- upcoming items
+
+مرتبطة بالسياق، اعرضها.
+
+الأولوية:
+
+1. يحتاج تدخل المستخدم
+2. متأخر
+3. اليوم
+4. قريبًا
+5. باقي العناصر
+
+إذا كانت البيانات غير متاحة من المصدر الحالي:
+
+لا تنشئ placeholder يوحي بوجودها.
+
+---
+
+9. Context → Ask
+
+من داخل Person / Project / Record يجب أن يستطيع المستخدم بدء سؤال للسكرتير مع تمرير السياق.
+
+مثال:
+
+«"إيه آخر حاجة حصلت مع أحمد؟"»
+
+المحادثة يجب أن تعرف أن السياق الحالي هو أحمد.
+
+أو:
+
+«"إيه وضع المشروع ده؟"»
+
+مع تمرير project context.
+
+لكن لا تنفذ action لمجرد فتح Context أو Ask.
+
+---
+
+10. Context → Follow
+
+احتفظ بمدخل:
+
+اجعل السكرتير يتابع
+
+واستخدم مسار Phase D الحالي.
+
+عند الدخول من Person:
+
+- مرر Person context.
+
+عند الدخول من Project:
+
+- مرر Project context.
+
+عند الدخول من Record:
+
+- مرر Record context إذا كان مدعومًا فعليًا.
+
+لا تنشئ Work مباشرة.
+
+المسار يجب أن يبقى:
+
+Context → Ask → Agent → clarification if needed → Work → approval if needed
+
+---
+
+11. Secretary Home integration
+
+راجع الروابط بين Secretary Home وContext.
+
+إذا ظهر:
+
+- Person
+- Project
+- Work
+- Record
+
+يجب أن يستطيع المستخدم الانتقال إلى السياق المناسب بدون فقدان context.
+
+لكن لا تغير Attention Engine الخاص بـPhase C إلا إذا كان التعديل ضروريًا للربط.
+
+حافظ على:
+
+- محتاج منك الآن
+- السكرتير بيتابع
+- اليوم
+- قريبًا
+- آخر ما تسجل
+
+والـdeduplication الحالي.
+
+---
+
+12. Work ↔ Context
+
+راجع Work detail.
+
+إذا كانت Work مرتبطة بسياق حقيقي، يجب أن يظهر:
+
+السياق
+
+«أحمد محمد»
+
+أو:
+
+المشروع
+
+«مشروع X»
+
+مع رابط للـContext.
+
+إذا لم تكن العلاقة موجودة فعليًا، لا تعرض رابطًا وهميًا.
+
+---
+
+13. Empty States
+
+لا تستخدم empty states عامة مثل:
+
+«"لا توجد بيانات"»
+
+اجعلها مفيدة.
+
+أمثلة:
+
+لا توجد متابعة
+
+«السكرتير مش بيتابع حاجة مرتبطة بالسياق ده حاليًا.»
+
+ثم:
+
+اجعل السكرتير يتابع
+
+لكن لا تعرض CTA لشيء غير مدعوم.
+
+---
+
+14. لا تجعل Context شاشة CRUD
+
+دي نقطة مهمة جدًا.
+
+لا تجعل النتيجة:
+
+«Person → fields → tables → buttons»
+
+المطلوب:
+
+«Context → What the secretary knows → What's happening → What's being followed → What's needed → Evidence → Related entities»
+
+لكن فقط عندما تكون البيانات موجودة.
+
+---
+
+15. Mobile-first
+
+راجع التصميم على شاشة موبايل صغيرة.
+
+الأولوية:
+
+1. identity
+2. what secretary knows
+3. needs attention
+4. following
+5. recent activity
+6. relationships
+7. detailed records/evidence
+
+لا تجعل الشاشة عبارة عن dashboard مزدحم.
+
+استخدم progressive disclosure.
+
+RTL والعربية يجب أن تكون طبيعية.
+
+---
+
+16. Web + Mobile consistency
+
+يجب أن يكون مفهوم Context واحدًا في:
+
+- Web
+- Mobile
+
+لكن لا يلزم أن يكون الـUI مطابقًا pixel-for-pixel.
+
+نفس:
+
+- البيانات
+- state
+- authority
+- provenance
+- Work relationship
+- action semantics
+
+---
+
+17. لا تغيّر الـBackend Architecture
+
+ممنوع:
+
+- إعادة تصميم Agent
+- إعادة تصميم Second Brain
+- إعادة تصميم Work engine
+- إنشاء monitoring engine
+- إنشاء execution engine
+- client-side execution
+- client-side polling كبديل للـbackend
+- LLM logic داخل frontend
+- fake relationship persistence
+- fake provenance
+- mock data
+
+أعد استخدام العقود الموجودة.
+
+إذا اكتشفت أن مطلبًا أساسيًا غير ممكن بدون Backend contract جديد، لا تخترع حلًا شكليًا. سجّل الفجوة بوضوح في التقرير النهائي.
+
+---
+
+18. Architecture / code quality
+
+لا تعمل giant refactor.
+
+لو Context implementation موجودة داخل ملف كبير:
+
+- استخرج مكونات صغيرة فقط عند الحاجة
+- حافظ على السلوك الحالي
+- لا تعيد بناء navigation
+- لا تغير API contracts بلا ضرورة
+
+المكونات المحتملة فقط إذا كانت مفيدة:
+
+- ContextHeader
+- ContextSummary
+- ContextFacts
+- ContextFollowing
+- ContextActivity
+- ContextRelationships
+- ContextEvidence
+
+لكن لا تنشئ abstraction لمجرد abstraction.
+
+---
+
+19. Security / scoping
+
+كل Context يجب أن يحترم:
+
+- tenantId
+- ownerUserId
+- authorization
+- existing API scoping
+
+لا تسمح بأن فتح ID من URL يؤدي إلى كشف بيانات مستخدم آخر.
+
+اختبر هذا صراحة إذا كانت APIs الحالية تسمح به.
+
+---
+
+20. الاختبارات المطلوبة
+
+بعد التنفيذ شغّل الاختبارات المناسبة.
+
+أضف/حدّث اختبارات تغطي على الأقل:
+
+Context rendering
+
+- Person context
+- Project context
+- Record context
+
+Authority
+
+- structured data أعلى من inferred memory
+- لا يتم تقديم inference كحقيقة
+
+Relationships
+
+- العلاقات الحقيقية تظهر
+- عدم وجود علاقة لا ينتج علاقة وهمية
+
+Work
+
+- Work المرتبط يظهر
+- Work غير المرتبط لا يظهر كمرتبط
+- state يستخدم نفس Phase B model
+
+Ask
+
+- فتح Ask من Person يمرر السياق
+- فتح Ask من Project يمرر السياق
+- لا يوجد execution تلقائي
+
+Follow
+
+- Follow من Person
+- Follow من Project
+- يستخدم مسار Phase D
+- لا ينشئ Work مباشرة من frontend
+
+Activity
+
+- لا mock data
+- لا يتم وصف Record بأنه completed action بدون evidence
+
+Security
+
+- tenant isolation
+- owner isolation
+
+Mobile
+
+- Context قابل للاستخدام على شاشة صغيرة
+- لا يوجد overflow أو تداخل مع navigation/input
+
+Regression
+
+يجب ألا تكسر:
+
+- Secretary Home
+- Ask
+- Work
+- Phase B state UX
+- Phase C attention feed
+- Phase D Follow entry points
+
+---
+
+21. Acceptance Criteria
+
+اعتبر Phase E ناجحة فقط إذا أصبح بإمكاني فتح شخص أو مشروع وأفهم من شاشة واحدة تقريبًا:
+
+1. مين/إيه ده؟
+2. إيه المعلومات الرسمية اللي السكرتير يعرفها؟
+3. إيه المعلومات المحفوظة/المستنتجة؟
+4. إيه اللي حصل مؤخرًا؟
+5. إيه اللي السكرتير بيتابعه؟
+6. هل محتاج مني حاجة؟
+7. إيه الكيانات المرتبطة؟
+8. إيه مصدر المعلومات المهمة عندما يكون المصدر متاحًا؟
+9. أقدر أسأل السكرتير عن السياق.
+10. أقدر أقول له اجعل السكرتير يتابع السياق.
+
+والأهم:
+
+«Context يجب أن يشعر المستخدم أن السكرتير "فاهم الموضوع"، وليس أنه يعرض له قاعدة بيانات.»
+
+---
+
+22. التقرير النهائي
+
+بعد التنفيذ، أرسل تقريرًا مختصرًا يحتوي على:
+
+What existed
+
+ما كان موجودًا قبل Phase E.
+
+What changed
+
+ما تم تغييره فعليًا.
+
+APIs/contracts reused
+
+ما تم إعادة استخدامه.
+
+Backend gaps
+
+أي شيء لا يمكن تنفيذه بدون Backend contract جديد.
+
+Tests
+
+عدد الاختبارات والنتائج.
+
+Failed / skipped tests
+
+أي اختبار فشل أو timeout أو تم تخطيه، مع السبب.
+
+Security
+
+نتيجة اختبارات scoping/isolation.
+
+Known limitations
+
+أي limitations حقيقية بقيت.
+
+Do not continue to Phase F
+
+توقف بعد Phase E ولا تبدأ Connections أو أي Phase أخرى.
