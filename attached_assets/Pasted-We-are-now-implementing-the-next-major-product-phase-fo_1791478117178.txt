@@ -1,0 +1,729 @@
+We are now implementing the next major product phase for MNRsecr.
+
+This is NOT a cosmetic UI refresh and NOT a rewrite of the existing system.
+
+MNRsecr already has a strong backend/Agent foundation:
+
+- Second Brain / memory
+- structured records
+- People / Projects / Tasks / Reminders
+- Agent Work
+- approvals
+- External Actions
+- verification and evidence
+- notification/outbox infrastructure
+- proactive behavior
+- provider/gateway routing
+- Gmail / Calendar / Sheets backend foundations
+- Quick layer
+- tenant/user scoping
+- safe learning/review mechanisms
+
+The problem is that the current product experience does not expose this capability clearly enough.
+
+The current UI feels primarily like:
+"chat + records/dashboard"
+
+The target product experience is:
+
+"Personal AI Secretary"
+
+The secretary should feel like an active system that:
+
+- understands what matters
+- remembers context
+- brings important things to the user
+- asks for decisions when needed
+- executes approved actions
+- verifies outcomes
+- follows up
+- learns safely
+- continuously monitors things the user asked it to watch
+
+Core product loop:
+
+ATTENTION
+→ CONTEXT
+→ DECISION
+→ ACTION
+→ VERIFICATION
+→ FOLLOW-UP
+
+Do not redesign the backend architecture just to support this UX.
+Reuse existing contracts and capabilities wherever possible.
+
+==================================================
+
+1. FIRST: AUDIT CURRENT IMPLEMENTATION
+   ==================================================
+
+Before changing code:
+
+Audit the current mobile product and identify exactly where the existing implementation already supports the target experience.
+
+Pay particular attention to:
+
+- features/main/index.tsx
+- features/quick/
+- navigation
+- Records
+- People
+- Projects
+- Tasks
+- Reminders
+- Agent Work
+- Settings
+- approval/result UI
+- operation status handling
+- external action result handling
+- evidence / verification data
+- Connections / OAuth surfaces
+- proactive behavior
+- conversation/search behavior
+
+Do not assume previous audits or external reports are correct.
+Use the current code as the source of truth.
+
+Do not create Replit Tasks for this work.
+This is a direct implementation phase.
+
+Do not rewrite working backend systems unless an actual contract or integration gap is discovered.
+
+After the audit, proceed directly to implementation.
+
+==================================================
+2. NEW PRODUCT INFORMATION ARCHITECTURE
+
+The product should be organized around what the user wants from a secretary, not around database tables.
+
+The primary product worlds should become:
+
+1. SECRETARY
+2. ASK
+3. CONTEXT
+4. WORK
+
+System-level surfaces:
+
+5. CONNECTIONS
+6. SETTINGS
+
+The exact visual navigation can be adapted to the existing mobile navigation system, but the conceptual architecture must follow this model.
+
+---
+
+SECRETARY
+
+This is the new Home.
+
+It must answer:
+
+"What matters to me right now?"
+
+It should NOT primarily be a dashboard of counts and database categories.
+
+The Home experience should prioritize attention.
+
+Possible sections:
+
+- "محتاج منك الآن"
+- "السكرتير بيتابع"
+- "اليوم"
+- "قريبًا"
+- "آخر ما تم"
+
+The ordering must be based on relevance/attention rather than simply database ordering.
+
+Examples:
+
+- approval required
+- external action waiting for approval
+- failed action requiring attention
+- unknown result requiring reconciliation/review
+- important reminder
+- monitored condition triggered
+- upcoming commitment
+- recently completed action
+- important change in a person/project/context
+
+The UI should communicate WHY something matters.
+
+Do not overload the Home screen with every record.
+
+Home = attention, not database browsing.
+
+---
+
+ASK
+
+The existing conversational experience remains important.
+
+But Chat should become the universal request interface rather than the entire product.
+
+The user should be able to ask things like:
+
+"فكرني بكرة أكلم أحمد"
+
+"تابعلي سعر السهم ده"
+
+"ابعت له الرسالة دي"
+
+"إيه آخر حاجة حصلت مع شركة المحجر؟"
+
+"خلي السكرتير يتابع الموضوع ده"
+
+The chat experience must connect naturally into:
+
+- Context
+- Work
+- Actions
+- Approvals
+- Records
+- Evidence
+
+Do not remove existing conversational capabilities.
+
+---
+
+CONTEXT
+
+Unify the conceptual model of:
+
+- People
+- Records
+- Memory
+- Relationships
+- Projects
+- relevant Work
+- Evidence / provenance
+
+The user should be able to understand:
+
+"إيه اللي السكرتير يعرفه عن الشخص/الموضوع ده؟"
+
+without navigating through unrelated database-style screens.
+
+People and Projects should become context entry points rather than isolated CRUD pages.
+
+A context view should be able to surface:
+
+- known facts
+- official records
+- relevant memories
+- relationships
+- recent activity
+- current Work
+- commitments
+- relevant evidence/source
+
+Important rule:
+
+Official/structured records remain authoritative over inferred memory.
+
+Do NOT weaken this hierarchy.
+
+---
+
+WORK
+
+Agent Work must become a first-class product concept.
+
+Currently Work is strong technically but too dependent on conversational creation/discovery.
+
+The user should have an obvious way to say:
+
+"اجعل السكرتير يتابع"
+
+or equivalent UI.
+
+Creation should allow the user to express the general intent, then let the existing Agent/understanding layer collect missing details.
+
+Examples:
+
+- Monitor something
+- Remind me later
+- Follow a person
+- Follow a project
+- Execute something later
+- Run a recurring workflow
+- Watch a condition
+- Follow up after an event
+
+Do NOT create a second Work engine.
+
+Reuse the existing Agent Work infrastructure.
+
+The UI must expose existing statuses correctly:
+
+draft
+active
+paused
+waiting
+needs_review
+completed
+failed
+cancelled
+
+And communicate them clearly.
+
+==================================================
+3. ACTION / RESULT UX IS P0
+
+This is a critical correction.
+
+The UI must NEVER collapse different operational states into one generic "rejected" or "try again" result.
+
+Explicitly distinguish:
+
+- completed
+- rejected
+- expired
+- failed
+- unknown_result
+- waiting
+- needs_review
+- pending_approval
+
+For example:
+
+completed:
+"تم التنفيذ"
+
+rejected:
+"تم رفض العملية"
+
+failed:
+"التنفيذ فشل"
+
+expired:
+"انتهت صلاحية الموافقة"
+
+unknown_result:
+"حالة التنفيذ غير مؤكدة — نحتاج نتحقق قبل إعادة المحاولة"
+
+needs_review:
+"محتاج مراجعتك"
+
+The UI must respect the backend's existing operation state machine.
+
+Do not invent a new backend state model unless absolutely necessary.
+
+If evidence/verification is available, surface it.
+
+The user should be able to understand:
+
+WHAT happened
+→ WHETHER it actually happened
+→ WHY
+→ WHAT the secretary recommends next
+
+Never blindly retry an UNKNOWN_RESULT operation.
+
+==================================================
+4. CAPABILITY DISCOVERABILITY
+
+The product currently hides too much capability behind natural-language prompting.
+
+The user should naturally discover that the secretary can:
+
+- remember
+- understand context
+- remind
+- monitor
+- follow
+- execute
+- verify
+- connect services
+- manage ongoing Work
+
+Do this through useful contextual UI, not a giant list of features.
+
+For example:
+
+When viewing a person:
+
+- "فكرني أتابع معاه"
+- "تابع الموضوع ده"
+- "سجل معلومة"
+- "إيه آخر تعامل بيننا؟"
+
+When viewing a project:
+
+- "خلي السكرتير يتابعه"
+- "فكرني بالخطوة الجاية"
+- "إيه اللي متعطل؟"
+
+When viewing an item that can become Work:
+
+- "اجعل السكرتير يتابع"
+
+Do not hard-code dozens of unrelated buttons.
+Use a small set of meaningful actions.
+
+==================================================
+5. CONNECTIONS
+
+Connections must become a real product surface.
+
+Gmail / Calendar / Sheets and future integrations should not feel like hidden developer functionality.
+
+Create a clear Connections experience showing:
+
+- connected service
+- account identity where appropriate
+- available capabilities
+- connection status
+- permission/restriction state
+- connect/disconnect
+- relevant security/privacy explanation
+
+Reuse existing backend OAuth/account infrastructure.
+
+Do NOT implement fake connections.
+
+Do NOT enable production OAuth if the current environment is still development-gated.
+
+The UI must accurately reflect what is actually available.
+
+==================================================
+6. QUICK MUST REMAIN DISTINCT FROM MAIN
+
+Quick is NOT a smaller version of Main.
+
+Quick is an interruption/action layer.
+
+Its primary jobs:
+
+- notification
+- quick capture
+- quick reply
+- approval
+- reject
+- confirm
+- immediate decision
+- lightweight secretary interaction
+
+Main owns:
+
+- history
+- full context
+- Records
+- People
+- Network/context
+- Agent Work
+- exploration
+- longer conversations
+- detailed evidence
+- settings/connections
+
+Do not make Quick depend on becoming a second full conversation product.
+
+Reuse the shared backend and operation IDs.
+
+Do not duplicate execution logic on the client.
+
+==================================================
+7. PROACTIVE BEHAVIOR
+
+Proactivity must feel personalized.
+
+Do not implement it as static notification templates.
+
+The secretary's behavior should reflect:
+
+- user's preferences
+- communication style
+- answer depth
+- proactive level
+- timing preferences
+- personality/tone preferences
+
+Principle:
+
+Personality changes expression.
+Preferences change behavior.
+Facts never change.
+
+For example, the same event may be presented differently depending on the user's configured style.
+
+Do not alter factual content merely to personalize it.
+
+==================================================
+8. PROVENANCE / EVIDENCE
+
+The backend already contains valuable verification/evidence information.
+
+Expose it progressively in the UX.
+
+The user should be able to understand where important information came from.
+
+Examples:
+
+"المصدر"
+"تم التحقق من"
+"آخر تحديث"
+"نتيجة التنفيذ"
+"السجل المرتبط"
+
+Do not expose internal implementation details unnecessarily.
+
+The goal is trust, not developer diagnostics.
+
+==================================================
+9. ERROR UX
+
+Do not show one generic error for every failure.
+
+Where the existing transport/backend already distinguishes:
+
+- validation
+- authentication
+- permission
+- conflict
+- not found
+- rate limit
+- timeout
+- provider error
+- provider unavailable
+- agent error
+- parse/internal error
+
+map those into useful user-facing states.
+
+Examples:
+
+Authentication:
+"الحساب محتاج تسجيل دخول"
+
+Permission:
+"السكرتير مش عنده الصلاحية المطلوبة"
+
+Provider unavailable:
+"الخدمة الخارجية غير متاحة حاليًا"
+
+Conflict:
+"البيانات اتغيرت قبل التنفيذ"
+
+Timeout:
+"الخدمة ما ردتش في الوقت المتوقع"
+
+Internal error:
+"use a safe generic message"
+
+Do not expose sensitive technical details.
+
+==================================================
+10. FRONTEND STRUCTURE
+
+The current main frontend file is excessively large.
+
+Do NOT perform a giant speculative refactor before understanding the new product structure.
+
+Instead, as the new UX is implemented, create clear component/module boundaries around:
+
+- Secretary/Home
+- Attention items
+- Ask/Chat
+- Action surfaces
+- Approval/result surfaces
+- Context
+- People
+- Records
+- Work
+- Connections
+- Navigation
+
+The goal is that future changes to Home do not require editing a 6,000+ line monolith.
+
+Preserve behavior while extracting coherent modules.
+
+Do not introduce unnecessary abstraction layers.
+
+==================================================
+11. MOBILE-FIRST UX
+
+This is a mobile-first personal secretary.
+
+Do not design a desktop dashboard and then squeeze it onto mobile.
+
+Prioritize:
+
+- one-handed use
+- attention hierarchy
+- fast decisions
+- clear next action
+- progressive disclosure
+- low visual noise
+- calm Pearl-style visual identity
+- dark/light support
+- Arabic-first RTL behavior
+
+Do not fill the screen with decorative icons or unnecessary cards.
+
+Every surface should answer:
+
+"What does the user need to know or do here?"
+
+==================================================
+12. DO NOT BREAK EXISTING ARCHITECTURE
+
+Preserve:
+
+- tenant/user scoping
+- approval binding
+- operationId
+- workId/runId/stepId/lease semantics
+- external action verification
+- UNKNOWN_RESULT reconciliation
+- Agent Work lifecycle
+- notification/outbox guarantees
+- capability registry
+- provider/gateway extensibility
+- model routing architecture
+- official record authority
+- Second Brain candidate/review safety
+- learning-loop safety
+- Quick/Main separation at the execution layer
+
+Do not move business logic into the client.
+
+Do not add client-side execution.
+
+Do not bypass existing approval flows.
+
+Do not make the UI assume an external action succeeded before verification.
+
+Do not hard-code a specific AI provider into the UI or Agent architecture.
+
+==================================================
+13. IMPLEMENTATION ORDER
+
+Implement in this order:
+
+PHASE A — Product shell
+
+- new navigation/information architecture
+- Secretary/Home
+- Ask
+- Context
+- Work
+- Connections
+- Settings/system layer
+
+PHASE B — Trust/action states
+
+- approval UX
+- completed/rejected/failed/expired/unknown_result
+- verification/evidence
+- needs_review
+
+PHASE C — Secretary Home
+
+- attention ranking
+- needs attention
+- secretary is following
+- today/upcoming
+- recent outcomes
+
+PHASE D — Work discoverability
+
+- "اجعل السكرتير يتابع"
+- Work creation entry points
+- Work detail
+- lifecycle states
+- pause/resume/cancel/retry where valid
+
+PHASE E — Context
+
+- People
+- Projects
+- Records
+- Memory
+- Relationships
+- Work
+- evidence
+
+PHASE F — Connections
+
+- Gmail
+- Calendar
+- Sheets
+- accurate connection/account state
+
+PHASE G — Quick refinement
+
+- make Quick interruption/action-first
+- remove unnecessary Mini-Main behavior
+- preserve shared backend contracts
+
+PHASE H — Frontend cleanup
+
+- decompose large screens/components
+- preserve functionality
+- remove duplicated UI/state logic
+- add focused tests
+
+Do not stop after creating mockups.
+This phase is implementation.
+
+==================================================
+14. TESTING / VERIFICATION
+
+After each meaningful phase:
+
+- run existing relevant tests
+- run typecheck
+- run build where applicable
+- verify RTL/mobile behavior
+- verify navigation
+- verify approval/result states
+- verify no backend contract regressions
+
+At the end, explicitly verify:
+
+1. Existing Agent Work still works.
+2. Existing approval flow still works.
+3. UNKNOWN_RESULT cannot be blindly retried.
+4. Completed is not confused with rejected/failed.
+5. Quick does not gain independent execution logic.
+6. Tenant/user isolation remains intact.
+7. Provider/Gateway architecture remains extensible.
+8. Existing Gmail/Calendar/Sheets backend contracts are not broken.
+9. Second Brain authority rules remain intact.
+10. No existing core capability was removed merely to simplify the UI.
+
+==================================================
+15. IMPORTANT WORKING RULE
+
+Do not optimize for making the new UI look impressive in screenshots.
+
+Optimize for making the product feel like a real secretary.
+
+The final experience should make the user naturally understand:
+
+"السكرتير عارف السياق.
+السكرتير عارف إيه المهم.
+السكرتير بيتابع.
+السكرتير بيسألني لما محتاج قرار.
+السكرتير بينفذ لما أوافق.
+السكرتير بيتأكد إن التنفيذ حصل.
+والسكرتير بيرجعلي لو حصل شيء مهم."
+
+That is the product.
+
+Use the existing architecture wherever it already supports this behavior.
+
+Where something is missing, identify the smallest architectural addition required.
+
+Do not create Replit Tasks.
+
+Implement directly, incrementally, and report:
+
+- what was already reusable
+- what was changed
+- what was extracted/refactored
+- what backend contracts were preserved
+- what tests were run
+- any genuinely blocking gap that remains
+
+Do not report a proposal instead of implementation.
