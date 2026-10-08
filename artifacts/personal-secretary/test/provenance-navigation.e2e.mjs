@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { rmSync } from "node:fs";
 import http from "node:http";
@@ -193,7 +194,7 @@ async function waitForBrowserValue(page, expression, description, timeoutMs = 30
   throw new Error(`Timed out waiting for ${description}. Last value: ${JSON.stringify(lastValue)}`);
 }
 
-async function exerciseFirstApprovalInBrowser(appBaseUrl, apiBaseUrl, message) {
+async function exerciseFirstApprovalInBrowser(appBaseUrl, apiBaseUrl, message, proxyControls) {
   const browser = await startInteractiveChromium(`${appBaseUrl}/`);
   let turnPosts = 0;
   const approvalSnapshotExpression = `(() => {
@@ -220,11 +221,11 @@ async function exerciseFirstApprovalInBrowser(appBaseUrl, apiBaseUrl, message) {
       `document.querySelector('[data-testid="input-message"]') !== null`,
       "Home conversation composer",
     );
-    const send = async () => {
+    const send = async (value = message) => {
       await browser.page.evaluate(`(() => {
         const input = document.querySelector('[data-testid="input-message"]');
         const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set;
-        setter.call(input, ${JSON.stringify(message)});
+        setter.call(input, ${JSON.stringify(value)});
         input.dispatchEvent(new Event("input", { bubbles: true }));
         document.querySelector('[data-testid="button-send-message"]').click();
         return true;
@@ -238,6 +239,7 @@ async function exerciseFirstApprovalInBrowser(appBaseUrl, apiBaseUrl, message) {
     );
     assert.equal(turnPosts, 1, "the first approval must be rendered without repeating /turns");
     assert.equal(firstApproval.userMessages, 1, "the first request should create one user message");
+    assert.match(firstApproval.cardText, /محتاج موافقتك/, "the real pending approval card should be visible");
 
     const canonical = await jsonRequest(`${apiBaseUrl}/approvals/${firstApproval.operationId}`, {
       headers: { Authorization: "Bearer dev-user" },
@@ -263,13 +265,13 @@ async function exerciseFirstApprovalInBrowser(appBaseUrl, apiBaseUrl, message) {
     await browser.page.evaluate(`document.querySelector('[data-testid="button-confirm-approval-${firstApproval.operationId}"]').click()`);
     await waitForBrowserValue(
       browser.page,
-      `document.querySelector('[data-testid="approval-status-${firstApproval.operationId}-completed"]') !== null`,
+      `document.querySelector('[data-testid="approval-${firstApproval.operationId}"] [data-testid="operation-status-completed"]') !== null`,
       "completed approval status",
     );
     assert.equal(turnPosts, 1, "confirming an approval must not resend the conversational request");
     assert.match(
-      await browser.page.evaluate(`document.querySelector('[data-testid="approval-status-${firstApproval.operationId}-completed"]')?.textContent ?? ""`),
-      /اكتملت العملية/,
+      await browser.page.evaluate(`document.querySelector('[data-testid="approval-${firstApproval.operationId}"] [data-testid="operation-status-completed"]')?.textContent ?? ""`),
+      /نتيجة مكتملة/,
     );
 
     await browser.page.evaluate(`document.querySelector('[data-testid="button-new-conversation"]').click()`);
@@ -290,14 +292,79 @@ async function exerciseFirstApprovalInBrowser(appBaseUrl, apiBaseUrl, message) {
     await browser.page.evaluate(`document.querySelector('[data-testid="button-reject-approval-${secondApproval.operationId}"]').click()`);
     await waitForBrowserValue(
       browser.page,
-      `document.querySelector('[data-testid="approval-status-${secondApproval.operationId}-rejected"]') !== null`,
+      `document.querySelector('[data-testid="approval-${secondApproval.operationId}"] [data-testid="operation-status-rejected"]') !== null`,
       "rejected approval status",
     );
     assert.equal(turnPosts, 2, "rejecting an approval must not resend the conversational request");
     assert.match(
-      await browser.page.evaluate(`document.querySelector('[data-testid="approval-status-${secondApproval.operationId}-rejected"]')?.textContent ?? ""`),
+      await browser.page.evaluate(`document.querySelector('[data-testid="approval-${secondApproval.operationId}"] [data-testid="operation-status-rejected"]')?.textContent ?? ""`),
       /تم رفض العملية/,
     );
+
+    const startUiScenario = async (scenario) => {
+      await browser.page.evaluate(`document.querySelector('[data-testid="button-new-conversation"]').click()`);
+      await waitForBrowserValue(
+        browser.page,
+        `document.querySelector('[data-testid="input-message"]')?.value === ""`,
+        `${scenario} scenario composer`,
+      );
+      await send(`approval-ui:${scenario}`);
+      return waitForBrowserValue(
+        browser.page,
+        approvalSnapshotExpression,
+        `${scenario} scenario approval`,
+      );
+    };
+
+    const executingApproval = await startUiScenario("executing");
+    await browser.page.evaluate(`document.querySelector('[data-testid="button-confirm-approval-${executingApproval.operationId}"]').click()`);
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="operation-status-executing"]') !== null`,
+      "executing approval status",
+    );
+    assert.equal(proxyControls.approvalCount(executingApproval.operationId), 1);
+    proxyControls.completeExecution(executingApproval.operationId);
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="operation-status-completed"]') !== null`,
+      "completed result after execution",
+    );
+
+    const expiredApproval = await startUiScenario("expired");
+    await browser.page.evaluate(`document.querySelector('[data-testid="button-confirm-approval-${expiredApproval.operationId}"]').click()`);
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="operation-status-expired"]') !== null`,
+      "expired approval result",
+    );
+
+    const failedApproval = await startUiScenario("failed");
+    await browser.page.evaluate(`document.querySelector('[data-testid="button-confirm-approval-${failedApproval.operationId}"]').click()`);
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="operation-status-failed"]') !== null`,
+      "failed approval result",
+    );
+
+    const unknownApproval = await startUiScenario("unknown");
+    await browser.page.evaluate(`document.querySelector('[data-testid="button-confirm-approval-${unknownApproval.operationId}"]').click()`);
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="operation-status-unknown_result"]') !== null`,
+      "unknown approval result",
+    );
+    assert.match(
+      await browser.page.evaluate(`document.querySelector('[data-testid="operation-status-unknown_result"]')?.textContent ?? ""`),
+      /لن أعيد التنفيذ تلقائيًا/,
+    );
+    const unknownApprovalCount = proxyControls.approvalCount(unknownApproval.operationId);
+    const unknownGetCount = proxyControls.operationReadCount(unknownApproval.operationId);
+    const unknownTurnCount = turnPosts;
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+    assert.equal(proxyControls.approvalCount(unknownApproval.operationId), unknownApprovalCount, "unknown outcomes must not retry the approval automatically");
+    assert.equal(proxyControls.operationReadCount(unknownApproval.operationId), unknownGetCount, "unknown outcomes must not poll the executing operation automatically");
+    assert.equal(turnPosts, unknownTurnCount, "unknown outcomes must not resend the conversation automatically");
   } finally {
     browser.page.close();
     await closeProcess(browser.child);
@@ -305,19 +372,162 @@ async function exerciseFirstApprovalInBrowser(appBaseUrl, apiBaseUrl, message) {
   }
 }
 
-function startApiProxy(apiBaseUrl, viteBaseUrl) {
+function sendJson(response, status, value) {
+  response.writeHead(status, { "content-type": "application/json; charset=utf-8" });
+  response.end(JSON.stringify(value));
+}
+
+function startApiProxy(apiBaseUrl, viteBaseUrl, fixtureInfo) {
+  const approvals = new Map();
+  const controls = {
+    approvalCount: (operationId) => approvals.get(operationId)?.approvalPosts ?? 0,
+    operationReadCount: (operationId) => approvals.get(operationId)?.operationReads ?? 0,
+    completeExecution: (operationId) => {
+      const approval = approvals.get(operationId);
+      assert.ok(approval, `missing browser approval fixture ${operationId}`);
+      approval.status = "completed";
+    },
+  };
   const server = http.createServer(async (request, response) => {
     try {
-      const targetBase = request.url?.startsWith("/api/") ? apiBaseUrl : viteBaseUrl;
-      const target = new URL(request.url ?? "/", targetBase);
+      const requestUrl = new URL(request.url ?? "/", "http://127.0.0.1");
+      const pathname = requestUrl.pathname;
       const chunks = [];
       for await (const chunk of request) chunks.push(chunk);
+      const body = Buffer.concat(chunks);
+
+      // This local proxy is the test-only signed-in session; the production
+      // auth routes and middleware are never modified or bypassed.
+      if (request.method === "GET" && pathname === "/api/auth/me") {
+        sendJson(response, 200, {
+          user: {
+            userId: fixtureInfo.userId,
+            tenantId: fixtureInfo.tenantId,
+            email: "approval-fixture@example.test",
+          },
+        });
+        return;
+      }
+
+      if (request.method === "POST" && pathname === "/api/turns") {
+        const input = body.length ? JSON.parse(body.toString("utf8")) : {};
+        if (typeof input.message === "string" && input.message.startsWith("approval-ui:")) {
+          const scenario = input.message.slice("approval-ui:".length);
+          assert.ok(["executing", "expired", "failed", "unknown"].includes(scenario), `unexpected browser approval scenario: ${scenario}`);
+          const operationId = randomUUID();
+          const args = {
+            amountMinor: 12_500,
+            currency: "EGP",
+            description: `مصروف تحقق ${scenario}`,
+            personId: null,
+            projectId: null,
+          };
+          const display = {
+            title: "تأكيد مصروف الاختبار",
+            details: ["القيمة: ١٢٥ EGP", `الوصف: ${args.description}`],
+          };
+          approvals.set(operationId, {
+            scenario,
+            status: "pending",
+            args,
+            display,
+            approvalPosts: 0,
+            operationReads: 0,
+          });
+          sendJson(response, 200, {
+            conversationId: `approval-ui-${scenario}`,
+            turnId: `approval-ui-turn-${scenario}`,
+            assistantMessage: "راجع تفاصيل العملية قبل الموافقة.",
+            response: { kind: "answer", message: "راجع تفاصيل العملية قبل الموافقة." },
+            action: {
+              type: "approval_required",
+              operationId,
+              toolName: "record_expense",
+              args,
+              display,
+              status: "pending",
+            },
+            provider: "test-fixture",
+            model: "deterministic",
+          });
+          return;
+        }
+      }
+
+      const approvalMatch = pathname.match(/^\/api\/approvals\/([^/]+)(?:\/(approve|reject))?$/);
+      const approval = approvalMatch ? approvals.get(approvalMatch[1]) : undefined;
+      if (approvalMatch && approval) {
+        const operationId = approvalMatch[1];
+        const action = approvalMatch[2];
+        if (request.method === "GET" && !action) {
+          approval.operationReads += 1;
+          sendJson(response, 200, {
+            operationId,
+            conversationId: `approval-ui-${approval.scenario}`,
+            toolName: "record_expense",
+            args: approval.args,
+            display: approval.display,
+            status: approval.status,
+            updatedAt: new Date().toISOString(),
+          });
+          return;
+        }
+        if (request.method === "POST" && action) {
+          if (action === "approve") approval.approvalPosts += 1;
+          approval.status = action === "reject" ? "rejected"
+            : approval.scenario === "executing" || approval.scenario === "unknown" ? "executing"
+              : approval.scenario;
+          if (approval.scenario === "unknown" && action === "approve") {
+            sendJson(response, 504, {
+              error: "Approval response timed out.",
+              code: "APPROVAL_RESULT_UNKNOWN",
+              category: "timeout",
+              retryable: true,
+            });
+            return;
+          }
+          const status = approval.status;
+          sendJson(response, 200, {
+            operationId,
+            conversationId: `approval-ui-${approval.scenario}`,
+            turnId: `approval-ui-result-${approval.scenario}`,
+            status,
+            assistantMessage: status === "executing"
+              ? "العملية قيد التنفيذ. لا ترسل تأكيدًا آخر."
+              : status === "expired"
+                ? "انتهت صلاحية طلب التأكيد، ولم يتم تنفيذ أي تغيير."
+                : status === "failed"
+                  ? "تعذر تنفيذ العملية. لن أعيد تشغيلها تلقائيًا."
+                  : status === "rejected"
+                    ? "تم إلغاء العملية، ولن يتم تنفيذ أي تغيير."
+                    : "اكتملت العملية.",
+            action: {
+              type: `approval_${status}`,
+              operationId,
+              status,
+              toolName: "record_expense",
+            },
+            provider: "test-fixture",
+            model: "deterministic",
+          });
+          return;
+        }
+      }
+
+      const targetBase = request.url?.startsWith("/api/") ? apiBaseUrl : viteBaseUrl;
+      const target = new URL(request.url ?? "/", targetBase);
+      const headers = Object.fromEntries(
+        Object.entries(request.headers).filter(([name]) => name !== "host"),
+      );
+      if (pathname.startsWith("/api/") && !headers.authorization) {
+        // The fixture server accepts this development identity only in its
+        // explicitly development-mode process and scoped fixture tenant.
+        headers.authorization = fixtureInfo.authHeader;
+      }
       const upstream = await fetch(target, {
         method: request.method,
-        headers: Object.fromEntries(
-          Object.entries(request.headers).filter(([name]) => name !== "host"),
-        ),
-        body: chunks.length > 0 ? Buffer.concat(chunks) : undefined,
+        headers,
+        body: body.length > 0 ? body : undefined,
         duplex: "half",
       });
       response.writeHead(upstream.status, Object.fromEntries(upstream.headers.entries()));
@@ -327,7 +537,7 @@ function startApiProxy(apiBaseUrl, viteBaseUrl) {
       response.end(String(error));
     }
   });
-  return server;
+  return { server, controls };
 }
 
 async function closeProcess(child) {
@@ -347,7 +557,7 @@ const fixture = spawnProcess(
   ["test/approval-fixture-harness.ts"],
   {
     cwd: apiFixtureCwd,
-    env: { FIXTURE_PORT: "0", AI_PROVIDER: "development" },
+    env: { FIXTURE_PORT: "0", AI_PROVIDER: "development", NODE_ENV: "development" },
   },
 );
 
@@ -397,7 +607,8 @@ try {
   const viteBaseUrl = `http://127.0.0.1:${vitePort}`;
   await waitForHttp(viteBaseUrl);
 
-  proxy = startApiProxy(apiBaseUrl, viteBaseUrl);
+  const apiProxy = startApiProxy(apiBaseUrl, viteBaseUrl, fixtureInfo);
+  proxy = apiProxy.server;
   await new Promise((resolve, reject) => {
     proxy.once("error", reject);
     proxy.listen(0, "127.0.0.1", resolve);
@@ -410,6 +621,7 @@ try {
     appBaseUrl,
     apiBaseUrl,
     fixtureInfo.firstApprovalMessage,
+    apiProxy.controls,
   );
 
   const recordsBrowser = await startInteractiveChromium(`${appBaseUrl}/records?tab=expenses`);
