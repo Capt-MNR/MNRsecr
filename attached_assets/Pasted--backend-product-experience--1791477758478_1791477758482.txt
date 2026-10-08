@@ -1,0 +1,527 @@
+الحكم العام
+الـbackend أقوى بكثير من الـproduct experience الحالي.
+المشروع حاليًا عنده محرك قوي جدًا:
+Understand → Context → Tools → Approval → Work → Execute → Verify → Evidence → Proactive → Learn
+لكن المستخدم لا يرى هذا المحرك بهذه الصورة.
+هو يرى تقريبًا:
+Chat + Records + بعض الصفحات + Agent Work
+وده أكبر gap وجدته.
+بمعنى آخر:
+المشكلة الرئيسية لم تعد "هل السكرتير يستطيع أن يفعل؟"
+المشكلة أصبحت "هل التطبيق يجعلني أفهم أنه يستطيع أن يفعل؟ وهل يجعل استخدام قدراته طبيعيًا؟"
+1. سير العمل الحالي من منظور المستخدم
+لو أخذت المستخدم من أول لحظة:
+A. يدخل التطبيق
+يجد Home فيها:
+حديث اليوم
+بعض الاقتراحات
+سجلات وسياق
+input box
+ده جميل بصريًا وهادئ، لكن فيه مشكلة جوهرية:
+لا توجد لحظة تعريف واضحة بقدرة السكرتير.
+المستخدم لا يعرف بسهولة:
+"أنا أقدر أطلب منه إيه؟"
+ولا:
+"إيه الفرق بينه وبين ChatGPT؟"
+ولا:
+"إيه الحاجات اللي ممكن ينفذها بدلًا مني؟"
+والـbackend حاليًا قادر على أشياء كثيرة جدًا.
+2. الـHome حاليًا Dashboard أكثر من Secretary
+دي أهم ملاحظة UX عندي.
+الشاشة الحالية تحاول تجمع:
+Today
+chat
+records
+tasks
+reminders
+approvals
+recent conversations
+financial context
+لكنها في النهاية تعرض معلومات عن السكرتير أكثر مما تجعل السكرتير يعمل أمامك.
+أنا كمستخدم أريد أن أدخل وأجد:
+"دي الحاجات اللي أنا محتاج أعرفها أو أقررها الآن."
+مش:
+"دي مجموعة أقسام تحتوي معلوماتك."
+الفرق صغير في الشكل، لكنه ضخم في المنتج.
+الـHome المفروض تكون Attention Engine
+مثلاً:
+محتاج منك الآن
+وافق على إرسال الإيميل لمحمد
+فيه اجتماع متعارض الساعة 3
+فاتورة تحتاج مراجعة
+السكرتير بيتابع
+سعر سهم X
+موعد Y
+رد محمد
+اليوم
+11:00 اجتماع
+14:00 مهمة
+18:00 تذكير
+اسأل السكرتير
+"رتب لي اليوم"
+هنا المستخدم يشعر أن عنده سكرتير.
+3. أكبر مشكلة Product وجدتها: القدرات مخفية
+الـAgent Work عنده أنواع:
+Monitor
+Reminder
+Recurring task
+External action
+Research
+Workflow
+لكن المستخدم غالبًا لا يصل لها إلا عن طريق صياغة جملة ذكية للـLLM.
+مثلاً:
+"راقب repository كذا ولو عدد الـissues زاد عن 10 بلغني."
+ده يعمل.
+لكن المستخدم العادي لن يعرف أن التطبيق قادر على ذلك.
+إذن عندنا paradox:
+كلما زادت قوة Agent، أصبح اكتشاف قدراته أصعب.
+وده لازم يتحل في الـUI.
+4. الـAgent Work نفسه صحيح معماريًا، لكن UX ناقص
+WorksView حاليًا ممتاز كـإدارة أعمال موجودة بالفعل.
+عنده:
+status
+last run
+pause
+resume
+cancel
+retry
+needs review
+لكن السؤال الأهم:
+كيف أنشئ Work بسهولة؟
+الإجابة الحالية غالبًا:
+اكتب prompt مناسبًا للسكرتير.
+أنا لا أريد الاعتماد على ذلك وحده.
+نحتاج زر:
++ اجعل السكرتير يتابع
+ثم خيارات مثل:
+راقب شيئًا
+ذكّرني
+نفّذ شيئًا لاحقًا
+تابع موعدًا
+تابع شخصًا
+تابع مشروعًا
+أنشئ سير عمل
+ثم يستطيع المستخدم التحدث طبيعيًا داخل هذا الـflow.
+هكذا الـUI يكشف الـAgent بدل أن يخفيه.
+5. ثاني مشكلة كبيرة: فصل الأشياء أكثر من اللازم
+حاليًا عندنا:
+Conversations
+Records
+People
+Projects
+Financial
+Tasks
+Reminders
+Activity
+Agent Work
+Settings
+Personal Information
+Memory
+ده منطقي من ناحية database.
+لكن مش منطقي بنفس الدرجة من ناحية الإنسان.
+المستخدم لا يفكر:
+"أريد فتح entity type = commitment."
+هو يفكر:
+"إيه اللي بيني وبين محمد؟"
+أو:
+"إيه اللي عليّ الأسبوع ده؟"
+أو:
+"إيه اللي السكرتير عمله؟"
+أو:
+"إيه اللي محتاج مني قرار؟"
+إذن لازم نعيد بناء Information Architecture حول user intent بدل database entities.
+6. Records وMemory وAgent Work لازم يتقاربوا
+حاليًا عندك فصل قوي بينهم.
+تقنيًا ده ممتاز.
+لكن في UX:
+Record
+الحقيقة الرسمية.
+Memory
+ما يعرفه السكرتير عني.
+Work
+ما يفعله السكرتير نيابة عني.
+Evidence
+ما يثبت أنه فعل ذلك.
+المستخدم يحتاج أن يرى العلاقة بينهم.
+مثلاً:
+محمد
+آخر تواصل: أمس
+التزامات: 2
+معاملات: 7
+مشاريع مرتبطة: 2
+السكرتير يتابع: "لو لم يرد حتى الخميس..."
+آخر إجراء: أرسل إيميل أمس
+الدليل: Sent / Verified
+ده Network حقيقي.
+مش مجرد صفحة People وصفحة Works وصفحة Records منفصلين.
+7. أهم gap في الـAction UX
+المشروع ممتاز جدًا في:
+approval / verification / unknown result
+لكن الـUI لا يعكس هذه القوة بما يكفي.
+مثلاً الكود حاليًا يميز بين:
+pending
+executing
+completed
+rejected
+expired
+failed
+لكن الـMessageBubble في بعض الحالات يعرض ببساطة:
+تم التنفيذ
+أو:
+تم الرفض
+وده تبسيط زائد.
+خصوصًا أن failed وexpired وunknown_result ليست "رفضًا".
+دي نقطة أعتبرها bug في semantics الـUX، حتى لو الـbackend سليم.
+لازم المستخدم يشوف مثلاً:
+تم التنفيذ ✓
+أُنشئ الموعد وتم التحقق منه.
+أو:
+يحتاج مراجعتك ⚠️
+لم أتمكن من التأكد هل تم إرسال الرسالة أم لا.
+لن أعيد إرسالها تلقائيًا.
+ده فرق جوهري.
+8. Error Handling الحالي أضعف من الـbackend
+دي من أهم الحاجات اللي لفتت نظري في الكود.
+الـtransport يعرف حالات كثيرة:
+authentication
+permission
+conflict
+rate limit
+timeout
+provider error
+provider unavailable
+agent error
+parse error
+internal error
+لكن الـMain في sendMessage يختزل أغلبها إلى:
+"تعذر تنفيذ الطلب. جرّب مرة أخرى."
+وده ضياع لقيمة الـerror classification اللي بنيناها.
+مثلاً:
+Conflict
+المفروض:
+"السجل اتغير من جهاز آخر. راجعت النسخة الجديدة ولم أعدلها."
+مش:
+"تعذر تنفيذ الطلب."
+Provider unavailable
+"Gmail غير متاح الآن. لم يتم إرسال الرسالة."
+Authentication
+"انتهت جلسة الدخول."
+Unknown result
+"النتيجة غير مؤكدة. لن أعيد التنفيذ قبل التحقق."
+دي لازم تكون جزء من الـProduct experience.
+9. هناك مشكلة أخطر: المستخدم لا يرى الـstate machine
+الـAgent في الحقيقة عنده lifecycle غني جدًا:
+Requested
+↓
+Understood
+↓
+Planned
+↓
+Waiting approval
+↓
+Approved
+↓
+Executing
+↓
+Verifying
+↓
+Verified
+لكن المستخدم غالبًا يرى:
+user message
+assistant message
+approval card
+ثم فجأة:
+تم التنفيذ
+أنا أرى فرصة ضخمة هنا.
+مش لازم نعرض كل state دائمًا.
+لكن أثناء العملية:
+Preparing…
+→ Executing…
+→ Checking…
+→ Done ✓
+ده هيحول الإحساس من chatbot إلى agent.
+10. Quick عندي عليه ملاحظة مهمة
+بصيت عليه كمنتج مستقل.
+الكود الحالي يحتفظ بـ:
+conversationId
+messages
+AsyncStorage
+loading previous conversation
+فتح conversationId
+نفس approval flow
+فهو عمليًا ليس مجرد contact/notification surface بالكامل.
+هو ما زال نسخة مصغرة من conversation surface.
+وده لا يتطابق تمامًا مع أفضل تعريف للـQuick الذي أراه:
+Quick = interruption/action surface
+يعني:
+notification
+ask
+approve
+reject
+quick capture
+quick reply
+لكن Main هو مكان التاريخ، الاستكشاف، السياق، إدارة Work، Records، Network.
+أنا كنت سأفصل الـresponsibilities أكثر.
+11. مشكلة discoverability أكبر من مشكلة navigation
+أنا لا أرى أن الحل هو:
+نضيف 5 tabs جديدة.
+بالعكس.
+لو أضفنا:
+Home | Chat | Records | Tasks | Works | People | Projects | Finance | Memory...
+هنزيد المشكلة.
+أنا أفضل navigation مبنية على 4 عوالم:
+① Secretary
+كل ما السكرتير يريد أن يلفت انتباهك له.
+② Ask
+المحادثة/الطلب.
+③ Context
+People / Records / Network / Memory.
+④ Work
+كل ما السكرتير يتابعه وينفذه.
+ثم:
+Connections + Settings في طبقة النظام.
+ده أبسط وأقوى.
+12. Connections غير موجودة كـProduct Surface حقيقي
+وده gap واضح جدًا بعد ما أضفنا:
+Gmail
+Calendar
+Sheets
+future providers
+حاليًا بعض الربط موجود داخل Settings.
+لكن المستخدم يحتاج:
+Connections
+ويشوف:
+Google
+Gmail — Connected
+Calendar — Connected
+Sheets — Available
+ثم:
+ماذا يستطيع السكرتير فعله بهذا الاتصال؟
+مثلاً:
+Gmail
+قراءة البريد
+إرسال بريد بعد موافقتك
+Calendar
+قراءة المواعيد
+إنشاء/تعديل/إلغاء بعد موافقتك
+ده ليس Settings فقط.
+ده جزء من قيمة المنتج.
+13. هناك مشكلة maintainability حقيقية في الـFrontend
+الملف:
+features/main/index.tsx
+حوالي 6756 سطر.
+وده بالنسبة لي علامة خطر حقيقية الآن، خصوصًا وإحنا داخلين على redesign.
+والـbackend عنده:
+phase2.ts
+حوالي 8105 سطر.
+مش معناها إن الكود سيئ.
+لكن معناها إن:
+أي redesign كبير للـUI داخل نفس monolith هيبقى مكلف وخطر.
+أنا لا أريد refactor شامل الآن.
+لكن أثناء الـredesign لازم نخرج:
+Home/Secretary
+Chat
+Action surfaces
+Records
+Context
+Navigation
+Approval components
+Work UI
+إلى وحدات واضحة.
+قبل أن نضيف المزيد فوق الملف الحالي.
+14. مشكلة أخرى: التطبيق يعرف "Today" لكن لا يبدو أنه يعرف "Why"
+عندك TodayContext.
+وده ممتاز.
+لكن السكرتير الشخصي الحقيقي لازم يقدر يقول:
+"دي أهم 3 حاجات بالنسبة لك النهارده."
+وليس فقط:
+عندك 3 tasks و2 reminders.
+الفرق هو:
+Dashboard
+يعرض البيانات.
+Secretary
+يرتب البيانات ويقرر ما يستحق انتباهك، وفق تفضيلاتك.
+وده هو المكان الذي يمكن فيه للـBehavioral Adaptation الذي بنيناه أن يظهر فعليًا.
+15. Personalization موجود في backend أكثر مما يظهر في المنتج
+عندك:
+activity
+proactive level
+intelligence
+communication style
+repeat reminders
+لكن المستخدم لا يشعر بوضوح أن:
+السكرتير اتعلم كيف يتعامل معي.
+مثلاً:
+لو user يفضل concise:
+بدل:
+"هناك مهمة مفتوحة مرتبطة بالمشروع..."
+يقول:
+"عندك مهمة متأخرة في المحجر."
+ده يجب أن يظهر في كل:
+Home
+notifications
+approvals
+Work
+proactive messages
+وليس Settings فقط.
+16. أرى مشكلة في فكرة "Chat-first"
+وده ربما أهم رأي مختلف عن التصميمات السابقة.
+أنا لا أريد أن يكون Chat هو مركز المنتج بالكامل.
+السكرتير الحقيقي:
+Context-first + Action-first + Chat when needed.
+المستخدم لا يحتاج دائمًا أن يبدأ بجملة.
+أحيانًا التطبيق يجب أن يبدأ:
+"منير، فيه 3 حاجات محتاجة انتباهك."
+ثم:
+[وافق]
+[راجع]
+[لاحقًا]
+والـchat يبقى دائمًا متاحًا:
+"اسأل السكرتير أي شيء."
+ده أقوى بكثير من:
+"ماذا تريد أن تكتب؟"
+17. نقطة قوية جدًا في المشروع لا نستغلها UX
+Provenance / Evidence
+المشروع يعرف أصل السجل:
+conversation
+turn
+operation
+source
+verification
+لكن UX ممكن يحول ده إلى:
+"ليه بتقول كده؟"
+مثلاً:
+محمد عليه 7,500 جنيه.
+زر صغير:
+المصدر
+يفتح:
+3 معاملات
+آخر تحديث
+السجل الرسمي
+وقت التحقق
+ده يبني trust رهيب.
+خصوصًا لأن المنتج يتعامل مع:
+مال + علاقات + التزامات + تنفيذ خارجي.
+18. أخطر Product risk في رأيي
+مش authentication.
+ومش tool count.
+ومش Agent Work.
+الخطر الأكبر هو:
+أن المنتج يصبح قويًا جدًا داخليًا، لكن المستخدم لا يعرف كيف يستفيد من قوته.
+يعني نصرف وقتًا ضخمًا على:
+routing
+memory
+work
+verification
+evidence
+learning
+ثم المستخدم يفتح التطبيق ويقول:
+"طيب أعمل إيه؟"
+وده بالضبط ما يجب أن تمنعه إعادة تصميم الواجهة.
+ماذا أقترح؟
+أنا لن أعمل "UI redesign".
+أنا أعمل:
+Product Experience Redesign
+وأبني التطبيق حول دورة حياة السكرتير:
+NOTICE
+↓
+UNDERSTAND
+↓
+SUGGEST
+↓
+ASK / APPROVE
+↓
+ACT
+↓
+VERIFY
+↓
+REMEMBER
+↓
+FOLLOW UP
+والـUI يصبح:
+Home / Secretary
+What matters now
+Needs you
+Secretary is handling
+Today
+Upcoming
+Recent outcomes
+Ask
+اطلب أي شيء
+ليس مجرد chat history.
+Context
+People / Records / Network / Memory
+لكن في تجربة واحدة مترابطة.
+Work
+What your secretary is doing
+Active
+Waiting
+Monitoring
+Completed
+Needs review
+Connections
+What your secretary can access
+Gmail / Calendar / Sheets / future providers.
+ترتيب التنفيذ الذي أوصي به
+مش نبدأ بتصميم الشاشة.
+نبدأ بـ UX Architecture:
+Phase 1 — Product model
+نحدد:
+ما هي "النية" التي يراها المستخدم؟
+ما هو "Work"؟
+ما هو "Attention"؟
+ما هو "Context"؟
+ما هو "Evidence"؟
+ما الذي يحتاج Approval؟
+Phase 2 — Information Architecture
+نقلل الـsections الحالية إلى structure أبسط.
+Phase 3 — Core interaction states
+نصمم:
+ask
+clarify
+suggest
+approval
+executing
+verifying
+success
+failure
+unknown
+needs review
+Phase 4 — Home
+نبني الـSecretary Home حول attention وليس records.
+Phase 5 — Work
+نجعل Agent Work capability قابلة للاكتشاف والإدارة.
+Phase 6 — Context
+نربط People / Records / Memory / Relationships.
+Phase 7 — Connections
+Gmail / Calendar / Sheets.
+Phase 8 — Quick
+نرجعه فعلًا إلى:
+Quick action / interruption layer
+وليس Mini-Main.
+وأخيرًا: ماذا أعتبر Bugs الآن؟
+لو كنت أكتب backlog مستقل بعد هذه المراجعة، سأضع:
+🔴 P0
+Error/uncertain-result UX semantics
+لا تخلط: failed / rejected / expired / unknown.
+🔴 P0
+Capabilities discoverability
+المستخدم لازم يعرف أن السكرتير يستطيع: remember / monitor / execute / remind / connect / verify.
+🟠 P1
+Home attention model
+تحويل Home من dashboard إلى Secretary.
+🟠 P1
+Agent Work creation UX
+ليس فقط عبر prompt.
+🟠 P1
+Connections surface
+Gmail/Calendar/Sheets كقدرات فعلية.
+🟠 P1
+Context unification
+People + Records + Memory + Relationships + Work.
+🟡 P2
+Search debounce.
+🟡 P2
+Frontend decomposition قبل/أثناء redesign.
+🟡 P2
+Richer error/retry states.
