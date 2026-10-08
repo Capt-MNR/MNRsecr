@@ -9,11 +9,11 @@ The approval request and the committed result are separate conversation events. 
 
 **How to apply:** Any new approval execution path must append its completed or rejected outcome to the scoped conversation memory without accepting tool arguments from the client. Optional clarification turns must remain pending and must not create a write until the user has supplied enough context and approved it.
 
-Browser approval views must invalidate their cached operation after a terminal response and preserve local terminal status when stale conversation polling reloads the original pending action.
+Approval surfaces treat transcript status as a snapshot: refresh the operation by ID before allowing decisions, then preserve terminal results over stale history.
 
-**Why:** The server stores the pending intent and the post-approval event separately, so history refreshes can legitimately return the original pending action after the UI has already confirmed or rejected it.
+**Why:** The server stores the pending intent and the post-approval event separately, so history refreshes can legitimately return the original pending action after the UI has already confirmed or rejected it. A stale pending snapshot must not keep decision controls active after the canonical operation expires or starts executing.
 
-**How to apply:** On confirm or reject, refresh the scoped operation query and merge any locally terminal operation state over older history snapshots before rendering the approval form.
+**How to apply:** On web and mobile, refresh the tenant-scoped operation query before enabling approve/reject controls, disable decisions while status is loading or unavailable, and merge a locally terminal result over older history snapshots.
 
 Approved domain mutation, activity, verification, and operation completion must commit in the same database transaction whenever they share the existing database executor. A stale `executing` operation may only be reconciled from a tenant-scoped activity receipt carrying its operation ID; without a receipt, reset it only after the execution grace period and retry the existing approval.
 

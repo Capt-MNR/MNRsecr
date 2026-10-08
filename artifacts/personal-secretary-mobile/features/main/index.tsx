@@ -23,6 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { useLanguage, type AppLanguage } from '@/hooks/useLanguage';
 import { useSecretaryChatService, type SecretaryChatContext } from '../../services/secretary-chat';
+import { operationNoticeFromAction, type OperationNotice } from '../../services/operation-presentation';
 import type { LocalInputAttachment } from '../../services/local-input-assets';
 import { receiptNeedsReview, type SecretaryInputResult, type SecretaryInputState } from '../../services/secretary-input';
 import { MessageBubble } from '../message-bubble';
@@ -64,10 +65,7 @@ export type LocalMessage = {
   inputAttachment?: LocalInputAttachment | null;
   approval?: Approval;
   approvals?: Approval[];
-  operationNotice?: {
-    status: 'completed' | 'rejected' | 'expired' | 'failed' | 'unknown_result' | 'waiting' | 'needs_review' | 'pending_approval';
-    operationId?: string;
-  };
+  operationNotice?: OperationNotice;
   recordLink?: MobileRecordRow;
 };
 
@@ -732,6 +730,10 @@ export function messagesFromConversation(detail: unknown, conversationId: string
           return approvals.length > 0
             ? { approval: approvals[0], ...(approvals.length > 1 ? { approvals } : {}) }
             : {};
+        })() : {}),
+        ...(action ? (() => {
+          const notice = operationNoticeFromAction(action, action.status);
+          return notice ? { operationNotice: notice } : {};
         })() : {}),
         ...(linkedRecord ? { recordLink: linkedRecord } : {}),
       });

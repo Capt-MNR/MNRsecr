@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, CircleAlert, CircleCheck, CircleX, Clock3, LoaderCircle, Save, TriangleAlert, X, type LucideIcon } from 'lucide-react';
+import { Check, CircleAlert, Clock3, LoaderCircle, Save, X } from 'lucide-react';
 import {
   useGetCandidates,
   useGetSecretaryOperation,
@@ -7,6 +7,8 @@ import {
   type Candidate,
 } from '@workspace/api-client-react';
 import { prepareReminderApprovalArgs } from '../lib/approval-args';
+import { approvalExplanation, operationNoticeFromStatus, type OperationNotice } from '../lib/operation-presentation';
+import OperationStatusNotice from './operation-status-notice';
 
 type ApprovalDisplay = {
   title: string;
@@ -22,6 +24,7 @@ type ApprovalFormProps = {
   initialArgs: ApprovalArgs;
   display: ApprovalDisplay;
   status?: ApprovalStatus;
+  operationNotice?: OperationNotice;
   allowArgsOverride?: boolean;
   busy?: boolean;
   error?: string | null;
@@ -149,58 +152,6 @@ function isoFromLocalDateTime(value: string): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
-function statusPresentation(status: ApprovalStatus): {
-  label: string;
-  message: string;
-  icon: LucideIcon;
-  className: string;
-} {
-  switch (status) {
-    case 'completed':
-      return {
-        label: 'اكتملت العملية',
-        message: 'تم حفظ التغيير وتسجيله مرة واحدة.',
-        icon: CircleCheck,
-        className: 'text-emerald-600 dark:text-emerald-400',
-      };
-    case 'rejected':
-      return {
-        label: 'تم رفض العملية',
-        message: 'تم إلغاء العملية، ولم يتم تنفيذ أي تغيير.',
-        icon: CircleX,
-        className: 'text-muted-foreground',
-      };
-    case 'expired':
-      return {
-        label: 'انتهت صلاحية العملية',
-        message: 'انتهت مهلة الموافقة، ولم يتم تنفيذ أي تغيير.',
-        icon: Clock3,
-        className: 'text-amber-600 dark:text-amber-400',
-      };
-    case 'failed':
-      return {
-        label: 'تعذر تنفيذ العملية',
-        message: 'لم يكتمل التغيير. راجع الخطأ أو اطلب العملية من جديد بدل إعادة المحاولة تلقائيًا.',
-        icon: TriangleAlert,
-        className: 'text-destructive',
-      };
-    case 'executing':
-      return {
-        label: 'العملية قيد التنفيذ',
-        message: 'جارٍ تنفيذ التغيير. لا ترسل موافقة أخرى.',
-        icon: LoaderCircle,
-        className: 'animate-spin text-primary',
-      };
-    default:
-      return {
-        label: 'في انتظار موافقتك',
-        message: 'لن يحدث أي تغيير قبل تأكيدك.',
-        icon: Clock3,
-        className: 'text-primary',
-      };
-  }
-}
-
 function CandidateSelect({
   label,
   value,
@@ -254,6 +205,7 @@ export default function ApprovalForm({
   initialArgs,
   display,
   status = 'pending',
+  operationNotice,
   allowArgsOverride = true,
   busy = false,
   error,
@@ -266,7 +218,11 @@ export default function ApprovalForm({
     query: {
       queryKey: [`/api/approvals/${operationId}`],
       staleTime: 0,
-      refetchInterval: (query) => query.state.data?.status === 'executing' ? 1_500 : false,
+      refetchInterval: (query) => (
+        query.state.data?.status === 'executing'
+        && operationNotice?.status !== 'unknown_result'
+        && operationNotice?.status !== 'needs_review'
+      ) ? 1_500 : false,
     },
   });
   const operation = operationQuery.data as ApprovalOperation | undefined;
@@ -324,7 +280,19 @@ export default function ApprovalForm({
     }
   }, [operation?.status, operationId]);
 
-  const effectiveStatus = operation?.status ?? status;
+  const canonicalTerminalStatus = ['completed', 'rejected', 'expired', 'failed'].includes(operation?.status ?? '');
+  const noticeOverridesCanonical = operationNotice?.status === 'unknown_result' || operationNotice?.status === 'needs_review';
+  const effectiveStatus = noticeOverridesCanonical
+    ? operationNotice!.status
+    : canonicalTerminalStatus
+      ? operation!.status
+      : operationNotice?.status ?? operation?.status ?? status;
+  const statusNotice = effectiveStatus !== 'pending' && effectiveStatus !== 'pending_approval'
+    ? (operationNotice?.status === effectiveStatus
+      ? operationNotice
+      : operationNoticeFromStatus(effectiveStatus))
+    : undefined;
+  const explanation = approvalExplanation(toolName);
   const hasAuthoritativeOperation = Boolean(operation);
 
   useEffect(() => {
@@ -370,7 +338,7 @@ export default function ApprovalForm({
   }
 
   function confirm() {
-    if (validationError || busy || !hasAuthoritativeOperation || operationQuery.isError) return;
+    if (validationError || busy || !hasAuthoritativeOperation || operationQuery.isError || operation?.status !== 'pending') return;
     const nextArgs = toolName === 'create_reminder'
       ? prepareReminderApprovalArgs(args)
       : {
@@ -410,32 +378,16 @@ export default function ApprovalForm({
     setDraftSaved(true);
   }
 
-  if (effectiveStatus !== 'pending') {
-    const presentation = statusPresentation(effectiveStatus);
-    const StatusIcon = presentation.icon;
-    return (
-      <div
-        className="mt-3 rounded-xl border border-border/70 bg-background/60 p-3"
-        data-testid={`approval-status-${operationId}-${effectiveStatus}`}
-        role="status"
-        aria-live="polite"
-      >
-        <div className={`flex items-center gap-2 text-sm font-semibold ${presentation.className}`}>
-          <StatusIcon className="size-4" />
-          {presentation.label}
-        </div>
-        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{presentation.message}</p>
-        {effectiveStatus === 'failed' && operationQuery.data?.display.details?.length ? (
-          <ul className="mt-2 space-y-0.5 text-xs text-muted-foreground">
-            {operationQuery.data.display.details.map((detail) => <li key={detail}>{detail}</li>)}
-          </ul>
-        ) : null}
-      </div>
-    );
-  }
+  if (statusNotice) return <OperationStatusNotice notice={statusNotice} />;
 
   return (
     <div className="mt-3 space-y-3" data-testid={`approval-form-${operationId}`}>
+      <div className="rounded-xl border border-primary/15 bg-primary/5 p-3 text-xs leading-relaxed">
+        <p className="font-semibold text-foreground">محتاج موافقتك</p>
+        <p className="mt-1 text-muted-foreground"><span className="font-medium text-foreground">الجهة:</span> {explanation.service}</p>
+        <p className="mt-1 text-muted-foreground">{explanation.reason}</p>
+        <p className="mt-1 text-muted-foreground">{explanation.afterApproval}</p>
+      </div>
       {operationQuery.isLoading && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <LoaderCircle className="size-3.5 animate-spin" /> جاري تحميل تفاصيل العملية…
@@ -563,16 +515,16 @@ export default function ApprovalForm({
           data-testid={`button-confirm-approval-${operationId}`}
         >
           {busy ? <LoaderCircle className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
-          تأكيد
+          موافقة
         </button>
         <button
           type="button"
           onClick={() => { clearDraft(operationId); onReject(); }}
-          disabled={busy}
+          disabled={busy || operationQuery.isLoading || operationQuery.isError || !hasAuthoritativeOperation || operation?.status !== 'pending'}
           className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
           data-testid={`button-reject-approval-${operationId}`}
         >
-          <X className="size-3.5" /> إلغاء
+          <X className="size-3.5" /> رفض
         </button>
         <button
           type="button"

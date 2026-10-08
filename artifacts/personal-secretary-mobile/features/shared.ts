@@ -2,6 +2,7 @@ import { StyleSheet } from 'react-native';
 import type { AppLanguage } from '@/hooks/useLanguage';
 import type { SecretaryChatContext } from '../services/secretary-chat';
 import type { LocalInputAttachment } from '../services/local-input-assets';
+import type { OperationNotice } from '../services/operation-presentation';
 
 export type ApprovalStatus = 'pending' | 'executing' | 'completed' | 'rejected' | 'expired' | 'failed';
 export type ConfirmationMode = 'immediate_approval' | 'deferred_confirmation';
@@ -19,10 +20,7 @@ export type Approval = {
   personCandidates?: ApprovalCandidate[];
   projectCandidates?: ApprovalCandidate[];
 };
-export type OperationNotice = {
-  status: 'completed' | 'rejected' | 'expired' | 'failed' | 'unknown_result' | 'waiting' | 'needs_review' | 'pending_approval';
-  operationId?: string;
-};
+export type { OperationNotice } from '../services/operation-presentation';
 export type RecordOrigin = {
   conversationId: string;
   turnId?: string | null;

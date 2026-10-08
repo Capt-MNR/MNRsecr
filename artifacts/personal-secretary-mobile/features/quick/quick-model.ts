@@ -1,6 +1,7 @@
 import { StyleSheet } from 'react-native';
 import type { AppLanguage } from '@/hooks/useLanguage';
 import type { LocalInputAttachment } from '../../services/local-input-assets';
+import { operationNoticeFromAction, type OperationNotice } from '../../services/operation-presentation';
 import {
   addOrigin,
   recordLinkFromAction,
@@ -22,6 +23,7 @@ export type Approval = {
   title: string;
   details: string[];
   status: ApprovalStatus;
+  toolName?: string;
   quickApprove?: boolean;
   initialArgs?: Record<string, unknown>;
   personCandidates?: Array<{ id: string; name: string; status?: string }>;
@@ -37,6 +39,7 @@ export type LocalMessage = {
   inputAttachment?: LocalInputAttachment | null;
   approval?: Approval;
   approvals?: Approval[];
+  operationNotice?: OperationNotice;
   recordLink?: MobileRecordRow;
 };
 
@@ -75,6 +78,7 @@ export function approvalFromAction(action: unknown): Approval | undefined {
     title: typeof display.title === 'string' ? display.title : 'تأكيد العملية',
     details: Array.isArray(display.details) ? display.details.filter((item): item is string => typeof item === 'string') : [],
     status,
+    ...(typeof value.toolName === 'string' ? { toolName: value.toolName } : {}),
     ...(value.quickApprove === true ? { quickApprove: true } : {}),
     ...(Object.keys(args).length ? { initialArgs: args } : {}),
     ...(candidates(value.personCandidates ?? args.personCandidates) ? { personCandidates: candidates(value.personCandidates ?? args.personCandidates) } : {}),
@@ -111,6 +115,10 @@ export function messagesFromConversation(detail: unknown, conversationId: string
         text: turn.assistantMessage,
         createdAt,
         ...(approvals.length > 0 ? { approval: approvals[0], ...(approvals.length > 1 ? { approvals } : {}) } : {}),
+        ...(action ? (() => {
+          const notice = operationNoticeFromAction(action, action.status);
+          return notice ? { operationNotice: notice } : {};
+        })() : {}),
         ...(link ? { recordLink: addOrigin(link, conversationId, typeof action?.operationId === 'string' ? action.operationId : null) } : {}),
       });
     }

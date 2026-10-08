@@ -18,17 +18,18 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors, useThemePreference } from '@/hooks/useColors';
 import { useLanguage } from '@/hooks/useLanguage';
 import { useAuth } from '@/services/auth-context';
-import {
-  isSecretaryAuthenticationFailure,
-  SecretaryChatTransportError,
-  useSecretaryChatService,
-} from '../services/secretary-chat';
+import { useSecretaryChatService } from '../services/secretary-chat';
 import {
   receiptDraft,
   receiptNeedsReview,
   useSecretaryInputCapture,
   type SecretaryInputResult,
 } from '../services/secretary-input';
+import {
+  approvalOutcomeMayBeUnknown,
+  operationNoticeFromAction,
+  secretaryFailureText,
+} from '../services/operation-presentation';
 import { hydrateLocalInputAttachments } from '../services/local-input-assets';
 import { initializeSecretaryPush } from '../services/mobile-push';
 import {
@@ -64,84 +65,6 @@ import {
   type MobileRecordRow,
   type RecordOrigin,
 } from '../features/main';
-
-function secretaryFailureText(error: unknown, language: 'ar' | 'en', approval = false) {
-  if (isSecretaryAuthenticationFailure(error)) {
-    return language === 'ar' ? 'انتهت جلسة الدخول. سجّل الدخول مرة أخرى.' : 'Your session expired. Sign in again.';
-  }
-  const value = error && typeof error === 'object' ? error as { category?: unknown; status?: unknown; name?: unknown } : {};
-  const category = error instanceof SecretaryChatTransportError ? error.category : value.category;
-  const status = typeof value.status === 'number' ? value.status : undefined;
-  const isTimeout = category === 'timeout' || value.name === 'FetchTimeoutError' || status === 408 || status === 504;
-  if (isTimeout) {
-    return language === 'ar'
-      ? (approval ? 'تأخر تأكيد النتيجة. راجع سجل العملية قبل إعادة المحاولة.' : 'تأخر الرد. تحقّق من المحادثة قبل إرسال الطلب مرة أخرى.')
-      : (approval ? 'The outcome could not be confirmed in time. Check the operation history before retrying.' : 'The response took too long. Check the conversation before sending again.');
-  }
-  if (category === 'conflict' || status === 409) {
-    return language === 'ar'
-      ? 'تغيّرت هذه العملية في موضع آخر. حدّث البيانات وراجع حالتها قبل أي إجراء.'
-      : 'This operation changed elsewhere. Refresh and review its current state before acting.';
-  }
-  if (category === 'provider_unavailable' || category === 'provider_error' || status === 503 || status === 502) {
-    return language === 'ar'
-      ? 'مزود الذكاء الاصطناعي غير متاح حاليًا. لم أؤكد تنفيذ أي طلب.'
-      : 'The AI provider is unavailable right now. No request was confirmed as completed.';
-  }
-  if (category === 'provider_rate_limit' || category === 'rate_limit' || status === 429) {
-    return language === 'ar'
-      ? 'وصل مزود الذكاء الاصطناعي إلى حد مؤقت. انتظر قليلًا ثم أعد المحاولة.'
-      : 'The AI provider reached a temporary limit. Wait briefly, then try again.';
-  }
-  if (category === 'validation' || status === 400 || status === 422) {
-    return language === 'ar'
-      ? 'الطلب يحتاج إلى تفاصيل أو تصحيح قبل إكماله.'
-      : 'The request needs more detail or correction before it can continue.';
-  }
-  if (category === 'permission' || status === 403) {
-    return language === 'ar' ? 'ليس لديك إذن لتنفيذ هذا الإجراء.' : 'You do not have permission to perform this action.';
-  }
-  if (category === 'not_found' || status === 404) {
-    return language === 'ar' ? 'لم تعد هذه العملية موجودة. حدّث الشاشة.' : 'This operation is no longer available. Refresh the screen.';
-  }
-  if (error instanceof TypeError) {
-    return language === 'ar'
-      ? 'تعذر الاتصال بالخدمة. تحقّق من اتصالك ثم راجع الحالة قبل إعادة إجراء تغييري.'
-      : 'Could not reach the service. Check your connection and verify the status before repeating a write.';
-  }
-  return language === 'ar'
-    ? (approval ? 'تعذر حفظ قرارك. راجع حالة العملية ثم حاول مجددًا.' : 'تعذر إكمال الطلب. حاول مرة أخرى.')
-    : (approval ? 'Your decision could not be saved. Check the operation status before trying again.' : 'The request could not be completed. Try again.');
-}
-
-function operationNoticeFromAction(action: unknown): LocalMessage['operationNotice'] {
-  const value = objectValue(action);
-  const verification = objectValue(value.verification);
-  const rawStatus = [verification.outcome, verification.status, verification.state, value.outcome, value.status]
-    .find((candidate): candidate is string => typeof candidate === 'string')
-    ?.toLowerCase();
-  const withOperationId = (status: NonNullable<LocalMessage['operationNotice']>['status']): LocalMessage['operationNotice'] => ({
-    status,
-    ...(typeof value.operationId === 'string' ? { operationId: value.operationId } : {}),
-  });
-  if (rawStatus === 'unknown_result' || rawStatus === 'uncertain') return withOperationId('unknown_result');
-  if (rawStatus === 'needs_review' || value.type === 'needs_review') return withOperationId('needs_review');
-  if (['approval_required', 'pending_confirmation'].includes(String(value.type))) return withOperationId('pending_approval');
-  if (rawStatus === 'waiting' || rawStatus === 'queued') return withOperationId('waiting');
-  if (rawStatus === 'completed' || rawStatus === 'verified' || verification.verified === true) return withOperationId('completed');
-  if (rawStatus === 'rejected' || rawStatus === 'expired' || rawStatus === 'failed') return withOperationId(rawStatus);
-  return undefined;
-}
-
-function approvalOutcomeMayBeUnknown(error: unknown) {
-  const value = error && typeof error === 'object' ? error as { name?: unknown; status?: unknown; category?: unknown } : {};
-  return (error instanceof SecretaryChatTransportError && error.category === 'timeout')
-    || value.name === 'FetchTimeoutError'
-    || value.category === 'timeout'
-    || value.status === 408
-    || value.status === 504
-    || error instanceof TypeError;
-}
 
 export default function MainRoute() {
   const { language, setLanguage } = useLanguage();
@@ -391,7 +314,11 @@ export default function MainRoute() {
       setConversationId(result.conversationId);
        void queryClient.invalidateQueries({ queryKey: getListPendingSecretaryApprovalsQueryKey() });
       const linked = recordLinkFromAction(result.action);
-       const operationNotice = operationNoticeFromAction(result.action);
+      const actionApprovals = approvalsFromAction(result.action);
+      const derivedNotice = operationNoticeFromAction(result.action, result.action?.status);
+      const operationNotice = actionApprovals.length > 0 && derivedNotice?.status === 'pending_approval'
+        ? undefined
+        : derivedNotice;
       appendMessage({
         id: `assistant-${Date.now()}`,
         role: 'assistant',
@@ -399,12 +326,9 @@ export default function MainRoute() {
         createdAt: new Date().toISOString(),
         ...(result.turnId ? { turnId: result.turnId } : {}),
          ...(operationNotice ? { operationNotice } : {}),
-        ...(() => {
-          const approvals = approvalsFromAction(result.action);
-          return approvals.length > 0
-            ? { approval: approvals[0], ...(approvals.length > 1 ? { approvals } : {}) }
-            : {};
-        })(),
+        ...(actionApprovals.length > 0
+          ? { approval: actionApprovals[0], ...(actionApprovals.length > 1 ? { approvals: actionApprovals } : {}) }
+          : {}),
         ...(linked ? { recordLink: addOrigin(linked, result.conversationId, typeof objectValue(result.action).operationId === 'string' ? objectValue(result.action).operationId as string : null, result.turnId) } : {}),
       });
     } catch (error) {
@@ -420,7 +344,7 @@ export default function MainRoute() {
         ? await secretaryChat.approveOperation(approval.operationId, args)
         : await secretaryChat.rejectOperation(approval.operationId);
       const linked = recordLinkFromAction(response.action);
-      const operationNotice = operationNoticeFromAction(response.action);
+      const operationNotice = operationNoticeFromAction(response.action, response.status);
       setMessages((current) => current.map((message) => {
         const approvals = message.approvals ?? (message.approval ? [message.approval] : []);
         if (!approvals.some((item) => item.operationId === approval.operationId)) return message;
@@ -431,16 +355,16 @@ export default function MainRoute() {
           ...message,
           approval: updatedApprovals[0],
           ...(updatedApprovals.length > 1 ? { approvals: updatedApprovals } : {}),
+          ...(operationNotice ? { operationNotice } : {}),
           ...(linked ? { recordLink: addOrigin(linked, response.conversationId, response.operationId, response.turnId) } : {}),
         };
       }));
       setConversationId(response.conversationId);
-      if (response.assistantMessage || operationNotice) appendMessage({
+      if (response.assistantMessage) appendMessage({
         id: `approval-${Date.now()}`,
         role: 'assistant',
-        text: response.assistantMessage ?? '',
+        text: response.assistantMessage,
         createdAt: new Date().toISOString(),
-        ...(operationNotice ? { operationNotice } : {}),
         ...(linked ? { recordLink: addOrigin(linked, response.conversationId, response.operationId, response.turnId) } : {}),
       });
       void queryClient.invalidateQueries({ queryKey: getListPendingSecretaryApprovalsQueryKey() });

@@ -10,6 +10,7 @@ import {
 import type { AppLanguage } from '@/hooks/useLanguage';
 import { useColors } from '@/hooks/useColors';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { statusLabel as workStatusLabel } from './WorksView';
 
 type Colors = ReturnType<typeof useColors>;
 export type HomeRecord = { id: string; recordType: string; title: string; subtitle: string; trailing?: string };
@@ -217,8 +218,8 @@ export default function SecretaryHome({
               testID={`office-focus-work-${work.id ?? work.title}`}
               icon={work.status === 'needs_review' ? 'alert-circle' : 'activity'}
               title={work.title ?? copy(language, 'عمل جارٍ', 'Ongoing work')}
-              subtitle={work.description ?? work.lastRunStatus ?? ''}
-              tag={work.status}
+              subtitle={work.description ?? (work.lastRunStatus ? workStatusLabel(work.lastRunStatus, language) : '')}
+              tag={workStatusLabel(work.status ?? 'draft', language)}
               onPress={() => { if (work.id) onOpenWork(work.id); }}
               colors={colors}
               rtl={rtl}

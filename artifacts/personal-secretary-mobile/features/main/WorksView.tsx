@@ -27,6 +27,15 @@ import {
 } from 'react-native';
 import type { AppLanguage } from '@/hooks/useLanguage';
 import { useColors } from '@/hooks/useColors';
+import { OperationStatusNotice } from '../OperationStatusNotice';
+import {
+  approvalExplanation,
+  approvalOutcomeMayBeUnknown,
+  operationNoticeFromAction,
+  operationNoticeFromStatus,
+  secretaryFailureText,
+  type OperationNotice,
+} from '../../services/operation-presentation';
 
 type WorksColors = ReturnType<typeof useColors>;
 
@@ -74,7 +83,7 @@ function dateLabel(value: string | null | undefined, language: AppLanguage): str
   }).format(date);
 }
 
-function statusLabel(status: string, language: AppLanguage): string {
+export function statusLabel(status: string, language: AppLanguage): string {
   const labels = statusLabels[status];
   return labels ? localized(language, labels[0], labels[1]) : status;
 }
@@ -289,6 +298,11 @@ function WorkDetail({
     updatedAt: '',
   } as AgentWork);
   const queryClient = useQueryClient();
+  const [approvalNotice, setApprovalNotice] = useState<OperationNotice | null>(null);
+  const [approvalError, setApprovalError] = useState<string | null>(null);
+  const persistedRunNotice = operationNoticeFromStatus(work.lastRunStatus ?? details.runs[0]?.status ?? '');
+  const hasUnknownPersistedOutcome = persistedRunNotice?.status === 'unknown_result'
+    || persistedRunNotice?.status === 'needs_review';
   const approvalOperationId = useMemo(() => {
     const event = details.events.find((item) => item.eventType === 'approval_requested');
     const metadata = event?.metadata;
@@ -301,44 +315,68 @@ function WorkDetail({
         : ['/api/approvals/disabled'],
       enabled: Boolean(approvalOperationId),
       staleTime: 2_000,
-      refetchInterval: approvalOperationId ? 5_000 : false,
+      refetchInterval: approvalOperationId
+        && !hasUnknownPersistedOutcome
+        && approvalNotice?.status !== 'unknown_result'
+        && approvalNotice?.status !== 'needs_review'
+        ? 5_000
+        : false,
     },
   });
   const approveMutation = useApproveSecretaryOperation({
     mutation: {
-      onSuccess: () => {
+      onSuccess: (response) => {
+        const notice = operationNoticeFromAction(response.action, response.status);
+        setApprovalNotice(notice?.status === 'pending_approval' ? null : notice ?? null);
+        setApprovalError(null);
         void queryClient.invalidateQueries({ queryKey: getGetAgentWorkQueryKey(work.id ?? '') });
         if (approvalOperationId) void queryClient.invalidateQueries({ queryKey: getGetSecretaryOperationQueryKey(approvalOperationId) });
         onRefresh();
+      },
+      onError: (error) => {
+        setApprovalError(secretaryFailureText(error, language, true));
+        if (approvalOutcomeMayBeUnknown(error)) {
+          setApprovalNotice({ status: 'unknown_result', ...(approvalOperationId ? { operationId: approvalOperationId } : {}) });
+        }
       },
     },
   });
   const rejectMutation = useRejectSecretaryOperation({
     mutation: {
-      onSuccess: () => {
+      onSuccess: (response) => {
+        const notice = operationNoticeFromAction(response.action, response.status);
+        setApprovalNotice(notice?.status === 'pending_approval' ? null : notice ?? null);
+        setApprovalError(null);
         void queryClient.invalidateQueries({ queryKey: getGetAgentWorkQueryKey(work.id ?? '') });
         if (approvalOperationId) void queryClient.invalidateQueries({ queryKey: getGetSecretaryOperationQueryKey(approvalOperationId) });
         onRefresh();
       },
+      onError: (error) => {
+        setApprovalError(secretaryFailureText(error, language, true));
+        if (approvalOutcomeMayBeUnknown(error)) {
+          setApprovalNotice({ status: 'unknown_result', ...(approvalOperationId ? { operationId: approvalOperationId } : {}) });
+        }
+      },
     },
   });
-  const unknownOutcome = work.lastRunStatus === 'uncertain'
-    || work.lastRunStatus === 'unknown_result'
-    || details.runs[0]?.status === 'uncertain';
-  const actions = transitionActions(work.status ?? 'draft', unknownOutcome);
   const operation = operationQuery.data;
+  const reviewPriorityNotice = [approvalNotice, persistedRunNotice]
+    .find((notice) => notice?.status === 'unknown_result' || notice?.status === 'needs_review');
+  const currentOperationNotice = reviewPriorityNotice
+    ?? approvalNotice
+    ?? (operation?.status ? operationNoticeFromStatus(operation.status) : persistedRunNotice);
+  const unknownOutcome = currentOperationNotice?.status === 'unknown_result';
+  const needsReview = currentOperationNotice?.status === 'needs_review';
+  const actions = transitionActions(work.status ?? 'draft', unknownOutcome);
   const approvalVisible = Boolean(
     operation
     && approvalOperationId
-    && (operation.status === 'pending' || operation.status === 'executing'),
+    && operation.status === 'pending'
+    && !unknownOutcome
+    && !needsReview,
   );
-  const approvalOutcome = operation?.status === 'expired'
-    ? localized(language, 'انتهت صلاحية الموافقة، لذلك لم تُنشأ المهمة. ستستمر المتابعة دون طلب موافقة جديدة حتى يتحقق الشرط مرة أخرى.', 'The approval expired, so the task was not created. Monitoring will continue without asking again until the condition is met again.')
-    : operation?.status === 'rejected'
-      ? localized(language, 'تم رفض الموافقة، لذلك لم تُنشأ المهمة.', 'The approval was rejected, so the task was not created.')
-      : operation?.status === 'failed'
-        ? localized(language, 'تعذر تنفيذ المهمة بعد الموافقة، ولم تُعتبر منشأة.', 'The action failed after approval, so the task was not considered created.')
-        : null;
+  const statusNotice = currentOperationNotice?.status === 'pending_approval' ? undefined : currentOperationNotice;
+  const explanation = approvalExplanation(operation?.toolName, language);
   return (
     <ScrollView
       testID="agent-work-detail"
@@ -367,14 +405,8 @@ function WorkDetail({
         <WorkStatusPill work={work} colors={colors} language={language} />
       </View>
 
-      {unknownOutcome && (
-        <View style={[styles.errorCard, { backgroundColor: `${colors.accent}14`, borderColor: colors.accent }]}>
-          <Text style={[styles.errorTitle, { color: colors.accent }]}>{localized(language, 'نتيجة التنفيذ غير مؤكدة', 'The outcome is unknown')}</Text>
-          <Text style={[styles.emptyText, { color: colors.foreground }]}>
-            {localized(language, 'لن أعيد تشغيل العملية تلقائيًا أو أعرض زر إعادة المحاولة. راجع سجل الخدمة والأدلة أولًا.', 'The action will not be retried automatically and no retry button is shown. Review its service history and evidence first.')}
-          </Text>
-        </View>
-      )}
+      {statusNotice && <OperationStatusNotice notice={statusNotice} colors={colors} language={language} />}
+      {approvalError && <Text accessibilityRole="alert" style={[styles.approvalDetail, { color: colors.destructive }]}>{approvalError}</Text>}
 
       {actions.length > 0 && (
         <View style={styles.actionRow}>
@@ -414,28 +446,34 @@ function WorkDetail({
       {approvalVisible && operation && approvalOperationId && (
         <View style={[styles.approvalCard, { backgroundColor: `${colors.primary}0F`, borderColor: `${colors.primary}55` }]}>
           <Text style={[styles.approvalTitle, { color: colors.foreground }]}>
-            {localized(language, 'موافقة مطلوبة قبل إنشاء المهمة', 'Approval required before creating the task')}
+            {localized(language, 'محتاج موافقتك', 'Waiting for your approval')}
           </Text>
           <Text style={[styles.approvalCopy, { color: colors.mutedForeground }]}>
             {operation.display.title}
           </Text>
+          <Text style={[styles.approvalDetail, { color: colors.mutedForeground }]}>
+            {localized(language, `الجهة: ${explanation.service}`, `Service: ${explanation.service}`)}
+          </Text>
+          <Text style={[styles.approvalDetail, { color: colors.mutedForeground }]}>{explanation.reason}</Text>
+          <Text style={[styles.approvalDetail, { color: colors.mutedForeground }]}>{explanation.afterApproval}</Text>
           {operation.display.details.map((detail) => (
             <Text key={detail} style={[styles.approvalDetail, { color: colors.mutedForeground }]}>{detail}</Text>
           ))}
+          {approvalError && <Text accessibilityRole="alert" style={[styles.approvalDetail, { color: colors.destructive }]}>{approvalError}</Text>}
           <View style={styles.approvalActions}>
             <Pressable
               testID="agent-work-approve"
               accessibilityRole="button"
-              disabled={approveMutation.isPending || rejectMutation.isPending}
+              disabled={operation.status !== 'pending' || approveMutation.isPending || rejectMutation.isPending}
               onPress={() => approveMutation.mutate({ operationId: approvalOperationId })}
               style={({ pressed }) => [styles.approvalButton, { backgroundColor: colors.primary, opacity: pressed ? 0.7 : 1 }]}
             >
-              <Text style={[styles.approvalButtonText, { color: colors.primaryForeground }]}>{localized(language, 'موافقة وتنفيذ', 'Approve and run')}</Text>
+              <Text style={[styles.approvalButtonText, { color: colors.primaryForeground }]}>{localized(language, 'موافقة', 'Approve')}</Text>
             </Pressable>
             <Pressable
               testID="agent-work-reject"
               accessibilityRole="button"
-              disabled={approveMutation.isPending || rejectMutation.isPending}
+              disabled={operation.status !== 'pending' || approveMutation.isPending || rejectMutation.isPending}
               onPress={() => rejectMutation.mutate({ operationId: approvalOperationId })}
               style={({ pressed }) => [styles.approvalButton, { borderColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
             >
@@ -444,10 +482,8 @@ function WorkDetail({
           </View>
         </View>
       )}
-      {approvalOutcome && (
-        <View style={[styles.approvalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.approvalCopy, { color: colors.mutedForeground }]}>{approvalOutcome}</Text>
-        </View>
+      {!statusNotice && operation?.status === 'executing' && (
+        <OperationStatusNotice notice={{ status: 'executing', ...(approvalOperationId ? { operationId: approvalOperationId } : {}) }} colors={colors} language={language} />
       )}
 
       <View style={styles.summaryGrid}>

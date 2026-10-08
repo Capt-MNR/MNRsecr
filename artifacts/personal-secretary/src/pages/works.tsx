@@ -16,6 +16,14 @@ import {
   useListAgentWorks,
 } from '@workspace/api-client-react';
 import ApprovalForm from '../components/approval-form';
+import OperationStatusNotice from '../components/operation-status-notice';
+import { classifySecretaryError } from '../lib/secretary-errors';
+import {
+  approvalOutcomeMayBeUnknown,
+  operationNoticeFromAction,
+  operationNoticeFromStatus,
+  type OperationNotice,
+} from '../lib/operation-presentation';
 
 const kindLabels: Record<AgentWorkKind, string> = {
   monitor: 'متابعة',
@@ -32,7 +40,20 @@ const statusLabels: Record<string, string> = {
   paused: 'متوقف مؤقتًا',
   waiting: 'ينتظر',
   needs_review: 'يحتاج مراجعتك',
-  completed: 'اكتمل',
+  pending: 'محتاج موافقتك',
+  pending_approval: 'محتاج موافقتك',
+  executing: 'جارٍ التنفيذ',
+  claimed: 'بدأ التنفيذ',
+  queued: 'في قائمة الانتظار',
+  running: 'جارٍ التنفيذ',
+  verifying: 'جارٍ التحقق',
+  verified: 'تم التنفيذ والتحقق',
+  unchanged: 'لم يتغير شيء',
+  unknown_result: 'النتيجة غير مؤكدة',
+  uncertain: 'النتيجة غير مؤكدة',
+  rejected: 'تم رفض العملية',
+  expired: 'انتهت صلاحية الموافقة',
+  completed: 'تم التنفيذ',
   failed: 'تعذر إكماله',
   cancelled: 'ملغى',
 };
@@ -114,6 +135,8 @@ function WorkCard({ work, selected }: { work: any; selected: boolean }) {
 function WorkDetail({ workId }: { workId: string }) {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
+  const [approvalNotice, setApprovalNotice] = useState<OperationNotice | null>(null);
+  const [approvalError, setApprovalError] = useState<string | null>(null);
   const detailQuery = useGetAgentWork(workId, {
     query: { queryKey: getGetAgentWorkQueryKey(workId), staleTime: 5_000 },
   });
@@ -122,6 +145,11 @@ function WorkDetail({ workId }: { workId: string }) {
     const metadata = event?.metadata;
     return metadata && typeof metadata.operationId === 'string' ? metadata.operationId : null;
   }, [detailQuery.data?.events]);
+  const persistedRunNotice = operationNoticeFromStatus(
+    detailQuery.data?.work?.lastRunStatus ?? detailQuery.data?.runs[0]?.status ?? '',
+  );
+  const hasUnknownPersistedOutcome = persistedRunNotice?.status === 'unknown_result'
+    || persistedRunNotice?.status === 'needs_review';
   const operationQuery = useGetSecretaryOperation(approvalOperationId ?? '', {
     query: {
       queryKey: approvalOperationId
@@ -129,22 +157,36 @@ function WorkDetail({ workId }: { workId: string }) {
         : ['/api/approvals/disabled'],
       enabled: Boolean(approvalOperationId),
       staleTime: 2_000,
-      refetchInterval: approvalOperationId ? 5_000 : false,
+      refetchInterval: approvalOperationId && !hasUnknownPersistedOutcome ? 5_000 : false,
     },
   });
   const approveMutation = useApproveSecretaryOperation({
     mutation: {
-      onSuccess: () => {
+      onSuccess: (response) => {
+        const notice = operationNoticeFromAction(response.action, response.status);
+        setApprovalNotice(notice?.status === 'pending_approval' ? null : notice ?? null);
+        setApprovalError(null);
         void queryClient.invalidateQueries({ queryKey: getGetAgentWorkQueryKey(workId) });
         if (approvalOperationId) void queryClient.invalidateQueries({ queryKey: getGetSecretaryOperationQueryKey(approvalOperationId) });
+      },
+      onError: (error) => {
+        setApprovalError(classifySecretaryError(error).message);
+        if (approvalOutcomeMayBeUnknown(error)) setApprovalNotice({ status: 'unknown_result', operationId: approvalOperationId ?? undefined });
       },
     },
   });
   const rejectMutation = useRejectSecretaryOperation({
     mutation: {
-      onSuccess: () => {
+      onSuccess: (response) => {
+        const notice = operationNoticeFromAction(response.action, response.status);
+        setApprovalNotice(notice?.status === 'pending_approval' ? null : notice ?? null);
+        setApprovalError(null);
         void queryClient.invalidateQueries({ queryKey: getGetAgentWorkQueryKey(workId) });
         if (approvalOperationId) void queryClient.invalidateQueries({ queryKey: getGetSecretaryOperationQueryKey(approvalOperationId) });
+      },
+      onError: (error) => {
+        setApprovalError(classifySecretaryError(error).message);
+        if (approvalOutcomeMayBeUnknown(error)) setApprovalNotice({ status: 'unknown_result', operationId: approvalOperationId ?? undefined });
       },
     },
   });
@@ -179,18 +221,19 @@ function WorkDetail({ workId }: { workId: string }) {
         : null;
   const currentStatus = workStatus;
   const operation = operationQuery.data;
+  const reviewPriorityNotice = [approvalNotice, persistedRunNotice]
+    .find((notice) => notice?.status === 'unknown_result' || notice?.status === 'needs_review');
+  const workStatusNotice = reviewPriorityNotice
+    ?? approvalNotice
+    ?? (operation?.status ? operationNoticeFromStatus(operation.status) : persistedRunNotice);
+  const statusNotice = workStatusNotice?.status === 'pending_approval' ? undefined : workStatusNotice;
   const approvalVisible = Boolean(
     operation
     && approvalOperationId
-    && (operation.status === 'pending' || operation.status === 'executing'),
+    && operation.status === 'pending'
+    && statusNotice?.status !== 'unknown_result'
+    && statusNotice?.status !== 'needs_review',
   );
-  const approvalOutcome = operation?.status === 'expired'
-    ? 'انتهت صلاحية الموافقة، لذلك لم تُنشأ المهمة. ستستمر المتابعة، ولن أطلب موافقة جديدة إلا بعد تحقق الشرط مرة أخرى.'
-    : operation?.status === 'rejected'
-      ? 'تم رفض الموافقة، لذلك لم تُنشأ المهمة.'
-      : operation?.status === 'failed'
-        ? 'تعذر تنفيذ المهمة بعد الموافقة، ولم تُعتبر منشأة.'
-        : null;
 
   function changeStatus(to: 'active' | 'paused' | 'cancelled') {
     statusMutation.mutate({
@@ -214,6 +257,9 @@ function WorkDetail({ workId }: { workId: string }) {
           {statusLabels[workStatus] ?? workStatus}
         </span>
       </div>
+
+      {statusNotice && <OperationStatusNotice notice={statusNotice} />}
+      {approvalError && <p className="mt-3 text-xs text-destructive" role="alert">{approvalError}</p>}
 
       <div className="mt-6 flex flex-wrap gap-2">
         {nextStatus && (
@@ -239,23 +285,20 @@ function WorkDetail({ workId }: { workId: string }) {
 
       {approvalVisible && operation && approvalOperationId && (
         <div className="mt-6 rounded-2xl border border-primary/25 bg-primary/5 p-4">
-          <p className="mb-3 text-sm font-semibold">موافقة مطلوبة قبل إنشاء المهمة</p>
+          <p className="mb-3 text-sm font-semibold">محتاج موافقتك</p>
           <ApprovalForm
             operationId={approvalOperationId}
             toolName={operation.toolName}
             initialArgs={operation.args}
             display={operation.display}
             status={operation.status}
+            operationNotice={approvalNotice ?? undefined}
             allowArgsOverride={false}
             busy={approveMutation.isPending || rejectMutation.isPending}
+            error={approvalError}
             onConfirm={() => approveMutation.mutate({ operationId: approvalOperationId })}
             onReject={() => rejectMutation.mutate({ operationId: approvalOperationId })}
           />
-        </div>
-      )}
-      {approvalOutcome && (
-        <div className="mt-6 rounded-2xl border border-border/70 bg-background/65 p-4 text-sm text-muted-foreground">
-          {approvalOutcome}
         </div>
       )}
 

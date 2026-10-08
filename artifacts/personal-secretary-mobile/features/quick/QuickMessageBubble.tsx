@@ -2,8 +2,11 @@ import { Feather } from '@expo/vector-icons';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { useColors } from '@/hooks/useColors';
 import type { AppLanguage } from '@/hooks/useLanguage';
+import { approvalExplanation } from '../../services/operation-presentation';
 import type { Approval, LocalMessage, MobileRecordRow } from './quick-model';
 import { localized, starterMessage, styles } from './quick-model';
+import { OperationStatusNotice } from '../OperationStatusNotice';
+import { ApprovalStatusGate } from '../ApprovalStatusGate';
 import { LocalInputAttachmentView } from '../local-input-attachment';
 
 function messageTime(value: string, language: AppLanguage) {
@@ -67,13 +70,44 @@ export function QuickMessageBubble({
           {messageTime(message.createdAt, language)}
         </Text>
 
-        {approvals.map((approval) => {
+        {approvals.map((snapshotApproval) => (
+          <ApprovalStatusGate
+            key={snapshotApproval.operationId}
+            approval={snapshotApproval}
+            operationNotice={
+              !message.operationNotice?.operationId
+                || message.operationNotice.operationId === snapshotApproval.operationId
+                ? message.operationNotice
+                : undefined
+            }
+            colors={colors}
+            language={language}
+          >
+          {({ approval, canRespond }) => {
           const approvalBusy = busyOperationId === approval.operationId;
-          const isResolved = approval.status === 'completed'
-            || approval.status === 'rejected'
-            || approval.status === 'expired'
-            || approval.status === 'failed';
-          const canQuickApprove = approval.status === 'pending' && approval.quickApprove === true;
+          const noticeStatus = message.operationNotice?.operationId
+            && message.operationNotice.operationId !== approval.operationId
+            ? undefined
+            : message.operationNotice?.status;
+          const unknownOutcome = noticeStatus === 'unknown_result';
+          const needsReview = noticeStatus === 'needs_review';
+          const isExecuting = approval.status === 'executing'
+            || noticeStatus === 'executing'
+            || noticeStatus === 'verifying';
+          const isWaiting = noticeStatus === 'waiting';
+          const isResolved = ['completed', 'rejected', 'expired', 'failed'].includes(approval.status)
+            || ['completed', 'rejected', 'expired', 'failed', 'unknown_result', 'needs_review', 'cancelled'].includes(noticeStatus ?? '')
+            || isWaiting
+            || isExecuting;
+          const operationCompleted = approval.status === 'completed' || noticeStatus === 'completed';
+          const operationRejected = approval.status === 'rejected' || noticeStatus === 'rejected';
+          const operationExpired = approval.status === 'expired' || noticeStatus === 'expired';
+          const operationFailed = approval.status === 'failed' || noticeStatus === 'failed';
+          const operationCancelled = noticeStatus === 'cancelled';
+          const canShowPending = approval.status === 'pending'
+            && (!noticeStatus || noticeStatus === 'pending_approval');
+          const canQuickApprove = canRespond && approval.status === 'pending' && approval.quickApprove === true;
+          const explanation = approvalExplanation(approval.toolName, language);
           return (
           <View key={approval.operationId} style={[styles.approvalCard, { backgroundColor: colors.muted, borderColor: colors.border }]}>
             <View style={[styles.approvalHeading, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
@@ -85,22 +119,46 @@ export function QuickMessageBubble({
                 {detail}
               </Text>
             ))}
+            {canShowPending && (
+              <View style={{ marginTop: 8, paddingTop: 7, borderTopWidth: 1, borderTopColor: colors.border }}>
+                <Text style={[styles.approvalDetail, { color: colors.foreground, fontWeight: '700', textAlign: isRtl ? 'right' : 'left' }]}>
+                  {localized(language, 'محتاج موافقتك', 'Waiting for your approval')}
+                </Text>
+                <Text style={[styles.approvalDetail, { color: colors.mutedForeground, textAlign: isRtl ? 'right' : 'left' }]}>
+                  {localized(language, `الجهة: ${explanation.service}`, `Service: ${explanation.service}`)}
+                </Text>
+                <Text style={[styles.approvalDetail, { color: colors.mutedForeground, textAlign: isRtl ? 'right' : 'left' }]}>{explanation.reason}</Text>
+                <Text style={[styles.approvalDetail, { color: colors.mutedForeground, textAlign: isRtl ? 'right' : 'left' }]}>{explanation.afterApproval}</Text>
+              </View>
+            )}
 
-            {isResolved ? (
+            {isResolved || isExecuting ? (
               <View style={[styles.resolvedRow, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
                 <Feather
-                  name={approval.status === 'completed' ? 'check-circle' : 'x-circle'}
+                  name={operationCompleted ? 'check-circle' : isExecuting ? 'loader' : unknownOutcome || needsReview ? 'alert-circle' : operationRejected ? 'x-circle' : 'alert-circle'}
                   size={15}
-                  color={approval.status === 'completed' ? colors.primary : colors.destructive}
+                  color={operationCompleted ? colors.primary : isExecuting || unknownOutcome || needsReview ? colors.accent : operationRejected ? colors.destructive : colors.mutedForeground}
                 />
                 <Text style={[styles.resolvedText, { color: colors.mutedForeground }]}>
-                  {approval.status === 'completed'
-                    ? localized(language, 'تم التنفيذ', 'Completed')
-                    : approval.status === 'failed'
-                      ? localized(language, 'تعذر التنفيذ', 'Failed')
-                      : approval.status === 'expired'
+                  {unknownOutcome
+                    ? localized(language, 'النتيجة غير مؤكدة', 'Outcome is unknown')
+                    : needsReview
+                      ? localized(language, 'محتاج مراجعتك', 'Needs your review')
+                      : isExecuting
+                         ? localized(language, noticeStatus === 'verifying' ? 'جارٍ التحقق' : 'جارٍ التنفيذ', noticeStatus === 'verifying' ? 'Verifying' : 'Executing')
+                        : operationCompleted
+                          ? localized(language, 'تم التنفيذ ✓', 'Completed ✓')
+                           : operationRejected
+                             ? localized(language, 'تم رفض العملية', 'Operation rejected')
+                             : operationFailed
+                      ? localized(language, 'التنفيذ فشل', 'Execution failed')
+                      : operationExpired
                         ? localized(language, 'انتهت صلاحية العملية', 'Expired')
-                        : localized(language, 'تم الرفض', 'Rejected')}
+                        : operationCancelled
+                          ? localized(language, 'تم إلغاء العملية', 'Operation cancelled')
+                          : isWaiting
+                            ? localized(language, 'في انتظار الخطوة التالية', 'Waiting for the next step')
+                          : localized(language, 'تم رفض العملية', 'Operation rejected')}
                 </Text>
               </View>
             ) : (
@@ -109,9 +167,9 @@ export function QuickMessageBubble({
                   <Pressable
                     testID={`quick-approve-${approval.operationId}`}
                     accessibilityRole="button"
-                      accessibilityLabel={localized(language, 'اعتماد العملية سريعًا', 'Approve this action')}
+                      accessibilityLabel={localized(language, 'الموافقة على العملية سريعًا', 'Approve this action')}
                     onPress={() => onApprove(approval)}
-                    disabled={Boolean(approvalBusy)}
+                    disabled={Boolean(approvalBusy) || !canRespond}
                       style={({ pressed }) => [
                       styles.approveButton,
                         { backgroundColor: colors.primary, opacity: pressed || approvalBusy ? 0.65 : 1, flexDirection: isRtl ? 'row-reverse' : 'row' },
@@ -120,7 +178,7 @@ export function QuickMessageBubble({
                     {approvalBusy
                       ? <ActivityIndicator size="small" color={colors.primaryForeground} />
                       : <Feather name="check" size={16} color={colors.primaryForeground} />}
-                    <Text style={[styles.approveText, { color: colors.primaryForeground }]}>{localized(language, 'اعتماد', 'Approve')}</Text>
+                    <Text style={[styles.approveText, { color: colors.primaryForeground }]}>{localized(language, 'موافقة', 'Approve')}</Text>
                   </Pressable>
                 ) : onOpenMain ? (
                   <Pressable
@@ -143,7 +201,7 @@ export function QuickMessageBubble({
                   accessibilityRole="button"
                   accessibilityLabel={localized(language, 'رفض العملية', 'Reject this action')}
                   onPress={() => onReject(approval)}
-                  disabled={Boolean(approvalBusy)}
+                  disabled={Boolean(approvalBusy) || !canRespond}
                   style={({ pressed }) => [
                     styles.rejectButton,
                     { borderColor: colors.border, opacity: pressed || approvalBusy ? 0.65 : 1, flexDirection: isRtl ? 'row-reverse' : 'row' },
@@ -156,7 +214,10 @@ export function QuickMessageBubble({
             )}
           </View>
           );
-        })}
+          }}
+          </ApprovalStatusGate>
+        ))}
+        {message.operationNotice && <OperationStatusNotice notice={message.operationNotice} colors={colors} language={language} />}
 
         {message.recordLink && (
           <Pressable

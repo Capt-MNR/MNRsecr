@@ -33,8 +33,10 @@ import {
 } from '@workspace/api-client-react';
 import type { ConversationDetail } from '@workspace/api-client-react';
 import { classifySecretaryError } from '../lib/secretary-errors';
+import { operationNoticeFromAction, type OperationNotice } from '../lib/operation-presentation';
 import ConversationHistory from '../components/conversation-history';
 import ApprovalForm from '../components/approval-form';
+import OperationStatusNotice from '../components/operation-status-notice';
 import { Link, useLocation, useSearch } from 'wouter';
 import SecretaryDashboard from '../components/secretary-dashboard';
 
@@ -46,6 +48,7 @@ type LocalMessage = {
   meta?: string;
   turnId?: string;
   facts?: Array<{ type: 'money' | 'count'; value: number; currency?: string; label?: string }>;
+  operationNotice?: OperationNotice;
   approval?: {
     operationId: string;
     toolName: string;
@@ -96,7 +99,7 @@ function approvalFromAction(action: Record<string, unknown> | undefined): LocalM
     : {};
   return {
     operationId: action.operationId,
-    toolName: typeof action.toolName === 'string' ? action.toolName : 'record_expense',
+    toolName: typeof action.toolName === 'string' ? action.toolName : 'unknown_action',
     initialArgs: action.args && typeof action.args === 'object'
       ? action.args as Record<string, unknown>
       : {},
@@ -230,6 +233,9 @@ function Home() {
     setConversationId(detail.conversationId);
     const loadedMessages: LocalMessage[] = [];
     detail.recentTurns.forEach((turn, index) => {
+      const action = turn.action as Record<string, unknown> | undefined;
+      const approval = approvalFromAction(action);
+      const notice = operationNoticeFromAction(action, action?.status);
       loadedMessages.push({
         id: `${detail.conversationId}-user-${index}`,
         role: 'user',
@@ -244,7 +250,8 @@ function Home() {
         time: formatTime(turn.createdAt),
         meta: 'من سجل المحادثة',
           ...(turn.turnId ? { turnId: turn.turnId } : {}),
-        ...(turn.action ? { approval: approvalFromAction(turn.action as Record<string, unknown>) } : {}),
+        ...(approval ? { approval } : {}),
+        ...(notice?.status !== 'pending_approval' ? { operationNotice: notice } : {}),
       });
     });
     setMessages((current) => {
@@ -260,6 +267,7 @@ function Home() {
         return {
           ...message,
           text: localMessage.text,
+          ...(localMessage.operationNotice ? { operationNotice: localMessage.operationNotice } : {}),
           approval: {
             ...message.approval,
             status: localMessage.approval.status,
@@ -332,6 +340,8 @@ function Home() {
           setSendError(null);
           setUncertainSend(null);
           const approval = approvalFromAction(response.action);
+          const derivedNotice = operationNoticeFromAction(response.action);
+          const operationNotice = approval && derivedNotice?.status === 'pending_approval' ? undefined : derivedNotice;
           setConversationId(response.conversationId);
           setSelectedConversationId(response.conversationId);
           setApprovalError(null);
@@ -346,6 +356,7 @@ function Home() {
                turnId: response.turnId,
                ...(response.response?.groundedFacts ? { facts: response.response.groundedFacts } : {}),
               ...(approval ? { approval } : {}),
+               ...(operationNotice ? { operationNotice } : {}),
             },
           ]);
           queryClient.invalidateQueries({ queryKey: getGetTodayContextQueryKey() });
@@ -368,8 +379,10 @@ function Home() {
     status: ApprovalStatus;
     assistantMessage: string;
     turnId?: string;
+    action?: unknown;
   }) {
     setApprovalError(null);
+    const operationNotice = operationNoticeFromAction(response.action, response.status);
     setMessages((current) => current.map((message) => (
       message.approval?.operationId === response.operationId
         ? {
@@ -377,6 +390,7 @@ function Home() {
             text: response.assistantMessage,
              ...(response.turnId ? { turnId: response.turnId } : {}),
             approval: { ...message.approval, status: response.status },
+             ...(operationNotice ? { operationNotice } : {}),
           }
         : message
     )));
@@ -393,7 +407,13 @@ function Home() {
       {
         onSuccess: handleApprovalResponse,
         onError: (error) => {
-          setApprovalError(classifySecretaryError(error)?.message ?? 'تعذر تنفيذ الموافقة.');
+          const classified = classifySecretaryError(error);
+          setApprovalError(classified.message);
+          if (classified.category === 'timeout' || classified.category === 'network') {
+            setMessages((current) => current.map((message) => message.approval?.operationId === operationId
+              ? { ...message, operationNotice: { status: 'unknown_result', operationId } }
+              : message));
+          }
           approvalOperationQueries.forEach((id) => {
             queryClient.invalidateQueries({ queryKey: getGetSecretaryOperationQueryKey(id) });
           });
@@ -409,7 +429,15 @@ function Home() {
       { operationId },
       {
         onSuccess: handleApprovalResponse,
-        onError: (error) => setApprovalError(classifySecretaryError(error)?.message ?? 'تعذر إلغاء العملية.'),
+        onError: (error) => {
+          const classified = classifySecretaryError(error);
+          setApprovalError(classified.message);
+          if (classified.category === 'timeout' || classified.category === 'network') {
+            setMessages((current) => current.map((message) => message.approval?.operationId === operationId
+              ? { ...message, operationNotice: { status: 'unknown_result', operationId } }
+              : message));
+          }
+        },
       },
     );
   }
@@ -650,11 +678,13 @@ function Home() {
                               projectCandidates={message.approval.projectCandidates}
                               busy={approveOperation.isPending || rejectOperation.isPending}
                               error={approvalError}
+                              operationNotice={message.operationNotice}
                               onConfirm={(args) => approve(message.approval!.operationId, args)}
                               onReject={() => reject(message.approval!.operationId)}
                             />
                           </div>
                         )}
+                        {!message.approval && message.operationNotice && <OperationStatusNotice notice={message.operationNotice} />}
                       </div>
                     </article>
                   ))}

@@ -5,7 +5,7 @@
 - [Groq GPT-OSS limits](groq-gpt-oss-limits.md) — low hidden reasoning keeps tool calls usable under the provider's token-per-minute budget.
 - [Workspace test runner](workspace-test-runner.md) — direct Node 24 TypeScript tests can fail on workspace directory imports even when builds and workflows are healthy.
 - [Database declaration refresh](db-declaration-refresh.md) — API typecheck can consume stale lib/db declarations; refresh the referenced project before changing source exports.
-- [Approval lifecycle memory](approval-lifecycle.md) — persist the post-approval result as a separate conversation event so later corrections use committed state.
+- [Approval lifecycle memory](approval-lifecycle.md) — persist outcomes separately; transcript approval status is a snapshot, so decisions require current operation state.
 - [Agent Work audit boundaries](agent-work-audit-boundaries.md) — creation, activation, first-baseline verification, and device delivery are separate runtime claims.
 - [Approval draft persistence](approval-draft-persistence.md) — keep edited approval fields local and temporary; the server operation stays authoritative until approval.
 - [Record approval executor](record-approval-executor.md) — record-page approvals reuse the deterministic executor, so every editable field must be forwarded into its stored operation.

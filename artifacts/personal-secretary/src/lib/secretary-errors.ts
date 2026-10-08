@@ -56,7 +56,7 @@ export function classifySecretaryError(error: unknown): UserFacingError {
   if (name === "FetchTimeoutError") {
     return {
       category: "timeout",
-      message: "الطلب أخذ وقتًا أطول من المتوقع. حاول مرة أخرى بعد قليل.",
+      message: "الخدمة ما ردتش في الوقت المتوقع. راجع حالة العملية قبل إعادة الطلب.",
       retryable: true,
       requestId: payload.requestId,
     };
@@ -65,7 +65,7 @@ export function classifySecretaryError(error: unknown): UserFacingError {
   if (name === "ResponseParseError") {
     return {
       category: "response_parse",
-      message: "وصل رد غير مفهوم من السكرتير. حاول مرة أخرى، وإذا تكرر الأمر راجع الدعم.",
+      message: "تعذر فهم نتيجة الطلب. راجع حالة العملية قبل إعادة الطلب.",
       retryable: true,
       requestId: payload.requestId,
     };
@@ -80,10 +80,18 @@ export function classifySecretaryError(error: unknown): UserFacingError {
         requestId: payload.requestId,
       };
     }
-    if (status === 401 || status === 403 || payload.category === "authentication_error" || payload.category === "permission_error") {
+    if (status === 401 || payload.category === "authentication_error") {
       return {
-        category: status === 403 || payload.category === "permission_error" ? "permission" : "authentication",
-        message: "انتهت جلسة الدخول أو لا تملك صلاحية تنفيذ هذا الطلب.",
+        category: "authentication",
+        message: "الحساب محتاج تسجيل دخول.",
+        retryable: false,
+        requestId: payload.requestId,
+      };
+    }
+    if (status === 403 || payload.category === "permission_error") {
+      return {
+        category: "permission",
+        message: "السكرتير مش عنده الصلاحية المطلوبة.",
         retryable: false,
         requestId: payload.requestId,
       };
@@ -102,7 +110,7 @@ export function classifySecretaryError(error: unknown): UserFacingError {
     if (status === 409 || payload.category === "conflict_error") {
       return {
         category: "conflict",
-        message: payload.error ?? "لا يمكن تنفيذ العملية لأن السجل مرتبط ببيانات أخرى.",
+        message: "البيانات اتغيرت قبل التنفيذ. حدّثها وراجع الحالة قبل المتابعة.",
         retryable: false,
         requestId: payload.requestId,
       };
@@ -110,7 +118,7 @@ export function classifySecretaryError(error: unknown): UserFacingError {
     if (status === 408 || status === 504 || payload.category === "timeout") {
       return {
         category: "timeout",
-        message: "الطلب أخذ وقتًا أطول من المتوقع. حاول مرة أخرى بعد قليل.",
+        message: "الخدمة ما ردتش في الوقت المتوقع. راجع حالة العملية قبل إعادة الطلب.",
         retryable: true,
         requestId: payload.requestId,
       };
@@ -118,7 +126,7 @@ export function classifySecretaryError(error: unknown): UserFacingError {
     if (status === 429 || payload.category === "rate_limit" || payload.category === "provider_rate_limit") {
       return {
         category: "rate_limit",
-        message: "السكرتير مشغول حاليًا. انتظر قليلًا ثم حاول مرة أخرى.",
+        message: "الخدمة مشغولة حاليًا. انتظر قليلًا ثم راجع حالة العملية.",
         retryable: true,
         requestId: payload.requestId,
       };
@@ -126,7 +134,7 @@ export function classifySecretaryError(error: unknown): UserFacingError {
     if (payload.category === "provider_unavailable" || status === 503) {
       return {
         category: "provider",
-        message: "خدمة الذكاء الاصطناعي غير متاحة مؤقتًا. حاول مرة أخرى بعد قليل.",
+        message: "الخدمة الخارجية غير متاحة حاليًا.",
         retryable: true,
         requestId: payload.requestId,
       };
@@ -134,7 +142,7 @@ export function classifySecretaryError(error: unknown): UserFacingError {
     if (payload.category === "provider_error" || status === 502) {
       return {
         category: "provider",
-        message: "حدث خطأ في خدمة الذكاء الاصطناعي. حاول مرة أخرى بعد قليل.",
+        message: "تعذر إكمال الطلب لدى الخدمة المستخدمة. راجع الحالة قبل إعادة الطلب.",
         retryable: true,
         requestId: payload.requestId,
       };
@@ -142,7 +150,7 @@ export function classifySecretaryError(error: unknown): UserFacingError {
     if (payload.category === "agent_error") {
       return {
         category: "agent",
-        message: "تعذر تنفيذ الطلب بالكامل، ولم يتم تغيير البيانات. جرّب صياغة أقصر أو حاول مرة أخرى.",
+        message: "تعذر إكمال الطلب. راجع حالة العملية قبل أي تكرار.",
         retryable: false,
         requestId: payload.requestId,
       };

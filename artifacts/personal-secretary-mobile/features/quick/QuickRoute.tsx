@@ -18,10 +18,12 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { useLanguage } from '@/hooks/useLanguage';
+import { useSecretaryChatService } from '../../services/secretary-chat';
 import {
-  isSecretaryAuthenticationFailure,
-  useSecretaryChatService,
-} from '../../services/secretary-chat';
+  approvalOutcomeMayBeUnknown,
+  operationNoticeFromAction,
+  secretaryFailureText,
+} from '../../services/operation-presentation';
 import {
   receiptDraft,
   receiptNeedsReview,
@@ -202,33 +204,33 @@ export default function QuickRoute() {
       setConversationId(result.conversationId);
       await queryClient.invalidateQueries({ queryKey: ['secretary-chat-conversations'] });
       const linked = recordLinkFromAction(result.action);
+      const turnApprovals = approvalsFromAction(result.action);
+      const derivedNotice = operationNoticeFromAction(result.action, objectValue(result.action).status);
+      const operationNotice = turnApprovals.length > 0 && derivedNotice?.status === 'pending_approval'
+        ? undefined
+        : derivedNotice;
       appendMessage({
         id: `assistant-${Date.now()}`,
         role: 'assistant',
         text: result.assistantMessage || result.response?.message || 'تم استلام طلبك.',
         createdAt: new Date().toISOString(),
         ...(result.turnId ? { turnId: result.turnId } : {}),
-        ...(() => {
-          const approvals = approvalsFromAction(result.action);
-          return approvals.length > 0
-            ? { approval: approvals[0], ...(approvals.length > 1 ? { approvals } : {}) }
-            : {};
-        })(),
+        ...(turnApprovals.length > 0
+          ? { approval: turnApprovals[0], ...(turnApprovals.length > 1 ? { approvals: turnApprovals } : {}) }
+          : {}),
+        ...(operationNotice ? { operationNotice } : {}),
         ...(linked ? { recordLink: addOrigin(linked, result.conversationId, typeof objectValue(result.action).operationId === 'string' ? objectValue(result.action).operationId as string : null, result.turnId) } : {}),
       });
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
-      if (isSecretaryAuthenticationFailure(error)) {
-        setLocalError(localized(language, 'انتهت جلسة الدخول. سجّل الدخول مرة أخرى.', 'Your session expired. Sign in again.'));
-      } else {
-        setLocalError(localized(language, 'تعذر تنفيذ الطلب. جرّب مرة أخرى.', 'The request could not be completed. Try again.'));
-        appendMessage({
-          id: `error-${Date.now()}`,
-          role: 'assistant',
-          text: localized(language, 'تعذر تنفيذ الطلب. لم يُحفظ أي تغيير.', 'The request could not be completed. No changes were saved.'),
-          createdAt: new Date().toISOString(),
-        });
-      }
+      const failure = secretaryFailureText(error, language);
+      setLocalError(failure);
+      appendMessage({
+        id: `error-${Date.now()}`,
+        role: 'assistant',
+        text: failure,
+        createdAt: new Date().toISOString(),
+      });
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       actionGuardRef.current.endTurn();
@@ -244,6 +246,7 @@ export default function QuickRoute() {
         ? await secretaryChat.approveOperation(approval.operationId)
         : await secretaryChat.rejectOperation(approval.operationId);
       const linked = recordLinkFromAction(response.action);
+      const operationNotice = operationNoticeFromAction(response.action, response.status);
       setMessages((current) => current.map((message) => {
         const approvals = message.approvals ?? (message.approval ? [message.approval] : []);
         if (!approvals.some((item) => item.operationId === approval.operationId)) return message;
@@ -254,18 +257,30 @@ export default function QuickRoute() {
           ...message,
           approval: updatedApprovals[0],
           ...(updatedApprovals.length > 1 ? { approvals: updatedApprovals } : {}),
+          ...(operationNotice ? { operationNotice } : {}),
           ...(linked ? { recordLink: addOrigin(linked, response.conversationId, response.operationId, response.turnId) } : {}),
         };
       }));
       setConversationId(response.conversationId);
       await queryClient.invalidateQueries({ queryKey: ['secretary-chat-conversations'] });
-      if (response.assistantMessage) appendMessage({ id: `approval-${Date.now()}`, role: 'assistant', text: response.assistantMessage, createdAt: new Date().toISOString(), ...(linked ? { recordLink: addOrigin(linked, response.conversationId, response.operationId, response.turnId) } : {}) });
+      if (response.assistantMessage) appendMessage({
+        id: `approval-${Date.now()}`,
+        role: 'assistant',
+        text: response.assistantMessage,
+        createdAt: new Date().toISOString(),
+        ...(linked ? { recordLink: addOrigin(linked, response.conversationId, response.operationId, response.turnId) } : {}),
+      });
       if (status === 'completed') await queryClient.invalidateQueries({ queryKey: ['records'] });
       await Haptics.notificationAsync(status === 'completed' ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Warning);
     } catch (error) {
-      setLocalError(isSecretaryAuthenticationFailure(error)
-        ? localized(language, 'انتهت جلسة الدخول. سجّل الدخول مرة أخرى.', 'Your session expired. Sign in again.')
-        : localized(language, 'لم يتم حفظ قرار الموافقة. جرّب مرة أخرى.', 'Your approval could not be saved. Try again.'));
+      setLocalError(secretaryFailureText(error, language, true));
+      if (approvalOutcomeMayBeUnknown(error)) {
+        setMessages((current) => current.map((message) => {
+          const approvals = message.approvals ?? (message.approval ? [message.approval] : []);
+          if (!approvals.some((item) => item.operationId === approval.operationId)) return message;
+          return { ...message, operationNotice: { status: 'unknown_result', operationId: approval.operationId } };
+        }));
+      }
     } finally {
       actionGuardRef.current.endApproval(approval.operationId);
       setBusyOperationId(null);
