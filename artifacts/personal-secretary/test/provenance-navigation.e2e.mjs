@@ -617,12 +617,16 @@ try {
   assert.ok(proxyAddress && typeof proxyAddress !== "string");
   const appBaseUrl = `http://127.0.0.1:${proxyAddress.port}`;
 
-  await exerciseFirstApprovalInBrowser(
-    appBaseUrl,
-    apiBaseUrl,
-    fixtureInfo.firstApprovalMessage,
-    apiProxy.controls,
-  );
+  if (process.env.PROVENANCE_NAVIGATION_ONLY === "1") {
+    console.log("Skipping approval UI assertions; running provenance and navigation checks only.");
+  } else {
+    await exerciseFirstApprovalInBrowser(
+      appBaseUrl,
+      apiBaseUrl,
+      fixtureInfo.firstApprovalMessage,
+      apiProxy.controls,
+    );
+  }
 
   const recordsBrowser = await startInteractiveChromium(`${appBaseUrl}/records?tab=expenses`);
   try {
