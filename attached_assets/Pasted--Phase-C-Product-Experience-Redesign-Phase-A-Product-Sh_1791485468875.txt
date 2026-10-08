@@ -1,0 +1,463 @@
+ننتقل الآن إلى Phase C من Product Experience Redesign.
+
+Phase A — Product Shell مكتملة.
+Phase B — Trust / Action UX مكتملة.
+
+لا نعود الآن إلى Groq أو provider testing.
+
+الهدف في هذه المرحلة:
+
+تحويل Secretary/Home من Dashboard يعرض مجموعات بيانات إلى Attention Engine يجيب عن سؤال:
+
+"إيه أهم حاجة السكرتير محتاجني أعرفها أو أعملها دلوقتي؟"
+
+==================================================
+
+1. AUDIT HOME الحالية أولًا
+   ==================================================
+
+راجع التنفيذ الحالي لـSecretary/Home بعد Phase A وB.
+
+حدد بدقة:
+
+- ما الذي تعرضه حاليًا؟
+- ما مصادر البيانات؟
+- كيف يتم ترتيب العناصر؟
+- هل يوجد بالفعل prioritization؟
+- هل توجد duplicate items؟
+- هل approval/work/reminder/task تظهر ككيانات منفصلة رغم أنها تشير لنفس الحاجة؟
+- هل يوجد empty state؟
+- هل توجد loading/error states؟
+
+لا تفترض أن Home الحالية هي مجرد implementation لما في هذا البرومبت.
+
+استخدم الكود الحالي كمصدر الحقيقة.
+
+==================================================
+2. HOME ليست DATABASE DASHBOARD
+
+أعد تنظيم Home حول attention وليس database categories.
+
+المفهوم الأساسي:
+
+SECRETARY
+"What matters now"
+
+وليس:
+
+"Here are all your records."
+
+الهيكل المقترح:
+
+1. محتاج منك الآن
+2. السكرتير بيتابع
+3. اليوم
+4. قريبًا
+5. آخر ما تم
+
+يمكن تعديل الأسماء إذا كان ذلك أكثر طبيعية في الـUI الحالي، لكن حافظ على المعنى.
+
+لا تجعل كل قسم يظهر دائمًا.
+
+إذا لم يوجد شيء مهم، لا تعرض قسمًا فارغًا لمجرد الحفاظ على الشكل.
+
+==================================================
+3. "محتاج منك الآن"
+
+هذه أهم منطقة في Home.
+
+اجمع فيها فقط الأشياء التي تحتاج انتباه المستخدم أو قرارًا منه.
+
+أمثلة من البيانات الحالية:
+
+- pending approval
+- needs_review
+- failed action requiring attention
+- unknown_result requiring reconciliation/review
+- important overdue item
+- triggered monitored condition
+- time-sensitive reminder
+- conflict requiring user decision
+
+لا تكرر نفس العملية إذا كانت موجودة في أكثر من مصدر.
+
+مثال:
+Approval + Work لنفس العملية = عنصر attention واحد مع إمكانية فتح التفاصيل.
+
+كل عنصر يجب أن يجيب بصريًا:
+
+WHAT?
+WHY NOW?
+WHAT CAN I DO?
+
+مثال:
+
+"محتاج موافقتك"
+"إرسال رسالة إلى محمد"
+[موافقة] [مراجعة]
+
+أو:
+
+"النتيجة غير مؤكدة"
+"لم أتمكن من التأكد من حالة الإرسال"
+[مراجعة]
+
+لا تخترع أسبابًا أو أولوية غير موجودة في البيانات.
+
+==================================================
+4. ATTENTION PRIORITIZATION
+
+لا تستخدم LLM في هذه المرحلة لمجرد ترتيب Home.
+
+استخدم deterministic ranking واضح وقابل للاختبار.
+
+رتّب بناءً على إشارات موجودة فعلًا، مثل:
+
+أعلى:
+
+- user action required
+- unknown result / needs review
+- failed action requiring attention
+- expiring approval
+- time-sensitive item
+
+ثم:
+
+- upcoming important commitment
+- triggered monitoring/work event
+- overdue task/reminder
+
+ثم:
+
+- normal upcoming items
+- informational updates
+
+ثم:
+
+- recent outcomes
+
+لا تستخدم "priority" إذا لم يكن لها معنى في البيانات.
+
+إذا كانت البيانات غير كافية لاتخاذ قرار، لا تخترع intelligence.
+
+==================================================
+5. "السكرتير بيتابع"
+
+هذه المنطقة يجب أن تجعل Agent Work قابلًا للرؤية.
+
+اعرض الأعمال النشطة ذات القيمة للمستخدم، مثل:
+
+- monitoring
+- recurring work
+- follow-up
+- scheduled execution
+- ongoing workflows
+
+كل عنصر يجب أن يوضح:
+
+ما الذي يتابعه السكرتير؟
+الحالة الحالية
+آخر نشاط/تشغيل إذا كان متاحًا
+ما المتوقع بعد ذلك إذا كان متاحًا
+
+مثال:
+
+"السكرتير بيتابع رد محمد"
+"آخر تحقق: اليوم 18:20"
+"المتابعة التالية: الخميس"
+
+لا تعرض internal run IDs أو implementation details.
+
+إذا لم يوجد Active Work، لا تعرض قسمًا فارغًا.
+
+أضف entry point واضحًا إلى Work.
+
+==================================================
+6. TODAY
+
+اعرض TodayContext الموجود حاليًا إذا كان متاحًا.
+
+لكن لا تحوله إلى task dump.
+
+رتّب الأحداث زمنيًا.
+
+تمييز:
+
+- الآن
+- قادم
+- متأخر
+- مكتمل
+
+إذا كانت هناك معلومة سياقية مرتبطة بالحدث بالفعل، يمكن إظهارها progressively.
+
+لا تعمل calendar clone.
+
+==================================================
+7. UPCOMING
+
+اعرض الأشياء القريبة التي تستحق المعرفة، وليس كل شيء.
+
+أمثلة:
+
+- upcoming reminder
+- upcoming commitment
+- scheduled Work
+- important appointment
+- deadline
+
+استخدم البيانات الحالية.
+
+لا تضف prediction engine.
+
+==================================================
+8. RECENT OUTCOMES
+
+اعرض ما فعله السكرتير مؤخرًا عندما يكون ذلك مفيدًا.
+
+أمثلة:
+
+"تم إرسال الرسالة ✓"
+"تم إنشاء الموعد ✓"
+"تم التحقق من النتيجة ✓"
+
+إذا كانت العملية failed أو unknown_result فلا تعرضها كنجاح.
+
+استخدم OperationStatus UX الذي تم بناؤه في Phase B.
+
+يمكن فتح التفاصيل / evidence عند الحاجة.
+
+==================================================
+9. WHY DOES THIS MATTER?
+
+كل Attention item يجب أن يكون له سبب مفهوم.
+
+لكن السبب يجب أن يأتي من البيانات/الحالة الفعلية.
+
+لا تكتب:
+
+"هذا مهم لأنك عادةً تهتم بهذه الأمور"
+
+إلا إذا كان هذا مدعومًا فعلًا من preference/behavior الموجود.
+
+في هذه المرحلة نريد:
+
+- يحتاج موافقتك
+- الموعد قريب
+- يحتاج مراجعتك
+- المتابعة فشلت
+- انتهت الصلاحية
+- هناك تغيير فعلي
+- السكرتير ينتظر قرارك
+
+وليس reasoning وهمي.
+
+==================================================
+10. EMPTY STATES
+
+الـempty Home يجب ألا تبدو كصفحة Database فارغة.
+
+مثال:
+
+"كل شيء هادئ الآن."
+"السكرتير مش محتاج منك حاجة."
+
+ثم:
+
+[اسأل السكرتير]
+
+أو entry point مفيد لإنشاء Work.
+
+لكن لا تضع fake activity.
+
+==================================================
+11. ASK ENTRY POINT
+
+Ask يجب أن يظل متاحًا دائمًا من Secretary.
+
+يمكن أن يكون:
+
+"اسأل السكرتير أي حاجة..."
+
+لكن لا تجعل الصفحة تتحول مرة أخرى إلى Chat-first experience.
+
+Home يبدأ من attention.
+Ask متاح عندما يريد المستخدم الطلب.
+
+==================================================
+12. DISCOVERABILITY
+
+بدون إضافة عشرات الأزرار، اجعل Home تكشف أن السكرتير يستطيع المتابعة والتنفيذ.
+
+يجب أن يوجد entry point واضح لـ:
+
+"اجعل السكرتير يتابع"
+
+يفتح Work creation flow الموجود/المقرر في المرحلة التالية.
+
+لا تنفذ Work creation architecture كاملة الآن إذا لم تكن موجودة.
+
+يكفي أن يكون entry point واضحًا وقابلًا للربط في Phase D.
+
+لا تضف mock Work.
+
+==================================================
+13. DATA / AUTHORITY RULES
+
+التزم تمامًا بالقواعد الموجودة:
+
+- official/structured records authoritative
+- inferred memory لا تتغلب على official records
+- tenant/user scoping
+- existing backend contracts
+- existing operationId
+- existing workId/runId semantics
+- existing verification/evidence
+- no client-side execution
+
+Home يجب أن تكون projection للبيانات الموجودة، وليست مصدر حقيقة جديدًا.
+
+==================================================
+14. PERFORMANCE
+
+لا تجعل Home تطلب نفس البيانات مرات متعددة بدون داعٍ.
+
+راجع:
+
+- duplicate API calls
+- unnecessary polling
+- repeated fetches
+- loading waterfalls
+
+لا تضف aggressive polling.
+
+استخدم caching/state الموجودة بالفعل عندما يكون ذلك آمنًا.
+
+==================================================
+15. COMPONENT STRUCTURE
+
+إذا كانت Secretary/Home ما زالت داخل الـlarge Main file، استخرج حدودًا واضحة أثناء التنفيذ.
+
+المطلوب على الأقل حدود منطقية لـ:
+
+SecretaryHome
+AttentionSection
+AttentionItem
+ActiveWorkSection
+TodaySection
+UpcomingSection
+RecentOutcomesSection
+
+أسماء الملفات/المكونات يمكن أن تختلف حسب architecture الحالية.
+
+لا تعمل refactor شامل.
+
+الهدف أن تصبح Secretary/Home قابلة للتطوير بدون الرجوع إلى monolith.
+
+==================================================
+16. MOBILE-FIRST
+
+Home يجب أن تكون ممتازة على شاشة الهاتف.
+
+الأولوية:
+
+1. ما يحتاج قرارًا
+2. ما يحتاج معرفة
+3. ما يحدث الآن
+4. ما يتابعه السكرتير
+5. التفاصيل عند الطلب
+
+لا تملأ الشاشة بالcards.
+
+لا تستخدم decorative icons لمجرد الزينة.
+
+Progressive disclosure أهم من عرض كل المعلومات مرة واحدة.
+
+احترم RTL والعربية.
+
+==================================================
+17. TESTING
+
+بعد التنفيذ شغّل:
+
+- typecheck
+- existing Main/navigation tests
+- API tests ذات العلاقة
+- tests الموجودة للـAgent Work
+- tests الخاصة بالـapproval/result states
+- build
+
+وأضف focused tests للـAttention ranking إذا كان framework الحالي يسمح.
+
+اختبر على الأقل:
+
+1. pending approval يظهر في "محتاج منك الآن"
+2. unknown_result يظهر كـneeds review وليس failure/rejection
+3. expired approval لا يظهر كزر موافقة صالح
+4. active Work يظهر في "السكرتير بيتابع"
+5. completed action يظهر في Recent Outcomes
+6. failed action لا يظهر كنجاح
+7. نفس العملية لا تظهر duplicate في أكثر من Attention item
+8. Home لا تعرض sections فارغة بلا داعٍ
+9. user/tenant scoping محفوظ
+10. Home لا تنفذ أي action بنفسها
+11. عدم وجود data لا ينتج fake content
+12. navigation إلى Ask/Work/Context تعمل
+
+==================================================
+18. IMPORTANT PRODUCT RULE
+
+لا تجعل Home تحاول أن تكون:
+
+Dashboard
+Calendar
+Task manager
+Chat
+CRM
+Finance page
+
+كلها في نفس الوقت.
+
+Secretary Home يجب أن تكون:
+
+"طبقة الانتباه الخاصة بالسكرتير."
+
+المستخدم يدخل ويعرف بسرعة:
+
+محتاج مني إيه؟
+السكرتير بيعمل إيه؟
+إيه اللي حصل؟
+إيه اللي جاي؟
+
+ثم يذهب إلى Ask / Context / Work عند الحاجة.
+
+==================================================
+19. STOP CONDITION
+
+بعد إكمال Phase C:
+
+لا تبدأ Phase D.
+
+لا تبدأ Work creation redesign.
+
+لا تضف Connections جديدة.
+
+لا تعمل Quick redesign.
+
+توقف وأبلغني:
+
+- كيف كانت Home قبل التعديل
+- ما الذي تغير
+- ما مصادر البيانات المستخدمة
+- كيف يعمل attention ranking
+- كيف تم منع duplicates
+- ما الذي تم استخراجه من Main
+- الاختبارات والنتائج
+- أي limitations حقيقية
+
+لا تستخدم mock data لتغطية أي نقص.
+
+لا تعتبر وجود الأقسام وحده نجاحًا.
+
+الهدف هو أن يشعر المستخدم عند فتح التطبيق:
+
+"السكرتير شايف اللي مهم، ومش محتاجني ألف على خمس شاشات عشان أعرف أعمل إيه."
