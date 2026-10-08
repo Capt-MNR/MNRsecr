@@ -16,8 +16,9 @@ import { useGetEntityGraph, useGetFinancialParty } from "@workspace/api-client-r
 import { useLocation, useRoute } from "wouter";
 import type { ReactNode } from "react";
 import { ActivityTimeline, type ActivityTimelineEvent } from "../components/graph/activity-timeline";
-import { AskSecretaryLink, FollowSecretaryLink, entityPath, financialRecordPath, recordPath } from "../components/graph/context-link";
+import { AskSecretaryLink, FollowSecretaryLink, entityPath, financialRecordPath, recordContextPath } from "../components/graph/context-link";
 import { EmptyRelation, GraphSection, RelatedLink } from "../components/graph/graph-section";
+import { ContextAvailabilityNote } from "../components/graph/context-availability-note";
 
 type EntityType = "person" | "project";
 type RelatedItem = {
@@ -46,7 +47,7 @@ type Expense = {
   origin?: { conversationId: string; turnId?: string | null } | null;
 };
 type GraphData = {
-  entity: { id: string; name: string; notes?: string | null; phone?: string | null; status?: string };
+  entity: { id: string; name: string; notes?: string | null; phone?: string | null; status?: string; createdAt?: string; updatedAt?: string };
   related: {
     projects?: RelatedItem[];
     people?: RelatedItem[];
@@ -80,6 +81,43 @@ function text(value: unknown, fallback: string) {
 
 function amount(value: unknown) {
   return typeof value === "number" ? value : Number(value ?? 0);
+}
+
+function actionStatusLabel(value: string | undefined) {
+  if (!value) return "";
+  const labels: Record<string, string> = {
+    pending: "قيد الانتظار",
+    in_progress: "جارٍ",
+    scheduled: "مجدول",
+    open: "مفتوح",
+    completed: "مكتمل",
+    cancelled: "ملغى",
+    active: "نشط",
+    archived: "مؤرشف",
+  };
+  return labels[value] ?? value;
+}
+
+function sortContextActions(items: RelatedItem[]) {
+  const closed = new Set(["completed", "cancelled", "archived"]);
+  return [...items].sort((left, right) => {
+    const leftClosed = left.status && closed.has(left.status) ? 1 : 0;
+    const rightClosed = right.status && closed.has(right.status) ? 1 : 0;
+    if (leftClosed !== rightClosed) return leftClosed - rightClosed;
+    const leftDue = left.dueAt ? new Date(left.dueAt).getTime() : Number.POSITIVE_INFINITY;
+    const rightDue = right.dueAt ? new Date(right.dueAt).getTime() : Number.POSITIVE_INFINITY;
+    const safeLeftDue = Number.isFinite(leftDue) ? leftDue : Number.POSITIVE_INFINITY;
+    const safeRightDue = Number.isFinite(rightDue) ? rightDue : Number.POSITIVE_INFINITY;
+    return safeLeftDue - safeRightDue;
+  });
+}
+
+function actionDetail(item: RelatedItem) {
+  return [
+    item.relationship ? `ارتباط: ${item.relationship}` : "",
+    item.status ? actionStatusLabel(item.status) : "",
+    item.dueAt ? formatDate(item.dueAt) : "",
+  ].filter(Boolean).join(" · ") || "سجل مرتبط";
 }
 
 function groupedMoney(items: Array<Record<string, unknown>>, field: string) {
@@ -129,7 +167,7 @@ export default function EntityDetail({ entityType }: { entityType: EntityType })
               <div className="min-w-0">
                 <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{entityType === "person" ? "شخص" : "مشروع"}</p>
                 <h1 className="mt-1 break-words font-serif text-3xl tracking-tight sm:text-4xl">{entity.name}</h1>
-                <p className="mt-2 text-sm text-muted-foreground">{entityType === "project" ? `الحالة: ${text(entity.status, "غير محددة")}` : text(entity.notes, "لا توجد ملاحظات محفوظة.")}</p>
+                <p className="mt-2 text-sm text-muted-foreground">سياق من السجل المحفوظ في مساحتك.</p>
                 {entityType === "person" && entity.phone && (
                   <a href={`tel:${entity.phone}`} className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-xl border border-border bg-background px-3 py-2 text-sm font-medium text-muted-foreground hover:border-primary/40 hover:text-primary" data-testid={`link-profile-phone-${entity.id}`}>
                     <Phone className="size-4" /> {entity.phone}
@@ -143,6 +181,23 @@ export default function EntityDetail({ entityType }: { entityType: EntityType })
             </div>
           </div>
         </header>
+        <section className="mt-4 rounded-2xl border border-border/75 bg-card p-4 sm:p-5" aria-label="البيانات الرسمية المسجلة" data-testid="context-structured-record">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+            <h2 className="text-sm font-semibold">بيانات مسجلة</h2>
+            <p className="text-[11px] text-muted-foreground">من سجل {entityType === "person" ? "الشخص" : "المشروع"} الحالي، وليست استنتاجًا من الذاكرة.</p>
+          </div>
+          <dl className="mt-3 grid gap-2 sm:grid-cols-2">
+            {entityType === "person" ? (
+              <>
+                <div className="rounded-xl bg-muted/40 px-3 py-2.5"><dt className="text-[11px] text-muted-foreground">الهاتف</dt><dd className="mt-1 text-sm">{entity.phone || "غير مسجل"}</dd></div>
+                <div className="rounded-xl bg-muted/40 px-3 py-2.5"><dt className="text-[11px] text-muted-foreground">ملاحظات محفوظة</dt><dd className="mt-1 break-words text-sm">{entity.notes || "لا توجد ملاحظات محفوظة."}</dd></div>
+              </>
+            ) : (
+              <div className="rounded-xl bg-muted/40 px-3 py-2.5"><dt className="text-[11px] text-muted-foreground">حالة المشروع</dt><dd className="mt-1 text-sm">{text(entity.status, "غير محددة")}</dd></div>
+            )}
+            {entity.updatedAt && <div className="rounded-xl bg-muted/40 px-3 py-2.5"><dt className="text-[11px] text-muted-foreground">آخر تحديث مسجل</dt><dd className="mt-1 text-sm">{formatDate(entity.updatedAt)}</dd></div>}
+          </dl>
+        </section>
         {entityType === "person" ? <PersonSections data={data} setLocation={setLocation} /> : <ProjectSections data={data} setLocation={setLocation} />}
       </main>
     </div>
@@ -153,13 +208,14 @@ function PersonSections({ data, setLocation }: { data: GraphData; setLocation: (
   const related = data.related;
   return (
     <div className="mt-6 grid gap-5 lg:mt-8 lg:grid-cols-3">
+      <ActivityTimeline entityType="person" entityId={data.entity.id} initialEvents={data.timeline ?? []} className="lg:col-span-3" />
+      <div className="lg:col-span-3"><ContextAvailabilityNote /></div>
+      {related.commitments && related.commitments.length > 0 && <EntityLinks title="الالتزامات المرتبطة" icon={<Scale className="size-4 text-primary" />} items={sortContextActions(related.commitments)} getPath={(item) => recordContextPath("commitments", item.id)} setLocation={setLocation} className="lg:col-span-2" />}
+      {related.tasks && related.tasks.length > 0 && <EntityLinks title="المهام المرتبطة" icon={<CheckSquare2 className="size-4 text-primary" />} items={sortContextActions(related.tasks)} getPath={(item) => recordContextPath("tasks", item.id)} setLocation={setLocation} />}
+      {related.reminders && related.reminders.length > 0 && <EntityLinks title="التذكيرات المرتبطة" icon={<Bell className="size-4 text-primary" />} items={sortContextActions(related.reminders)} getPath={(item) => recordContextPath("reminders", item.id)} setLocation={setLocation} />}
       {related.projects && related.projects.length > 0 && <EntityLinks title="المشاريع المرتبطة" icon={<FolderKanban className="size-4 text-primary" />} items={related.projects} getPath={(item) => entityPath("project", item.id)} setLocation={setLocation} className="lg:col-span-2" />}
-      {related.tasks && related.tasks.length > 0 && <EntityLinks title="المهام المرتبطة" icon={<CheckSquare2 className="size-4 text-primary" />} items={related.tasks} getPath={(item) => recordPath("tasks", item.id)} setLocation={setLocation} />}
-      {related.reminders && related.reminders.length > 0 && <EntityLinks title="التذكيرات المرتبطة" icon={<Bell className="size-4 text-primary" />} items={related.reminders} getPath={(item) => recordPath("reminders", item.id)} setLocation={setLocation} />}
       {related.financialParties && related.financialParties.length > 0 && <FinancialSnapshots parties={related.financialParties} setLocation={setLocation} />}
       {related.expenses && related.expenses.length > 0 && <ExpenseList expenses={related.expenses} setLocation={setLocation} className="lg:col-span-2" />}
-      {related.commitments && related.commitments.length > 0 && <EntityLinks title="الالتزامات المرتبطة" icon={<Scale className="size-4 text-primary" />} items={related.commitments} getPath={(item) => recordPath("commitments", item.id)} setLocation={setLocation} className="lg:col-span-2" />}
-      <ActivityTimeline entityType="person" entityId={data.entity.id} initialEvents={data.timeline ?? []} className="lg:col-span-3" />
     </div>
   );
 }
@@ -168,12 +224,13 @@ function ProjectSections({ data, setLocation }: { data: GraphData; setLocation: 
   const related = data.related;
   return (
     <div className="mt-6 grid gap-5 lg:mt-8 lg:grid-cols-3">
+      <ActivityTimeline entityType="project" entityId={data.entity.id} initialEvents={data.timeline ?? []} className="lg:col-span-3" />
+      <div className="lg:col-span-3"><ContextAvailabilityNote /></div>
+      {related.tasks && related.tasks.length > 0 && <EntityLinks title="المهام المرتبطة" icon={<CheckSquare2 className="size-4 text-primary" />} items={sortContextActions(related.tasks)} getPath={(item) => recordContextPath("tasks", item.id)} setLocation={setLocation} />}
+      {related.reminders && related.reminders.length > 0 && <EntityLinks title="التذكيرات المرتبطة" icon={<Bell className="size-4 text-primary" />} items={sortContextActions(related.reminders)} getPath={(item) => recordContextPath("reminders", item.id)} setLocation={setLocation} />}
       {related.people && related.people.length > 0 && <EntityLinks title="الأشخاص المرتبطون" icon={<UserRound className="size-4 text-primary" />} items={related.people} getPath={(item) => entityPath("person", item.id)} setLocation={setLocation} className="lg:col-span-2" />}
-      {related.tasks && related.tasks.length > 0 && <EntityLinks title="المهام المرتبطة" icon={<CheckSquare2 className="size-4 text-primary" />} items={related.tasks} getPath={(item) => recordPath("tasks", item.id)} setLocation={setLocation} />}
-      {related.reminders && related.reminders.length > 0 && <EntityLinks title="التذكيرات المرتبطة" icon={<Bell className="size-4 text-primary" />} items={related.reminders} getPath={(item) => recordPath("reminders", item.id)} setLocation={setLocation} />}
       {related.financialParties && related.financialParties.length > 0 && <FinancialSnapshots parties={related.financialParties} setLocation={setLocation} />}
       {related.expenses && related.expenses.length > 0 && <ExpenseList expenses={related.expenses} setLocation={setLocation} className="lg:col-span-3" />}
-      <ActivityTimeline entityType="project" entityId={data.entity.id} initialEvents={data.timeline ?? []} className="lg:col-span-3" />
     </div>
   );
 }
@@ -196,7 +253,7 @@ function EntityLinks({
   return (
     <GraphSection title={title} icon={icon} className={className}>
       <div className="space-y-2">
-        {items.map((item) => <RelatedLink key={item.relationshipId ?? item.id} label={item.name ?? item.title ?? item.text ?? "سجل مرتبط"} detail={item.relationship || item.status || formatDate(item.dueAt)} onOpen={() => setLocation(getPath(item))} />)}
+        {items.map((item) => <RelatedLink key={item.relationshipId ?? item.id} label={item.name ?? item.title ?? item.text ?? "سجل مرتبط"} detail={actionDetail(item)} onOpen={() => setLocation(getPath(item))} />)}
       </div>
     </GraphSection>
   );
@@ -260,9 +317,9 @@ function ExpenseList({ expenses, setLocation, className = "" }: { expenses: Expe
   return (
     <GraphSection title="المصروفات المرتبطة" icon={<Receipt className="size-4 text-primary" />} className={className}>
       <div className="space-y-2">
-        {expenses.map((expense) => (
+              {expenses.map((expense) => (
           <div key={expense.id} className="rounded-xl bg-muted/50 p-3">
-            <button type="button" onClick={() => setLocation(recordPath("expenses", expense.id))} className="flex min-h-11 w-full items-center justify-between gap-3 text-right transition hover:text-primary">
+            <button type="button" onClick={() => setLocation(recordContextPath("expenses", expense.id))} className="flex min-h-11 w-full items-center justify-between gap-3 text-right transition hover:text-primary">
               <span className="min-w-0"><span className="block truncate text-sm font-medium">{expense.description}</span><span className="mt-1 block truncate text-xs text-muted-foreground">{expense.purposeName ? `${expense.purposeName} · ` : ""}{formatDate(expense.occurredAt)}</span></span>
               <span className="shrink-0 font-mono text-sm font-semibold">{money(expense.amountMinor, expense.currency)}</span>
             </button>

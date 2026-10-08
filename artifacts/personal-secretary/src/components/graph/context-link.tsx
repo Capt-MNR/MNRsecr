@@ -1,13 +1,8 @@
 import { MessageCircle, Sparkles } from "lucide-react";
+export { askAboutRecordHref, entityPath, recordContextPath } from "../../lib/context-navigation";
 
 export type GraphEntityType = "person" | "project" | "financial_party";
 export type FinancialRecordType = "obligation" | "payment" | "donation" | "receivable";
-
-export function entityPath(entityType: GraphEntityType, id: string) {
-  if (entityType === "person") return `/people/${encodeURIComponent(id)}`;
-  if (entityType === "project") return `/projects/${encodeURIComponent(id)}`;
-  return `/financial/parties/${encodeURIComponent(id)}`;
-}
 
 export function recordPath(tab: string, id: string) {
   return `/records?tab=${encodeURIComponent(tab)}&recordId=${encodeURIComponent(id)}`;

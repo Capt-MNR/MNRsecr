@@ -638,7 +638,7 @@ try {
         .find((card) => card.textContent?.includes(${JSON.stringify("مصروف الاختبار")}));
       return {
         actionText: action?.textContent ?? "",
-        manualHasUnlinkedState: Boolean(manualCard?.textContent?.includes("أضيف يدويًا أو قبل تفعيل ربط المحادثات")),
+        manualHasUnlinkedState: Boolean(manualCard?.textContent?.includes("لا توجد محادثة أصلية مرتبطة بهذا السجل")),
         manualHasOriginAction: Boolean(manualCard?.querySelector('[data-testid^="link-record-origin-"]')),
       };
     })()`);

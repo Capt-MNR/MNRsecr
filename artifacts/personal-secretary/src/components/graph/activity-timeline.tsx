@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, CircleAlert, Clock3, LoaderCircle, RefreshCw } from "lucide-react";
 import { useLocation } from "wouter";
 import { GraphSection } from "./graph-section";
-import { financialRecordPath, recordPath } from "./context-link";
+import { financialRecordPath, recordContextPath } from "./context-link";
 
 export type ActivityTimelineEvent = {
   id: string;
@@ -75,10 +75,10 @@ function targetForEvent(event: ActivityTimelineEvent, currentType: TimelineEntit
     if (type === "person" || type === "project" || type === "financial_party") {
       return type === currentType && id === currentId ? null : type === "person" ? `/people/${encodeURIComponent(id)}` : type === "project" ? `/projects/${encodeURIComponent(id)}` : `/financial/parties/${encodeURIComponent(id)}`;
     }
-    if (type === "expense") return recordPath("expenses", id);
-    if (type === "task") return recordPath("tasks", id);
-    if (type === "reminder") return recordPath("reminders", id);
-    if (type === "commitment") return recordPath("commitments", id);
+    if (type === "expense") return recordContextPath("expenses", id);
+    if (type === "task") return recordContextPath("tasks", id);
+    if (type === "reminder") return recordContextPath("reminders", id);
+    if (type === "commitment") return recordContextPath("commitments", id);
     if (type === "financial_obligation") return financialRecordPath("obligation", id);
     if (type === "financial_payment") return financialRecordPath("payment", id);
     if (type === "donation") return financialRecordPath("donation", id);

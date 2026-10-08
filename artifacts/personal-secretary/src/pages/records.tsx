@@ -51,7 +51,8 @@ import { classifySecretaryError } from '../lib/secretary-errors';
 import { RECORD_REFRESH_FAILURE_MESSAGE, resolveRecordForEditing } from '../lib/record-editing';
 import { useLocation } from 'wouter';
 import ApprovalForm from '../components/approval-form';
-import { entityPath, financialRecordPath } from '../components/graph/context-link';
+import { entityPath, financialRecordPath, recordContextPath } from '../components/graph/context-link';
+import { RecordContextFocus } from '../components/graph/record-context-focus';
 
 type RecordItem = ExpenseRecord | PersonRecord | ProjectRecord | TaskRecord | ReminderRecord | CommitmentRecord;
 type RecordOrigin = { conversationId: string; turnId?: string | null; operationId?: string | null };
@@ -518,7 +519,7 @@ function RecordCard({
           <MessageSquareText className="size-3.5" /> فتح المحادثة الأصلية
         </button>
       ) : supportsConversationOrigin ? (
-        <p className="mt-3 text-[11px] text-muted-foreground/75">أضيف يدويًا أو قبل تفعيل ربط المحادثات</p>
+        <p className="mt-3 text-[11px] text-muted-foreground/75">لا توجد محادثة أصلية مرتبطة بهذا السجل.</p>
       ) : null}
     </article>
   );
@@ -553,6 +554,8 @@ export default function Records() {
   const data = recordsQuery.data;
   const currentRecords = useMemo(() => tab === 'financial' ? [] : data?.[tab] ?? [], [data, tab]) as RecordItem[];
   const kind = recordTypeForTab(tab === 'financial' ? 'expenses' : tab);
+  const contextRecordId = new URLSearchParams(window.location.search).get('contextId');
+  const contextRecord = contextRecordId ? currentRecords.find((record) => record.id === contextRecordId) : undefined;
 
   useEffect(() => {
     const nextTab = new URLSearchParams(window.location.search).get('tab');
@@ -573,6 +576,16 @@ export default function Records() {
       setStaleRecordMessage('السجل المطلوب لم يعد موجودًا أو لا ينتمي إلى مساحتك الحالية.');
     }
   }, [data, kind, location, recordsQuery.isLoading, setLocation, tab]);
+
+  useEffect(() => {
+    if (!contextRecordId || tab === 'financial') {
+      setStaleRecordMessage(null);
+      return;
+    }
+    if (recordsQuery.isLoading || !data) return;
+    if (contextRecord) setStaleRecordMessage(null);
+    else setStaleRecordMessage('السجل المطلوب غير موجود أو غير متاح في مساحتك الحالية.');
+  }, [contextRecord, contextRecordId, data, recordsQuery.isLoading, tab]);
 
   function refresh() {
     queryClient.invalidateQueries({ queryKey: getListRecordsQueryKey() });
@@ -692,6 +705,17 @@ export default function Records() {
     setCreating(kind);
   }
 
+  function selectTab(nextTab: Tab) {
+    setTab(nextTab);
+    setStaleRecordMessage(null);
+    const params = new URLSearchParams(window.location.search);
+    params.set('tab', nextTab);
+    params.delete('contextId');
+    params.delete('recordId');
+    params.delete('financialType');
+    setLocation(`/records?${params.toString()}`);
+  }
+
   return (
     <div dir="rtl" lang="ar" className="grain min-h-[100dvh] bg-background text-foreground">
       <main className="mx-auto min-h-[100dvh] max-w-[1240px] px-4 py-6 sm:px-8 sm:py-10">
@@ -721,7 +745,7 @@ export default function Records() {
                    const tabInfo = tabs.find((item) => item.id === id)!;
                    const Icon = tabInfo.icon;
                    return (
-                     <button key={id} type="button" onClick={() => setTab(id)} className={`flex min-h-10 shrink-0 items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-medium transition ${tab === id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-primary'}`} data-testid={`tab-records-${id}`}>
+                      <button key={id} type="button" onClick={() => selectTab(id)} className={`flex min-h-10 shrink-0 items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-medium transition ${tab === id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-primary'}`} data-testid={`tab-records-${id}`}>
                        <Icon className="size-3.5" /> {tabInfo.label} {id !== 'financial' && <span className={tab === id ? 'text-primary-foreground/70' : 'text-muted-foreground/60'}>{data?.[id]?.length ?? 0}</span>}
                      </button>
                    );
@@ -735,8 +759,23 @@ export default function Records() {
           {recordsQuery.isLoading && <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{[1, 2, 3, 4, 5, 6].map((item) => <div key={item} className="h-32 animate-pulse rounded-2xl bg-muted" />)}</div>}
           {staleRecordMessage && <div className="mb-5 flex items-center gap-2 rounded-2xl border border-amber-500/25 bg-amber-500/5 p-4 text-sm text-amber-700 dark:text-amber-300" role="status"><CircleAlert className="size-4" /> {staleRecordMessage}</div>}
            {error && <div className="mb-5 rounded-2xl border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive" role="alert"><div className="flex items-center gap-2"><CircleAlert className="size-4" /> {error.message}</div><button type="button" onClick={() => void recordsQuery.refetch()} className="mt-3 text-xs font-semibold underline underline-offset-4">حاول مرة أخرى</button></div>}
+           {contextRecord && data && (
+             <div className="mb-5">
+               <RecordContextFocus
+                 record={contextRecord}
+                 recordType={kind}
+                 records={data}
+                 onNavigate={setLocation}
+                 onClose={() => {
+                   setStaleRecordMessage(null);
+                   setLocation(`/records?tab=${tab}`);
+                 }}
+                 onOpenConversation={(origin) => setLocation(conversationPath(origin))}
+               />
+             </div>
+           )}
           {!recordsQuery.isLoading && !error && currentRecords.length === 0 && <div className="rounded-[24px] border border-dashed border-border bg-card/50 px-6 py-16 text-center"><Check className="mx-auto size-8 text-primary/60" /><h2 className="mt-4 font-serif text-xl">لا توجد سجلات هنا بعد</h2><p className="mt-2 text-sm text-muted-foreground">يمكنك إضافة أول سجل يدويًا أو من خلال المحادثة.</p><button type="button" onClick={openCreate} className="mx-auto mt-5 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"><Plus className="size-4" /> إضافة {labelForKind(kind)}</button></div>}
-            {!recordsQuery.isLoading && currentRecords.length > 0 && <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{currentRecords.map((record) => <RecordCard key={record.id} kind={kind} record={record} setLocation={setLocation} isRefreshing={refreshingRecordId === record.id} onEdit={() => void editItem(record)} onDelete={() => deleteItem(record)} onOpen={kind === 'person' ? () => setLocation(entityPath('person', record.id)) : kind === 'project' ? () => setLocation(entityPath('project', record.id)) : undefined} />)}</div>}
+             {!recordsQuery.isLoading && currentRecords.length > 0 && <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{currentRecords.map((record) => <RecordCard key={record.id} kind={kind} record={record} setLocation={setLocation} isRefreshing={refreshingRecordId === record.id} onEdit={() => void editItem(record)} onDelete={() => deleteItem(record)} onOpen={kind === 'person' ? () => setLocation(entityPath('person', record.id)) : kind === 'project' ? () => setLocation(entityPath('project', record.id)) : () => setLocation(recordContextPath(tab, record.id))} />)}</div>}
         </>}
       </main>
       {creating && <EditModal kind={creating} record={null} isCreate people={data?.people ?? []} projects={data?.projects ?? []} onClose={() => setCreating(null)} isSaving={createMutation.isPending} onSave={(form) => createMutation.mutate({ data: form as RecordCreateInput }, { onSuccess: (response) => handleCreateResult(response, creating) })} />}

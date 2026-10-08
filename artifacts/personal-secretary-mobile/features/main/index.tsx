@@ -1,7 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { getGetTodayContextQueryKey, getListRecordsQueryKey, useCreateProactiveSuppression, useGetEntityGraph, useGetTodayContext, useListRecords, useUpdateRecord, type ApprovalRequest, type CommitmentRecord, type ConversationListResponse, type ExpenseRecord, type PersonRecord, type ProjectRecord, type RecordMutationResponse, type RecordType, type RecordsResponse, type RecordUpdateInput, type ReminderRecord, type TaskRecord, type TodayContext, type TurnResponse } from '@workspace/api-client-react';
-import { useQueryClient } from '@tanstack/react-query';
+import { getGetTodayContextQueryKey, getListRecordsQueryKey, getListTypedRelationshipsQueryOptions, useCreateProactiveSuppression, useGetEntityGraph, useGetTodayContext, useListRecords, useUpdateRecord, type ApprovalRequest, type CommitmentRecord, type ConversationListResponse, type ExpenseRecord, type PersonRecord, type ProjectRecord, type RecordMutationResponse, type RecordType, type RecordsResponse, type RecordUpdateInput, type ReminderRecord, type TaskRecord, type TodayContext, type TurnResponse } from '@workspace/api-client-react';
+import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import {
   ActivityIndicator,
@@ -25,6 +25,7 @@ import { useLanguage, type AppLanguage } from '@/hooks/useLanguage';
 import { useSecretaryChatService, type SecretaryChatContext } from '../../services/secretary-chat';
 import { operationNoticeFromAction, type OperationNotice } from '../../services/operation-presentation';
 import { agentWorkIdFromAction } from '../../services/agent-work-presentation';
+import { contextRelationshipSpecs, contextRelationshipTargetId, sortContextActionsByUrgency } from '../../services/context-relationships';
 import type { LocalInputAttachment } from '../../services/local-input-assets';
 import { receiptNeedsReview, type SecretaryInputResult, type SecretaryInputState } from '../../services/secretary-input';
 import { MessageBubble } from '../message-bubble';
@@ -3775,10 +3776,93 @@ export function RecordDetailView({
   const [suppressionMessage, setSuppressionMessage] = useState<string | null>(null);
   const [suppressionError, setSuppressionError] = useState<string | null>(null);
   const [latestRecord, setLatestRecord] = useState<MobileRecordRow | null>(null);
+  const [contextAvailabilityExpanded, setContextAvailabilityExpanded] = useState(false);
   const editableKind = (record.recordType in editableRecordCollections) ? record.recordType as RecordType : null;
   const displayRecord = latestRecord ?? record;
   const detailRecord = editableKind ? findEditableRecord(recordsQuery.data, displayRecord) : null;
   const detailFields = detailFieldsForRecord(detailRecord, editableKind);
+  const contextRelationSpecs = contextRelationshipSpecs(displayRecord.recordType);
+  const contextRelationQueries = useQueries({
+    queries: contextRelationSpecs.map((spec) => getListTypedRelationshipsQueryOptions(
+      { relation: spec.relation, side: 'left', entityId: displayRecord.id },
+    )),
+  });
+  const contextRelationRows: MobileRecordRow[] = [];
+  let unresolvedContextRelations = false;
+  contextRelationSpecs.forEach((spec, specIndex) => {
+    const relationships = arrayValue(objectValue(contextRelationQueries[specIndex]?.data).relationships);
+    relationships.forEach((relationship) => {
+      const targetId = contextRelationshipTargetId(spec, relationship);
+      if (!targetId) return;
+      const target = ((recordsQuery.data?.[spec.targetCollection] ?? []) as Array<PersonRecord | ProjectRecord | TaskRecord>)
+        .find((item) => item.id === targetId);
+      if (!target) {
+        unresolvedContextRelations = true;
+        return;
+      }
+      if (spec.targetRecordType === 'person') {
+        const person = target as PersonRecord;
+        contextRelationRows.push({
+          id: person.id,
+          recordType: 'person',
+          title: person.name,
+          subtitle: stringValue(person.notes, stringValue(person.phone, 'شخص مرتبط')),
+        });
+      } else if (spec.targetRecordType === 'project') {
+        const project = target as ProjectRecord;
+        contextRelationRows.push({
+          id: project.id,
+          recordType: 'project',
+          title: project.name,
+          subtitle: `المشروع · ${statusLabel(stringValue(project.status, ''))}`,
+          trailing: stringValue(project.status, ''),
+        });
+      } else {
+        const task = target as TaskRecord;
+        contextRelationRows.push({
+          id: task.id,
+          recordType: 'task',
+          title: task.title,
+          subtitle: task.dueAt ? recordDate(task.dueAt) : statusLabel(task.status),
+          trailing: statusLabel(task.status),
+        });
+      }
+    });
+  });
+  const directContextRows: MobileRecordRow[] = [];
+  if (detailRecord && editableKind && recordsQuery.data) {
+    const direct = objectValue(detailRecord);
+    const addDirect = (recordType: 'person' | 'project', id: unknown) => {
+      if (typeof id !== 'string' || !id) return;
+      const collection = recordType === 'person' ? recordsQuery.data!.people : recordsQuery.data!.projects;
+      const target = collection.find((candidate) => candidate.id === id);
+      if (!target) return;
+      if (recordType === 'person') {
+        const person = target as PersonRecord;
+        directContextRows.push({
+          id: target.id,
+          recordType,
+          title: person.name,
+          subtitle: stringValue(person.notes, stringValue(person.phone, 'شخص مرتبط')),
+        });
+      } else {
+        const project = target as ProjectRecord;
+        directContextRows.push({
+          id: target.id,
+          recordType,
+          title: project.name,
+          subtitle: `المشروع · ${statusLabel(stringValue(project.status, ''))}`,
+          trailing: stringValue(project.status, ''),
+        });
+      }
+    };
+    if (editableKind === 'expense') {
+      addDirect('person', direct.personId);
+      addDirect('project', direct.projectId);
+    } else if (editableKind === 'commitment') {
+      addDirect('person', direct.personId);
+    }
+  }
   const detailStatus = stringValue(objectValue(detailRecord).status, '');
   const canSuppressProactive = (record.recordType === 'task'
     && ['pending', 'in_progress'].includes(detailStatus))
@@ -3808,16 +3892,34 @@ export function RecordDetailView({
     : displayRecord.recordType === 'project'
       ? `الحالة: ${stringValue(entity.status, displayRecord.trailing ?? 'غير محددة')}`
       : 'فتح مركز الطرف المالي';
-  const relatedGroups = Object.entries(related)
-    .map(([key, value]) => ({ key, count: arrayValue(value).length }))
-    .filter((group) => group.count > 0);
-  const graphRelatedRows = Object.entries(related).flatMap(([key, value]) =>
-    arrayValue(value)
-      .map((item) => relatedRow(key, item))
-      .filter((item): item is MobileRecordRow => Boolean(item)),
-  );
-  const allRelatedRows = [...(record.related ?? []), ...graphRelatedRows]
+  const relatedPriority: Record<string, number> = {
+    tasks: 0,
+    reminders: 1,
+    commitments: 2,
+    people: 3,
+    projects: 4,
+    expenses: 5,
+    financialParties: 6,
+  };
+  const graphRelatedRows = Object.entries(related)
+    .sort(([left], [right]) => (relatedPriority[left] ?? 20) - (relatedPriority[right] ?? 20))
+    .flatMap(([key, value]) => {
+      const items = arrayValue(value);
+      const orderedItems = ['tasks', 'reminders', 'commitments'].includes(key)
+        ? sortContextActionsByUrgency(items.map((item) => objectValue(item)))
+        : items;
+      return orderedItems
+        .map((item) => relatedRow(key, item))
+        .filter((item): item is MobileRecordRow => Boolean(item));
+    });
+  const allRelatedRows = [...(record.related ?? []), ...graphRelatedRows, ...directContextRows, ...contextRelationRows]
     .filter((item, index, rows) => rows.findIndex((candidate) => candidate.recordType === item.recordType && candidate.id === item.id) === index);
+  const hasContextRelationSurface = editableKind === 'expense'
+    || editableKind === 'task'
+    || editableKind === 'reminder'
+    || editableKind === 'commitment';
+  const isContextRelationLoading = contextRelationQueries.some((query) => query.isLoading);
+  const hasContextRelationError = contextRelationQueries.some((query) => query.isError);
   const timelineRows = arrayValue(entityData.timeline).slice(0, 8);
   async function openEditor() {
     if (!editableKind || recordsQuery.isFetching) return;
@@ -3969,6 +4071,10 @@ export function RecordDetailView({
       </View>
       {detailFields.length > 0 && (
         <View testID="record-detail-fields" style={[detailStyles.fieldsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: '700', textAlign: 'right' }}>بيانات من السجل المحفوظ</Text>
+          <Text style={{ color: colors.mutedForeground, fontSize: 11, lineHeight: 18, textAlign: 'right', marginBottom: 5 }}>
+            هذه حقول السجل الحالي، وليست استنتاجًا من الذاكرة.
+          </Text>
           {detailFields.map((field) => (
             <View key={field.label} style={[detailStyles.fieldRow, { borderBottomColor: colors.border }]}>
               <Text style={[detailStyles.fieldValue, { color: colors.foreground }]}>{field.value}</Text>
@@ -4013,12 +4119,50 @@ export function RecordDetailView({
         </View>
       )}
 
-      {!entityQuery.isLoading && !entityQuery.isError && allRelatedRows.length > 0 && (
+      {isEntity && !entityQuery.isLoading && !entityQuery.isError && timelineRows.length > 0 && (
+        <View style={[detailStyles.timelineCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={detailStyles.timelineHeading}>
+            <Text style={[detailStyles.relatedTitle, { color: colors.foreground }]}>نشاط مسجل</Text>
+          </View>
+          {timelineRows.map((item, index) => {
+            const event = objectValue(item);
+            return (
+              <View key={`${String(event.id ?? 'event')}-${index}`} style={[detailStyles.timelineRow, { borderBottomColor: colors.border }]}>
+                <View style={[detailStyles.timelineDot, { backgroundColor: colors.accent }]} />
+                <View style={detailStyles.timelineCopy}>
+                  <Text style={[detailStyles.timelineTitle, { color: colors.foreground }]} numberOfLines={2}>
+                    {stringValue(event.summary, stringValue(event.description, stringValue(event.type, 'نشاط مرتبط')))}
+                  </Text>
+                  <Text style={[detailStyles.timelineMeta, { color: colors.mutedForeground }]}>
+                    {recordDate(typeof event.occurredAt === 'string' ? event.occurredAt : null)}
+                  </Text>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      )}
+
+      {!entityQuery.isLoading && !entityQuery.isError && (
+        (isEntity && Boolean(entityData.related))
+        || (!isEntity && hasContextRelationSurface)
+        || allRelatedRows.length > 0
+      ) && (
         <View style={[detailStyles.relatedCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[detailStyles.relatedTitle, { color: colors.foreground }]}>استكشف المعلومات المرتبطة</Text>
+          <Text style={[detailStyles.relatedTitle, { color: colors.foreground }]}>العلاقات والسجلات المرتبطة</Text>
           <Text style={[detailStyles.relatedHint, { color: colors.mutedForeground }]}>
-            افتح علاقة واتبعها إلى الكيان أو السجل التالي.
+            تظهر هنا الروابط التي أعادها السجل أو شبكة العلاقات، دون ربط يعتمد على تشابه الأسماء.
           </Text>
+          {isContextRelationLoading && (
+            <View style={{ paddingVertical: 10, alignItems: 'flex-end' }}>
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          )}
+          {hasContextRelationError && (
+            <Text accessibilityRole="alert" style={{ color: colors.destructive, fontSize: 12, textAlign: 'right', marginVertical: 8 }}>
+              تعذر تحميل بعض العلاقات المحفوظة.
+            </Text>
+          )}
           {allRelatedRows.map((relatedRecord) => (
             <Pressable
               key={`${relatedRecord.recordType}-${relatedRecord.id}`}
@@ -4046,30 +4190,16 @@ export function RecordDetailView({
               <Feather name="chevron-left" size={15} color={colors.mutedForeground} />
             </Pressable>
           ))}
-        </View>
-      )}
-
-      {isEntity && !entityQuery.isLoading && !entityQuery.isError && timelineRows.length > 0 && (
-        <View style={[detailStyles.timelineCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={detailStyles.timelineHeading}>
-            <Text style={[detailStyles.relatedTitle, { color: colors.foreground }]}>النشاط المرتبط</Text>
-          </View>
-          {timelineRows.map((item, index) => {
-            const event = objectValue(item);
-            return (
-              <View key={`${String(event.id ?? 'event')}-${index}`} style={[detailStyles.timelineRow, { borderBottomColor: colors.border }]}>
-                <View style={[detailStyles.timelineDot, { backgroundColor: colors.accent }]} />
-                <View style={detailStyles.timelineCopy}>
-                  <Text style={[detailStyles.timelineTitle, { color: colors.foreground }]} numberOfLines={2}>
-                    {stringValue(event.summary, stringValue(event.description, stringValue(event.type, 'نشاط مرتبط')))}
-                  </Text>
-                  <Text style={[detailStyles.timelineMeta, { color: colors.mutedForeground }]}>
-                    {recordDate(typeof event.occurredAt === 'string' ? event.occurredAt : null)}
-                  </Text>
-                </View>
-              </View>
-            );
-          })}
+          {!isContextRelationLoading && !hasContextRelationError && allRelatedRows.length === 0 && (
+            <Text style={{ color: colors.mutedForeground, fontSize: 12, lineHeight: 20, textAlign: 'right', paddingVertical: 8 }}>
+              لا توجد علاقات مسجلة لهذا السياق في البيانات المتاحة.
+            </Text>
+          )}
+          {unresolvedContextRelations && (
+            <Text style={{ color: colors.mutedForeground, fontSize: 11, lineHeight: 18, textAlign: 'right', marginTop: 5 }}>
+              توجد علاقة مسجلة، لكن الطرف الآخر غير موجود ضمن سجلات هذه المساحة المتاحة.
+            </Text>
+          )}
         </View>
       )}
 
@@ -4090,6 +4220,35 @@ export function RecordDetailView({
           </Text>
         </Pressable>
       )}
+      {!displayRecord.origin && (editableKind === 'expense' || editableKind === 'task' || editableKind === 'reminder') && (
+        <Text style={{ color: colors.mutedForeground, fontSize: 11, lineHeight: 18, textAlign: 'right' }}>
+          لا توجد محادثة أصلية مرتبطة بهذا السجل في البيانات الحالية.
+        </Text>
+      )}
+
+      <View style={[detailStyles.detailContext, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+        <Pressable
+          testID="context-availability-toggle"
+          accessibilityRole="button"
+          accessibilityState={{ expanded: contextAvailabilityExpanded }}
+          accessibilityLabel="عرض حدود الذاكرة والمتابعات المرتبطة بهذا السياق"
+          onPress={() => setContextAvailabilityExpanded((expanded) => !expanded)}
+          style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 })}
+        >
+          <Feather name={contextAvailabilityExpanded ? 'chevron-up' : 'chevron-down'} size={15} color={colors.primary} />
+          <Text style={[detailStyles.detailContextTitle, { color: colors.foreground, flex: 1, textAlign: 'right' }]}>ما الذي لا يظهر هنا؟</Text>
+        </Pressable>
+        {contextAvailabilityExpanded && (
+          <View style={{ marginTop: 8, gap: 6 }}>
+            <Text style={[detailStyles.detailContextText, { color: colors.mutedForeground, textAlign: 'right' }]}>
+              لا تعرض واجهة الذاكرة الحالية رابطًا موثوقًا بهذا السياق؛ لذلك لا أقدّم ذاكرة عامة كأنها تخصه.
+            </Text>
+            <Text style={[detailStyles.detailContextText, { color: colors.mutedForeground, textAlign: 'right' }]}>
+              لا يوفّر مصدر أعمال السكرتير الحالي رابطًا دائمًا لهذا السياق؛ لذلك لا أدرج أعمالًا على أساس الاسم أو التخمين.
+            </Text>
+          </View>
+        )}
+      </View>
 
       <View style={[detailStyles.detailContext, { backgroundColor: colors.muted, borderColor: colors.border }]}>
         <View style={detailStyles.detailContextCopy}>
