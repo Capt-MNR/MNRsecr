@@ -1,0 +1,845 @@
+Phase F–H — Product Completion Pass
+
+الهدف
+
+أكمل المنتج من بعد Phase E حتى نهاية الخطة الأساسية، بتنفيذ:
+
+1. Phase F — Connections
+2. Phase G — Quick refinement
+3. Phase H — Frontend cleanup / consolidation
+
+نفّذ الثلاث مراحل في تنفيذ واحد متسلسل، لكن تعامل معها كمراحل منفصلة داخليًا:
+
+F → verify → G → verify → H → final regression
+
+لا تبدأ H قبل التأكد أن F وG تعملان.
+
+لا تنشئ Replit Tasks جديدة. نفّذ مباشرة في الكود الحالي.
+
+---
+
+قواعد غير قابلة للتفاوض
+
+قبل كل شيء:
+
+- لا تعيد تصميم Backend architecture.
+- لا تعيد تصميم Agent core.
+- لا تنشئ Work engine جديد.
+- لا تنشئ execution engine جديد.
+- لا تضف client-side execution.
+- لا تضف frontend LLM/parser logic.
+- لا تخترع capabilities لأن schema يحتوي عليها.
+- لا تستخدم mock/fake connection أو Work أو activity.
+- لا تغيّر provider configuration.
+- لا تستخدم AI provider حيًا في الاختبارات.
+- حافظ على:
+  - tenantId
+  - ownerUserId
+  - authorization
+  - operationId
+  - workId/runId/stepId
+  - approval binding
+  - state transitions
+  - verification/evidence
+  - notification/outbox semantics
+  - Quick/Main separation
+- لا تكسر Phase A–E.
+- لا تعمل giant refactor.
+
+إذا اكتشفت أن capability أو contract غير موجود فعليًا، لا تخترع implementation شكليًا. سجّل الفجوة.
+
+---
+
+PHASE F — CONNECTIONS
+
+1. Audit أولًا
+
+افحص التنفيذ الحالي لـ:
+
+- Connections screen
+- Gmail
+- Calendar
+- Sheets
+- connection/auth state
+- capabilities
+- Agent actions
+- approval
+- error handling
+- Ask
+- Work
+- Quick
+
+حدد بدقة:
+
+ما الذي يستطيع النظام فعليًا؟
+
+وليس ما يظهر في schema فقط.
+
+---
+
+2. Connections ليست Integration Dashboard
+
+الهدف من Connections:
+
+«"السكرتير متوصل بإيه؟ وإيه اللي يقدر يعمله من خلال كل اتصال؟"»
+
+وليس:
+
+«قائمة APIs وتقنيات OAuth.»
+
+يجب أن يفهم المستخدم لكل خدمة:
+
+- متصلة أم لا
+- حالتها
+- ما الذي يستطيع السكرتير استخدامه منها
+- ما الذي يحتاج موافقة
+- ما الذي لا يستطيع فعله
+
+---
+
+3. Connection states
+
+اعرض فقط الحالات التي يدعمها النظام فعليًا.
+
+مثل:
+
+- متصل
+- غير متصل
+- يحتاج إعادة ربط
+- غير متاح
+- يحتاج صلاحية
+
+لا تخترع state غير موجود في backend.
+
+عندما يكون الاتصال غير متاح:
+
+لا تعرض capabilities وكأنها جاهزة للتنفيذ.
+
+---
+
+4. Capability presentation
+
+لكل Connection اعرض capabilities الفعلية فقط.
+
+مثال مفاهيمي:
+
+Gmail
+
+إذا كانت مدعومة فعليًا:
+
+- قراءة
+- البحث
+- إنشاء/إرسال إجراء معين
+
+Calendar
+
+إذا كانت مدعومة فعليًا:
+
+- قراءة الأحداث
+- إنشاء حدث
+- تعديل حدث
+
+Sheets
+
+إذا كانت مدعومة فعليًا:
+
+- قراءة
+- كتابة
+- تحديث
+
+لكن لا تفترض أن الأمثلة أعلاه كلها موجودة.
+
+استخرج الحقيقة من contracts الحالية.
+
+---
+
+5. Capability ≠ Permission ≠ Action
+
+وضّح للمستخدم الفرق:
+
+Connection
+
+«الحساب متصل.»
+
+Capability
+
+«السكرتير يستطيع استخدام وظيفة معينة.»
+
+Permission
+
+«هل الاتصال الحالي يسمح بها؟»
+
+Action
+
+«السكرتير سيقوم بها الآن.»
+
+ولا تجعل مجرد connection يعني automatic execution.
+
+---
+
+6. Approval
+
+إذا كان action يحتاج موافقة:
+
+اعرض ذلك بوضوح قبل التنفيذ.
+
+استخدم:
+
+- operationId
+- approval state
+- existing approval UX
+- existing state presentation
+
+لا تنشئ approval system جديدًا.
+
+مثال:
+
+«السكرتير سيستخدم Gmail لإرسال الرسالة.
+
+يحتاج موافقتك قبل التنفيذ.»
+
+بعد الموافقة:
+
+Pending → Executing → Verifying → Completed
+
+حسب الحالة الفعلية التي يرجعها backend.
+
+---
+
+7. Ask integration
+
+من Connections يجب أن يستطيع المستخدم فهم كيف يستخدم الاتصال من خلال السكرتير.
+
+لكن لا تجعل Connections مكانًا لإنشاء actions يدويًا.
+
+المسار الأساسي:
+
+Connection → capability awareness → Ask → Agent → approval → action
+
+إذا كان backend يدعم إنشاء action مباشرة من Connection UI وكان المسار آمنًا وموجودًا، يمكن إعادة استخدامه.
+
+لكن لا تنشئ execution path جديدًا فقط لأن ذلك أسهل في الواجهة.
+
+---
+
+8. Work integration
+
+إذا كان Work يستخدم Connection فعليًا:
+
+اعرض:
+
+- الخدمة المستخدمة
+- capability
+- state
+- next step
+- approval status
+- verification/evidence عند توفرها
+
+ولا تعرض Connection كجزء من Work إذا لم يكن هناك دليل من البيانات.
+
+---
+
+9. Connection errors
+
+لا تعرض:
+
+«OAuth error 401
+provider exception
+stack trace»
+
+للمستخدم.
+
+استخدم classification الحالية.
+
+أمثلة:
+
+«الاتصال يحتاج إعادة ربط.»
+
+«السكرتير مش قادر يستخدم الخدمة حاليًا.»
+
+«الخدمة متصلة لكن الصلاحية المطلوبة غير متاحة.»
+
+مع الاحتفاظ بالتفاصيل التقنية للـlogs.
+
+---
+
+PHASE F ACCEPTANCE
+
+لا تعتبر F مكتملة إلا إذا:
+
+- المستخدم يفهم الخدمات المتصلة.
+- يعرف capabilities الفعلية.
+- يعرف ما يحتاج approval.
+- يعرف حالة الاتصال.
+- لا تظهر capabilities وهمية.
+- Ask/Work يستطيعان استخدام connections الموجودة فعليًا.
+- لا يوجد execution جديد على العميل.
+- لا يوجد mock connection.
+- كل شيء scoped وآمن.
+
+---
+
+PHASE G — QUICK REFINEMENT
+
+الهدف
+
+Quick ليس Mini-Main.
+
+Quick هو:
+
+«Interruption + Notification + Immediate Decision/Action Layer»
+
+بينما Main هو:
+
+«Full Secretary Context + History + Exploration + Work + Records + Connections»
+
+حافظ على هذا الفصل.
+
+---
+
+10. Audit Quick
+
+افحص:
+
+- QuickMessageBubble
+- notifications
+- approvals
+- operationId
+- Quick actions
+- conversation behavior
+- navigation إلى Main
+- state presentation
+- Android notification behavior
+
+لا تعيد بناء Quick من الصفر.
+
+---
+
+11. Quick يجب أن يكون سريعًا
+
+Quick يجب أن يستطيع إبلاغ المستخدم بشيء مثل:
+
+«السكرتير محتاج موافقتك على إرسال الرسالة.»
+
+ثم:
+
+موافقة / رفض
+
+أو:
+
+«السكرتير اكتشف أن عدد المهام المفتوحة تجاوز الحد.»
+
+مع:
+
+فتح التفاصيل
+
+الـfull context ينتقل إلى Main.
+
+---
+
+12. Quick approval
+
+إذا كان الـoperation يحتاج approval:
+
+Quick يعرض نفس العملية المرتبطة بـ:
+
+"operationId"
+
+ولا ينشئ operation جديدًا.
+
+الموافقة من Quick يجب أن تمر عبر نفس backend approval path.
+
+لا يوجد:
+
+«Quick approval engine»
+
+مستقل.
+
+---
+
+13. Quick state handling
+
+استخدم نفس حالات Phase B:
+
+- pending_approval
+- executing
+- verifying
+- completed
+- rejected
+- expired
+- failed
+- unknown_result
+- needs_review
+- cancelled
+
+خصوصًا:
+
+unknown_result
+
+لا:
+
+- retry تلقائي
+- duplicate action
+- إعادة تنفيذ من Quick
+
+بل:
+
+«النتيجة غير محسومة — افتح في Main للمراجعة.»
+
+---
+
+14. Quick → Main handoff
+
+عندما يحتاج المستخدم تفاصيل:
+
+Quick يجب أن ينقله إلى Main مع السياق المناسب.
+
+مثل:
+
+- Work
+- operation
+- approval
+- person
+- project
+- record
+
+ولا يبدأ conversation جديدة بدون داعٍ.
+
+---
+
+15. Quick conversations
+
+لا تعيد Quick إلى chat application كامل.
+
+Main هو صاحب:
+
+- conversation history
+- long sessions
+- records
+- context
+- network
+- work
+- evidence
+
+Quick لا يحتاج conversation list كاملة.
+
+---
+
+16. Notification quality
+
+راجع النصوص.
+
+يجب أن يكون Quick:
+
+- مختصر
+- واضح
+- actionable
+- مناسب لتفضيلات المستخدم الموجودة
+
+ولا تستخدم templates جامدة إذا كان النظام الحالي يدعم personalization/proactive behavior.
+
+المحتوى يجب أن يجيب:
+
+«إيه اللي حصل؟
+محتاج مني إيه؟
+أعمل إيه؟»
+
+---
+
+17. Quick execution boundary
+
+تأكد صراحة أن:
+
+- لا client-side execution
+- لا direct provider calls
+- لا Work creation مستقل
+- لا polling loop جديد
+- لا approval logic مستقل
+
+Quick فقط يستدعي backend contracts الموجودة.
+
+---
+
+PHASE G ACCEPTANCE
+
+Quick مكتمل إذا:
+
+- notification واضحة.
+- approval يعمل من نفس operation.
+- state موحد.
+- unknown_result آمن.
+- التفاصيل تنتقل إلى Main.
+- Quick لا يتحول إلى Mini-Main.
+- لا يوجد execution مستقل على العميل.
+
+---
+
+PHASE H — FRONTEND CLEANUP / CONSOLIDATION
+
+الهدف
+
+بعد F وG فقط، اعمل cleanup محدود.
+
+هذه ليست إعادة كتابة للـfrontend.
+
+---
+
+18. Audit قبل cleanup
+
+حدد:
+
+- duplicated components
+- duplicated state mapping
+- duplicated error mapping
+- repeated navigation logic
+- repeated approval presentation
+- repeated Context/Work display
+- dead code الناتج من Phase A–G
+
+لا تنظف شيئًا لمجرد أنه "قديم".
+
+---
+
+19. Extract reusable primitives
+
+إذا كان نفس السلوك موجودًا في أكثر من مكان، وحّد استخدامه.
+
+خصوصًا:
+
+- operation state presentation
+- error classification
+- approval state
+- Work state
+- evidence/provenance display
+- connection state
+- navigation/handoff
+
+استخدم الموجود بالفعل عندما يكون صالحًا.
+
+لا تنشئ abstraction فوق abstraction.
+
+---
+
+20. Remove obsolete paths
+
+احذف فقط المسارات التي أصبحت فعلًا obsolete.
+
+مثال مهم:
+
+إذا بقي أي frontend path يستطيع إنشاء Work مباشرة من:
+
+"POST /api/works"
+
+ويُستخدم كمسار UI مستقل ويتجاوز Agent:
+
+أزله.
+
+لكن لا تحذف API نفسه إذا كان مستخدمًا backend داخليًا أو في مكان مشروع.
+
+---
+
+21. Navigation consistency
+
+بعد F/G/H يجب أن تكون الصورة:
+
+Secretary
+
+«What matters now?»
+
+Ask
+
+«Talk to the secretary.»
+
+Context
+
+«What does the secretary know?»
+
+Work
+
+«What is the secretary following/doing?»
+
+Connections
+
+«What can the secretary access?»
+
+Quick
+
+«What needs my attention right now?»
+
+لا تجعل أي صفحة تنافس الأخرى على كونها "Home".
+
+---
+
+22. Mobile-first cleanup
+
+تحقق من:
+
+- RTL
+- small screens
+- keyboard
+- safe areas
+- navigation
+- scrolling
+- cards
+- long Arabic text
+- action buttons
+- no overflow
+
+خصوصًا:
+
+- Secretary
+- Ask
+- Context
+- Work
+- Connections
+- Quick
+
+---
+
+23. Visual consistency
+
+وحّد فقط الأشياء التي أصبحت فعلًا مشتركة:
+
+- typography hierarchy
+- status semantics
+- action placement
+- loading
+- empty states
+- error states
+- approval presentation
+
+لا تحول كل الشاشة إلى generic component.
+
+---
+
+24. Product coherence audit
+
+في النهاية، تصفح المنتج كأنك مستخدم جديد.
+
+اسأل:
+
+هل أفهم ماذا يفعل السكرتير؟
+
+هل أعرف ماذا يريد مني؟
+
+هل أعرف ماذا يتابع؟
+
+هل أعرف ماذا يعرف؟
+
+هل أعرف ما يستطيع الوصول إليه؟
+
+هل أستطيع إعطاءه مهمة بدون معرفة API أو schema؟
+
+هل أفهم متى ينفذ ومتى يحتاج موافقة؟
+
+هل أعرف إذا نجح أو فشل أو ما زال غير محسوم؟
+
+هل Quick يبدو كامتداد للسكرتير وليس تطبيقًا ثانيًا؟
+
+إذا كانت الإجابة لا في نقطة مهمة، أصلح الـUX الموجود بدل إضافة feature جديدة.
+
+---
+
+25. Regression requirements
+
+بعد F:
+
+شغّل tests الخاصة بـ:
+
+- Connections
+- Ask
+- Work
+- approval
+- authentication
+- scoping
+
+بعد G:
+
+شغّل:
+
+- Quick
+- approval
+- operation state
+- notification
+- Main handoff
+
+بعد H:
+
+شغّل full relevant regression suite.
+
+يجب أن تشمل على الأقل:
+
+- Web TypeScript
+- Mobile TypeScript
+- API TypeScript
+- Web build
+- Mobile build
+- Secretary
+- Ask
+- Context
+- Work
+- Connections
+- Quick
+- Agent Work
+- approvals/reconciliation
+- authentication/isolation
+
+---
+
+26. Test discipline
+
+لا تستخدم:
+
+- live Groq
+- live Gemini
+- أي live AI provider
+
+إلا إذا كان اختبارًا موجودًا أصلًا ومطلوبًا صراحة.
+
+استخدم deterministic fixtures.
+
+إذا فشل test بسبب environment:
+
+لا تعلن النجاح.
+
+اذكر:
+
+- test
+- failure
+- السبب
+- هل هو product regression أم environment/fixture
+- هل تم عزله أم لا
+
+---
+
+27. Final security audit
+
+تأكد أن كل مسار جديد أو معدل يحافظ على:
+
+- tenant isolation
+- owner isolation
+- authorization
+- operation binding
+- approval binding
+
+اختبر عدم إمكانية الوصول إلى:
+
+- Work مستخدم آخر
+- approval مستخدم آخر
+- Context مستخدم آخر
+- Connection مستخدم آخر
+- records خارج tenant
+
+---
+
+28. ممنوع توسيع النطاق
+
+أثناء F–H لا تبدأ:
+
+- Learning Loop redesign
+- Agent architecture redesign
+- provider optimization
+- token optimization
+- new integrations
+- WhatsApp integration
+- A2A architecture
+- Graph redesign
+- new monitoring engine
+- new automation engine
+- paid/free monetization work
+
+هذه خارج هذا الـpass.
+
+إذا ظهرت فجوة مهمة تخص أحدها، سجلها فقط.
+
+---
+
+29. Final report
+
+في نهاية التنفيذ، أرسل تقريرًا واضحًا مقسمًا إلى:
+
+Phase F — Connections
+
+- ما كان موجودًا
+- ما تغير
+- capabilities الفعلية
+- connection states
+- approval behavior
+- gaps
+
+Phase G — Quick
+
+- ما كان موجودًا
+- ما تغير
+- Main/Quick boundary
+- approval
+- state handling
+- handoff
+- gaps
+
+Phase H — Cleanup
+
+- ما تم استخراجه
+- ما تم توحيده
+- ما تم حذفه
+- أي technical debt بقي
+
+Tests
+
+جدول واضح:
+
+Area| Result
+Web TypeScript| 
+Mobile TypeScript| 
+API TypeScript| 
+Web build| 
+Mobile build| 
+Agent Work| 
+Approval| 
+Auth/isolation| 
+Secretary| 
+Ask| 
+Context| 
+Work| 
+Connections| 
+Quick| 
+
+Failed / skipped
+
+لا تخفِ أي test فشل أو timeout.
+
+Backend gaps
+
+أي capability لا يمكن تنفيذها بسبب contract حالي.
+
+Product gaps
+
+أي شيء ما زال يجعل التجربة أقل من Personal AI Secretary.
+
+Security
+
+نتيجة scoping/isolation.
+
+Final assessment
+
+أجب بوضوح:
+
+«هل المنتج الآن يقدم تجربة Personal AI Secretary متماسكة من Secretary → Ask → Context → Work → Connections → Quick؟»
+
+اذكر ما ينقص إن كانت الإجابة لا.
+
+---
+
+STOP CONDITION
+
+بعد إنهاء F + G + H والتقرير النهائي:
+
+توقف.
+
+لا تبدأ Phase جديدة.
+
+لا تقترح backlog طويل.
+
+لا تحول الملاحظات إلى Replit Tasks.
+
+الهدف من هذا التنفيذ هو إغلاق الخطة الأساسية الحالية، ثم نعمل مراجعة شاملة للمنتج قبل تحديد أي مرحلة جديدة.
