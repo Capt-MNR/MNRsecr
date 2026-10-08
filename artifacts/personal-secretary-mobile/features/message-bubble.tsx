@@ -548,34 +548,36 @@ export function MessageBubble({
               </View>
             )}
             {isResolved || isExecuting ? (
-              <View style={styles.resolvedRow}>
-                <Feather
-                  name={operationCompleted ? 'check-circle' : isExecuting ? 'loader' : operationRejected ? 'x-circle' : 'alert-circle'}
-                  size={15}
-                  color={operationCompleted ? colors.primary : isExecuting || unknownOutcome || needsReview ? colors.accent : operationRejected ? colors.destructive : colors.mutedForeground}
-                />
-                <Text style={[styles.resolvedText, { color: colors.mutedForeground }]}>
-                  {unknownOutcome
-                    ? localized(language, 'نتيجة التنفيذ غير مؤكدة', 'Outcome unconfirmed')
-                    : needsReview
-                      ? localized(language, 'يحتاج إلى مراجعتك', 'Needs your review')
-                      : operationCompleted
-                    ? localized(language, 'تم التنفيذ', 'Completed')
-                    : operationRejected
-                      ? localized(language, 'تم الرفض', 'Rejected')
-                      : operationExpired
-                        ? localized(language, 'انتهت صلاحية الموافقة', 'Approval expired')
-                        : operationFailed
-                          ? localized(language, 'التنفيذ فشل', 'Execution failed')
-                          : operationCancelled
-                            ? localized(language, 'تم إلغاء العملية', 'Operation cancelled')
-                            : isWaiting
-                              ? localized(language, 'في انتظار الخطوة التالية', 'Waiting for the next step')
-                              : noticeStatus === 'verifying'
-                                ? localized(language, 'جارٍ التحقق', 'Verifying')
-                                : localized(language, 'جارٍ التنفيذ', 'Executing')}
-                </Text>
-              </View>
+              noticeStatus ? null : (
+                <View style={styles.resolvedRow}>
+                  <Feather
+                    name={operationCompleted ? 'check-circle' : isExecuting ? 'loader' : operationRejected ? 'x-circle' : 'alert-circle'}
+                    size={15}
+                    color={operationCompleted ? colors.primary : isExecuting || unknownOutcome || needsReview ? colors.accent : operationRejected ? colors.destructive : colors.mutedForeground}
+                  />
+                  <Text style={[styles.resolvedText, { color: colors.mutedForeground }]}>
+                    {unknownOutcome
+                      ? localized(language, 'نتيجة التنفيذ غير مؤكدة', 'Outcome unconfirmed')
+                      : needsReview
+                        ? localized(language, 'يحتاج إلى مراجعتك', 'Needs your review')
+                        : operationCompleted
+                      ? localized(language, 'تم التنفيذ', 'Completed')
+                      : operationRejected
+                        ? localized(language, 'تم الرفض', 'Rejected')
+                        : operationExpired
+                          ? localized(language, 'انتهت صلاحية الموافقة', 'Approval expired')
+                          : operationFailed
+                            ? localized(language, 'التنفيذ فشل', 'Execution failed')
+                            : operationCancelled
+                              ? localized(language, 'تم إلغاء العملية', 'Operation cancelled')
+                              : isWaiting
+                                ? localized(language, 'في انتظار الخطوة التالية', 'Waiting for the next step')
+                                : noticeStatus === 'verifying'
+                                  ? localized(language, 'جارٍ التحقق', 'Verifying')
+                                  : localized(language, 'جارٍ التنفيذ', 'Executing')}
+                  </Text>
+                </View>
+              )
             ) : (
               <>
               {canEdit && (
@@ -653,7 +655,9 @@ export function MessageBubble({
           }}
           </ApprovalStatusGate>
         ))}
-        {message.operationNotice && <OperationStatusNotice notice={message.operationNotice} colors={colors} language={language} />}
+        {message.operationNotice && !(message.operationNotice.status === 'pending_approval' && approvals.length > 0) && (
+          <OperationStatusNotice notice={message.operationNotice} colors={colors} language={language} />
+        )}
         {message.recordLink && (
           <Pressable
             testID={`open-record-${message.recordLink.recordType}-${message.recordLink.id}`}

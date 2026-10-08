@@ -59,6 +59,18 @@ export function operationNoticeFromStatus(status: string): OperationNotice | und
   return mapped ? { status: mapped } : undefined;
 }
 
+export function operationNoticeForHandoff(
+  status: string,
+  operationId: string,
+  stateHint?: 'unknown_result' | 'needs_review',
+): OperationNotice {
+  const current = operationNoticeFromStatus(status);
+  const notice = current?.status === 'pending_approval' && stateHint
+    ? { status: stateHint }
+    : current ?? { status: stateHint ?? 'unknown_result' };
+  return { ...notice, operationId };
+}
+
 function typeStatus(value: unknown): OperationPresentationStatus | undefined {
   if (typeof value !== 'string') return undefined;
   const type = value.toLowerCase();

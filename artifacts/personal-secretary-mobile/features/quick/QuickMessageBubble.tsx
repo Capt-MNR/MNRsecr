@@ -36,7 +36,7 @@ export function QuickMessageBubble({
   language: AppLanguage;
   onApprove: (approval: Approval) => void;
   onReject: (approval: Approval) => void;
-  onOpenMain?: () => void;
+  onOpenMain?: (operationId?: string, stateHint?: 'unknown_result' | 'needs_review') => void;
   onOpenRecord: (record: MobileRecordRow) => void;
   onRetryInput?: (attachment: LocalMessage['inputAttachment']) => void;
   retryingInput?: boolean;
@@ -133,34 +133,36 @@ export function QuickMessageBubble({
             )}
 
             {isResolved || isExecuting ? (
-              <View style={[styles.resolvedRow, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
-                <Feather
-                  name={operationCompleted ? 'check-circle' : isExecuting ? 'loader' : unknownOutcome || needsReview ? 'alert-circle' : operationRejected ? 'x-circle' : 'alert-circle'}
-                  size={15}
-                  color={operationCompleted ? colors.primary : isExecuting || unknownOutcome || needsReview ? colors.accent : operationRejected ? colors.destructive : colors.mutedForeground}
-                />
-                <Text style={[styles.resolvedText, { color: colors.mutedForeground }]}>
-                  {unknownOutcome
-                    ? localized(language, 'النتيجة غير مؤكدة', 'Outcome is unknown')
-                    : needsReview
-                      ? localized(language, 'محتاج مراجعتك', 'Needs your review')
-                      : isExecuting
-                         ? localized(language, noticeStatus === 'verifying' ? 'جارٍ التحقق' : 'جارٍ التنفيذ', noticeStatus === 'verifying' ? 'Verifying' : 'Executing')
-                        : operationCompleted
-                          ? localized(language, 'تم التنفيذ ✓', 'Completed ✓')
-                           : operationRejected
-                             ? localized(language, 'تم رفض العملية', 'Operation rejected')
-                             : operationFailed
-                      ? localized(language, 'التنفيذ فشل', 'Execution failed')
-                      : operationExpired
-                        ? localized(language, 'انتهت صلاحية العملية', 'Expired')
-                        : operationCancelled
-                          ? localized(language, 'تم إلغاء العملية', 'Operation cancelled')
-                          : isWaiting
-                            ? localized(language, 'في انتظار الخطوة التالية', 'Waiting for the next step')
-                          : localized(language, 'تم رفض العملية', 'Operation rejected')}
-                </Text>
-              </View>
+              noticeStatus ? null : (
+                <View style={[styles.resolvedRow, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
+                  <Feather
+                    name={operationCompleted ? 'check-circle' : isExecuting ? 'loader' : unknownOutcome || needsReview ? 'alert-circle' : operationRejected ? 'x-circle' : 'alert-circle'}
+                    size={15}
+                    color={operationCompleted ? colors.primary : isExecuting || unknownOutcome || needsReview ? colors.accent : operationRejected ? colors.destructive : colors.mutedForeground}
+                  />
+                  <Text style={[styles.resolvedText, { color: colors.mutedForeground }]}>
+                    {unknownOutcome
+                      ? localized(language, 'النتيجة غير مؤكدة', 'Outcome is unknown')
+                      : needsReview
+                        ? localized(language, 'محتاج مراجعتك', 'Needs your review')
+                        : isExecuting
+                           ? localized(language, noticeStatus === 'verifying' ? 'جارٍ التحقق' : 'جارٍ التنفيذ', noticeStatus === 'verifying' ? 'Verifying' : 'Executing')
+                          : operationCompleted
+                            ? localized(language, 'تم التنفيذ ✓', 'Completed ✓')
+                             : operationRejected
+                               ? localized(language, 'تم رفض العملية', 'Operation rejected')
+                               : operationFailed
+                        ? localized(language, 'التنفيذ فشل', 'Execution failed')
+                        : operationExpired
+                          ? localized(language, 'انتهت صلاحية العملية', 'Expired')
+                          : operationCancelled
+                            ? localized(language, 'تم إلغاء العملية', 'Operation cancelled')
+                            : isWaiting
+                              ? localized(language, 'في انتظار الخطوة التالية', 'Waiting for the next step')
+                            : localized(language, 'تم رفض العملية', 'Operation rejected')}
+                  </Text>
+                </View>
+              )
             ) : (
               <View style={[styles.approvalActions, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
                 {canQuickApprove ? (
@@ -185,7 +187,7 @@ export function QuickMessageBubble({
                     testID={`open-main-review-${approval.operationId}`}
                     accessibilityRole="button"
                     accessibilityLabel={localized(language, 'مراجعة العملية في البرنامج الرئيسي', 'Review this action in Main')}
-                    onPress={onOpenMain}
+                    onPress={() => onOpenMain(approval.operationId)}
                     disabled={Boolean(approvalBusy)}
                       style={({ pressed }) => [
                       styles.approveButton,
@@ -217,7 +219,38 @@ export function QuickMessageBubble({
           }}
           </ApprovalStatusGate>
         ))}
-        {message.operationNotice && <OperationStatusNotice notice={message.operationNotice} colors={colors} language={language} />}
+        {message.operationNotice && !(message.operationNotice.status === 'pending_approval' && approvals.length > 0) && (
+          <>
+            <OperationStatusNotice notice={message.operationNotice} colors={colors} language={language} />
+            {onOpenMain
+              && ['unknown_result', 'needs_review'].includes(message.operationNotice.status)
+              && (message.operationNotice.operationId || approvals[0]?.operationId) && (
+                <Pressable
+                  testID={`quick-open-main-review-${message.operationNotice.operationId ?? approvals[0]?.operationId}`}
+                  accessibilityRole="button"
+                  accessibilityLabel={localized(language, 'فتح العملية في Main للمراجعة', 'Open operation in Main for review')}
+                  onPress={() => onOpenMain(
+                    message.operationNotice?.operationId ?? approvals[0]?.operationId,
+                    message.operationNotice?.status === 'unknown_result' ? 'unknown_result' : 'needs_review',
+                  )}
+                  style={({ pressed }) => [
+                    styles.messageLink,
+                    {
+                      borderColor: colors.border,
+                      opacity: pressed ? 0.65 : 1,
+                      flexDirection: isRtl ? 'row-reverse' : 'row',
+                      alignSelf: isRtl ? 'flex-end' : 'flex-start',
+                    },
+                  ]}
+                >
+                  <Feather name={isRtl ? 'arrow-up-left' : 'arrow-up-right'} size={15} color={colors.primary} />
+                  <Text style={[styles.messageLinkText, { color: colors.primary }]}>
+                    {localized(language, 'فتح في Main للمراجعة', 'Review in Main')}
+                  </Text>
+                </Pressable>
+              )}
+          </>
+        )}
 
         {message.recordLink && (
           <Pressable

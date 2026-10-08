@@ -39,6 +39,7 @@ import {
 } from '../../services/mobile-push';
 import { initializeQuickNotification } from '../../services/quick-notification';
 import { createQuickActionGuard } from '../../services/quick-action-guard';
+import { quickOperationRouteParams, type QuickOperationStateHint } from '../../services/quick-operation-handoff';
 import QuickScreen from './QuickScreen';
 import { QuickMessageBubble } from './QuickMessageBubble';
 import { ReceiptReviewCard } from '../receipt-review';
@@ -287,7 +288,11 @@ export default function QuickRoute() {
     }
   }
 
-  function openMain(record?: MobileRecordRow) {
+  function openMain(
+    record?: MobileRecordRow,
+    operationId?: string,
+    operationState?: QuickOperationStateHint,
+  ) {
     if (record) {
       router.push({
         pathname: '/main',
@@ -298,6 +303,13 @@ export default function QuickRoute() {
           recordSubtitle: record.subtitle,
           recordTrailing: record.trailing ?? '',
         },
+      });
+      return;
+    }
+    if (operationId) {
+      router.push({
+        pathname: '/main',
+        params: quickOperationRouteParams(operationId, conversationId, operationState),
       });
       return;
     }
@@ -379,7 +391,7 @@ export default function QuickRoute() {
              inverted={!isFreshConversation}
              data={isFreshConversation ? messages : reversedMessages}
             keyExtractor={(item) => item.id}
-              renderItem={({ item }) => isFreshConversation && item.id === starterMessage.id ? null : <QuickMessageBubble message={item} colors={colors} language={language} onApprove={(approval) => void updateApproval(approval, 'completed')} onReject={(approval) => void updateApproval(approval, 'rejected')} onOpenMain={() => openMain()} onOpenRecord={(record) => openMain(record)} onRetryInput={(attachment) => { if (attachment) void inputCapture.retryAttachment(attachment); }} retryingInput={inputCapture.state === 'processing'} busyOperationId={busyOperationId} />}
+              renderItem={({ item }) => isFreshConversation && item.id === starterMessage.id ? null : <QuickMessageBubble message={item} colors={colors} language={language} onApprove={(approval) => void updateApproval(approval, 'completed')} onReject={(approval) => void updateApproval(approval, 'rejected')} onOpenMain={(operationId, stateHint) => operationId ? openMain(undefined, operationId, stateHint) : openMain()} onOpenRecord={(record) => openMain(record)} onRetryInput={(attachment) => { if (attachment) void inputCapture.retryAttachment(attachment); }} retryingInput={inputCapture.state === 'processing'} busyOperationId={busyOperationId} />}
              contentContainerStyle={styles.messageList}
             keyboardDismissMode="interactive"
             keyboardShouldPersistTaps="handled"

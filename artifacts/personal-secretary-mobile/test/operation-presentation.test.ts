@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { operationNoticeFromAction } from '../services/operation-presentation';
+import { operationNoticeForHandoff, operationNoticeFromAction } from '../services/operation-presentation';
+import { quickOperationRouteParams } from '../services/quick-operation-handoff';
 
 test('mobile operation presentation preserves distinct lifecycle states', () => {
   assert.equal(operationNoticeFromAction({ status: 'pending' })?.status, 'pending_approval');
@@ -57,4 +58,36 @@ test('verified evidence is summarized and failed error codes are translated safe
   assert.equal(failed?.errorSummary, 'السكرتير مش عنده الصلاحية المطلوبة.');
   assert.equal(failed?.serviceLabel, undefined);
   assert.equal(failed?.errorSummary?.includes('PERMISSION_DENIED'), false);
+});
+
+test('Quick review handoff keeps operation and conversation context and never turns unknown into approval', () => {
+  assert.deepEqual(
+    quickOperationRouteParams('operation-1', 'conversation-1', 'unknown_result'),
+    {
+      operationId: 'operation-1',
+      conversationId: 'conversation-1',
+      operationState: 'unknown_result',
+    },
+  );
+  assert.deepEqual(
+    quickOperationRouteParams('operation-2'),
+    { operationId: 'operation-2' },
+  );
+
+  assert.deepEqual(
+    operationNoticeForHandoff('pending', 'operation-1', 'unknown_result'),
+    { status: 'unknown_result', operationId: 'operation-1' },
+  );
+  assert.deepEqual(
+    operationNoticeForHandoff('pending', 'operation-2', 'needs_review'),
+    { status: 'needs_review', operationId: 'operation-2' },
+  );
+  assert.deepEqual(
+    operationNoticeForHandoff('completed', 'operation-1', 'unknown_result'),
+    { status: 'completed', operationId: 'operation-1' },
+  );
+  assert.deepEqual(
+    operationNoticeForHandoff('unrecognized', 'operation-3'),
+    { status: 'unknown_result', operationId: 'operation-3' },
+  );
 });

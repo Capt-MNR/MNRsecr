@@ -29,8 +29,10 @@ import {
 import {
   approvalOutcomeMayBeUnknown,
   operationNoticeFromAction,
+  operationNoticeForHandoff,
   secretaryFailureText,
 } from '../services/operation-presentation';
+import type { QuickOperationStateHint } from '../services/quick-operation-handoff';
 import { hydrateLocalInputAttachments } from '../services/local-input-assets';
 import { agentWorkIdFromAction } from '../services/agent-work-presentation';
 import { initializeSecretaryPush } from '../services/mobile-push';
@@ -82,6 +84,9 @@ export default function MainRoute() {
     recordSubtitle?: string;
     recordTrailing?: string;
     workId?: string;
+    operationId?: string;
+    operationState?: string;
+    conversationId?: string;
     providerTest?: string;
   }>();
   const [mainSection, setMainSection] = useState<MainSection>(
@@ -97,7 +102,11 @@ export default function MainRoute() {
   const [followEntryActive, setFollowEntryActive] = useState(false);
   const [messages, setMessages] = useState<LocalMessage[]>([starterMessage]);
   const [conversationId, setConversationId] = useState<string | undefined>();
-  const [focusedApproval, setFocusedApproval] = useState<{ operationId: string } | null>(null);
+  const [focusedApproval, setFocusedApproval] = useState<{
+    operationId: string;
+    conversationId?: string;
+    operationState?: QuickOperationStateHint;
+  } | null>(null);
   const [draft, setDraft] = useState('');
   const [hydrated, setHydrated] = useState(false);
   const [busyOperationId, setBusyOperationId] = useState<string | null>(null);
@@ -133,6 +142,24 @@ export default function MainRoute() {
     },
     setLocalError,
   );
+  useEffect(() => {
+    if (typeof params.operationId !== 'string' || !params.operationId) return;
+    const operationState = params.operationState === 'unknown_result' || params.operationState === 'needs_review'
+      ? params.operationState
+      : undefined;
+    setSelectedRecord(null);
+    setMainSection('chat');
+    setConversationToLoad(null);
+    setLoadedConversationId(null);
+    setFocusedApproval({
+      operationId: params.operationId,
+      ...(typeof params.conversationId === 'string' ? { conversationId: params.conversationId } : {}),
+      ...(operationState ? { operationState } : {}),
+    });
+    setLocalError(null);
+    router.setParams({ operationId: undefined, operationState: undefined, conversationId: undefined });
+  }, [params.conversationId, params.operationId, params.operationState, router]);
+
   function applyPreferenceResponse(preferences: NonNullable<typeof proactivePreferencesQuery.data>) {
     setAssistantPreferences({
       activity: preferences.activity,
@@ -237,6 +264,11 @@ export default function MainRoute() {
     const operation = focusedApprovalQuery.data;
     if (operation && operation.operationId === focusedApproval.operationId) {
       const args = objectValue(operation.args);
+      const operationNotice = operationNoticeForHandoff(
+        operation.status,
+        operation.operationId,
+        focusedApproval.operationState,
+      );
       const approval: Approval = {
         operationId: operation.operationId,
         title: operation.display.title,
@@ -247,13 +279,18 @@ export default function MainRoute() {
       };
       setConversationToLoad(null);
       setLoadedConversationId(null);
-      setConversationId(operation.conversationId ?? undefined);
+      setConversationId(operation.conversationId ?? focusedApproval.conversationId);
       setMessages([{
         id: `home-approval-${operation.operationId}`,
         role: 'assistant',
-        text: language === 'ar' ? 'راجع العملية المحفوظة قبل اتخاذ القرار.' : 'Review the saved operation before deciding.',
+        text: language === 'ar'
+          ? 'هذه العملية مرتبطة بمحادثة Quick. راجع التفاصيل والحالة الحالية أدناه.'
+          : 'This action is linked to the Quick conversation. Review its details and current status below.',
         createdAt: new Date().toISOString(),
         approval,
+        ...(operationNotice.status === 'pending_approval' || operationNotice.status === 'executing'
+          ? {}
+          : { operationNotice }),
       }]);
       setMainSection('chat');
       setFocusedApproval(null);
@@ -595,7 +632,17 @@ export default function MainRoute() {
                     onOpenConnections={() => openMainSection('connections')}
                   />
                 )}
-                {mainSection === 'connections' && <ConnectionsView language={language} onBack={() => openMainSection('context')} />}
+                {mainSection === 'connections' && (
+                  <ConnectionsView
+                    language={language}
+                    onBack={() => openMainSection('context')}
+                    onAsk={(prompt) => {
+                      setDraft(prompt);
+                      setInputReview(null);
+                      openMainSection('chat');
+                    }}
+                  />
+                )}
                 {mainSection === 'records' && <RecordsView colors={colors} onOpenSection={openRecordSection} onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}
                 {mainSection === 'people' && <RecordsView colors={colors} onOpenSection={openRecordSection} title="الأشخاص" titleEn="People" subtitle="الأشخاص وعلاقاتهم بالسجلات والمشاريع" subtitleEn="People and their links to records and projects" sectionKeys={['people']} onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}
                {mainSection === 'projects' && <RecordsView colors={colors} onOpenSection={openRecordSection} title="المشاريع" titleEn="Projects" subtitle="المشاريع النشطة وسياقها المرتبط" subtitleEn="Active projects and their related context" sectionKeys={['projects']} onOpenRecord={openRecord} onBack={() => openMainSection('office')} />}

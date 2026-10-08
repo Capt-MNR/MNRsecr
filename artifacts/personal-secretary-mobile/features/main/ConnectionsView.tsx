@@ -15,19 +15,19 @@ import { useColors } from '@/hooks/useColors';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-type Props = { language: AppLanguage; onBack?: () => void };
+type Props = { language: AppLanguage; onBack?: () => void; onAsk: (prompt: string) => void };
 const copy = (language: AppLanguage, ar: string, en: string) => language === 'en' ? en : ar;
 
 function ServiceCard({
-  title, description, icon, configured, connected, emailAddress, scopes, loading, busy, error, onConnect, onDisconnect, onRetry, colors, language,
+  title, description, capability, icon, configured, connected, emailAddress, loading, busy, error, onConnect, onDisconnect, onRetry, colors, language,
 }: {
   title: string;
   description: string;
+  capability: string;
   icon: React.ComponentProps<typeof Feather>['name'];
   configured: boolean;
   connected: boolean;
   emailAddress: string | null;
-  scopes?: string[];
   loading: boolean;
   busy: boolean;
   error: boolean;
@@ -43,7 +43,7 @@ function ServiceCard({
     : error
       ? copy(language, 'تعذّر التحقق', 'Could not verify')
       : !configured
-        ? copy(language, 'غير مُهيّأ', 'Not configured')
+        ? copy(language, 'غير مهيأ في هذه البيئة', 'Not configured here')
         : connected
           ? copy(language, 'متصل', 'Connected')
           : copy(language, 'غير متصل', 'Not connected');
@@ -69,17 +69,10 @@ function ServiceCard({
       {connected && emailAddress && (
         <Text selectable style={[styles.email, { color: colors.foreground, textAlign: rtl ? 'right' : 'left' }]}>{emailAddress}</Text>
       )}
-      {!!scopes?.length && connected && (
-        <View style={styles.scopeWrap}>
-          <Text style={[styles.scopeHeading, { color: colors.mutedForeground, textAlign: rtl ? 'right' : 'left' }]}>{copy(language, 'الأذونات الممنوحة', 'Granted scopes')}</Text>
-          {scopes.map((scope) => (
-            <View key={scope} style={[styles.scopeRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
-              <Feather name="check" size={12} color={colors.accent} />
-              <Text selectable style={[styles.scopeText, { color: colors.mutedForeground, textAlign: rtl ? 'right' : 'left' }]}>{scope}</Text>
-            </View>
-          ))}
-        </View>
-      )}
+      <View style={[styles.capability, { borderTopColor: colors.border }]}>
+        <Text style={[styles.capabilityTitle, { color: colors.foreground, textAlign: rtl ? 'right' : 'left' }]}>{copy(language, 'ما الذي يستطيع السكرتير فعله؟', 'What the secretary can do')}</Text>
+        <Text style={[styles.capabilityText, { color: colors.mutedForeground, textAlign: rtl ? 'right' : 'left' }]}>{capability}</Text>
+      </View>
 
       <View style={[styles.actions, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
         {error ? (
@@ -102,7 +95,7 @@ function ServiceCard({
   );
 }
 
-export default function ConnectionsView({ language, onBack }: Props) {
+export default function ConnectionsView({ language, onBack, onAsk }: Props) {
   const colors = useColors();
   const queryClient = useQueryClient();
   const [feedback, setFeedback] = useState('');
@@ -176,13 +169,14 @@ export default function ConnectionsView({ language, onBack }: Props) {
       <View style={[styles.notice, { backgroundColor: colors.secondary, flexDirection: rtl ? 'row-reverse' : 'row' }]}>
         <Feather name="shield" size={17} color={colors.primary} />
         <Text style={[styles.noticeText, { color: colors.foreground, textAlign: rtl ? 'right' : 'left' }]}>
-          {copy(language, 'هذه أذونات قراءة البيانات. ربط Google لتسجيل الدخول منفصل ولا يمنح وصولًا إلى البريد أو التقويم.', 'These controls grant data access. Google sign-in is separate and does not grant access to email or calendar.')}
+          {copy(language, 'حالة الاتصال لا تعني أن كل محتوى الخدمة قابل للتصفح. كل إجراء خارجي يحتاج موافقتك. ربط Google لتسجيل الدخول منفصل.', 'A connection does not mean all service content can be browsed. Each external action requires your approval. Google sign-in is separate.')}
         </Text>
       </View>
 
       <ServiceCard
         title="Gmail"
-        description={copy(language, 'البريد الإلكتروني', 'Email access')}
+        description={copy(language, 'إرسال رسالة عبر بريدك', 'Send a message with your account')}
+        capability={copy(language, 'يمكنه إرسال رسالة واحدة بعد موافقتك، ثم التحقق من ظهورها في الرسائل المرسلة. لا يدعم تصفح البريد الوارد أو البحث العام فيه.', 'Can send one message after your approval and verify it appears in Sent. General inbox browsing and search are not supported.')}
         icon="mail"
         configured={gmail.data?.configured ?? false}
         connected={gmail.data?.connected ?? false}
@@ -206,11 +200,11 @@ export default function ConnectionsView({ language, onBack }: Props) {
       <ServiceCard
         title="Google Calendar"
         description={copy(language, 'التقويم والمواعيد', 'Calendar and events')}
+        capability={copy(language, 'يمكنه إنشاء أو تعديل أو إلغاء حدث محدد بعد موافقتك، ثم التحقق من النتيجة. لا يدعم تصفح التقويم أو البحث العام في الأحداث.', 'Can create, update, or cancel a specific event after your approval, then verify the result. General calendar browsing and event search are not supported.')}
         icon="calendar"
         configured={calendar.data?.configured ?? false}
         connected={calendar.data?.connected ?? false}
         emailAddress={calendar.data?.emailAddress ?? null}
-        scopes={calendar.data?.grantedScopes}
         loading={calendar.isLoading}
         busy={connectCalendar.isPending || disconnectCalendar.isPending}
         error={calendar.isError}
@@ -234,9 +228,20 @@ export default function ConnectionsView({ language, onBack }: Props) {
           <Text style={[styles.managedBadge, { color: colors.mutedForeground, backgroundColor: colors.muted }]}>{copy(language, 'تديره المنصة', 'Platform managed')}</Text>
         </View>
         <Text style={[styles.managedText, { color: colors.mutedForeground, textAlign: rtl ? 'right' : 'left' }]}>
-          {copy(language, 'هذا الاتصال تديره مساحة Replit. لا يمكن ربط حساب مستخدم منفصل أو التحقق منه من هذه الشاشة.', 'This connector is managed by the Replit workspace. A separate user account cannot be linked or verified from this view.')}
+          {copy(language, 'تديره مساحة العمل، ولا تعرض هذه الصفحة حالة اتصاله أو تؤكد جاهزيته. يستطيع السكرتير إنشاء جدول أو كتابة بيانات محددة ضمن متابعة؛ يتطلب ذلك موافقة إنشاء المتابعة ثم موافقة منفصلة قبل الاتصال، مع التحقق من النتيجة.', 'Managed by the workspace; this page does not expose its connection status or confirm readiness. The secretary can create a sheet or write specified data within a Work item. This requires approval to create the Work item and a separate approval before connecting, followed by result verification.')}
         </Text>
       </View>
+
+      <Pressable
+        testID="connections-ask-secretary"
+        accessibilityRole="button"
+        accessibilityLabel={copy(language, 'اسأل السكرتير عن الاتصالات', 'Ask the secretary about connections')}
+        onPress={() => onAsk(copy(language, 'ما الذي يستطيع السكرتير فعله عبر الاتصالات المتاحة؟', 'What can the secretary do through the available connections?'))}
+        style={({ pressed }) => [styles.askButton, { backgroundColor: colors.primary, opacity: pressed ? 0.72 : 1, flexDirection: rtl ? 'row-reverse' : 'row' }]}
+      >
+        <Feather name="message-circle" size={16} color={colors.primaryForeground} />
+        <Text style={[styles.askButtonText, { color: colors.primaryForeground }]}>{copy(language, 'اسأل السكرتير عن الاتصالات', 'Ask the secretary about connections')}</Text>
+      </Pressable>
 
       {!!feedback && <Text accessibilityRole="alert" style={[styles.feedback, { color: colors.mutedForeground, textAlign: rtl ? 'right' : 'left' }]}>{feedback}</Text>}
       {(gmail.isLoading || calendar.isLoading) && (
@@ -267,10 +272,9 @@ const styles = StyleSheet.create({
   statusLabel: { fontSize: 10 },
   statusValue: { fontSize: 11, fontWeight: '800' },
   email: { fontSize: 12, fontWeight: '700' },
-  scopeWrap: { gap: 6 },
-  scopeHeading: { fontSize: 10, fontWeight: '700' },
-  scopeRow: { alignItems: 'center', gap: 6 },
-  scopeText: { flex: 1, fontSize: 9, lineHeight: 14 },
+  capability: { gap: 5, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 11 },
+  capabilityTitle: { fontSize: 11, fontWeight: '800' },
+  capabilityText: { fontSize: 10, lineHeight: 16 },
   actions: { justifyContent: 'flex-start', marginTop: 1 },
   actionPrimary: { minHeight: 39, paddingHorizontal: 13, borderRadius: 13, flexDirection: 'row', alignItems: 'center', gap: 7 },
   actionPrimaryText: { fontSize: 11, fontWeight: '800' },
@@ -281,6 +285,8 @@ const styles = StyleSheet.create({
   managedTitle: { fontSize: 13, fontWeight: '800', flex: 1 },
   managedBadge: { overflow: 'hidden', borderRadius: 9, paddingHorizontal: 8, paddingVertical: 4, fontSize: 8, fontWeight: '700' },
   managedText: { fontSize: 10, lineHeight: 16 },
+  askButton: { minHeight: 46, justifyContent: 'center', alignItems: 'center', gap: 9, borderRadius: 15, paddingHorizontal: 16 },
+  askButtonText: { fontSize: 12, fontWeight: '800' },
   feedback: { fontSize: 11, lineHeight: 17, paddingHorizontal: 3 },
   loading: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 15, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },
   loadingText: { flex: 1, fontSize: 10 },

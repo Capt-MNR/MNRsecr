@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   CalendarDays,
   CheckCircle2,
+  Grid2X2,
   LoaderCircle,
   Mail,
   ShieldCheck,
@@ -147,7 +148,7 @@ function EmailSettings() {
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">الحسابات المتصلة</p>
               <h1 className="mt-2 font-serif text-3xl tracking-tight">الحسابات المتصلة</h1>
               <p className="mt-3 max-w-xl text-sm leading-7 text-muted-foreground">
-                اربط Gmail أو Google Calendar بحسابك. يتطلب كل إجراء خارجي موافقة منفصلة قبل تنفيذه.
+                حالة الاتصال توضّح الوصول للحساب فقط، ولا تعني أن السكرتير يستطيع تصفح كل محتواه. كل إجراء خارجي يحتاج موافقتك قبل التنفيذ.
               </p>
             </div>
           </div>
@@ -175,9 +176,13 @@ function EmailSettings() {
                   )}
                   {accountQuery.isPending
                     ? "جارٍ فحص الاتصال…"
-                    : account?.connected
+                    : accountQuery.isError
+                      ? "تعذر التحقق من اتصال Gmail"
+                      : account?.connected
                       ? "حساب Gmail متصل"
-                      : "لا يوجد حساب متصل"}
+                      : account?.configured
+                        ? "لا يوجد حساب Gmail متصل"
+                        : "ربط Gmail غير مهيأ في هذه البيئة"}
                 </div>
                 {account?.connected && account.emailAddress && (
                   <p className="mt-2 text-sm text-muted-foreground" data-testid="text-gmail-account">
@@ -227,9 +232,15 @@ function EmailSettings() {
             )}
             {account && !account.configured && !account.connected && (
               <p className="mt-4 text-sm leading-6 text-muted-foreground" data-testid="status-gmail-not-configured">
-                ربط Gmail غير مفعّل هنا بعد. لا تُرسل رسائل حقيقية من بيئة الإنتاج؛ يجب إكمال إعداد OAuth والتحقق قبل تفعيله.
+                لا يمكن بدء الربط لأن إعداد Gmail غير متاح في هذه البيئة.
               </p>
             )}
+            <div className="mt-5 border-t border-border pt-4" data-testid="capability-gmail">
+              <p className="text-sm font-semibold">ما الذي يستطيع السكرتير فعله؟</p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                إرسال رسالة واحدة بعد موافقتك، ثم التحقق من ظهورها في الرسائل المرسلة. لا يدعم هذا الاتصال تصفح البريد الوارد أو البحث العام فيه.
+              </p>
+            </div>
           </div>
 
           <div className="mt-6 rounded-2xl border border-border/80 bg-background/60 p-5">
@@ -245,20 +256,20 @@ function EmailSettings() {
                   )}
                   {calendarAccountQuery.isPending
                     ? "جارٍ فحص اتصال التقويم…"
-                    : calendarAccount?.connected
+                    : calendarAccountQuery.isError
+                      ? "تعذر التحقق من اتصال التقويم"
+                      : calendarAccount?.connected
                       ? "حساب Google Calendar متصل"
-                      : "لا يوجد حساب تقويم متصل"}
+                      : calendarAccount?.configured
+                        ? "لا يوجد حساب تقويم متصل"
+                        : "ربط التقويم غير مهيأ في هذه البيئة"}
                 </div>
                 {calendarAccount?.connected && calendarAccount.emailAddress && (
                   <p className="mt-2 text-sm text-muted-foreground" data-testid="text-calendar-account">
                     {calendarAccount.emailAddress}
                   </p>
                 )}
-                {calendarAccount?.connected && (
-                  <p className="mt-1 text-xs text-muted-foreground" data-testid="text-calendar-scope">
-                    صلاحية أحداث التقويم فقط
-                  </p>
-                )}
+                {calendarAccount?.connected && <p className="mt-1 text-xs text-muted-foreground">وصول لأحداث التقويم</p>}
               </div>
 
               {calendarAccount?.connected ? (
@@ -306,20 +317,41 @@ function EmailSettings() {
             )}
             {calendarAccount && !calendarAccount.configured && !calendarAccount.connected && (
               <p className="mt-4 text-sm leading-6 text-muted-foreground" data-testid="status-calendar-not-configured">
-                ربط Google Calendar غير مفعّل في هذه البيئة بعد؛ يلزم إعداد OAuth لاختبار حساب حقيقي.
+                لا يمكن بدء الربط لأن إعداد التقويم غير متاح في هذه البيئة.
               </p>
             )}
             <p className="mt-4 text-sm leading-6 text-muted-foreground">
-              يُحفظ رمز التحديث مشفّراً. لا تُكتب التغييرات على التقويم إلا بعد موافقتك، وتُراجع النتيجة قبل اعتبارها مكتملة.
+              <span className="font-semibold text-foreground">القدرة المتاحة:</span> إنشاء أو تعديل أو إلغاء حدث محدد بعد موافقتك، ثم التحقق من النتيجة. لا يدعم هذا الاتصال تصفح أحداث التقويم أو البحث العام فيها.
+            </p>
+          </div>
+
+          <div className="mt-6 rounded-2xl border border-border/80 bg-background/60 p-5" data-testid="connection-sheets">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <Grid2X2 className="size-4 text-muted-foreground" />
+              Google Sheets
+              <span className="rounded-full bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">تديره مساحة العمل</span>
+            </div>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              يمكن للسكرتير إنشاء جدول أو كتابة بيانات محددة ضمن متابعة. يلزم اعتماد إنشاء المتابعة، ثم موافقة منفصلة قبل الاتصال بـSheets، وتُراجع النتيجة بعد ذلك.
+            </p>
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">
+              لا تعرض هذه الصفحة حالة اتصال Sheets، لذلك لا يمكن تأكيد جاهزيته من هنا.
             </p>
           </div>
 
           <div className="mt-6 flex gap-3 rounded-2xl bg-primary/5 p-4 text-sm leading-6">
             <ShieldCheck className="mt-0.5 size-5 shrink-0 text-primary" />
             <p>
-              بيانات OAuth تُحفظ مشفّرة ومربوطة بحسابك. لا تظهر رموز الدخول في سجل الإجراءات، والنتائج الخارجية غير المؤكدة لا تؤدي إلى تنفيذ جديد تلقائيًا.
+              ربط Google لتسجيل الدخول منفصل عن هذه الاتصالات. عند عدم التأكد من نتيجة إجراء خارجي، لن يعيده السكرتير تلقائيًا.
             </p>
           </div>
+          <Link
+            href={`/ask?ask=${encodeURIComponent("ما الذي يستطيع السكرتير فعله عبر الاتصالات المتاحة؟")}`}
+            className="mt-6 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+            data-testid="button-ask-about-connections"
+          >
+            اسأل السكرتير عن الاتصالات
+          </Link>
         </section>
         <AuthProvidersSection />
       </div>
