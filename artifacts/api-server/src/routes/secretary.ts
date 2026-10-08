@@ -318,12 +318,23 @@ router.post("/turns", async (req, res): Promise<void> => {
     return;
   }
 
+  if (parsed.data.providerFallbackPolicy === "groq_only" && configuredProvider() !== "groq") {
+    sendError(req, res, new SecretaryError("Groq-only testing requires Groq to be the configured primary provider.", {
+      status: 503,
+      category: "provider_unavailable",
+      code: "GROQ_ONLY_PRIMARY_UNAVAILABLE",
+      retryable: false,
+    }), "warn");
+    return;
+  }
+
   try {
     const currentRequestId = requestId(req);
     await recordResolverShadow(identity, parsed.data.message);
     req.log.info({
       requestId: currentRequestId,
       provider: configuredProvider(),
+      providerFallbackPolicy: parsed.data.providerFallbackPolicy ?? "configured",
       conversationId: parsed.data.conversationId ?? undefined,
       inputId: parsed.data.inputId ?? undefined,
     }, "Secretary request started");

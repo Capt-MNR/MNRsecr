@@ -394,6 +394,17 @@ export const TurnInputChannel = {
   record: 'record',
 } as const;
 
+/**
+ * Use the configured fallback chain by default, or restrict this request to Groq and fail without trying another provider.
+ */
+export type TurnInputProviderFallbackPolicy = typeof TurnInputProviderFallbackPolicy[keyof typeof TurnInputProviderFallbackPolicy];
+
+
+export const TurnInputProviderFallbackPolicy = {
+  configured: 'configured',
+  groq_only: 'groq_only',
+} as const;
+
 export interface SecretaryChatContext {
   /**
      * @minLength 1
@@ -452,6 +463,8 @@ export interface TurnInput {
   /** @nullable */
   idempotencyKey?: string | null;
   channel: TurnInputChannel;
+  /** Use the configured fallback chain by default, or restrict this request to Groq and fail without trying another provider. */
+  providerFallbackPolicy?: TurnInputProviderFallbackPolicy;
   context?: SecretaryChatContext | null;
   peer?: SecretaryChatPeer | null;
   /**

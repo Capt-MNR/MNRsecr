@@ -1174,6 +1174,25 @@ function CentralSecretaryChat({
         </View>
       )}
 
+      {smartSignal && (
+        <View
+          testID="main-chat-smart-signal"
+          accessibilityLiveRegion="polite"
+          style={[
+            styles.centralChatSignalBanner,
+            { backgroundColor: colors.muted, borderColor: colors.border },
+          ]}
+        >
+          <Feather name="info" size={13} color={colors.primary} />
+          <Text
+            style={[styles.centralChatSignalBannerText, { color: colors.foreground }]}
+            numberOfLines={2}
+          >
+            {smartSignal}
+          </Text>
+        </View>
+      )}
+
       {!compact && expanded && onQuickPrompt && showPromptRail && (
         <ScrollView
           horizontal
@@ -5145,6 +5164,25 @@ export const styles = StyleSheet.create({
   centralChatSignalText: {
     fontSize: 8,
     fontWeight: '700',
+    textAlign: 'right',
+  },
+  centralChatSignalBanner: {
+    marginHorizontal: 12,
+    marginTop: 7,
+    marginBottom: 2,
+    minHeight: 34,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 7,
+  },
+  centralChatSignalBannerText: {
+    flex: 1,
+    fontSize: 10,
+    lineHeight: 15,
     textAlign: 'right',
   },
   chatContextChip: {

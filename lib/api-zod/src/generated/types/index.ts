@@ -243,6 +243,7 @@ export * from './todayContext';
 export * from './todayContextResponse';
 export * from './turnInput';
 export * from './turnInputChannel';
+export * from './turnInputProviderFallbackPolicy';
 export * from './turnResponse';
 export * from './undoRecordInput';
 export * from './unregisterMobilePushTokenInput';

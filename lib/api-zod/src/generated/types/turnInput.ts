@@ -8,6 +8,7 @@
 import type { SecretaryChatContext } from './secretaryChatContext';
 import type { SecretaryChatPeer } from './secretaryChatPeer';
 import type { TurnInputChannel } from './turnInputChannel';
+import type { TurnInputProviderFallbackPolicy } from './turnInputProviderFallbackPolicy';
 
 export interface TurnInput {
   /** @minLength 1 */
@@ -17,6 +18,8 @@ export interface TurnInput {
   /** @nullable */
   idempotencyKey?: string | null;
   channel: TurnInputChannel;
+  /** Use the configured fallback chain by default, or restrict this request to Groq and fail without trying another provider. */
+  providerFallbackPolicy?: TurnInputProviderFallbackPolicy;
   context?: SecretaryChatContext | null;
   peer?: SecretaryChatPeer | null;
   /**

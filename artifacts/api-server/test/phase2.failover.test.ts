@@ -115,6 +115,76 @@ test("Gemini-only and Groq-only configurations complete through the same gateway
   }
 });
 
+test("Groq-only turn policy reaches the configured Groq route without invoking Gemini", async () => {
+  const groq = new ScriptedProvider("groq", (call) => {
+    assert.equal(call.context.providerFallbackPolicy, "groq_only");
+    return finalResponse("تم الرد عبر Groq.");
+  });
+  const gemini = new ScriptedProvider("gemini", () => {
+    throw new Error("Gemini must not be called for a Groq-only turn.");
+  });
+  const gateway = new MnrInferenceRouter({
+    "direct:groq": groq,
+    "direct:gemini": gemini,
+  }, ["direct:groq", "direct:gemini"]);
+
+  const result = await new Phase2AgentRuntime(gateway).run(identity("groq-only-turn"), {
+    message: "عايز رد طبيعي بالعربي",
+    requestId: "groq-only-turn-request",
+    providerFallbackPolicy: "groq_only",
+  }, { dryRun: true });
+
+  assert.equal(result.provider, "groq");
+  assert.equal(result.response?.message, "تم الرد عبر Groq.");
+  assert.equal(groq.calls.length, 1);
+  assert.equal(gemini.calls.length, 0);
+  assert.equal(result.action?.providerTrace?.fallbackOccurred, false);
+});
+
+test("Groq-only routing returns Groq's transient error instead of falling back", async () => {
+  const failure = providerTimeoutError("groq");
+  const groq = new ScriptedProvider("groq", () => { throw failure; });
+  const gemini = new ScriptedProvider("gemini", () => finalResponse("يجب ألا يصل إلى Gemini."));
+  const gateway = new MnrInferenceRouter({
+    "direct:groq": groq,
+    "direct:gemini": gemini,
+  }, ["direct:groq", "direct:gemini"]);
+  const requestId = "groq-only-timeout-request";
+
+  await assert.rejects(
+    gateway.generate([{ role: "user", text: "إيه آخر حاجة سجلناها عن شركة المحجر؟" }], {
+      requestId,
+      callNumber: 1,
+      toolCallsExecuted: 0,
+      providerFallbackPolicy: "groq_only",
+    }),
+    (error) => error instanceof SecretaryError && error.code === failure.code,
+  );
+
+  assert.equal(groq.calls.length, 1);
+  assert.equal(gemini.calls.length, 0);
+  assert.deepEqual(gateway.getTrace(requestId).providersAttempted, ["groq"]);
+  assert.equal(gateway.getTrace(requestId).fallbackOccurred, false);
+});
+
+test("Groq-only routing fails closed when Groq is not the configured primary route", async () => {
+  const gemini = new ScriptedProvider("gemini", () => finalResponse("يجب ألا يصل إلى Gemini."));
+  const gateway = new MnrInferenceRouter({
+    "direct:gemini": gemini,
+  }, ["direct:gemini"]);
+
+  await assert.rejects(
+    gateway.generate([{ role: "user", text: "عايز رد طبيعي بالعربي" }], {
+      requestId: "groq-only-wrong-primary-request",
+      callNumber: 1,
+      toolCallsExecuted: 0,
+      providerFallbackPolicy: "groq_only",
+    }),
+    (error) => error instanceof SecretaryError && error.code === "GROQ_ONLY_PRIMARY_UNAVAILABLE",
+  );
+  assert.equal(gemini.calls.length, 0);
+});
+
 test("provider order is configurable and defaults to Gemini before Groq when both keys exist", () => {
   const keys = [
     "AI_PROVIDER_CATALOG",

@@ -3,7 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   getGetSecretaryOperationQueryKey,
   getListPendingSecretaryApprovalsQueryKey,
@@ -157,8 +157,13 @@ export default function MainRoute() {
     recordSubtitle?: string;
     recordTrailing?: string;
     workId?: string;
+    providerTest?: string;
   }>();
-  const [mainSection, setMainSection] = useState<MainSection>('office');
+  const [mainSection, setMainSection] = useState<MainSection>(
+    params.providerTest === 'groq-only' || params.providerTest === 'groq-only-consumed'
+      ? 'chat'
+      : 'office',
+  );
   const [selectedRecord, setSelectedRecord] = useState<MobileRecordRow | null>(null);
   const [recordReturnSection, setRecordReturnSection] = useState<MainSection>('office');
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -175,6 +180,7 @@ export default function MainRoute() {
   const [conversationToLoad, setConversationToLoad] = useState<string | null>(null);
   const [loadedConversationId, setLoadedConversationId] = useState<string | null>(null);
   const [conversationSearch, setConversationSearch] = useState('');
+  const groqOnlyTestAttempted = useRef(params.providerTest === 'groq-only-consumed');
   const [assistantPreferences, setAssistantPreferences] = useState<AssistantPreferences>(defaultAssistantPreferences);
   const queryClient = useQueryClient();
   const proactivePreferencesQuery = useGetProactivePreferences({
@@ -338,9 +344,27 @@ export default function MainRoute() {
   async function sendMessage(value = draft) {
     const message = value.trim();
     if (!message || secretaryChat.isSending || conversationQuery.isFetching) return;
+    const groqOnlyTestRequested = params.providerTest === 'groq-only';
+    const groqOnlyTestRoute = groqOnlyTestRequested || params.providerTest === 'groq-only-consumed';
+    if (groqOnlyTestRoute && groqOnlyTestAttempted.current) {
+      setLocalError(language === 'ar'
+        ? 'تم استهلاك طلب اختبار Groq الوحيد. لا تعِد الإرسال من وضع الاختبار.'
+        : 'The one Groq-only test request has been used. Do not send again in test mode.');
+      return;
+    }
+    if (groqOnlyTestRequested && chatContext) {
+      setLocalError(language === 'ar'
+        ? 'اختبار Groq متاح من محادثة Main فقط، وليس من تفاصيل سجل.'
+        : 'The Groq-only test is available from Main chat, not from a record detail.');
+      return;
+    }
     if (receiptNeedsReview(inputReview)) {
       setLocalError('أكمل مبلغ الفاتورة والعملة قبل إرسال المسودة.');
       return;
+    }
+    if (groqOnlyTestRequested) {
+      groqOnlyTestAttempted.current = true;
+      router.setParams({ providerTest: 'groq-only-consumed' });
     }
     setDraft('');
     const submittedInputId = inputReview?.inputId ?? null;
@@ -356,7 +380,14 @@ export default function MainRoute() {
       ...(submittedInputAttachment ? { inputAttachment: submittedInputAttachment } : {}),
     });
     try {
-       const result = await secretaryChat.sendTurn({ message, conversationId: conversationId ?? null, channel: chatContext ? 'record' : 'main', context: chatContext ? secretaryContextFromRecord(chatContext) : null, inputId: submittedInputId });
+       const result = await secretaryChat.sendTurn({
+        message,
+        conversationId: conversationId ?? null,
+        channel: chatContext ? 'record' : 'main',
+        context: chatContext ? secretaryContextFromRecord(chatContext) : null,
+        inputId: submittedInputId,
+        ...(groqOnlyTestRequested ? { providerFallbackPolicy: 'groq_only' } : {}),
+      });
       setConversationId(result.conversationId);
        void queryClient.invalidateQueries({ queryKey: getListPendingSecretaryApprovalsQueryKey() });
       const linked = recordLinkFromAction(result.action);
@@ -570,7 +601,17 @@ export default function MainRoute() {
                     onRetryInput={(attachment) => { if (attachment) void inputCapture.retryAttachment(attachment); }}
                     retryingInput={inputCapture.state === 'processing'}
                     context={chatContext}
-                    smartSignal={localError ?? undefined}
+                    smartSignal={localError ?? (
+                      params.providerTest === 'groq-only'
+                        ? (language === 'ar'
+                          ? 'اختبار لمرة واحدة: إذا احتاج الطلب إلى نموذج فسيستخدم Groq فقط، بلا fallback. قد تنتهي قراءة محلية قبل استدعاء النموذج.'
+                          : 'One-time test: if the turn needs a model, it can use Groq only, with no provider fallback. Local handling may finish before any model call.')
+                        : params.providerTest === 'groq-only-consumed'
+                          ? (language === 'ar'
+                            ? 'استهلكت محاولة الاختبار الوحيدة، سواء اكتملت أو فشلت. لا تعِد الإرسال من وضع الاختبار.'
+                            : 'The one test attempt has been consumed, whether it completed or failed. Do not send again in test mode.')
+                          : undefined
+                    )}
                     quickPrompts={undefined}
                     inputState={inputCapture.state}
                     onToggleVoice={() => void inputCapture.toggleVoice()}

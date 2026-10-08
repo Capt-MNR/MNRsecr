@@ -97,18 +97,22 @@ function startApiProxy(apiBaseUrl, mobileBaseUrl, counts) {
       const requestPath = request.url ?? "/";
       const targetBase = requestPath.startsWith("/api/") ? apiBaseUrl : mobileBaseUrl;
       const target = new URL(requestPath, targetBase);
-      if (request.method === "POST" && target.pathname === "/api/turns") counts.turns += 1;
       if (request.method === "POST" && target.pathname.startsWith("/api/approvals/")) counts.approvals += 1;
 
       const chunks = [];
       for await (const chunk of request) chunks.push(chunk);
+      const body = chunks.length > 0 ? Buffer.concat(chunks) : undefined;
+      if (request.method === "POST" && target.pathname === "/api/turns") {
+        counts.turns += 1;
+        counts.turnBodies.push(JSON.parse(body?.toString("utf8") ?? "{}"));
+      }
       const headers = Object.fromEntries(
         Object.entries(request.headers).filter(([name]) => name !== "host" && name !== "content-length"),
       );
       const upstream = await fetch(target, {
         method: request.method,
         headers,
-        body: chunks.length > 0 ? Buffer.concat(chunks) : undefined,
+        body,
       });
       const responseHeaders = Object.fromEntries(
         [...upstream.headers].filter(([name]) => ![
@@ -283,7 +287,7 @@ try {
   const expoBaseUrl = `http://127.0.0.1:${expoPort}`;
   await waitForHttp(expoBaseUrl);
 
-  const counts = { turns: 0, approvals: 0 };
+  const counts = { turns: 0, approvals: 0, turnBodies: [] };
   proxy = startApiProxy(fixtureInfo.apiBaseUrl, expoBaseUrl, counts);
   await new Promise((resolve, reject) => {
     proxy.once("error", reject);
@@ -795,6 +799,75 @@ try {
       `document.querySelector('[data-testid="drawer-logout"]') !== null`,
       "workspace drawer before logout",
     );
+    await browser.page.send("Page.navigate", {
+      url: `${appBaseUrl}/main?providerTest=groq-only`,
+    });
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="main-message-input"]') !== null`,
+      "Groq-only one-shot test chat",
+    );
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="main-chat-smart-signal"]')?.innerText.includes("Groq")`,
+      "visible Groq-only test notice before sending",
+    );
+    const turnsBeforeGroqOnlyTest = counts.turns;
+    await browser.page.evaluate(`(() => {
+      const input = document.querySelector('[data-testid="main-message-input"]');
+      if (!input) throw new Error("Groq-only test message input is missing");
+      const prototype = input instanceof HTMLTextAreaElement
+        ? HTMLTextAreaElement.prototype
+        : HTMLInputElement.prototype;
+      const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+      if (!setter) throw new Error("Could not set the Groq-only test message");
+      setter.call(input, "إيه آخر حاجة سجلناها عن شركة المحجر؟");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      document.querySelector('[data-testid="main-send-message"]')?.click();
+    })()`);
+    await waitForBrowserValue(
+      browser.page,
+      `location.search.includes("providerTest=groq-only-consumed")`,
+      "Groq-only test mode consumed after its one request",
+    );
+    const groqOnlyRequestDeadline = Date.now() + 10_000;
+    while (counts.turns === turnsBeforeGroqOnlyTest && Date.now() < groqOnlyRequestDeadline) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    assert.equal(counts.turns, turnsBeforeGroqOnlyTest + 1);
+    assert.equal(
+      counts.turnBodies.at(-1)?.providerFallbackPolicy,
+      "groq_only",
+      "the Main UI must send the Groq-only policy with the one test turn",
+    );
+
+    await browser.page.evaluate(`(() => {
+      const input = document.querySelector('[data-testid="main-message-input"]');
+      if (!input) throw new Error("Main message input disappeared after the test turn");
+      const prototype = input instanceof HTMLTextAreaElement
+        ? HTMLTextAreaElement.prototype
+        : HTMLInputElement.prototype;
+      const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+      if (!setter) throw new Error("Could not set the post-test message");
+      setter.call(input, "لا ترسل هذا الطلب");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      document.querySelector('[data-testid="main-send-message"]')?.click();
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    assert.equal(
+      counts.turns,
+      turnsBeforeGroqOnlyTest + 1,
+      "the consumed Groq-only test route must block a second turn",
+    );
+
+    await browser.page.evaluate(`document.querySelector('[data-testid="open-main-drawer"]').click()`);
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="drawer-logout"]') !== null`,
+      "workspace drawer before logout",
+    );
     await browser.page.evaluate(`document.querySelector('[data-testid="drawer-logout"]').click()`);
     await waitForBrowserValue(
       browser.page,
@@ -816,6 +889,7 @@ try {
   console.log(JSON.stringify({
     ok: true,
     turnPosts: counts.turns,
+    groqOnlyTestPosts: counts.turnBodies.filter((body) => body.providerFallbackPolicy === "groq_only").length,
     approvalPosts: counts.approvals,
     covered: ["expense", "task", "reminder", "person", "project", "provenance", "language-theme"],
   }));

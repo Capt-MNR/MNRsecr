@@ -2159,6 +2159,10 @@ components:
         channel:
           type: string
           enum: [main, quick, record]
+        providerFallbackPolicy:
+          type: string
+          description: Use the configured fallback chain by default, or restrict this request to Groq and fail without trying another provider.
+          enum: [configured, groq_only]
         context:
           anyOf:
             - $ref: "#/components/schemas/SecretaryChatContext"

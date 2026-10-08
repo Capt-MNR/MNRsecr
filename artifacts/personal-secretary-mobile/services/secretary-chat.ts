@@ -40,6 +40,7 @@ export type SecretaryChatPeer = {
 export type SecretaryChatTurnInput = {
   message: string;
   conversationId?: string | null;
+  providerFallbackPolicy?: 'configured' | 'groq_only';
   channel: SecretaryChatChannel;
   context?: SecretaryChatContext | null;
   peer?: SecretaryChatPeer | null;
@@ -509,6 +510,9 @@ const apiTransport: SecretaryChatTransport = {
   sendTurn: (input) => createTurn({
     message: input.message,
     conversationId: input.conversationId ?? null,
+    ...(input.providerFallbackPolicy
+      ? { providerFallbackPolicy: input.providerFallbackPolicy }
+      : {}),
     channel: input.channel,
     context: input.context ?? null,
     peer: input.peer ?? null,

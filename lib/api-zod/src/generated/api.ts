@@ -1609,6 +1609,7 @@ export const CreateTurnBody = zod.object({
   "conversationId": zod.string().nullish(),
   "idempotencyKey": zod.string().nullish(),
   "channel": zod.enum(['main', 'quick', 'record']),
+  "providerFallbackPolicy": zod.enum(['configured', 'groq_only']).optional().describe('Use the configured fallback chain by default, or restrict this request to Groq and fail without trying another provider.'),
   "context": zod.union([zod.object({
   "recordType": zod.string().min(1).max(createTurnBodyContextOneRecordTypeMax),
   "recordId": zod.string().min(1).max(createTurnBodyContextOneRecordIdMax),

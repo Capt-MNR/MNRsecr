@@ -175,6 +175,7 @@ export type Phase2TurnInput = {
   message: string;
   conversationId?: string | null;
   idempotencyKey?: string | null;
+  providerFallbackPolicy?: "configured" | "groq_only";
   channel?: TurnInputChannel;
   context?: SecretaryChatContext | null;
   peer?: SecretaryChatPeer | null;
@@ -526,6 +527,7 @@ export type GatewayCallContext = {
   toolScope?: ToolScope;
   finalResponseOnly?: boolean;
   providerFallback?: boolean;
+  providerFallbackPolicy?: "configured" | "groq_only";
   currentUserMessage?: string;
   metrics?: GatewayRequestMetrics;
   deadlineAt?: number;
@@ -5356,7 +5358,16 @@ export class MnrInferenceRouter implements ModelGateway {
     if (context.metrics) this.metrics.set(context.requestId, context.metrics);
     const request = this.requestState(context.requestId);
     const startIndex = request?.routeIndex ?? 0;
-    const preferredRoutes = this.order.slice(startIndex);
+    const groqOnly = context.providerFallbackPolicy === "groq_only";
+    if (groqOnly && routeTargetId(this.routeFor(this.order[0])) !== "groq") {
+      throw new SecretaryError("Groq-only routing requires Groq to be the configured primary route.", {
+        status: 503,
+        category: "provider_unavailable",
+        code: "GROQ_ONLY_PRIMARY_UNAVAILABLE",
+        retryable: false,
+      });
+    }
+    const preferredRoutes = groqOnly ? this.order.slice(0, 1) : this.order.slice(startIndex);
     const trace = this.trace(context.requestId);
     const candidates = preferredRoutes.filter((routeId) => this.gateways[routeId]);
     const requiredCapabilities = [...new Set(context.requiredCapabilities ?? [])];
@@ -7448,6 +7459,7 @@ export class Phase2AgentRuntime {
                 toolCallsExecuted: toolCalls,
                 toolScope: activeToolScope,
                 finalResponseOnly: true,
+                providerFallbackPolicy: input.providerFallbackPolicy,
                 currentUserMessage: input.message.trim(),
                 metrics,
                 deadlineAt: startedAt + MODEL_REQUEST_DEADLINE_MS,
@@ -7540,6 +7552,7 @@ export class Phase2AgentRuntime {
             callNumber: llmCalls,
             toolCallsExecuted: toolCalls,
             toolScope: activeToolScope,
+            providerFallbackPolicy: input.providerFallbackPolicy,
             currentUserMessage: input.message.trim(),
             metrics,
             deadlineAt: startedAt + MODEL_REQUEST_DEADLINE_MS,
