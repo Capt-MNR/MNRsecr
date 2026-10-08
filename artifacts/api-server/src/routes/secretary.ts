@@ -3,6 +3,7 @@ import {
   CreateTurnBody,
   CreateTurnResponse,
   GetTodayContextResponse,
+  PendingApprovalListResponse,
   ProcessSecretaryInputAssetBody,
   ProcessSecretaryInputAssetResponse,
 } from "@workspace/api-zod";
@@ -26,6 +27,7 @@ import {
   completeOperationWithExecutor,
   failOperation,
   getOperation,
+  listPendingApprovalSummaries,
   recordOperationProgress,
   rejectOperation,
   type OperationExecutionResult,
@@ -240,6 +242,26 @@ router.get("/today", async (req, res): Promise<void> => {
   try {
     const context = await persistence.getTodayContext(identity);
     res.json(GetTodayContextResponse.parse({ context }));
+  } catch (error) {
+    sendError(req, res, error);
+  }
+});
+
+router.get("/approvals/pending", async (req, res): Promise<void> => {
+  const identity = getIdentity(req);
+  if (!identity) {
+    sendError(req, res, new SecretaryError("Authentication required.", {
+      status: 401,
+      category: "authentication_error",
+      code: "AUTHENTICATION_REQUIRED",
+      retryable: false,
+    }), "warn");
+    return;
+  }
+  try {
+    const approvals = await listPendingApprovalSummaries(identity);
+    const payload: PendingApprovalListResponse = { approvals };
+    res.json(payload);
   } catch (error) {
     sendError(req, res, error);
   }

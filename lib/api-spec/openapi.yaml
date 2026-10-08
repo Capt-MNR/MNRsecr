@@ -1326,6 +1326,24 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /approvals/pending:
+    get:
+      operationId: listPendingSecretaryApprovals
+      tags: [secretary]
+      summary: List the signed-in user's unexpired pending secretary approvals
+      responses:
+        "200":
+          description: Pending approvals scoped to the authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PendingApprovalListResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /approvals/{operationId}:
     get:
       operationId: getSecretaryOperation
@@ -2442,6 +2460,41 @@ components:
           type: string
           format: date-time
       required: [operationId, toolName, args, display, status, updatedAt]
+    PendingApprovalSummary:
+      type: object
+      properties:
+        operationId:
+          type: string
+          format: uuid
+        conversationId:
+          type: ["string", "null"]
+        toolName:
+          type: string
+        display:
+          type: object
+          properties:
+            title:
+              type: string
+            details:
+              type: array
+              items:
+                type: string
+          required: [title, details]
+        status:
+          type: string
+          enum: [pending]
+        updatedAt:
+          type: string
+          format: date-time
+      required: [operationId, toolName, display, status, updatedAt]
+    PendingApprovalListResponse:
+      type: object
+      properties:
+        approvals:
+          type: array
+          items:
+            $ref: "#/components/schemas/PendingApprovalSummary"
+      required: [approvals]
     RegisterMobilePushTokenInput:
       type: object
       properties:

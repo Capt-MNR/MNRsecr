@@ -77,6 +77,7 @@ import type {
   ListTypedRelationshipsParams,
   MobilePushTokenResponse,
   OperationalSummaryResponse,
+  PendingApprovalListResponse,
   PersonGraphResponse,
   ProactivePreferences,
   ProactivePreferencesUpdate,
@@ -5623,6 +5624,83 @@ export const useApproveSecretaryOperation = <TError = ErrorType<ErrorResponse>,
       > => {
       return useMutation(getApproveSecretaryOperationMutationOptions(options));
     }
+
+export const getListPendingSecretaryApprovalsUrl = () => {
+
+
+
+
+  return `/api/approvals/pending`
+}
+
+/**
+ * @summary List the signed-in user's unexpired pending secretary approvals
+ */
+export const listPendingSecretaryApprovals = async ( options?: Parameters<typeof customFetch>[1]): Promise<PendingApprovalListResponse> => {
+
+  return customFetch<PendingApprovalListResponse>(getListPendingSecretaryApprovalsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPendingSecretaryApprovalsQueryKey = () => {
+    return [
+    `/api/approvals/pending`
+    ] as const;
+    }
+
+
+export const getListPendingSecretaryApprovalsQueryOptions = <TData = Awaited<ReturnType<typeof listPendingSecretaryApprovals>>, TError = ErrorType<ErrorResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPendingSecretaryApprovals>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPendingSecretaryApprovalsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPendingSecretaryApprovals>>> = ({ signal }) => listPendingSecretaryApprovals({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPendingSecretaryApprovals>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPendingSecretaryApprovalsQueryResult = NonNullable<Awaited<ReturnType<typeof listPendingSecretaryApprovals>>>
+export type ListPendingSecretaryApprovalsQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary List the signed-in user's unexpired pending secretary approvals
+ */
+
+export function useListPendingSecretaryApprovals<TData = Awaited<ReturnType<typeof listPendingSecretaryApprovals>>, TError = ErrorType<ErrorResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPendingSecretaryApprovals>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPendingSecretaryApprovalsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetSecretaryOperationUrl = (operationId: string,) => {
 

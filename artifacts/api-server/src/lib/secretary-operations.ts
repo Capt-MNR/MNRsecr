@@ -51,6 +51,15 @@ export type PendingOperation = {
   error?: { message: string };
 };
 
+export type PendingApprovalSummary = {
+  operationId: string;
+  conversationId: string | null;
+  toolName: string;
+  display: OperationDisplay;
+  status: "pending";
+  updatedAt: Date;
+};
+
 const OPERATION_TTL_MS = 24 * 60 * 60 * 1000;
 const EXECUTION_RECOVERY_GRACE_MS = 60 * 1000;
 
@@ -112,6 +121,35 @@ function toOperation(row: SecretaryOperation): PendingOperation {
     ...(result ? { result } : {}),
     ...(error ? { error } : {}),
   };
+}
+
+export async function listPendingApprovalSummaries(
+  identity: Identity,
+  now = new Date(),
+): Promise<PendingApprovalSummary[]> {
+  const rows = await db.select({
+    operationId: secretaryOperationsTable.id,
+    conversationId: secretaryOperationsTable.conversationId,
+    toolName: secretaryOperationsTable.toolName,
+    displayJson: secretaryOperationsTable.displayJson,
+    updatedAt: secretaryOperationsTable.updatedAt,
+  }).from(secretaryOperationsTable)
+    .where(and(
+      eq(secretaryOperationsTable.tenantId, identity.tenantId),
+      eq(secretaryOperationsTable.ownerUserId, identity.userId),
+      eq(secretaryOperationsTable.status, "pending"),
+      or(isNull(secretaryOperationsTable.expiresAt), gt(secretaryOperationsTable.expiresAt, now)),
+    ))
+    .orderBy(desc(secretaryOperationsTable.updatedAt));
+
+  return rows.map((row) => ({
+    operationId: row.operationId,
+    conversationId: row.conversationId,
+    toolName: row.toolName,
+    display: parseDisplay(row.displayJson),
+    status: "pending",
+    updatedAt: row.updatedAt,
+  }));
 }
 
 export function displayForOperation(

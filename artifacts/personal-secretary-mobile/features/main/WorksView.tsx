@@ -40,6 +40,14 @@ const statusLabels: Record<string, [string, string]> = {
   paused: ['متوقف مؤقتًا', 'Paused'],
   waiting: ['ينتظر', 'Waiting'],
   needs_review: ['يحتاج مراجعتك', 'Needs review'],
+  uncertain: ['نتيجة غير مؤكدة', 'Outcome unconfirmed'],
+  unknown_result: ['نتيجة غير مؤكدة', 'Outcome unconfirmed'],
+  verified: ['تم التحقق', 'Verified'],
+  unchanged: ['لم يتغير', 'Unchanged'],
+  queued: ['في قائمة الانتظار', 'Queued'],
+  claimed: ['بدأ التنفيذ', 'Claimed'],
+  running: ['جارٍ التنفيذ', 'Running'],
+  verifying: ['جارٍ التحقق', 'Verifying'],
   completed: ['اكتمل', 'Completed'],
   failed: ['تعذر إكماله', 'Failed'],
   cancelled: ['ملغى', 'Cancelled'],
@@ -124,7 +132,7 @@ function statusColor(status: string, colors: WorksColors): string {
   return colors.mutedForeground;
 }
 
-function transitionActions(status: AgentWorkStatus): Array<{
+function transitionActions(status: AgentWorkStatus, unknownOutcome = false): Array<{
   to: AgentWorkStatus;
   labelAr: string;
   labelEn: string;
@@ -149,6 +157,9 @@ function transitionActions(status: AgentWorkStatus): Array<{
     case 'needs_review':
       return [{ to: 'cancelled', labelAr: 'إلغاء', labelEn: 'Cancel', icon: 'x-circle', tone: 'destructive' }];
     case 'failed':
+      if (unknownOutcome) {
+        return [{ to: 'cancelled', labelAr: 'إلغاء المتابعة', labelEn: 'Cancel monitoring', icon: 'x-circle', tone: 'destructive' }];
+      }
       return [
         { to: 'active', labelAr: 'إعادة التشغيل', labelEn: 'Retry', icon: 'refresh-cw', tone: 'primary' },
         { to: 'cancelled', labelAr: 'إلغاء', labelEn: 'Cancel', icon: 'x-circle', tone: 'destructive' },
@@ -311,7 +322,10 @@ function WorkDetail({
       },
     },
   });
-  const actions = transitionActions(work.status ?? 'draft');
+  const unknownOutcome = work.lastRunStatus === 'uncertain'
+    || work.lastRunStatus === 'unknown_result'
+    || details.runs[0]?.status === 'uncertain';
+  const actions = transitionActions(work.status ?? 'draft', unknownOutcome);
   const operation = operationQuery.data;
   const approvalVisible = Boolean(
     operation
@@ -352,6 +366,15 @@ function WorkDetail({
         </View>
         <WorkStatusPill work={work} colors={colors} language={language} />
       </View>
+
+      {unknownOutcome && (
+        <View style={[styles.errorCard, { backgroundColor: `${colors.accent}14`, borderColor: colors.accent }]}>
+          <Text style={[styles.errorTitle, { color: colors.accent }]}>{localized(language, 'نتيجة التنفيذ غير مؤكدة', 'The outcome is unknown')}</Text>
+          <Text style={[styles.emptyText, { color: colors.foreground }]}>
+            {localized(language, 'لن أعيد تشغيل العملية تلقائيًا أو أعرض زر إعادة المحاولة. راجع سجل الخدمة والأدلة أولًا.', 'The action will not be retried automatically and no retry button is shown. Review its service history and evidence first.')}
+          </Text>
+        </View>
+      )}
 
       {actions.length > 0 && (
         <View style={styles.actionRow}>
@@ -500,11 +523,13 @@ export default function WorksView({
   language,
   onBack,
   initialWorkId,
+  onStartFollowing,
 }: {
   colors: WorksColors;
   language: AppLanguage;
   onBack: () => void;
   initialWorkId?: string;
+  onStartFollowing?: () => void;
 }) {
   const queryClient = useQueryClient();
   const [selectedWorkId, setSelectedWorkId] = useState<string | null>(initialWorkId ?? null);
@@ -593,6 +618,21 @@ export default function WorksView({
               <Feather name="arrow-right" size={17} color={colors.foreground} />
             </Pressable>
           </View>
+          {onStartFollowing && (
+            <Pressable
+              testID="agent-work-start-following"
+              accessibilityRole="button"
+              accessibilityLabel={localized(language, 'اطلب من السكرتير متابعة عمل جديد', 'Ask the secretary to follow something new')}
+              onPress={onStartFollowing}
+              style={({ pressed }) => [{ padding: 14, borderRadius: 16, borderWidth: 1, backgroundColor: colors.primary, borderColor: colors.primary, flexDirection: 'row-reverse', alignItems: 'center', gap: 10, opacity: pressed ? 0.75 : 1 }]}
+            >
+              <Feather name="plus-circle" size={18} color={colors.primaryForeground} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.errorTitle, { color: colors.primaryForeground }]}>{localized(language, 'اطلب متابعة جديدة', 'Ask for new follow-up')}</Text>
+                <Text style={[styles.emptyText, { color: colors.primaryForeground, opacity: 0.8 }]}>{localized(language, 'صف ما تريد متابعته بلغة عادية.', 'Describe what you want tracked in plain language.')}</Text>
+              </View>
+            </Pressable>
+          )}
           {worksQuery.isLoading && (
             <View style={styles.loadingState}>
               <ActivityIndicator color={colors.primary} />

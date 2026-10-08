@@ -3,7 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useEffect, useState } from 'react';
 import { useColors } from '@/hooks/useColors';
-import type { Approval, ApprovalArgs, ApprovalCandidate, LocalMessage, MobileRecordRow } from './shared';
+import { useLanguage } from '@/hooks/useLanguage';
+import { localized, type Approval, type ApprovalArgs, type ApprovalCandidate, type LocalMessage, type MobileRecordRow } from './shared';
 import { LocalInputAttachmentView } from './local-input-attachment';
 import { styles, starterMessage } from './shared';
 
@@ -26,6 +27,20 @@ function messageTime(value: string) {
     hour: 'numeric',
     minute: '2-digit',
   }).format(date);
+}
+
+function operationNoticeLabel(status: NonNullable<LocalMessage['operationNotice']>['status'], language: Parameters<typeof localized>[0]) {
+  const labels: Record<typeof status, [string, string]> = {
+    completed: ['تم التحقق من التنفيذ', 'Execution verified'],
+    rejected: ['تم الرفض', 'Rejected'],
+    expired: ['انتهت صلاحية الموافقة', 'Approval expired'],
+    failed: ['تعذر التنفيذ', 'Execution failed'],
+    unknown_result: ['نتيجة التنفيذ غير مؤكدة', 'Outcome is unknown'],
+    waiting: ['في انتظار خطوة أخرى', 'Waiting for another step'],
+    needs_review: ['يحتاج إلى مراجعتك', 'Needs your review'],
+    pending_approval: ['بانتظار موافقتك', 'Waiting for your approval'],
+  };
+  return localized(language, labels[status][0], labels[status][1]);
 }
 
 function asString(value: unknown, fallback = '') {
@@ -452,6 +467,7 @@ export function MessageBubble({
   compact?: boolean;
   pearlStyle?: boolean;
 }) {
+  const { language } = useLanguage();
   const isUser = message.role === 'user';
   const approvals = message.approvals ?? (message.approval ? [message.approval] : []);
 
@@ -483,10 +499,16 @@ export function MessageBubble({
         )}
         {approvals.map((approval) => {
           const approvalBusy = busyOperationId === approval.operationId;
+          const noticeApplies = !message.operationNotice?.operationId || message.operationNotice.operationId === approval.operationId;
+          const unknownOutcome = message.operationNotice?.status === 'unknown_result' && noticeApplies;
+          const needsReview = message.operationNotice?.status === 'needs_review' && noticeApplies;
           const isResolved = approval.status === 'completed'
             || approval.status === 'rejected'
             || approval.status === 'expired'
-            || approval.status === 'failed';
+            || approval.status === 'failed'
+            || unknownOutcome
+            || needsReview;
+          const isExecuting = approval.status === 'executing';
           const canEdit = !compact && approval.status === 'pending'
             && (approval.toolName === 'record_expense' || approval.toolName === 'create_reminder');
           const canQuickApprove = compact && approval.status === 'pending' && approval.quickApprove === true;
@@ -499,15 +521,27 @@ export function MessageBubble({
             {approval.details.map((detail) => (
               <Text key={detail} style={[styles.approvalDetail, pearlStyle && styles.pearlApprovalDetail, { color: colors.mutedForeground }]}>{detail}</Text>
             ))}
-            {isResolved ? (
+            {isResolved || isExecuting ? (
               <View style={styles.resolvedRow}>
                 <Feather
-                  name={approval.status === 'completed' ? 'check-circle' : 'x-circle'}
+                  name={approval.status === 'completed' ? 'check-circle' : isExecuting ? 'loader' : approval.status === 'rejected' ? 'x-circle' : 'alert-circle'}
                   size={15}
-                  color={approval.status === 'completed' ? colors.primary : colors.destructive}
+                  color={approval.status === 'completed' ? colors.primary : isExecuting || unknownOutcome || needsReview ? colors.accent : approval.status === 'rejected' ? colors.destructive : colors.mutedForeground}
                 />
                 <Text style={[styles.resolvedText, { color: colors.mutedForeground }]}>
-                  {approval.status === 'completed' ? 'تم التنفيذ' : 'تم الرفض'}
+                  {unknownOutcome
+                    ? localized(language, 'نتيجة التنفيذ غير مؤكدة', 'Outcome unconfirmed')
+                    : needsReview
+                      ? localized(language, 'يحتاج إلى مراجعتك', 'Needs your review')
+                      : approval.status === 'completed'
+                    ? localized(language, 'تم التنفيذ', 'Completed')
+                    : approval.status === 'rejected'
+                      ? localized(language, 'تم الرفض', 'Rejected')
+                      : approval.status === 'expired'
+                        ? localized(language, 'انتهت صلاحية الموافقة', 'Approval expired')
+                        : approval.status === 'failed'
+                          ? localized(language, 'تعذر التنفيذ', 'Execution failed')
+                          : localized(language, 'جارٍ التنفيذ', 'Executing')}
                 </Text>
               </View>
             ) : (
@@ -585,6 +619,28 @@ export function MessageBubble({
           </View>
           );
         })}
+        {message.operationNotice && (
+          <View
+            accessibilityRole={message.operationNotice.status === 'unknown_result' || message.operationNotice.status === 'needs_review' ? 'alert' : undefined}
+            style={[styles.operationNotice, { backgroundColor: colors.muted, borderColor: colors.border, flexDirection: language === 'en' ? 'row' : 'row-reverse' }]}
+          >
+            <Feather
+              name={message.operationNotice.status === 'completed' ? 'check-circle' : message.operationNotice.status === 'unknown_result' || message.operationNotice.status === 'needs_review' ? 'alert-circle' : 'info'}
+              size={15}
+              color={message.operationNotice.status === 'completed' ? colors.primary : message.operationNotice.status === 'unknown_result' || message.operationNotice.status === 'needs_review' ? colors.accent : colors.mutedForeground}
+            />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.operationNoticeTitle, { color: colors.foreground, textAlign: language === 'en' ? 'left' : 'right' }]}>
+                {operationNoticeLabel(message.operationNotice.status, language)}
+              </Text>
+              {(message.operationNotice.status === 'unknown_result' || message.operationNotice.status === 'needs_review') && (
+                <Text style={[styles.operationNoticeBody, { color: colors.mutedForeground, textAlign: language === 'en' ? 'left' : 'right' }]}>
+                  {localized(language, 'لن أعيد المحاولة تلقائيًا. راجع النتيجة قبل تنفيذ العملية مرة أخرى.', 'I will not retry automatically. Verify the outcome before attempting the action again.')}
+                </Text>
+              )}
+            </View>
+          </View>
+        )}
         {message.recordLink && (
           <Pressable
             testID={`open-record-${message.recordLink.recordType}-${message.recordLink.id}`}

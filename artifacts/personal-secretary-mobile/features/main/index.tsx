@@ -29,6 +29,9 @@ import { MessageBubble } from '../message-bubble';
 import { ReceiptReviewCard } from '../receipt-review';
 export { default as MainWorkspace } from './MainWorkspace';
 export { default as WorksView } from './WorksView';
+export { default as SecretaryHome } from './SecretaryHome';
+export { default as ContextHub } from './ContextHub';
+export { default as ConnectionsView } from './ConnectionsView';
 export { SecondBrainMemorySheet } from './SecondBrainMemorySheet';
 export { SettingsSection } from './SettingsSection';
 export { PersonalInformationSection } from './PersonalInformationSection';
@@ -61,6 +64,10 @@ export type LocalMessage = {
   inputAttachment?: LocalInputAttachment | null;
   approval?: Approval;
   approvals?: Approval[];
+  operationNotice?: {
+    status: 'completed' | 'rejected' | 'expired' | 'failed' | 'unknown_result' | 'waiting' | 'needs_review' | 'pending_approval';
+    operationId?: string;
+  };
   recordLink?: MobileRecordRow;
 };
 
@@ -106,7 +113,7 @@ type MobileRecordSection = {
   data: MobileRecordRow[];
 };
 
-export type MainSection = 'office' | 'chat' | 'records' | 'people' | 'projects' | 'financial' | 'tasks' | 'reminders' | 'activity' | 'works' | 'settings' | 'personal-information';
+export type MainSection = 'office' | 'chat' | 'history' | 'context' | 'connections' | 'records' | 'people' | 'projects' | 'financial' | 'tasks' | 'reminders' | 'activity' | 'works' | 'settings' | 'personal-information';
 export type AssistantPreferences = {
   activity: 'focused' | 'balanced' | 'quiet';
   proactive: 'low' | 'balanced' | 'high';
@@ -936,7 +943,7 @@ export function RecordsView({
   );
 }
 
-type SecretaryChatProps = {
+export type SecretaryChatProps = {
   colors: ReturnType<typeof useColors>;
   messages: LocalMessage[];
   draft: string;
@@ -968,6 +975,38 @@ type SecretaryChatProps = {
   onOpenPearlSheet?: (tab: 'records' | 'context') => void;
   sheetLift?: number;
 };
+
+export function AskView({
+  onOpenHistory,
+  ...chatProps
+}: SecretaryChatProps & { onOpenHistory: () => void }) {
+  const { language } = useLanguage();
+  const rtl = language === 'ar';
+  const colors = chatProps.colors;
+  return (
+    <View testID="ask-secretary-view" style={{ flex: 1, minHeight: 0, backgroundColor: colors.background }}>
+      <View style={{ minHeight: 58, paddingHorizontal: 17, paddingVertical: 9, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, flexDirection: rtl ? 'row-reverse' : 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <View>
+          <Text style={{ color: colors.primary, fontSize: 9, fontWeight: '800', letterSpacing: 1.2 }}>{localized(language, 'اسأل السكرتير', 'ASK YOUR SECRETARY')}</Text>
+          <Text style={{ color: colors.foreground, fontSize: 17, fontWeight: '800', marginTop: 2 }}>{localized(language, 'كل طلب يبدأ من هنا', 'One place for every request')}</Text>
+        </View>
+        <Pressable
+          testID="ask-open-history"
+          accessibilityRole="button"
+          accessibilityLabel={localized(language, 'المحادثات السابقة', 'Conversation history')}
+          onPress={onOpenHistory}
+          style={({ pressed }) => ({ minHeight: 36, paddingHorizontal: 10, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, flexDirection: rtl ? 'row-reverse' : 'row', alignItems: 'center', gap: 6, opacity: pressed ? 0.65 : 1 })}
+        >
+          <Feather name="clock" size={13} color={colors.primary} />
+          <Text style={{ color: colors.foreground, fontSize: 10, fontWeight: '700' }}>{localized(language, 'المحادثات', 'History')}</Text>
+        </Pressable>
+      </View>
+      <View style={{ flex: 1, minHeight: 0 }}>
+        <CentralSecretaryChat {...chatProps} expanded />
+      </View>
+    </View>
+  );
+}
 
 function CentralSecretaryChat({
   colors,
@@ -3993,8 +4032,10 @@ export function RecordDetailView({
 }
 
 const mainNavigation: Array<{ key: MainSection; labelAr: string; labelEn: string; icon: FeatherName }> = [
-  { key: 'office', labelAr: 'الرئيسية', labelEn: 'Home', icon: 'home' },
-  { key: 'chat', labelAr: 'المحادثات السابقة', labelEn: 'Conversations', icon: 'message-circle' },
+  { key: 'office', labelAr: 'مكتب السكرتير', labelEn: 'Secretary home', icon: 'home' },
+  { key: 'chat', labelAr: 'اسأل السكرتير', labelEn: 'Ask', icon: 'message-circle' },
+  { key: 'context', labelAr: 'السياق', labelEn: 'Context', icon: 'layers' },
+  { key: 'history', labelAr: 'المحادثات السابقة', labelEn: 'Conversation history', icon: 'clock' },
   { key: 'records', labelAr: 'السجلات', labelEn: 'Records', icon: 'archive' },
   { key: 'people', labelAr: 'الأشخاص', labelEn: 'People', icon: 'users' },
   { key: 'projects', labelAr: 'المشاريع', labelEn: 'Projects', icon: 'briefcase' },
@@ -4002,7 +4043,7 @@ const mainNavigation: Array<{ key: MainSection; labelAr: string; labelEn: string
   { key: 'tasks', labelAr: 'المهام', labelEn: 'Tasks', icon: 'check-square' },
   { key: 'reminders', labelAr: 'التذكيرات', labelEn: 'Reminders', icon: 'bell' },
   { key: 'activity', labelAr: 'النشاط', labelEn: 'Activity', icon: 'activity' },
-  { key: 'works', labelAr: 'أعمال الوكيل', labelEn: 'Agent work', icon: 'compass' },
+  { key: 'works', labelAr: 'الأعمال والمتابعة', labelEn: 'Work', icon: 'compass' },
 ];
 
 export function ConversationHistoryView({
@@ -4109,11 +4150,11 @@ export function MainBottomBar({
   onOpenDrawer: () => void;
 }) {
   const insets = useSafeAreaInsets();
-  const items: Array<{ key: 'office' | 'chat' | 'records' | 'tasks' | 'more'; labelAr: string; labelEn: string; icon: FeatherName }> = [
-    { key: 'office', labelAr: 'الرئيسية', labelEn: 'Home', icon: 'home' },
-    { key: 'chat', labelAr: 'المحادثة', labelEn: 'Chat', icon: 'message-circle' },
-    { key: 'records', labelAr: 'السجلات', labelEn: 'Records', icon: 'archive' },
-    { key: 'tasks', labelAr: 'المهام', labelEn: 'Tasks', icon: 'check-square' },
+  const items: Array<{ key: 'office' | 'chat' | 'context' | 'works' | 'more'; labelAr: string; labelEn: string; icon: FeatherName }> = [
+    { key: 'office', labelAr: 'السكرتير', labelEn: 'Secretary', icon: 'home' },
+    { key: 'chat', labelAr: 'اسأل', labelEn: 'Ask', icon: 'message-circle' },
+    { key: 'context', labelAr: 'السياق', labelEn: 'Context', icon: 'layers' },
+    { key: 'works', labelAr: 'العمل', labelEn: 'Work', icon: 'compass' },
     { key: 'more', labelAr: 'المزيد', labelEn: 'More', icon: 'more-horizontal' },
   ];
   return (
@@ -4131,12 +4172,10 @@ export function MainBottomBar({
         const selected = item.key === 'office'
           ? activeSection === 'office'
           : item.key === 'chat'
-            ? activeSection === 'chat'
-          : item.key === 'records'
-            ? activeSection === 'records'
-            : item.key === 'tasks'
-              ? activeSection === 'tasks'
-              : false;
+            ? activeSection === 'chat' || activeSection === 'history'
+            : item.key === 'context'
+              ? activeSection === 'context'
+              : item.key === 'works' && activeSection === 'works';
         return (
           <Pressable
             key={item.key}
@@ -4226,7 +4265,7 @@ export function MainDrawer({
             {localized(language, 'حالة المكتب', 'Office status')}
           </Text>
           <Text style={[styles.drawerStatusValue, { color: colors.foreground }]}>
-            {localized(language, 'السكرتير مستعد ويتبع اختيارك', 'The secretary is ready and follows your settings')}
+            {localized(language, 'تعتمد الاستجابة على مزود الذكاء الاصطناعي المتاح', 'Responses depend on the configured AI provider')}
           </Text>
         </View>
         <View style={styles.drawerNav}>
@@ -4272,8 +4311,22 @@ export function MainDrawer({
         </Pressable>
         <View style={[styles.drawerSettings, { borderTopColor: colors.border }]}>
           <Text style={[styles.drawerSettingsTitle, { color: colors.foreground }]}>
-            {localized(language, 'إدارة حسابك', 'Your account')}
+            {localized(language, 'النظام والحساب', 'System and account')}
           </Text>
+          <Pressable
+            testID="drawer-open-connections"
+            accessibilityRole="button"
+            accessibilityLabel={localized(language, 'فتح اتصالات البيانات', 'Open data connections')}
+            onPress={() => onSelect('connections')}
+            style={({ pressed }) => [styles.drawerMemoryLink, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}
+          >
+            <Feather name="link-2" size={15} color={colors.primary} />
+            <View style={styles.drawerMemoryCopy}>
+              <Text style={[styles.drawerMemoryTitle, { color: colors.foreground }]}>{localized(language, 'اتصالات البيانات', 'Data connections')}</Text>
+              <Text style={[styles.drawerMemoryText, { color: colors.mutedForeground }]}>{localized(language, 'Gmail وتقويم Google والخدمات المرتبطة', 'Gmail, Google Calendar, and connected services')}</Text>
+            </View>
+            <Feather name="chevron-left" size={15} color={colors.mutedForeground} />
+          </Pressable>
           <Pressable
             testID="drawer-open-settings"
             accessibilityRole="button"
@@ -5122,7 +5175,7 @@ export const styles = StyleSheet.create({
     maxHeight: 100000,
     minHeight: 0,
     marginTop: 0,
-    paddingBottom: 174,
+    paddingBottom: 0,
   },
   centralChatTranscriptOffice: {
     paddingBottom: 0,

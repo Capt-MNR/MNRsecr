@@ -336,13 +336,15 @@ try {
       feedCardTops.every((top, index) => typeof top === "number" && (index === 0 || top > feedCardTops[index - 1])),
       `Main feed should sort saved records newest first: ${JSON.stringify(feedCardTops)}`,
     );
-    await browser.page.evaluate(`document.querySelector('[data-testid="office-feed-open-chat"]').click()`);
+    await browser.page.evaluate(`document.querySelector('[data-testid="home-open-ask"]').click()`);
     await waitForBrowserValue(
       browser.page,
       `document.querySelector('[data-testid="main-message-input"]') !== null`,
       "Main Office message input",
     );
-    await browser.page.evaluate(`document.querySelector('[data-testid="main-quick-bubble"]').click()`);
+    await browser.page.evaluate(`document.querySelector('[data-testid="main-bottom-more"]').click()`);
+    await waitForBrowserValue(browser.page, `document.querySelector('[data-testid="drawer-open-quick"]') !== null`, "Quick entry in Main menu");
+    await browser.page.evaluate(`document.querySelector('[data-testid="drawer-open-quick"]').click()`);
     await waitForBrowserValue(
       browser.page,
       `document.querySelector('[data-testid="quick-message-input"]') !== null`,
@@ -383,7 +385,7 @@ try {
         );
       }
     }
-    await browser.page.evaluate(`document.querySelector('[data-testid="office-feed-open-chat"]').click()`);
+    await browser.page.evaluate(`document.querySelector('[data-testid="home-open-ask"]').click()`);
     await waitForBrowserValue(
       browser.page,
       `document.querySelector('[data-testid="main-message-input"]') !== null`,
@@ -423,7 +425,22 @@ try {
       if (!transcript || !composer) return false;
       return transcript.getBoundingClientRect().bottom <= composer.getBoundingClientRect().top + 1;
     })()`);
-    assert.equal(compactHeightChatContentFit, true, "Main's composer should not cover the transcript in a keyboard-sized viewport");
+    const compactChatGeometry = await browser.page.evaluate(`(() => {
+      const rect = (selector) => {
+        const element = document.querySelector(selector);
+        if (!element) return null;
+        const bounds = element.getBoundingClientRect();
+        return { top: bounds.top, bottom: bounds.bottom, height: bounds.height };
+      };
+      return {
+        viewportHeight: window.innerHeight,
+        transcript: rect('[data-testid="main-chat-transcript"]'),
+        composer: rect('[data-testid="main-chat-composer"]'),
+        navigation: rect('[data-testid="main-bottom-chat"]'),
+        ask: rect('[data-testid="ask-secretary-view"]'),
+      };
+    })()`);
+    assert.equal(compactHeightChatContentFit, true, `Main's composer should not cover the transcript in a keyboard-sized viewport: ${JSON.stringify(compactChatGeometry)}`);
     if (process.env.CAPTURE_MAIN_OFFICE_SNAPSHOTS === "1") {
       const screenshot = await browser.page.send("Page.captureScreenshot", {
         format: "jpeg",
@@ -436,7 +453,7 @@ try {
     }
     const compactComposerFit = await browser.page.evaluate(`(() => {
       const input = document.querySelector('[data-testid="main-message-input"]');
-      const navigation = document.querySelector('[data-testid="main-bottom-records"]');
+      const navigation = document.querySelector('[data-testid="main-bottom-chat"]');
       if (!input || !navigation) return false;
       return input.getBoundingClientRect().bottom <= navigation.getBoundingClientRect().top;
     })()`);
@@ -452,7 +469,7 @@ try {
       `document.querySelector('[data-testid="main-message-input"]') !== null`,
       "Main conversation restored after the compact viewport",
     );
-    await browser.page.evaluate(`document.querySelector('[data-testid="office-chat-close"]').click()`);
+    await browser.page.evaluate(`document.querySelector('[data-testid="main-bottom-office"]').click()`);
     await waitForBrowserValue(
       browser.page,
       `document.querySelector('[data-testid="office-feed"]') !== null`,
@@ -470,7 +487,7 @@ try {
     );
 
     const message = fixtureInfo.firstApprovalMessage;
-    await browser.page.evaluate(`document.querySelector('[data-testid="office-feed-open-chat"]').click()`);
+    await browser.page.evaluate(`document.querySelector('[data-testid="home-open-ask"]').click()`);
     await waitForBrowserValue(
       browser.page,
       `document.querySelector('[data-testid="main-message-input"]') !== null`,
@@ -500,10 +517,19 @@ try {
       })()`,
       "Main Office approval",
     );
+    await browser.page.evaluate(`document.querySelector('[data-testid="main-bottom-office"]').click()`);
     await waitForBrowserValue(
       browser.page,
       `document.querySelector('[data-testid^="office-focus-approval-"]') !== null`,
-      "adaptive focus for pending approval",
+      "pending approval on Home",
+    );
+    const homeApproval = await browser.page.evaluate(`document.querySelector('[data-testid^="office-focus-approval-"]')?.getAttribute("data-testid") ?? null`);
+    assert.ok(homeApproval, "Home should show the pending approval created from Ask");
+    await browser.page.evaluate(`document.querySelector('[data-testid="${homeApproval}"]').click()`);
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="main-message-input"]') !== null && document.querySelector('[data-testid="${approval}"]') !== null`,
+      "the same approval after reopening its conversation",
     );
     assert.equal(counts.turns, 1, "sending from Main Office must create one turn");
 
@@ -521,35 +547,55 @@ try {
       return element?.getAttribute("data-testid") ?? null;
     })()`);
     assert.ok(recordLink, "the approved turn should expose an expense detail link");
-    await clickAndWaitForDetail(browser.page, recordLink, "main-office-home");
-
-    await browser.page.evaluate(`document.querySelector('[data-testid="pearl-sheet-handle"]').click()`);
+    await clickAndWaitForDetail(browser.page, recordLink, "ask-secretary-view");
+    await browser.page.evaluate(`document.querySelector('[data-testid="main-bottom-office"]').click()`);
     await waitForBrowserValue(
       browser.page,
-      `document.querySelector('[data-testid="pearl-sheet-record-expense-${fixtureInfo.ids.expense}"]') !== null`,
-      "Main Office recent activity records",
+      `document.querySelector('[data-testid="main-office-home"]') !== null`,
+      "Home after returning from an approved record",
     );
     for (const [label, testId] of [
-      ["recent activity expense", `pearl-sheet-record-expense-${fixtureInfo.ids.expense}`],
-      ["task row", `pearl-sheet-record-task-${fixtureInfo.ids.task}`],
-      ["reminder row", `pearl-sheet-record-reminder-${fixtureInfo.ids.reminder}`],
+      ["recent expense", `office-focus-expense-${fixtureInfo.ids.expense}`],
+      ["task row", `office-focus-task-${fixtureInfo.ids.task}`],
+      ["reminder row", `office-focus-reminder-${fixtureInfo.ids.reminder}`],
     ]) {
       await clickAndWaitForDetail(browser.page, testId, "main-office-home");
       assert.ok(label, `${label} should remain covered by this drill-down`);
-      await browser.page.evaluate(`document.querySelector('[data-testid="pearl-sheet-handle"]').click()`);
     }
 
-    await browser.page.evaluate(`document.querySelector('[data-testid="pearl-sheet-tab-context"]').click()`);
-    for (const [label, testId] of [
-      ["person hub", `pearl-sheet-person-${fixtureInfo.ids.person}`],
-      ["project hub", `pearl-sheet-project-${fixtureInfo.ids.project}`],
+    for (const [label, section, testId] of [
+      ["person hub", "people", `record-person-${fixtureInfo.ids.person}`],
+      ["project hub", "projects", `record-project-${fixtureInfo.ids.project}`],
     ]) {
-      await clickAndWaitForDetail(browser.page, testId, "main-office-home");
+      await browser.page.evaluate(`document.querySelector('[data-testid="main-bottom-context"]').click()`);
+      await waitForBrowserValue(
+        browser.page,
+        `document.querySelector('[data-testid="context-open-${section}"]') !== null`,
+        `${section} entry in Context`,
+      );
+      await browser.page.evaluate(`document.querySelector('[data-testid="context-open-${section}"]').click()`);
+      await waitForBrowserValue(
+        browser.page,
+        `document.querySelector('[data-testid="records-back-to-office"]') !== null`,
+        `${section} records surface`,
+      );
+      await clickAndWaitForDetail(browser.page, testId, "records-back-to-office");
       assert.ok(label, `${label} should remain covered by this drill-down`);
-      await browser.page.evaluate(`document.querySelector('[data-testid="pearl-sheet-handle"]').click(); document.querySelector('[data-testid="pearl-sheet-tab-context"]').click()`);
+      await browser.page.evaluate(`document.querySelector('[data-testid="records-back-to-office"]').click()`);
+      await waitForBrowserValue(
+        browser.page,
+        `document.querySelector('[data-testid="main-office-home"]') !== null`,
+        `Home after leaving ${section}`,
+      );
     }
 
-    await browser.page.evaluate(`document.querySelector('[data-testid="main-bottom-records"]').click()`);
+    await browser.page.evaluate(`document.querySelector('[data-testid="main-bottom-context"]').click()`);
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="context-open-records"]') !== null`,
+      "Records entry in Context",
+    );
+    await browser.page.evaluate(`document.querySelector('[data-testid="context-open-records"]').click()`);
     await waitForBrowserValue(
       browser.page,
       `document.querySelector('[data-testid="records-back-to-office"]') !== null`,
@@ -567,7 +613,7 @@ try {
       "Office after leaving the Records surface",
     );
 
-    await browser.page.evaluate(`document.querySelector('[data-testid="office-feed-open-chat"]').click()`);
+    await browser.page.evaluate(`document.querySelector('[data-testid="home-open-ask"]').click()`);
     await waitForBrowserValue(
       browser.page,
       `document.querySelector('[data-testid="main-message-input"]') !== null`,
@@ -587,7 +633,7 @@ try {
     await browser.page.evaluate(`document.querySelector('[data-testid="open-original-conversation"]').click()`);
     await waitForBrowserValue(
       browser.page,
-      `document.querySelector('[data-testid="main-office-home"]') !== null`,
+      `document.querySelector('[data-testid="ask-secretary-view"]') !== null`,
       "Main Office after opening the origin conversation",
     );
     await waitForBrowserValue(
@@ -597,6 +643,12 @@ try {
     );
     assert.equal(counts.turns, 1, "opening provenance must not create another turn");
     assert.equal(counts.approvals, 1, "opening provenance must not re-approve the operation");
+    await browser.page.evaluate(`document.querySelector('[data-testid="main-bottom-office"]').click()`);
+    await waitForBrowserValue(
+      browser.page,
+      `document.querySelector('[data-testid="main-office-home"]') !== null`,
+      "Home after checking approval provenance",
+    );
 
     const mainBackgroundsScript = `(() => {
       let node = document.querySelector('[data-testid="main-office-home"]');
@@ -688,7 +740,9 @@ try {
       })()`,
       "Main English LTR layout",
     );
-    await browser.page.evaluate(`document.querySelector('[data-testid="main-quick-bubble"]').click()`);
+    await browser.page.evaluate(`document.querySelector('[data-testid="main-bottom-more"]').click()`);
+    await waitForBrowserValue(browser.page, `document.querySelector('[data-testid="drawer-open-quick"]') !== null`, "Quick entry in Main menu");
+    await browser.page.evaluate(`document.querySelector('[data-testid="drawer-open-quick"]').click()`);
     await waitForBrowserValue(
       browser.page,
       `document.querySelector('[data-testid="quick-message-input"]') !== null`,

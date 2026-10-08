@@ -1718,6 +1718,24 @@ export const ApproveSecretaryOperationResponse = zod.object({
 
 
 /**
+ * @summary List the signed-in user's unexpired pending secretary approvals
+ */
+export const ListPendingSecretaryApprovalsResponse = zod.object({
+  "approvals": zod.array(zod.object({
+  "operationId": zod.string().uuid(),
+  "conversationId": zod.string().nullish(),
+  "toolName": zod.string(),
+  "display": zod.object({
+  "title": zod.string(),
+  "details": zod.array(zod.string())
+}),
+  "status": zod.enum(['pending']),
+  "updatedAt": zod.coerce.date()
+}))
+})
+
+
+/**
  * @summary Get one scoped approval operation for editing
  */
 export const GetSecretaryOperationParams = zod.object({

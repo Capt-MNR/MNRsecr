@@ -156,6 +156,55 @@ async function createAndApprove(
   return { pending, approved, operationId };
 }
 
+test("pending approval summaries are owner-scoped, exclude expired rows, and omit arguments", async () => {
+  const now = new Date();
+  const pendingId = crypto.randomUUID();
+  const expiredId = crypto.randomUUID();
+  const values = (id: string, expiresAt: Date) => ({
+    id,
+    tenantId,
+    ownerUserId: userId,
+    toolName: "record_expense",
+    argumentsJson: JSON.stringify({ amountMinor: 12345, currency: "EGP", internalNote: "private argument" }),
+    displayJson: JSON.stringify({ title: "مصروف قيد المراجعة", details: ["1,234.50 EGP"] }),
+    status: "pending",
+    updatedAt: now,
+    expiresAt,
+  });
+  await db.insert(secretaryOperationsTable).values([
+    values(pendingId, new Date(now.getTime() + 60_000)),
+    values(expiredId, new Date(now.getTime() - 60_000)),
+  ]);
+
+  const response = await request("/approvals/pending");
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body?.approvals.map((item: { operationId: string }) => item.operationId), [pendingId]);
+  assert.deepEqual(
+    Object.keys(response.body.approvals[0]).sort(),
+    ["conversationId", "display", "operationId", "status", "toolName", "updatedAt"].sort(),
+  );
+  assert.equal(response.body.approvals[0].status, "pending");
+  assert.equal(JSON.stringify(response.body).includes("private argument"), false);
+
+  const originalUserId = process.env.SECRETARY_USER_ID;
+  const originalTenantId = process.env.SECRETARY_TENANT_ID;
+  try {
+    process.env.SECRETARY_USER_ID = `${userId}-other`;
+    const otherUser = await request("/approvals/pending");
+    assert.equal(otherUser.status, 200);
+    assert.deepEqual(otherUser.body?.approvals, []);
+
+    process.env.SECRETARY_USER_ID = userId;
+    process.env.SECRETARY_TENANT_ID = `${tenantId}-other`;
+    const otherTenant = await request("/approvals/pending");
+    assert.equal(otherTenant.status, 200);
+    assert.deepEqual(otherTenant.body?.approvals, []);
+  } finally {
+    process.env.SECRETARY_USER_ID = originalUserId;
+    process.env.SECRETARY_TENANT_ID = originalTenantId;
+  }
+});
+
 test("Secretary turn contract validates channel, bounded context, and peer metadata", async () => {
   const missingChannel = await request("/turns", "POST", {
     message: "اختبار العقد",

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { View } from 'react-native';
 
 /**
  * Runtime boundary for the full secretary office.
@@ -11,6 +12,12 @@ import type { ReactNode } from 'react';
  * boundary therefore guarantees deferred module evaluation, not a separately
  * downloadable native chunk or a measured RAM reduction.
  */
-export default function MainWorkspace({ children }: { children: ReactNode }) {
-  return children;
+export default function MainWorkspace({
+  children,
+  bottomBarClearance = 100,
+}: {
+  children: ReactNode;
+  bottomBarClearance?: number;
+}) {
+  return <View style={{ flex: 1, minHeight: 0, paddingBottom: bottomBarClearance }}>{children}</View>;
 }

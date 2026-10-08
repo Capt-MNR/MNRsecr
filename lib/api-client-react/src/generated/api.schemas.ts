@@ -716,6 +716,32 @@ export interface ApprovalOperation {
   updatedAt: string;
 }
 
+export type PendingApprovalSummaryDisplay = {
+  title: string;
+  details: string[];
+};
+
+export type PendingApprovalSummaryStatus = typeof PendingApprovalSummaryStatus[keyof typeof PendingApprovalSummaryStatus];
+
+
+export const PendingApprovalSummaryStatus = {
+  pending: 'pending',
+} as const;
+
+export interface PendingApprovalSummary {
+  operationId: string;
+  /** @nullable */
+  conversationId?: string | null;
+  toolName: string;
+  display: PendingApprovalSummaryDisplay;
+  status: PendingApprovalSummaryStatus;
+  updatedAt: string;
+}
+
+export interface PendingApprovalListResponse {
+  approvals: PendingApprovalSummary[];
+}
+
 export type RegisterMobilePushTokenInputProvider = typeof RegisterMobilePushTokenInputProvider[keyof typeof RegisterMobilePushTokenInputProvider];
 
 

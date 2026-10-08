@@ -19,6 +19,10 @@ export type Approval = {
   personCandidates?: ApprovalCandidate[];
   projectCandidates?: ApprovalCandidate[];
 };
+export type OperationNotice = {
+  status: 'completed' | 'rejected' | 'expired' | 'failed' | 'unknown_result' | 'waiting' | 'needs_review' | 'pending_approval';
+  operationId?: string;
+};
 export type RecordOrigin = {
   conversationId: string;
   turnId?: string | null;
@@ -43,6 +47,7 @@ export type LocalMessage = {
   inputAttachment?: LocalInputAttachment | null;
   approval?: Approval;
   approvals?: Approval[];
+  operationNotice?: OperationNotice;
   recordLink?: MobileRecordRow;
 };
 export type MainSection = 'office' | 'records' | 'people' | 'projects' | 'financial' | 'tasks' | 'reminders' | 'activity';
@@ -208,6 +213,9 @@ export const styles = StyleSheet.create({
   approvalActions: { flexDirection: 'row-reverse', gap: 8, marginTop: 11 }, approveButton: { minHeight: 38, flex: 1, borderRadius: 11, paddingHorizontal: 12, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 6 },
   approveText: { fontSize: 12, fontWeight: '700' }, rejectButton: { minHeight: 38, flex: 1, borderRadius: 11, borderWidth: 1, paddingHorizontal: 12, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 6 },
   rejectText: { fontSize: 12, fontWeight: '600' }, resolvedRow: { marginTop: 10, flexDirection: 'row-reverse', alignItems: 'center', gap: 6 }, resolvedText: { fontSize: 12, fontWeight: '600' },
+  operationNotice: { marginTop: 9, padding: 10, borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 8 },
+  operationNoticeTitle: { fontSize: 11, lineHeight: 16, fontWeight: '800', textAlign: 'right' },
+  operationNoticeBody: { fontSize: 10, lineHeight: 15, marginTop: 3, textAlign: 'right' },
   messageLink: { minHeight: 36, marginTop: 10, borderRadius: 11, borderWidth: 1, paddingHorizontal: 11, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-end', gap: 6 },
   messageLinkText: { fontSize: 12, fontWeight: '700' },
 });

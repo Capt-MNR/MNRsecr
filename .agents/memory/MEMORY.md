@@ -42,6 +42,7 @@
 - [Main mockup geometry](main-mockup-geometry.md) — the approved Main mockup is the source of truth for composition and proportions, not only the color palette.
 - [Media input vertical slice](media-input-vertical-slice.md) — process voice and receipts once into reviewable compact data before composing a secretary turn.
 - [Fixed mockup composer layering](fixed-mockup-composer-layering.md) — mount fixed mobile composers outside translucent card stacking contexts so sheets cannot cover them.
+- [Mobile bottom dock layout](mobile-bottom-dock-layout.md) — reserve fixed tab-bar space in the workspace; keep chat transcripts shrinkable instead of padding them.
 - [Native sheet motion on Web](pearl-native-sheet-motion.md) — use measured numeric translation for Expo Web sheet snaps; native-driver initialization can be ignored in the preview renderer.
 - [Pearl visual QA](pearl-visual-qa.md) — compare the populated Pearl render side-by-side at both mobile sizes; component-name mapping is not evidence of visual fidelity.
 - [Quick initial layout](quick-initial-layout.md) — render the intro state normally; invert Quick only after real conversation messages exist.
