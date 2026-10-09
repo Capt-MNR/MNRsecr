@@ -4,6 +4,7 @@ const { spawn } = require('child_process');
 const { Readable } = require('stream');
 const { pipeline } = require('stream/promises');
 
+const BUILD_PLATFORMS = ['android'];
 let metroProcess = null;
 
 const projectRoot = path.resolve(__dirname, '..');
@@ -90,12 +91,10 @@ function prepareDirectories(timestamp) {
     fs.rmSync(staticBuild, { recursive: true });
   }
 
-  const dirs = [
-    path.join(staticBuild, timestamp, '_expo', 'static', 'js', 'ios'),
-    path.join(staticBuild, timestamp, '_expo', 'static', 'js', 'android'),
-    path.join(staticBuild, 'ios'),
-    path.join(staticBuild, 'android'),
-  ];
+  const dirs = BUILD_PLATFORMS.flatMap((platform) => [
+    path.join(staticBuild, timestamp, '_expo', 'static', 'js', platform),
+    path.join(staticBuild, platform),
+  ]);
 
   for (const dir of dirs) {
     fs.mkdirSync(dir, { recursive: true });
@@ -291,22 +290,23 @@ async function downloadManifest(platform) {
 }
 
 async function downloadBundlesAndManifests(timestamp) {
-  console.log('Downloading bundles and manifests...');
+  console.log(`Downloading ${BUILD_PLATFORMS.join(', ')} bundle and manifest...`);
   console.log('This may take several minutes for production builds...');
 
   try {
-    // Bundles are sequential — Metro can't handle both platforms simultaneously
-    // without stalling. Manifests are cheap and run in parallel after.
-    await downloadBundle('ios', timestamp);
-    await downloadBundle('android', timestamp);
+    for (const platform of BUILD_PLATFORMS) {
+      await downloadBundle(platform, timestamp);
+    }
 
-    const [iosManifest, androidManifest] = await Promise.all([
-      downloadManifest('ios'),
-      downloadManifest('android'),
-    ]);
+    const manifestEntries = await Promise.all(
+      BUILD_PLATFORMS.map(async (platform) => [
+        platform,
+        await downloadManifest(platform),
+      ]),
+    );
 
     console.log('All downloads completed successfully');
-    return { ios: iosManifest, android: androidManifest };
+    return Object.fromEntries(manifestEntries);
   } catch (error) {
     exitWithError(`Download failed: ${error.message}`);
   }
@@ -314,32 +314,23 @@ async function downloadBundlesAndManifests(timestamp) {
 
 function extractAssets(timestamp) {
   const staticBuild = path.join(projectRoot, 'static-build');
-  const bundles = {
-    ios: fs.readFileSync(
-      path.join(
-        staticBuild,
-        timestamp,
-        '_expo',
-        'static',
-        'js',
-        'ios',
-        'bundle.js',
+  const bundles = Object.fromEntries(
+    BUILD_PLATFORMS.map((platform) => [
+      platform,
+      fs.readFileSync(
+        path.join(
+          staticBuild,
+          timestamp,
+          '_expo',
+          'static',
+          'js',
+          platform,
+          'bundle.js',
+        ),
+        'utf-8',
       ),
-      'utf-8',
-    ),
-    android: fs.readFileSync(
-      path.join(
-        staticBuild,
-        timestamp,
-        '_expo',
-        'static',
-        'js',
-        'android',
-        'bundle.js',
-      ),
-      'utf-8',
-    ),
-  };
+    ]),
+  );
 
   const assetsMap = new Map();
   const assetPattern =
@@ -376,8 +367,9 @@ function extractAssets(timestamp) {
     }
   };
 
-  extractFromBundle(bundles.ios, 'ios');
-  extractFromBundle(bundles.android, 'android');
+  for (const platform of BUILD_PLATFORMS) {
+    extractFromBundle(bundles[platform], platform);
+  }
 
   return Array.from(assetsMap.values());
 }
@@ -482,8 +474,9 @@ function updateBundleUrls(timestamp, baseUrl) {
     fs.writeFileSync(bundlePath, bundle);
   };
 
-  updateForPlatform('ios');
-  updateForPlatform('android');
+  for (const platform of BUILD_PLATFORMS) {
+    updateForPlatform(platform);
+  }
   console.log('Updated bundle URLs');
 }
 
@@ -524,13 +517,14 @@ function updateManifests(manifests, timestamp, baseUrl, assetsByHash) {
     );
   };
 
-  updateForPlatform('ios', manifests.ios);
-  updateForPlatform('android', manifests.android);
+  for (const platform of BUILD_PLATFORMS) {
+    updateForPlatform(platform, manifests[platform]);
+  }
   console.log('Manifests updated');
 }
 
 async function main() {
-  console.log('Building static Expo Go deployment...');
+  console.log(`Building static Expo Go deployment for ${BUILD_PLATFORMS.join(', ')}...`);
 
   setupSignalHandlers();
 

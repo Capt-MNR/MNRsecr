@@ -392,6 +392,10 @@
           </div>
         </div>
       </div>
+      <div class="content" id="ios-unavailable" style="display: none" role="status">
+        <h1>APP_NAME_PLACEHOLDER</h1>
+        <p class="subtitle">The mobile build is currently available for Android only.</p>
+      </div>
     </div>
 
     <script
@@ -409,6 +413,13 @@
         const isIOS =
           /iPhone|iPad|iPod/i.test(ua) ||
           (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+        if (isIOS) {
+          loadingEl.style.display = "none";
+          contentEl.style.display = "none";
+          document.getElementById("ios-unavailable").style.display = "block";
+          return;
+        }
 
         const deepLink = EXPS_URL_JSON_PLACEHOLDER;
 
@@ -449,7 +460,7 @@
 
         qrCode.append(document.getElementById("qr-code"));
 
-        if (isAndroid || isIOS) {
+        if (isAndroid) {
           loadingEl.style.display = "block";
           contentEl.style.display = "none";
           window.location.href = deepLink;
