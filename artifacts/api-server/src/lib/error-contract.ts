@@ -81,6 +81,20 @@ export function providerResponseError(
     });
   }
 
+  const looksLikeToolUseFailure = upstreamStatus === 400
+    && /"code"\s*:\s*"tool_use_failed"|failed to parse tool call arguments as json/i.test(providerError);
+  if (looksLikeToolUseFailure) {
+    return new SecretaryError(`The ${provider} provider rejected a tool call.`, {
+      status: 502,
+      category: "provider_error",
+      code: "PROVIDER_TOOL_USE_FAILED",
+      retryable: true,
+      provider,
+      upstreamStatus,
+      providerError: "tool_use_failed",
+    });
+  }
+
   return new SecretaryError(`The ${provider} provider returned an error.`, {
     status: upstreamStatus === 503 ? 503 : 502,
     category: upstreamStatus === 503 ? "provider_unavailable" : "provider_error",
@@ -125,7 +139,11 @@ export function isTransientProviderFailure(error: unknown): error is SecretaryEr
     return true;
   }
   return error.category === "provider_error"
-    && (error.code === "PROVIDER_REQUEST_FAILED" || (error.upstreamStatus ?? 0) >= 500);
+    && (
+      error.code === "PROVIDER_REQUEST_FAILED"
+      || error.code === "PROVIDER_TOOL_USE_FAILED"
+      || (error.upstreamStatus ?? 0) >= 500
+    );
 }
 
 export function providerFailoverError(

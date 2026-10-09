@@ -196,6 +196,8 @@ test("provider order is configurable and defaults to Gemini before Groq when bot
     "AI_PRIMARY_ROUTE",
     "AI_FALLBACK_ROUTE",
     "AI_SECONDARY_FALLBACK_ROUTE",
+    "PROVIDER_ROUTING_ENABLED",
+    "PROVIDER_ROUTING_ORDER",
     "GEMINI_API_KEY",
     "GROQ_API_KEY",
     "MISTRAL_API_KEY",
@@ -216,6 +218,8 @@ test("provider order is configurable and defaults to Gemini before Groq when bot
       "AI_PRIMARY_ROUTE",
       "AI_FALLBACK_ROUTE",
       "AI_SECONDARY_FALLBACK_ROUTE",
+      "PROVIDER_ROUTING_ENABLED",
+      "PROVIDER_ROUTING_ORDER",
       "DEEPSEEK_API_KEY",
       "QWEN_API_KEY",
       "OPENROUTER_API_KEY",
@@ -250,6 +254,23 @@ test("provider order is configurable and defaults to Gemini before Groq when bot
     assert.deepEqual(
       configuredRouteOrder().slice(0, 3),
       ["direct:groq", "gateway:openrouter", "direct:gemini"],
+    );
+
+    delete process.env.AI_PRIMARY_ROUTE;
+    delete process.env.AI_FALLBACK_ROUTE;
+    delete process.env.AI_SECONDARY_FALLBACK_ROUTE;
+    process.env.AI_PRIMARY_PROVIDER = "groq";
+    process.env.AI_FALLBACK_PROVIDER = "gemini";
+    process.env.AI_SECONDARY_FALLBACK_PROVIDER = "cohere";
+    process.env.AI_ROUTE_ORDER = "direct:groq,direct:gemini,direct:cohere,gateway:openrouter";
+    delete process.env.PROVIDER_ROUTING_ENABLED;
+    assert.deepEqual(
+      configuredProviderOrder(),
+      ["groq", "gemini", "cohere", "openrouter"],
+    );
+    assert.deepEqual(
+      configuredRouteOrder(),
+      ["direct:groq", "direct:gemini", "direct:cohere", "gateway:openrouter"],
     );
   } finally {
     for (const key of keys) {
@@ -453,6 +474,112 @@ test("Groq does not retry ordinary 400 provider errors", async () => {
         && error.upstreamStatus === 400,
     );
     assert.equal(requestCount, 1);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousGroqKey === undefined) delete process.env.GROQ_API_KEY;
+    else process.env.GROQ_API_KEY = previousGroqKey;
+  }
+});
+
+test("Groq falls back after one bounded tool-use recovery rejection", async () => {
+  const previousFetch = globalThis.fetch;
+  const previousGroqKey = process.env.GROQ_API_KEY;
+  let groqRequests = 0;
+  const classifiedToolFailure = providerResponseError(
+    "groq",
+    400,
+    JSON.stringify({
+      error: {
+        code: "tool_use_failed",
+        failed_generation: "private failed draft",
+      },
+    }),
+  );
+  assert.equal(classifiedToolFailure.code, "PROVIDER_TOOL_USE_FAILED");
+  assert.equal(classifiedToolFailure.retryable, true);
+  assert.equal(classifiedToolFailure.providerError, "tool_use_failed");
+  const gemini = new ScriptedProvider("gemini", () => finalResponse("اكتمل الرد عبر Gemini."));
+  try {
+    process.env.GROQ_API_KEY = "test-groq-key";
+    globalThis.fetch = async () => {
+      groqRequests += 1;
+      return new Response(JSON.stringify({
+        error: {
+          message: "Tool call validation failed: attempted to call tool 'commentary' which was not in request.tools",
+          type: "invalid_request_error",
+          code: "tool_use_failed",
+          failed_generation: JSON.stringify({ name: "commentary", arguments: { text: "private failed draft" } }),
+        },
+      }), { status: 400, headers: { "content-type": "application/json" } });
+    };
+    const gateway = new MnrInferenceRouter({
+      "direct:groq": new GroqModelGateway(),
+      "direct:gemini": gemini,
+    }, ["direct:groq", "direct:gemini"]);
+
+    const result = await gateway.generate([], {
+      requestId: "groq-tool-use-fallback",
+      callNumber: 1,
+      toolCallsExecuted: 0,
+    });
+
+    assert.equal(groqRequests, 2);
+    assert.equal(gemini.calls.length, 1);
+    assert.equal(result.toolCalls[0]?.args.message, "اكتمل الرد عبر Gemini.");
+    assert.deepEqual(gateway.getTrace("groq-tool-use-fallback").providersAttempted, ["groq", "gemini"]);
+    assert.equal(gateway.getTrace("groq-tool-use-fallback").fallbackOccurred, true);
+    assert.equal(gateway.getTrace("groq-tool-use-fallback").fallbackReason, "PROVIDER_TOOL_USE_FAILED");
+    assert.doesNotMatch(gateway.getTrace("groq-tool-use-fallback").fallbackReason ?? "", /private failed draft/u);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousGroqKey === undefined) delete process.env.GROQ_API_KEY;
+    else process.env.GROQ_API_KEY = previousGroqKey;
+  }
+});
+
+test("automatic fallback reaches the four approved routes in order", async () => {
+  const previousFetch = globalThis.fetch;
+  const previousGroqKey = process.env.GROQ_API_KEY;
+  let groqRequests = 0;
+  const gemini = new ScriptedProvider("gemini", () => {
+    throw providerResponseError("gemini", 503, "temporarily unavailable");
+  });
+  const cohere = new ScriptedProvider("cohere", () => {
+    throw providerResponseError("cohere", 429, "rate limit reached");
+  });
+  const openrouter = new ScriptedProvider("openrouter", () => finalResponse("اكتمل الرد عبر OpenRouter."));
+  try {
+    process.env.GROQ_API_KEY = "test-groq-key";
+    globalThis.fetch = async () => {
+      groqRequests += 1;
+      return new Response(JSON.stringify({
+        error: {
+          message: "Tool call validation failed",
+          code: "tool_use_failed",
+          failed_generation: JSON.stringify({ name: "commentary", arguments: { text: "untrusted" } }),
+        },
+      }), { status: 400, headers: { "content-type": "application/json" } });
+    };
+    const gateway = new MnrInferenceRouter({
+      "direct:groq": new GroqModelGateway(),
+      "direct:gemini": gemini,
+      "direct:cohere": cohere,
+      "gateway:openrouter": openrouter,
+    }, ["direct:groq", "direct:gemini", "direct:cohere", "gateway:openrouter"]);
+
+    const result = await gateway.generate([], {
+      requestId: "four-provider-fallback-order",
+      callNumber: 1,
+      toolCallsExecuted: 0,
+    });
+
+    assert.equal(groqRequests, 2);
+    assert.equal(result.toolCalls[0]?.args.message, "اكتمل الرد عبر OpenRouter.");
+    assert.deepEqual(
+      gateway.getTrace("four-provider-fallback-order").providersAttempted,
+      ["groq", "gemini", "cohere", "openrouter"],
+    );
+    assert.equal(gateway.getTrace("four-provider-fallback-order").fallbackOccurred, true);
   } finally {
     globalThis.fetch = previousFetch;
     if (previousGroqKey === undefined) delete process.env.GROQ_API_KEY;

@@ -3705,8 +3705,7 @@ function isGroqToolUseFailure(error: unknown): error is SecretaryError {
   return error instanceof SecretaryError
     && error.provider === "groq"
     && error.upstreamStatus === 400
-    && /"code"\s*:\s*"tool_use_failed"|failed to parse tool call arguments as json/i
-      .test(error.providerError ?? "");
+    && error.code === "PROVIDER_TOOL_USE_FAILED";
 }
 
 function parseRetryAfter(value: string | null): number | undefined {
@@ -8071,9 +8070,7 @@ export function configuredProviderOrder(): ProviderName[] {
     ?? asProvider(process.env.AI_PRIMARY_PROVIDER)
     ?? asProvider(process.env.AI_PROVIDER)
     ?? (featureFlags.providerRouting() ? firstConfiguredByRouting : originalDefaultProvider);
-  const autoFallbacks = (featureFlags.providerRouting()
-    ? fallbackPreference
-    : defaultInferenceServiceOrder())
+  const autoFallbacks = fallbackPreference
     .filter((provider) => provider !== primary)
     .filter(inferenceServiceIsConfigured);
   return [
