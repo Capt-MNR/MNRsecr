@@ -8,3 +8,9 @@ For Groq GPT-OSS tool-calling, request low hidden reasoning rather than the defa
 **Why:** The provider can spend most of the output budget on reasoning before producing a tool call, and account-level token limits can reject a later request even when the request shape and model are valid. A short application retry does not meaningfully resolve a multi-minute provider cooldown.
 
 **How to apply:** Keep retries inside the same LLM call before executing any returned tool call, log the provider rate-limit classification with the request ID and retry-after, and use deterministic local gateway tests for long conversational coverage.
+
+Groq GPT-OSS can return HTTP 400 `tool_use_failed` when it emits an unregistered tool name such as `commentary`; this is not necessarily a network failure or malformed JSON. A single same-provider recovery attempt can remind the model to use only tool names from the request and valid schema arguments. Do not return or log `failed_generation` as a user-facing answer.
+
+**Why:** The provider rejects the response before the application receives any tool call, so no action has executed; however, `failed_generation` may contain unverified user-facing text.
+
+**How to apply:** Inspect the upstream error code and message, retry only this exact tool-use failure once before any tool execution, keep 429 cooldowns unretried, and log only safe provider codes rather than generated response bodies.

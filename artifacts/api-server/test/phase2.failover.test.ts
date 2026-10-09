@@ -348,6 +348,118 @@ test("Gemini, Groq, Mistral, and Cohere adapters independently normalize provide
   }
 });
 
+test("Groq retries an unregistered tool call once with tool-list guidance and serial tools", async () => {
+  const previousFetch = globalThis.fetch;
+  const previousGroqKey = process.env.GROQ_API_KEY;
+  const capturedBodies: Array<Record<string, unknown>> = [];
+  try {
+    process.env.GROQ_API_KEY = "test-groq-key";
+    globalThis.fetch = async (_input, init) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      capturedBodies.push(body);
+      if (capturedBodies.length === 1) {
+        return new Response(JSON.stringify({
+          error: {
+            message: "Tool call validation failed: attempted to call tool 'commentary' which was not in request.tools",
+            type: "invalid_request_error",
+            code: "tool_use_failed",
+            failed_generation: JSON.stringify({
+              name: "commentary",
+              arguments: { kind: "answer", message: "صباح الخير!" },
+            }),
+          },
+        }), { status: 400, headers: { "content-type": "application/json" } });
+      }
+      return new Response(JSON.stringify({
+        choices: [{
+          message: {
+            tool_calls: [{
+              id: "recovered-final-response",
+              function: {
+                name: "final_response",
+                arguments: JSON.stringify({ kind: "answer", message: "صباح النور." }),
+              },
+            }],
+          },
+        }],
+        usage: { prompt_tokens: 20, completion_tokens: 8, total_tokens: 28 },
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    };
+
+    const metrics: GatewayRequestMetrics = {
+      logicalLlmCalls: 1,
+      httpAttempts: 0,
+      httpAttemptsByProvider: {},
+      retryCount: 0,
+      providerFallbackAttempts: 0,
+      modelFallbackAttempts: 0,
+      requestBytesByProvider: {},
+      maxRequestBytes: 0,
+      systemPromptChars: 0,
+      toolDefinitionsChars: 0,
+      toolDefinitionsCount: 0,
+      maxConversationChars: 0,
+      attempts: [],
+    };
+    const result = await new GroqModelGateway().generate([], {
+      requestId: "groq-tool-argument-recovery",
+      callNumber: 1,
+      toolCallsExecuted: 0,
+      metrics,
+    });
+
+    assert.equal(capturedBodies.length, 2);
+    const firstMessages = capturedBodies[0]?.messages as Array<{ role: string; content: string }>;
+    const retryMessages = capturedBodies[1]?.messages as Array<{ role: string; content: string }>;
+    assert.doesNotMatch(firstMessages[0]?.content ?? "", /المحاولة السابقة رُفضت/u);
+    assert.match(retryMessages[0]?.content ?? "", /استخدم اسم أداة حرفيًا من قائمة tools/u);
+    assert.match(retryMessages[0]?.content ?? "", /لا تستخدم commentary/u);
+    assert.equal(result.toolCalls[0]?.name, "final_response");
+    assert.equal(result.toolCalls[0]?.args.message, "صباح النور.");
+    assert.equal(metrics.httpAttempts, 2);
+    assert.equal(metrics.retryCount, 1);
+    assert.equal(metrics.attempts.length, 2);
+    assert.equal(metrics.attempts[0]?.success, false);
+    assert.equal(metrics.attempts[0]?.failureReason, "GROQ_TOOL_USE_FAILED");
+    assert.equal(metrics.attempts[1]?.success, true);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousGroqKey === undefined) delete process.env.GROQ_API_KEY;
+    else process.env.GROQ_API_KEY = previousGroqKey;
+  }
+});
+
+test("Groq does not retry ordinary 400 provider errors", async () => {
+  const previousFetch = globalThis.fetch;
+  const previousGroqKey = process.env.GROQ_API_KEY;
+  let requestCount = 0;
+  try {
+    process.env.GROQ_API_KEY = "test-groq-key";
+    globalThis.fetch = async () => {
+      requestCount += 1;
+      return new Response(JSON.stringify({
+        error: { message: "Invalid model", type: "invalid_request_error", code: "model_not_found" },
+      }), { status: 400, headers: { "content-type": "application/json" } });
+    };
+
+    await assert.rejects(
+      () => new GroqModelGateway().generate([], {
+        requestId: "groq-no-generic-400-retry",
+        callNumber: 1,
+        toolCallsExecuted: 0,
+      }),
+      (error: unknown) => error instanceof SecretaryError
+        && error.code === "PROVIDER_API_ERROR"
+        && error.upstreamStatus === 400,
+    );
+    assert.equal(requestCount, 1);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousGroqKey === undefined) delete process.env.GROQ_API_KEY;
+    else process.env.GROQ_API_KEY = previousGroqKey;
+  }
+});
+
 test("Groq does not repeat a long 429 cooldown and records the real retry-after", async () => {
   const previousFetch = globalThis.fetch;
   const previousGroqKey = process.env.GROQ_API_KEY;

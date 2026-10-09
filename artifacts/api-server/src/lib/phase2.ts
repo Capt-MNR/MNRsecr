@@ -714,8 +714,8 @@ function logLlmFailure(
     llmCall: context.callNumber,
     attempt,
     errorCode: classified.code,
+    providerErrorCode: classified.providerError?.match(/"code"\s*:\s*"([a-zA-Z0-9_-]{1,80})"/i)?.[1],
     upstreamStatus: classified.upstreamStatus,
-    providerError: classified.providerError,
     retryAfterSeconds: classified.retryAfterSeconds,
   }, "agent llm call failed");
 }
@@ -799,7 +799,7 @@ const MAX_TOOL_CALLS = 8;
 const MAX_LOGICAL_LLM_CALLS = 4;
 // Four normal model calls may be followed by one finalization call, each with one fallback.
 const MAX_PROVIDER_HTTP_ATTEMPTS = (MAX_LOGICAL_LLM_CALLS + 1) * 2;
-const MAX_GROQ_HTTP_ATTEMPTS = 1;
+const GROQ_TOOL_USE_RECOVERY_RETRIES = 1;
 const MODEL_REQUEST_DEADLINE_MS = 45_000;
 const MAX_CIRCUIT_COOLDOWN_MS = 15 * 60_000;
 const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.6-flash";
@@ -817,6 +817,8 @@ const GEMINI_CONTEXT_CACHE_EXPIRY_SAFETY_MS = 10_000;
 const GEMINI_CONTEXT_CACHE_FAILURE_COOLDOWN_MS = 60_000;
 const GROQ_MODEL = process.env.GROQ_MODEL ?? "openai/gpt-oss-20b";
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
+const GROQ_TOOL_USE_RETRY_INSTRUCTION =
+  "المحاولة السابقة رُفضت لأن اختيار الأداة أو arguments لم يطابق الأدوات المتاحة. استخدم اسم أداة حرفيًا من قائمة tools المرسلة فقط؛ لا تستخدم commentary أو أسماء الأدوار/القنوات كأدوات. إذا استدعيت أداة، اجعل arguments كائن JSON صالحًا مطابقًا تمامًا للـschema. عند إنهاء الإجابة استخدم final_response فقط إذا كانت متاحة، وضع الرد العربي داخل message.";
 const COHERE_MODEL = process.env.COHERE_MODEL ?? "command-r-08-2024";
 const COHERE_API_URL = "https://api.cohere.com/v2/chat";
 const DEFAULT_TIMEZONE = "Africa/Cairo";
@@ -3699,6 +3701,14 @@ function parseJsonObject(value: string | undefined): Record<string, unknown> {
   }
 }
 
+function isGroqToolUseFailure(error: unknown): error is SecretaryError {
+  return error instanceof SecretaryError
+    && error.provider === "groq"
+    && error.upstreamStatus === 400
+    && /"code"\s*:\s*"tool_use_failed"|failed to parse tool call arguments as json/i
+      .test(error.providerError ?? "");
+}
+
 function parseRetryAfter(value: string | null): number | undefined {
   if (!value) return undefined;
   const seconds = Number(value);
@@ -4812,19 +4822,34 @@ export class GroqModelGateway implements ModelGateway {
         return { role: "user", content: message.text ?? "" };
       }),
     ];
-    const requestBody = JSON.stringify({
-      model: this.model,
-      messages: apiMessages,
-      tools,
-      tool_choice: "auto",
-      reasoning_effort: "low",
-      include_reasoning: false,
-      temperature: 0.15,
-      max_tokens: 2048,
-    });
-    const systemText = instructions.text;
     let lastError: Error | null = null;
-    for (let attempt = 0; attempt < MAX_GROQ_HTTP_ATTEMPTS; attempt += 1) {
+    for (let attempt = 0; attempt <= GROQ_TOOL_USE_RECOVERY_RETRIES; attempt += 1) {
+      const systemText = attempt === 0
+        ? instructions.text
+        : `${instructions.text}\n\n${GROQ_TOOL_USE_RETRY_INSTRUCTION}`;
+      const attemptInstructions = attempt === 0
+        ? instructions
+        : {
+          ...instructions,
+          text: systemText,
+          systemPrompt: `${instructions.systemPrompt}\n\n${GROQ_TOOL_USE_RETRY_INSTRUCTION}`,
+        };
+      const attemptMessages = attempt === 0
+        ? apiMessages
+        : [
+          { role: "system", content: systemText },
+          ...apiMessages.slice(1),
+        ];
+      const requestBody = JSON.stringify({
+        model: this.model,
+        messages: attemptMessages,
+        tools,
+        tool_choice: "auto",
+        reasoning_effort: "low",
+        include_reasoning: false,
+        temperature: 0.15,
+        max_tokens: 2048,
+      });
       const attemptMeasurement = recordProviderRequest(context, "groq", {
         model: this.model,
         routeKind: this.routeKind,
@@ -4840,7 +4865,7 @@ export class GroqModelGateway implements ModelGateway {
           context.currentUserMessage,
           Buffer.byteLength(requestBody),
           JSON.stringify(tools).length,
-          instructions,
+          attemptInstructions,
         ),
         fallback: Boolean(context.providerFallback),
         retry: attempt > 0,
@@ -4915,6 +4940,23 @@ export class GroqModelGateway implements ModelGateway {
           raw,
           parseRetryAfter(response.headers.get("retry-after")),
         );
+          if (attempt < GROQ_TOOL_USE_RECOVERY_RETRIES && isGroqToolUseFailure(lastError)) {
+            finishLlmAttempt(context, attemptMeasurement, undefined, {
+              success: false,
+              failureReason: "GROQ_TOOL_USE_FAILED",
+            });
+            logger.warn({
+              requestId: context.requestId,
+              provider: this.provider,
+              model: this.model,
+              llmCall: context.callNumber,
+              attempt: attempt + 1,
+              errorCode: "GROQ_TOOL_USE_FAILED",
+              upstreamStatus: lastError.upstreamStatus,
+              retry: true,
+            }, "agent llm tool use was rejected; retrying once with tool schema guidance");
+            continue;
+          }
         if (response.status === 429) {
           logger.warn({
             requestId: context.requestId,
@@ -4938,9 +4980,7 @@ export class GroqModelGateway implements ModelGateway {
           ? error
           : providerExceptionError("groq", error);
         logLlmFailure("groq", this.model, context, attempt + 1, lastError);
-        if (attempt === 1 || !(lastError instanceof SecretaryError && lastError.upstreamStatus === 429)) {
-          throw lastError;
-        }
+        throw lastError;
       } finally {
         clearTimeout(timeout);
       }
