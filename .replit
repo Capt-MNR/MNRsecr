@@ -22,6 +22,7 @@ timeoutMs = 20000
 [userenv]
 
 [userenv.production]
+AI_ROUTE_ORDER = "direct:groq,direct:gemini,direct:cohere,gateway:openrouter"
 
 [userenv.shared]
 AI_PROVIDER = "groq"
