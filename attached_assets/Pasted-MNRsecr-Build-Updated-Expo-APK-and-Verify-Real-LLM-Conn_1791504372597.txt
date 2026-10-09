@@ -1,0 +1,169 @@
+MNRsecr — Build Updated Expo APK and Verify Real LLM Connectivity
+
+Mission
+
+The product and implementation work across Phases A–H has already been completed, including the previous Main, Quick, API, approval, Work lifecycle, and context-related fixes.
+
+This is not a new development phase. Do not reimplement completed work.
+
+The objective is to build an updated Android APK containing the latest correct implementation, ensure it targets the intended existing API, and verify that real LLM requests work from the APK on an Android device.
+
+Use the existing Replit project and available infrastructure. Do not create a new Replit project, deployment, Reserved VM, database, or other paid resource.
+
+1. Establish the correct source state
+
+Before changing anything:
+
+1. Inspect the current branch, working tree, latest commit, and relevant changes from the completed phases.
+2. Confirm that the source to be built includes the intended completed implementation.
+3. Identify any uncommitted changes or differences between the current working tree and the intended build commit.
+4. Do not reset, discard, overwrite, or revert existing work.
+5. Do not create another implementation of features already completed in Phases A–H.
+6. If the correct source state cannot be established safely, stop and report the exact issue.
+
+Use the latest correct implementation as the source of truth. Do not blindly switch branches, merge branches, or publish the current project to production.
+
+2. Verify the Expo/EAS configuration
+
+Inspect the actual mobile application under:
+
+"artifacts/personal-secretary-mobile"
+
+Review the Expo configuration, "eas.json", build scripts, environment variables, and API client.
+
+Determine:
+
+- Which API hostname each EAS profile targets.
+- Which API hostname the currently installed APK is expected to target, if this can be established from available build metadata or artifacts.
+- Whether the latest source contains the intended API client and authentication changes.
+- Whether the configured API is externally reachable from a physical Android device.
+- Whether the current Workspace URL is blocked by Replit's private-app login gate.
+- Whether authentication, cookies/session handling, request headers, and response processing work correctly for the native application.
+
+Do not assume that the Workspace URL is externally reachable just because the application works inside Replit.
+
+Do not use a temporary ".replit.dev" address as a permanent endpoint, embed provider keys or Replit access tokens in the APK, or weaken authentication to bypass connectivity restrictions.
+
+API target decision
+
+Prefer the existing intended API target if it is already reachable and supports the required functionality.
+
+If the existing Workspace API cannot be reached externally, do not assume rebuilding will fix the problem. Report the precise blocker and the minimum supported alternative. Do not create or publish another deployment without explicit approval.
+
+Keep the production EAS profile and production API configuration unchanged.
+
+If a dedicated non-production build profile is necessary and can be configured safely without affecting production, use a clearly named profile such as "dev-e2e". Do not change global defaults in a way that could redirect production builds.
+
+3. Build the updated APK
+
+If the correct source state and a suitable, reachable API target are established, proceed with an Expo EAS Android APK build.
+
+Do not stop after merely inspecting the configuration: building the updated APK is an explicit objective of this task.
+
+Before building:
+
+1. Confirm the selected EAS profile produces an installable Android APK.
+2. Confirm the intended API target and the environment variables applied at build time.
+3. Confirm that the build will include the latest correct implementation from the completed phases.
+4. Check the Android application ID, expected version code, EAS remote versioning, and signing credentials.
+5. Preserve the existing production profile and its API target.
+6. Do not uninstall the currently installed APK as a workaround.
+7. Do not claim that install-over compatibility is safe unless the installed APK's signing certificate and version can be verified against the new build.
+
+If the old APK's signing certificate or installed version cannot be inspected, explain the limitation before recommending an installation that could overwrite the existing app. Do not invent compatibility evidence.
+
+If building requires a paid service, a new resource, a production change, or another action outside these constraints, stop and request approval rather than proceeding.
+
+4. Verify real APK-to-LLM behavior
+
+After a successful build, test the resulting APK on a physical Android device if the device and installation path are available.
+
+Perform the following checks:
+
+1. Install or launch the APK using a safe, verified procedure.
+2. Complete real authentication using the supported sign-in flow.
+3. Open the actual Main Ask screen.
+4. Send a unique, non-sensitive test prompt that requires a genuine LLM response.
+5. Confirm that the request reaches the intended API.
+6. Correlate the mobile request with server-side logs using an existing request ID or correlation ID where available.
+7. Confirm the actual provider and model used, the final response, HTTP attempts, retries, fallback behavior, and latency where available.
+8. Distinguish a genuine provider response from a cache hit, deterministic/local response, mocked result, or error fallback.
+9. Verify that the response is successfully rendered in the APK.
+10. Compare with an equivalent prompt from the working Replit application to identify any meaningful behavioral or performance difference.
+
+Do not expose provider keys, session secrets, OAuth secrets, or access tokens in logs or the final report.
+
+A successful build, typecheck, API health check, or request sent from inside Replit does not prove end-to-end APK-to-LLM connectivity.
+
+If physical-device testing is unavailable, clearly report which parts were verified and mark the device test as pending. Do not claim end-to-end success without the evidence.
+
+5. Fix only newly demonstrated blockers
+
+If the APK fails, use the observed evidence to identify the actual cause.
+
+Potential causes include:
+
+- Incorrect or inaccessible API hostname.
+- Missing or incorrectly applied Expo/EAS environment variables.
+- Authentication or session incompatibility.
+- A real mobile/API request-contract mismatch.
+- A server-side configuration issue.
+
+Apply the smallest safe fix only after establishing the cause. Preserve the completed implementation, existing API contracts, tenant/owner scoping, operation IDs, approvals, Work lifecycle semantics, and production behavior.
+
+After a fix, rebuild only when necessary and repeat the affected verification steps.
+
+Do not refactor unrelated components, reopen completed phases, add new features, or introduce mock responses merely to make the test pass.
+
+6. Strictly prohibited actions
+
+- No new Replit project, deployment, Reserved VM, database, or paid resource.
+- No production publishing or production configuration changes.
+- No destructive migrations or production-data copying.
+- No provider-key rotation or disclosure.
+- No development-auth bypass in a release APK.
+- No speculative reimplementation of completed phases.
+- No unrelated feature development.
+- No claiming that a build succeeded if EAS did not confirm success.
+- No claiming that LLM connectivity works unless supported by actual evidence.
+
+7. Final report
+
+Return a concise report containing:
+
+A. Source
+
+- Branch and commit used.
+- Whether the completed Phase A–H implementation was preserved.
+- Any uncommitted changes or source-state concerns.
+
+B. Expo/EAS build
+
+- Selected profile.
+- API hostname embedded in the APK.
+- Build ID and final build status.
+- APK artifact location or accessible artifact reference.
+- Android application ID and version code, if available.
+- Signing/install-over compatibility status and any limitations.
+
+C. Verification
+
+- Authentication result.
+- Whether the APK reached the intended API.
+- Whether a genuine LLM provider/model request was confirmed.
+- Whether the response appeared in the APK.
+- Latency, HTTP attempts, retries, fallback, and token usage when available.
+- Whether results were compared with the working Replit application.
+
+D. Final status
+
+Use exactly one of these classifications:
+
+- "BUILD AND LLM E2E VERIFIED"
+- "APK BUILT — DEVICE TEST PENDING"
+- "BUILD BLOCKED — EXPLICIT REASON"
+- "LLM E2E FAILED — EXPLICIT REASON"
+
+Clearly separate verified facts from assumptions and remaining blockers.
+
+Stop after delivering the report. Do not create new infrastructure or begin another development phase without explicit approval.
